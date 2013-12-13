@@ -17,3 +17,8 @@ color:darkblue;
 {
 background-color:lightgreen;
 }
+
+li
+{
+cursor:pointer;
+}

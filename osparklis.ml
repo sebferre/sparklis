@@ -189,14 +189,73 @@ let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
 
+(* increments *)
+
+let insert_term t = function
+  | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Term t, ctx)))
+  | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Term t, rel_opt), ctx))
+  | _ -> None
+
+let append_and ctx elt_p1 = function
+  | And ar ->
+    let n = Array.length ar in
+    let ar2 = Array.make (n+1) elt_p1 in
+    Array.blit ar 0 ar2 0 n;
+    AtP1 (elt_p1, AndX (n, ar2, ctx))
+  | p1 ->
+    AtP1 (elt_p1, AndX (1, [|p1; elt_p1|], ctx))
+
+let insert_elt_p1 elt = function
+  | AtP1 (f, AndX (i,ar,ctx)) -> ar.(i) <- f; Some (append_and ctx elt (And ar))
+  | AtP1 (f, ctx) -> Some (append_and ctx elt f)
+  | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
+  | AtS1 (Det (det, Some rel), ctx) -> Some (append_and (DetThatX (det,ctx)) elt rel)
+
+let insert_class c = function
+  | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Class c, ctx)))
+  | focus -> insert_elt_p1 (Type c) focus
+
+let insert_property p focus =
+  match insert_elt_p1 (Has (p, Det (Something, None))) focus with
+    | Some foc -> down_focus foc
+    | None -> None
+
+let insert_inverse_property p focus =
+  match insert_elt_p1 (IsOf (p, Det (Something, None))) focus with
+    | Some foc -> down_focus foc
+    | None -> None
+
+let delete_and ctx ar i =
+  let n = Array.length ar in
+  let ar2 = Array.make (n-1) (Type "") in
+  Array.blit ar 0 ar2 0 i;
+  Array.blit ar (i+1) ar2 i (n-i-1);
+  AtP1 (And ar2, ctx)
+
+let delete_focus = function
+  | AtP1 (f, DetThatX (det,ctx)) -> Some (AtS1 (Det (det,None), ctx))
+  | AtP1 (f, AndX (i,ar,ctx)) -> Some (delete_and ctx ar i)
+  | AtP1 (f, WhatX (x)) -> None
+  | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
+
 (* ------------------ *)
 
 let jquery s k =
   Opt.iter (Dom_html.document##querySelector(string s)) (fun elt ->
     k elt)
 
+let jquery_all s k =
+  let nodelist = Dom_html.document##querySelectorAll(string s) in
+  let n = nodelist##length in
+  for i=0 to n-1 do
+    Opt.iter nodelist##item(i) k
+  done
+
 let onclick k elt =
-  elt##onclick <- Dom.handler (fun ev -> k ev; bool true)
+  elt##onclick <- Dom.handler (fun ev -> k elt ev; bool true)
+
+let ondblclick k elt =
+  elt##ondblclick <- Dom.handler (fun ev -> k elt ev; bool true)
 
 
 (* -------------------- *)
@@ -247,12 +306,13 @@ object (self)
       self#refresh
     end
 
-  method focus_move f =
+  method focus_update f =
     match f focus with
       | Some foc ->
 	focus <- foc;
 	self#refresh
       | None -> ()
+
 end
   
 let myplace = new place
@@ -260,13 +320,27 @@ let myplace = new place
 let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    jquery "#more" (onclick (fun ev -> myplace#give_more));
-    jquery "#less" (onclick (fun ev -> myplace#give_less));
+    jquery "#more" (onclick (fun elt ev -> myplace#give_more));
+    jquery "#less" (onclick (fun elt ev -> myplace#give_less));
 
-    jquery "#down" (onclick (fun ev -> myplace#focus_move down_focus));
-    jquery "#up" (onclick (fun ev -> myplace#focus_move up_focus));
-    jquery "#right" (onclick (fun ev -> myplace#focus_move right_focus));
-    jquery "#left" (onclick (fun ev -> myplace#focus_move left_focus));
+    jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
+    jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
+    jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
+    jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
+    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
+
+    jquery_all ".incr-term" (ondblclick (fun elt ev ->
+      let t = to_string elt##innerHTML in
+      myplace#focus_update (insert_term t)));
+    jquery_all ".incr-class" (ondblclick (fun elt ev ->
+      let c = to_string elt##innerHTML in
+      myplace#focus_update (insert_class c)));
+    jquery_all ".incr-property" (ondblclick (fun elt ev ->
+      let p = to_string elt##innerHTML in
+      myplace#focus_update (insert_property p)));
+    jquery_all ".incr-inverse-property" (ondblclick (fun elt ev ->
+      let p = to_string elt##innerHTML in
+      myplace#focus_update (insert_inverse_property p)));
 
     myplace#refresh;
     bool true)

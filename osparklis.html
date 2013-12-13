@@ -10,13 +10,33 @@
 <body>
 <div id="lisql"></div>
 <div id="sparql"></div>
-<!-- <button id="send">Send a SPARQL query to DBpedia</button> -->
+
 <button id="up">Focus UP</button>
 <button id="down">Focus DOWN</button>
 <button id="left">Focus LEFT</button>
 <button id="right">Focus RIGHT</button>
+<button id="delete">DELETE Focus</button>
+
+<ul id="terms">
+  <li class="incr-term">dbpedia:The_Terminal</li>
+</ul>
+
+<ul id="classes">
+  <li class="incr-class">dbpedia-owl:Film</li>
+  <li class="incr-class">dbpedia-owl:Person</li>
+</ul>
+
+<ul id="properties">
+  <li class="incr-property">dbpedia-owl:director</li>
+</ul>
+
+<ul id="inverse-properties">
+  <li class="incr-inverse-property">dbpedia-owl:director</li>
+</ul>
+
 <div id="result">No result</div>
 <button id="more">Give more results</button>
 <button id="less">Give less results</button>
+
 </body>
 </html>
