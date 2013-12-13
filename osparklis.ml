@@ -30,16 +30,16 @@ and elt_s2 =
   | Something
   | Class of uri
 and elt_s =
-  | What of var * elt_p1
+  | Return of elt_s1
 
 (* LISQL contexts *)
 type ctx_p1 =
   | DetThatX of elt_s2 * ctx_s1
   | AndX of int * elt_p1 array * ctx_p1
-  | WhatX of var
 and ctx_s1 =
   | HasX of uri * ctx_p1
   | IsOfX of uri * ctx_p1
+  | ReturnX
 
 (* LISQL focus *)
 type focus =
@@ -50,10 +50,10 @@ type focus =
 let rec elt_s_of_ctx_p1 (f : elt_p1) = function
   | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det (det, Some f)) ctx
   | AndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_p1 (And ar) ctx
-  | WhatX (x) -> What (x,f)
 and elt_s_of_ctx_s1 (f : elt_s1) = function
   | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
   | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
+  | ReturnX -> Return f
 
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
@@ -81,10 +81,17 @@ and sparql_of_elt_s2 = function
   | Something -> (fun d1 d2 -> let x = genvar#get in d1 x ^ d2 x)
   | Class c -> (fun d1 d2 -> let x = genvar#get in x ^ " a " ^ c ^ " . " ^ d1 x ^ d2 x)
 and sparql_of_elt_s = function
-  | What (x,vp) -> "SELECT " ^ x ^ " WHERE { " ^ sparql_of_elt_p1 vp x ^ "}"
+  | Return np ->
+    let what = ref "" in
+    let gp = sparql_of_elt_s1 np (fun x -> what := x; "") in
+    "SELECT DISTINCT " ^ !what ^ " { " ^ gp ^ "}"
 
 (* pretty-printing of focus as HTML *)
 
+let html_pre text =
+  let text = Regexp.global_replace (Regexp.regexp "<") text "&lt;" in
+  let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
+  "<pre>" ^ text ^ "</pre>"
 let html_span cl text = "<span class=\"" ^ cl ^ "\">" ^ text ^ "</span>"
 let html_term t = html_span "RDFTerm" t
 let html_class c = html_span "classURI" c
@@ -94,13 +101,13 @@ let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
 let html_is_of p np = "is " ^ html_prop p ^ " of " ^ np
 let html_and ar =
-  let html = ref ar.(0) in
+  let html = ref ("<ul class=\"list-and\"><li>" ^ ar.(0) ^ "</li>") in
   for i=1 to Array.length ar - 1 do
-    html := !html ^ " and " ^ ar.(i)
+    html := !html ^ " <li> and " ^ ar.(i) ^ "</li>"
   done;
-  !html
+  !html ^ "</ul>"
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
-let html_what vp = "What " ^ vp ^ " ?"
+let html_return np = "Give me " ^ np ^ "."
 
 let rec html_of_elt_p1 = function
   | Type c -> html_is_a c
@@ -113,9 +120,9 @@ and html_of_elt_s1 = function
 and html_of_elt_s2 = function
   | Term t -> html_term t
   | Something -> "something"
-  | Class c -> html_class c
+  | Class c -> "a " ^ html_class c
 and html_of_elt_s = function
-  | What (x,vp) -> html_what (html_of_elt_p1 vp)
+  | Return np -> html_return (html_of_elt_s1 np)
 
 let rec html_of_ctx_p1 html = function
   | DetThatX (det,ctx) -> html_of_ctx_s1 (html_det (html_of_elt_s2 det) (Some html)) ctx
@@ -123,10 +130,10 @@ let rec html_of_ctx_p1 html = function
     let ar_html = Array.map html_of_elt_p1 ar in
     ar_html.(i) <- html;
     html_of_ctx_p1 (html_and ar_html) ctx
-  | WhatX (x) -> html_what html
 and html_of_ctx_s1 html = function
   | HasX (p,ctx) -> html_of_ctx_p1 (html_has p html) ctx
   | IsOfX (p,ctx) -> html_of_ctx_p1 (html_is_of p html) ctx
+  | ReturnX -> html_return html
 
 let html_of_focus = function
   | AtP1 (f,ctx) -> html_of_ctx_p1 (html_span "focus" (html_of_elt_p1 f)) ctx
@@ -149,10 +156,10 @@ let down_focus = function
 let up_p1 f = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
   | AndX (i,ar,ctx) -> ar.(i) <- f; Some (AtP1 (And ar, ctx))
-  | WhatX (x) -> None
 let up_s1 f = function
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
+  | ReturnX -> None
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
@@ -165,10 +172,10 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
       ar.(i) <- f;
       Some (AtP1 (ar.(i+1), AndX (i+1, ar, ctx))) end
     else None
-  | WhatX (x) -> None
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
+  | ReturnX -> None
 let right_focus = function
   | AtP1 (f,ctx) -> right_p1 f ctx
   | AtS1 (f,ctx) -> right_s1 f ctx
@@ -181,10 +188,10 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
       ar.(i) <- f;
       Some (AtP1 (ar.(i-1), AndX (i-1, ar, ctx))) end
     else None
-  | WhatX (x) -> None
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
+  | ReturnX -> None
 let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
@@ -213,6 +220,7 @@ let insert_elt_p1 elt = function
 
 let insert_class c = function
   | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Class c, ctx)))
+  | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Class c, rel_opt), ctx)) 
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
@@ -235,7 +243,6 @@ let delete_and ctx ar i =
 let delete_focus = function
   | AtP1 (f, DetThatX (det,ctx)) -> Some (AtS1 (Det (det,None), ctx))
   | AtP1 (f, AndX (i,ar,ctx)) -> Some (delete_and ctx ar i)
-  | AtP1 (f, WhatX (x)) -> None
   | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
 
 (* ------------------ *)
@@ -263,25 +270,28 @@ let ondblclick k elt =
 (* navigation place *)
 class place =
 object (self)
+  val mutable prologue =
+    "PREFIX res: <http://dbpedia.org/resource/>\n" ^
+      "PREFIX dbo: <http://dbpedia.org/ontology/>\n" ^
+      "PREFIX dbp: <http://dbpedia.org/property/>\n" ^
+      "PREFIX : <http://dbpedia.org/ontology/>\n"
+
   val mutable limit = 10
-  val mutable focus =
-    AtP1 (And [| Type "dbpedia-owl:Film";
-		 Has ("dbpedia-owl:director",
-		      Det (Class "dbpedia-owl:Person",
-			   Some (IsOf ("dbpedia-owl:director",
-				       Det (Term "dbpedia:The_Terminal",
-					    None)))))
-	      |],
-	  WhatX "?what")
+
+  val mutable focus = AtS1 (Det (Class ":Film", None), ReturnX)
 	  
   method elt_s = elt_s_of_focus focus
-  method sparql = sparql_of_elt_s self#elt_s ^ " LIMIT " ^ string_of_int limit
+  method sparql =
+    prologue ^
+      sparql_of_elt_s self#elt_s ^
+      " LIMIT " ^ string_of_int limit
   method html = html_of_focus focus
 
   method refresh =
+    genvar#reset;
     let sparql = self#sparql in
     jquery "#sparql" (fun elt ->
-      elt##innerHTML <- string sparql);
+      elt##innerHTML <- string (html_pre sparql));
     jquery "#lisql" (fun elt ->
       elt##innerHTML <- string self#html);
     Lwt.ignore_result

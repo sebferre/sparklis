@@ -18,7 +18,22 @@ color:darkblue;
 background-color:lightgreen;
 }
 
+ul.list-and
+{
+list-style:none;
+}
+
+.incr-list
+{
+float:left;
+}
+
 li
 {
 cursor:pointer;
+}
+
+#result
+{
+clear:both;
 }
