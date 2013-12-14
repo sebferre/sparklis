@@ -10,6 +10,19 @@ object
   val mutable cpt = 0
   method reset = cpt <- 0
   method get = cpt <- cpt+1; "?x" ^ string_of_int cpt
+
+  val mutable var_what = ""
+  method set_what v = var_what <- v
+  method get_what = var_what
+
+  val mutable var_focus = ""
+  method set_focus v = var_focus <- v
+  method get_focus = var_focus
+
+  method vars =
+    if var_focus = var_what || var_focus = "" || var_focus.[0] <> '?'
+    then [var_what]
+    else [var_what; var_focus]
 end
 
 (* ------------------------- *)
@@ -61,10 +74,17 @@ let elt_s_of_focus = function
 
 
 (* translation from LISQL elts to SPARQL queries *)
-let rec sparql_of_elt_p1 = function
-  | Type c -> (fun x -> x ^ " a " ^ c ^ " . ")
-  | Has (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> x ^ " " ^ p ^ " " ^ y ^ " . "))
-  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> y ^ " " ^ p ^ " " ^ x ^ " . "))
+
+type sparql = string
+
+let sparql_triple s p o = s ^ " " ^ p ^ " " ^ o ^ " . "
+let sparql_select lv gp =
+  "SELECT DISTINCT " ^ String.concat " " lv ^ " WHERE { " ^ gp ^ "}"
+
+let rec sparql_of_elt_p1 : elt_p1 -> (var -> sparql) = function
+  | Type c -> (fun x -> sparql_triple x "a" c)
+  | Has (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> sparql_triple x p y))
+  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> sparql_triple y p x))
   | And ar ->
     (fun x ->
       let res = ref (sparql_of_elt_p1 ar.(0) x) in
@@ -72,19 +92,54 @@ let rec sparql_of_elt_p1 = function
 	res := !res ^ sparql_of_elt_p1 ar.(i) x
       done;
       !res)
-and sparql_of_elt_s1 = function
+and sparql_of_elt_s1 : elt_s1 -> ((var -> sparql) -> sparql) = function
   | Det (det,rel_opt) ->
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
     (fun d -> sparql_of_elt_s2 det d1 d)
-and sparql_of_elt_s2 = function
+and sparql_of_elt_s2 : elt_s2 -> ((var -> sparql) -> (var -> sparql) -> sparql) = function
   | Term t -> (fun d1 d2 -> d1 t ^ d2 t)
-  | Something -> (fun d1 d2 -> let x = genvar#get in d1 x ^ d2 x)
-  | Class c -> (fun d1 d2 -> let x = genvar#get in x ^ " a " ^ c ^ " . " ^ d1 x ^ d2 x)
-and sparql_of_elt_s = function
+  | Something -> (fun d1 d2 -> let x = genvar#get in d2 x ^ d1 x)
+  | Class c -> (fun d1 d2 -> let x = genvar#get in d2 x ^ sparql_triple x "a" c ^ d1 x)
+and sparql_of_elt_s : elt_s -> sparql = function
   | Return np ->
-    let what = ref "" in
-    let gp = sparql_of_elt_s1 np (fun x -> what := x; "") in
-    "SELECT DISTINCT " ^ !what ^ " { " ^ gp ^ "}"
+    let gp = sparql_of_elt_s1 np (fun x -> genvar#set_what x; "") in
+    sparql_select genvar#vars gp
+
+let rec sparql_of_ctx_p1 (d : var -> sparql) : ctx_p1 -> sparql = function
+  | DetThatX (det,ctx) ->
+    sparql_of_ctx_s1
+      (fun d2 -> sparql_of_elt_s2 det d d2) 
+      ctx
+  | AndX (i,ar,ctx) ->
+    sparql_of_ctx_p1
+      (fun x ->
+	let sparql = ref "" in
+	for j=0 to Array.length ar - 1 do
+	  if j=i
+	  then sparql := !sparql ^ d x
+	  else sparql := !sparql ^ sparql_of_elt_p1 ar.(j) x
+	done;
+	!sparql)
+      ctx
+and sparql_of_ctx_s1 (q : (var -> sparql) -> sparql) : ctx_s1 -> sparql = function
+  | HasX (p,ctx) ->
+    sparql_of_ctx_p1
+      (fun x -> q (fun y -> sparql_triple x p y))
+      ctx
+  | IsOfX (p,ctx) ->
+    sparql_of_ctx_p1
+      (fun x -> q (fun y -> sparql_triple y p x))
+      ctx
+  | ReturnX ->
+    q (fun x -> genvar#set_what x; "")
+
+let sparql_of_focus = function
+  | AtP1 (f,ctx) ->
+    let gp = sparql_of_ctx_p1 (fun x -> genvar#set_focus x; sparql_of_elt_p1 f x) ctx in
+    sparql_select genvar#vars gp
+  | AtS1 (f,ctx) ->
+    let gp = sparql_of_ctx_s1 (fun d -> sparql_of_elt_s1 f (fun x -> genvar#set_focus x; d x)) ctx in
+    sparql_select genvar#vars gp
 
 (* pretty-printing of focus as HTML *)
 
@@ -280,11 +335,9 @@ object (self)
 
   val mutable focus = AtS1 (Det (Class ":Film", None), ReturnX)
 	  
-  method elt_s = elt_s_of_focus focus
-  method sparql =
-    prologue ^
-      sparql_of_elt_s self#elt_s ^
-      " LIMIT " ^ string_of_int limit
+(*  method elt_s = elt_s_of_focus focus*)
+
+  method sparql = prologue ^ sparql_of_focus focus ^ "\nLIMIT " ^ string_of_int limit
   method html = html_of_focus focus
 
   method refresh =
