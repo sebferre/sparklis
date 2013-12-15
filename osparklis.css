@@ -26,6 +26,9 @@ list-style:none;
 .incr-list
 {
 float:left;
+width:200px;
+height:200px;
+overflow:auto;
 }
 
 li
@@ -36,4 +39,19 @@ cursor:pointer;
 #result
 {
 clear:both;
+}
+
+table
+{
+border-collapse:collapse;
+}
+
+table, th, td
+{
+border:1px solid black;
+}
+
+th, td
+{
+padding:4px;
 }

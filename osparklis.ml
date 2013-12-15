@@ -7,9 +7,23 @@ open XmlHttpRequest
 (* SPARQL variable generator *)
 let genvar =
 object
-  val mutable cpt = 0
-  method reset = cpt <- 0
-  method get = cpt <- cpt+1; "?x" ^ string_of_int cpt
+  val mutable prefix_cpt = []
+  val mutable vars = []
+  method reset =
+    prefix_cpt <- [];
+    vars <- []
+  method get prefix =
+    let k =
+      try
+	let cpt = List.assoc prefix prefix_cpt in
+	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
+	cpt+1
+      with Not_found ->
+	prefix_cpt <- (prefix,1)::prefix_cpt;
+	1 in
+    let v = "?" ^ prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
+    vars <- v::vars;
+    v
 
   val mutable var_what = ""
   method set_what v = var_what <- v
@@ -19,11 +33,18 @@ object
   method set_focus v = var_focus <- v
   method get_focus = var_focus
 
-  method vars =
+  method vars = List.rev vars
+(*
     if var_focus = var_what || var_focus = "" || var_focus.[0] <> '?'
     then [var_what]
     else [var_what; var_focus]
+*)
 end
+
+let prefix_of_uri uri =
+  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
+    | Some (i,res) -> Regexp.matched_string res
+    | None -> "thing"
 
 (* ------------------------- *)
 
@@ -83,8 +104,8 @@ let sparql_select lv gp =
 
 let rec sparql_of_elt_p1 : elt_p1 -> (var -> sparql) = function
   | Type c -> (fun x -> sparql_triple x "a" c)
-  | Has (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> sparql_triple x p y))
-  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 np (fun y -> sparql_triple y p x))
+  | Has (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
+  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:"" np (fun y -> sparql_triple y p x))
   | And ar ->
     (fun x ->
       let res = ref (sparql_of_elt_p1 ar.(0) x) in
@@ -92,23 +113,31 @@ let rec sparql_of_elt_p1 : elt_p1 -> (var -> sparql) = function
 	res := !res ^ sparql_of_elt_p1 ar.(i) x
       done;
       !res)
-and sparql_of_elt_s1 : elt_s1 -> ((var -> sparql) -> sparql) = function
+and sparql_of_elt_s1 ~prefix : elt_s1 -> ((var -> sparql) -> sparql) = function
   | Det (det,rel_opt) ->
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
-    (fun d -> sparql_of_elt_s2 det d1 d)
-and sparql_of_elt_s2 : elt_s2 -> ((var -> sparql) -> (var -> sparql) -> sparql) = function
+    (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
+and sparql_of_elt_s2 ~prefix : elt_s2 -> ((var -> sparql) -> (var -> sparql) -> sparql) = function
   | Term t -> (fun d1 d2 -> d1 t ^ d2 t)
-  | Something -> (fun d1 d2 -> let x = genvar#get in d2 x ^ d1 x)
-  | Class c -> (fun d1 d2 -> let x = genvar#get in d2 x ^ sparql_triple x "a" c ^ d1 x)
+  | Something ->
+    let prefix = if prefix = "" then "thing" else prefix in
+    (fun d1 d2 -> let x = genvar#get prefix in d2 x ^ d1 x)
+  | Class c ->
+    let prefix = prefix_of_uri c in
+    (fun d1 d2 -> let x = genvar#get prefix in d2 x ^ sparql_triple x "a" c ^ d1 x)
 and sparql_of_elt_s : elt_s -> sparql = function
   | Return np ->
-    let gp = sparql_of_elt_s1 np (fun x -> genvar#set_what x; "") in
+    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun x -> genvar#set_what x; "") in
     sparql_select genvar#vars gp
 
 let rec sparql_of_ctx_p1 (d : var -> sparql) : ctx_p1 -> sparql = function
   | DetThatX (det,ctx) ->
+    let prefix =
+      match ctx with
+	| HasX (p,_) -> prefix_of_uri p
+	| _ -> "" in
     sparql_of_ctx_s1
-      (fun d2 -> sparql_of_elt_s2 det d d2) 
+      (fun d2 -> sparql_of_elt_s2 ~prefix det d d2) 
       ctx
   | AndX (i,ar,ctx) ->
     sparql_of_ctx_p1
@@ -138,7 +167,11 @@ let sparql_of_focus = function
     let gp = sparql_of_ctx_p1 (fun x -> genvar#set_focus x; sparql_of_elt_p1 f x) ctx in
     sparql_select genvar#vars gp
   | AtS1 (f,ctx) ->
-    let gp = sparql_of_ctx_s1 (fun d -> sparql_of_elt_s1 f (fun x -> genvar#set_focus x; d x)) ctx in
+    let prefix =
+      match ctx with
+	| HasX (p,_) -> prefix_of_uri p
+	| _ -> "" in
+    let gp = sparql_of_ctx_s1 (fun d -> sparql_of_elt_s1 ~prefix f (fun x -> genvar#set_focus x; d x)) ctx in
     sparql_select genvar#vars gp
 
 (* pretty-printing of focus as HTML *)
@@ -300,6 +333,112 @@ let delete_focus = function
   | AtP1 (f, AndX (i,ar,ctx)) -> Some (delete_and ctx ar i)
   | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
 
+(* ------------------- *)
+
+(* SPARQL results JSon <--> OCaml *)
+
+type rdf_term =
+  | URI of uri
+  | PlainLiteral of string * string
+  | TypedLiteral of string * uri
+  | Bnode of string
+
+type sparql_results =
+    { dim : int;
+      vars : (string * int) list; (* the int is the rank of the string in the list *)
+      bindings : rdf_term array list;
+    }
+
+let sparql_results_of_json s_json =
+  try
+    let ojson = Json.unsafe_input s_json in
+    Firebug.console##log(ojson);
+    let ohead = Unsafe.get ojson (string "head") in
+    let ovars = Unsafe.get ohead (string "vars") in
+    let dim = truncate (to_float (Unsafe.get ovars (string "length"))) in
+    let vars =
+      let res = ref [] in
+      for i = dim-1 downto 0 do
+	let ovar = Unsafe.get ovars (string (string_of_int i)) in
+	let var = to_string (Unsafe.get ovar (string "fullBytes")) in
+	res := (var,i)::!res
+      done;
+      !res in
+    let oresults = Unsafe.get ojson (string "results") in
+    let obindings = Unsafe.get oresults (string "bindings") in
+    Firebug.console##log(obindings);
+    let n = truncate (to_float (Unsafe.get obindings (string "length"))) in
+    let bindings =
+      let res = ref [] in
+      for j = n-1 downto 0 do
+	let obinding = Unsafe.get obindings (string (string_of_int j)) in
+	let binding = Array.make dim (PlainLiteral ("","")) in
+	List.iter
+	  (fun (var,i) ->
+	    let ocell = Unsafe.get obinding (string var) in
+	    Firebug.console##log(ocell);
+	    let otype = Unsafe.get ocell (string "type") in
+	    let ovalue = Unsafe.get ocell (string "value") in
+	    let term =
+	      let v = Unsafe.get ovalue (string "fullBytes") in
+	      match to_string (Unsafe.get otype (string "fullBytes")) with
+		| "uri" -> URI (to_string (decodeURI v))
+		| "bnode" -> Bnode (to_string v)
+		| "typed-literal" ->
+		  let odatatype = Unsafe.get ocell (string "datatype") in
+		  TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+		| "plain-literal" ->
+		  let olang = Unsafe.get ocell (string "xml:lang") in
+		  PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
+		| _ -> assert false in
+	    binding.(i) <- term)
+	  vars;
+	res := binding::!res
+      done;
+      !res in
+    { dim; vars; bindings; }
+  with exn ->
+    Firebug.console##log(string (Printexc.to_string exn));
+    { dim=0; vars=[]; bindings=[]; }
+
+let name_of_uri uri =
+  match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
+    | Some (_,res) ->
+      ( match Regexp.matched_string res with "" -> uri | name -> name )
+    | None -> uri
+
+let html_of_term = function
+  | URI uri ->
+    let name = name_of_uri uri in
+    "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
+  | PlainLiteral (s,lang) -> s ^ "@" ^ lang
+  | TypedLiteral (s,dt) -> s ^ " (" ^ name_of_uri dt ^ ")"
+  | Bnode id -> "_:" ^ id
+
+let extension_of_results results =
+  let buf = Buffer.create 1000 in
+  Buffer.add_string buf "<table id=\"extension\"><tr>";
+  List.iter
+    (fun (var,i) ->
+      Buffer.add_string buf "<th>";
+      Buffer.add_string buf var;
+      Buffer.add_string buf "</th>")
+    results.vars;
+  Buffer.add_string buf "</tr>";
+  List.iter
+    (fun binding ->
+      Buffer.add_string buf "<tr>";
+      for i = 0 to results.dim - 1 do
+	let t = binding.(i) in
+	Buffer.add_string buf "<td>";
+	Buffer.add_string buf (html_of_term t);
+	Buffer.add_string buf "</td>"
+      done;
+      Buffer.add_string buf "</tr>")
+    results.bindings;
+  Buffer.add_string buf "</table>";
+  Buffer.contents buf
+
 (* ------------------ *)
 
 let jquery s k =
@@ -334,11 +473,14 @@ object (self)
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Class ":Film", None), ReturnX)
+
+  val mutable results : sparql_results = { dim=0; vars=[]; bindings=[]; }
 	  
 (*  method elt_s = elt_s_of_focus focus*)
 
   method sparql = prologue ^ sparql_of_focus focus ^ "\nLIMIT " ^ string_of_int limit
   method html = html_of_focus focus
+  method extension = extension_of_results results
 
   method refresh =
     genvar#reset;
@@ -350,11 +492,15 @@ object (self)
     Lwt.ignore_result
       (Lwt.bind
 	 (perform_raw_url
+	    ~headers:[("Accept","application/json")]
 	    ~post_args:[("query", sparql)]
 	    "http://dbpedia.org/sparql")
 	 (fun xhr ->
-	   jquery "#result" (fun elt ->
-	     elt##innerHTML <- string xhr.content);
+	   let content = string xhr.content in
+	   Firebug.console##log(content);
+	   results <- sparql_results_of_json content;
+	   let extension = string self#extension (* content *) in
+	   jquery "#result" (fun elt -> elt##innerHTML <- extension);
 	   Lwt.return_unit));
     ()
 
