@@ -1,6 +1,7 @@
 #lisql
 {
 font-size:1.5em;
+margin:10px;
 }
 
 .classURI
@@ -34,12 +35,25 @@ list-style:none;
 margin:0px;
 }
 
+#increments
+{
+}
+
 .incr-list
 {
 float:left;
-width:200px;
-max-height:200px;
+width:300px;
+height:200px;
 overflow:auto;
+border:4px inset grey;
+margin:5px;
+}
+
+.incr-list ul
+{
+list-style-type: none;
+padding: 10px;
+margin: 0px;
 }
 
 .increment
@@ -50,6 +64,7 @@ cursor:pointer;
 #result
 {
 clear:both;
+margin:5px;
 }
 
 table

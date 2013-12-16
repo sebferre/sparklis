@@ -29,9 +29,11 @@ object
   method set_what v = var_what <- v
   method get_what = var_what
 
+(*
   val mutable var_focus = ""
   method set_focus v = var_focus <- v
   method get_focus = var_focus
+*)
 
   method vars = List.rev vars
 (*
@@ -47,6 +49,7 @@ let prefix_of_uri uri = (* for variable names *)
     | None -> "thing"
 
 let name_of_uri uri =
+  let uri = to_string (decodeURI (string uri)) in
   match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
     | Some (_,res) ->
       ( match Regexp.matched_string res with "" -> uri | name -> name )
@@ -124,8 +127,9 @@ let sparql_term = function
   | Var v -> "?" ^ v
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
+let sparql_join lgp = String.concat "\n" lgp
 let sparql_select lv gp =
-  "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ " WHERE { " ^ gp ^ "}"
+  "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
 let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
@@ -133,23 +137,23 @@ let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:"" np (fun y -> sparql_triple y p x))
   | And ar ->
     (fun x ->
-      let res = ref (sparql_of_elt_p1 ar.(0) x) in
-      for i=1 to Array.length ar - 1 do
-	res := !res ^ sparql_of_elt_p1 ar.(i) x
-      done;
-      !res)
+      sparql_join
+	(Array.to_list
+	   (Array.map
+	      (fun elt -> sparql_of_elt_p1 elt x)
+	      ar)))
 and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> sparql) -> sparql) = function
   | Det (det,rel_opt) ->
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
     (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
 and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -> sparql) = function
-  | Term t -> (fun d1 d2 -> d1 t ^ d2 t)
+  | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
   | Something ->
     let prefix = if prefix = "" then "thing" else prefix in
-    (fun d1 d2 -> let t = Var (genvar#get prefix) in d2 t ^ d1 t)
+    (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; d1 t])
   | Class c ->
     let prefix = prefix_of_uri c in
-    (fun d1 d2 -> let t = Var (genvar#get prefix) in d2 t ^ sparql_triple t "a" (URI c) ^ d1 t)
+    (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
 and sparql_of_elt_s : elt_s -> sparql = function
   | Return np ->
     let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> 
@@ -168,13 +172,14 @@ let rec sparql_of_ctx_p1 (d : term -> sparql) : ctx_p1 -> sparql = function
   | AndX (i,ar,ctx) ->
     sparql_of_ctx_p1
       (fun x ->
-	let sparql = ref "" in
-	for j=0 to Array.length ar - 1 do
-	  if j=i
-	  then sparql := !sparql ^ d x
-	  else sparql := !sparql ^ sparql_of_elt_p1 ar.(j) x
-	done;
-	!sparql)
+	sparql_join
+	  (Array.to_list
+	     (Array.mapi
+		(fun j elt ->
+		  if j=i
+		  then d x
+		  else sparql_of_elt_p1 elt x)
+		ar)))
       ctx
 and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = function
   | HasX (p,ctx) ->
@@ -188,26 +193,28 @@ and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = funct
   | ReturnX ->
     q (fun t -> (match t with Var v -> genvar#set_what v | _ -> ()); "")
 
-let sparql_of_focus = function
+let sparql_of_focus : focus -> term * sparql = function
   | AtP1 (f,ctx) ->
+    let focus = ref (Var "") in
     let gp = sparql_of_ctx_p1
       (fun t ->
-	(match t with Var v -> genvar#set_focus v | _ -> ());
+	focus := t;
 	sparql_of_elt_p1 f t)
       ctx in
-    sparql_select genvar#vars gp
+    !focus, sparql_select genvar#vars gp
   | AtS1 (f,ctx) ->
     let prefix =
       match ctx with
 	| HasX (p,_) -> prefix_of_uri p
 	| _ -> "" in
+    let focus = ref (Var "") in
     let gp = sparql_of_ctx_s1 (fun d ->
       sparql_of_elt_s1 ~prefix f
 	(fun t ->
-	  (match t with Var v -> genvar#set_focus v | _ -> ());
+	  focus := t;
 	  d t))
       ctx in
-    sparql_select genvar#vars gp
+    !focus, sparql_select genvar#vars gp
 
 (* pretty-printing of focus as HTML *)
 
@@ -215,22 +222,29 @@ let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp "<") text "&lt;" in
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
   "<pre>" ^ text ^ "</pre>"
-let html_span cl text = "<span class=\"" ^ cl ^ "\">" ^ text ^ "</span>"
+
+(* let html_span cl text = "<span class=\"" ^ cl ^ "\">" ^ text ^ "</span>" *)
+
+let html_span ?classe ?title text =
+  "<span" ^
+    (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
+    (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
+    ">" ^ text ^ "</span>"
 
 let html_term ?(link = false) = function
   | URI uri ->
     let name = name_of_uri uri in
     if link
     then "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
-    else html_span "URI" name
-  | PlainLiteral (s,lang) -> html_span "Literal" (s ^ "@" ^ lang)
-  | TypedLiteral (s,dt) -> html_span "Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
+    else html_span ~classe:"URI" ~title:uri name
+  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ "@" ^ lang)
+  | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
   | Bnode id -> "_:" ^ id
   | Var v -> "?" ^ v
 let html_class c =
-  html_span "classURI" (name_of_uri c)
+  html_span ~classe:"classURI" ~title:c (name_of_uri c)
 let html_prop p =
-  html_span "propURI" (name_of_uri p)
+  html_span ~classe:"propURI" ~title:p (name_of_uri p)
 
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
@@ -271,8 +285,8 @@ and html_of_ctx_s1 html = function
   | ReturnX -> html_return html
 
 let html_of_focus = function
-  | AtP1 (f,ctx) -> html_of_ctx_p1 (html_span "focus" (html_of_elt_p1 f)) ctx
-  | AtS1 (f,ctx) -> html_of_ctx_s1 (html_span "focus" (html_of_elt_s1 f)) ctx
+  | AtP1 (f,ctx) -> html_of_ctx_p1 (html_span ~classe:"focus" (html_of_elt_p1 f)) ctx
+  | AtS1 (f,ctx) -> html_of_ctx_s1 (html_span ~classe:"focus" (html_of_elt_s1 f)) ctx
 
 (* focus moves *)
 
@@ -395,14 +409,6 @@ let delete_focus = function
 
 (* HTML of increment lists *)
 
-(*
-let html_of_increment = function
-  | IncrTerm t -> "<span class=\"incr-term\">" ^ html_term t ^ "</span>"
-  | IncrClass c -> "<span class=\"incr-class\">a " ^ html_class c ^ "</span>"
-  | IncrProp p -> "<span class=\"incr-property\">has " ^ html_prop p ^ " ...<span class=\"incr-property-uri\">" ^ p ^ "</span></span>"
-  | IncrInvProp p -> "<span class=\"incr-inverse-property\">is " ^ html_prop p ^ " of ...</span>"
-*)
-
 let html_of_increment dico_incrs incr =
   let key = dico_incrs#add incr in
   let text =
@@ -435,6 +441,7 @@ type sparql_results =
       bindings : term array list;
     }
 
+(*
 let column_of_results (var : var) results : term list =
   try
     let i = List.assoc var results.vars in
@@ -442,6 +449,27 @@ let column_of_results (var : var) results : term list =
   with Not_found ->
     Firebug.console##log(string ("column_of_results: missing variable " ^ var));
     [PlainLiteral ("see error","en")]
+*)
+
+let index_of_results_column (var : var) results : (term * int) list =
+  try
+    let i = List.assoc var results.vars in
+    let ht = Hashtbl.create 1000 in
+    List.iter
+      (fun binding ->
+	let term = binding.(i) in
+	try
+	  let cpt = Hashtbl.find ht term in
+	  incr cpt
+	with Not_found ->
+	  Hashtbl.add ht term (ref 1))
+      results.bindings;
+    Hashtbl.fold
+      (fun term cpt res -> (term,!cpt)::res)
+      ht []
+  with Not_found ->
+    Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
+    []
 
 let sparql_results_of_json s_json =
   try
@@ -474,7 +502,7 @@ let sparql_results_of_json s_json =
 	    let term =
 	      let v = Unsafe.get ovalue (string "fullBytes") in
 	      match to_string (Unsafe.get otype (string "fullBytes")) with
-		| "uri" -> URI (to_string (decodeURI v))
+		| "uri" -> URI (to_string v (*decodeURI v*))
 		| "bnode" -> Bnode (to_string v)
 		| "typed-literal" ->
 		  let odatatype = Unsafe.get ocell (string "datatype") in
@@ -482,7 +510,16 @@ let sparql_results_of_json s_json =
 		| "plain-literal" ->
 		  let olang = Unsafe.get ocell (string "xml:lang") in
 		  PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
-		| _ -> assert false in
+		| "literal" ->
+		  ( try
+		      let odatatype = Unsafe.get ocell (string "datatype") in
+		      TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+		    with _ ->
+		      let olang = Unsafe.get ocell (string "xml:lang") in
+		      PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes"))) )
+		| other ->
+		  Firebug.console##log(string ("unexpected value type in SPARQL results: " ^ other));
+		  assert false in
 	    binding.(i) <- term)
 	  vars;
 	res := binding::!res
@@ -604,37 +641,84 @@ object (self)
 
   val mutable focus = AtS1 (Det (Class "http://dbpedia.org/ontology/Film", None), ReturnX)
 
-  method private sparql = prologue ^ sparql_of_focus focus ^ "\nLIMIT " ^ string_of_int limit
+  method private sparql =
+    let focus_term, select = sparql_of_focus focus in
+    focus_term, prologue ^ select ^ "\nLIMIT " ^ string_of_int limit
 
-  method private term_increments focus_terms =
-    List.map (fun t -> IncrTerm t) focus_terms
+  method private focus_term_index focus_term results : (term * int) list =
+    match focus_term with
+      | Var v -> index_of_results_column v results
+      | t -> [(t, List.length results.bindings)]
+
+  method private refresh_term_increments focus_term_index dico_incrs =
+    jquery_set_innerHTML "#terms"
+      (html_of_increment_list dico_incrs
+	 (List.map (fun (t,_) -> IncrTerm t) focus_term_index));
+    jquery_all "#terms .increment" (onclick (fun elt ev ->
+      self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))
+
+  method private refresh_class_increments focus_term_index dico_incrs =
+    let sparql =
+      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+      "SELECT DISTINCT ?class WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
+    Firebug.console##log(string sparql);
+    ajax_sparql sparql (fun results ->
+      let class_index = index_of_results_column "class" results in
+      jquery_set_innerHTML "#classes"
+	(html_of_increment_list dico_incrs
+	   (List.fold_left
+	      (fun res -> function
+		| (URI c, _) -> IncrClass c :: res
+		| _ -> res)
+	      [] class_index));
+      jquery_all "#classes .increment" (onclick (fun elt ev ->
+	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+ 
+  method private refresh_property_increments focus_term_index dico_incrs =
+    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+    let sparql = "SELECT DISTINCT ?prop WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
+    Firebug.console##log(string sparql);
+    ajax_sparql sparql (fun results ->
+      let index = index_of_results_column "prop" results in
+      jquery_set_innerHTML "#properties"
+	(html_of_increment_list dico_incrs
+	   (List.fold_left
+	      (fun res -> function
+		| (URI c, _) -> IncrProp c :: res
+		| _ -> res)
+	      [] index));
+      jquery_all "#properties .increment" (onclick (fun elt ev ->
+	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+
+  method private refresh_inverse_property_increments focus_term_index dico_incrs =
+    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+    let sparql = "SELECT DISTINCT ?prop WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
+    Firebug.console##log(string sparql);
+    ajax_sparql sparql (fun results ->
+      let index = index_of_results_column "prop" results in
+      jquery_set_innerHTML "#inverse-properties"
+	(html_of_increment_list dico_incrs
+	   (List.fold_left
+	      (fun res -> function
+		| (URI c, _) -> IncrInvProp c :: res
+		| _ -> res)
+	      [] index));
+      jquery_all "#inverse-properties .increment" (onclick (fun elt ev ->
+	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
 
   method refresh =
     genvar#reset;
-    let sparql = self#sparql in
+    let focus_term, sparql = self#sparql in
     jquery_set_innerHTML "#sparql" (html_pre sparql);
     jquery_set_innerHTML "#lisql" (html_of_focus focus);
     ajax_sparql sparql (fun results ->
       jquery_set_innerHTML "#result" (html_table_of_results results);
-      let focus_terms = column_of_results genvar#get_focus results in
+      let focus_term_index = self#focus_term_index focus_term results in
       let dico_incrs = new dico_increments in
-      jquery_set_innerHTML "#terms" (html_of_increment_list dico_incrs (* (self#term_increments focus_terms); *)
-				       [IncrTerm (URI "http://dbpedia.org/resource/The_Terminal");
-					IncrTerm (URI "http://dbpedia.org/resource/Steven_Spielberg")]);
-      jquery_set_innerHTML "#classes" (html_of_increment_list dico_incrs
-					 [IncrClass "http://dbpedia.org/ontology/Person";
-					  IncrClass "http://dbpedia.org/ontology/Film"]);
-      jquery_set_innerHTML "#properties" (html_of_increment_list dico_incrs
-					    [IncrProp "http://dbpedia.org/ontology/director";
-					     IncrProp "http://dbpedia.org/ontology/birthDate";
-					     IncrProp "http://dbpedia.org/ontology/starring";
-					     IncrInvProp "http://dbpedia.org/ontology/director";
-					     IncrInvProp "http://dbpedia.org/ontology/starring"]);
-      jquery_all ".increment" (ondblclick (fun elt ev ->
-	let key = to_string (elt##id) in
-	(*Firebug.console##log(string key);*)
-	let incr = dico_incrs#get key in
-	self#focus_update (insert_increment incr))));
+      self#refresh_term_increments focus_term_index dico_incrs;
+      self#refresh_class_increments focus_term_index dico_incrs;
+      self#refresh_property_increments focus_term_index dico_incrs;
+      self#refresh_inverse_property_increments focus_term_index dico_incrs);
     ()
 
   method give_more =
