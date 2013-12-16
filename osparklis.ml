@@ -409,7 +409,7 @@ let delete_focus = function
 
 (* HTML of increment lists *)
 
-let html_of_increment dico_incrs incr =
+let html_of_increment_frequency dico_incrs (incr,freq) =
   let key = dico_incrs#add incr in
   let text =
     match incr with
@@ -417,17 +417,17 @@ let html_of_increment dico_incrs incr =
       | IncrClass c -> "a " ^ html_class c
       | IncrProp p -> "has " ^ html_prop p
       | IncrInvProp p -> "is " ^ html_prop p ^ " of" in
-  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ "</span>"
+  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ " [" ^ string_of_int freq ^ "]</span>"
 
-let html_of_increment_list dico_incrs li =
+let html_of_increment_frequency_list dico_incrs lif =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
-    (fun incr ->
+    (fun incr_freq ->
       Buffer.add_string buf "<li>";
-      Buffer.add_string buf (html_of_increment dico_incrs incr);
+      Buffer.add_string buf (html_of_increment_frequency dico_incrs incr_freq);
       Buffer.add_string buf "</li>")
-    li;
+    lif;
   Buffer.add_string buf "</ul>";
   Buffer.contents buf
 
@@ -440,16 +440,6 @@ type sparql_results =
       vars : (string * int) list; (* the int is the rank of the string in the list *)
       bindings : term array list;
     }
-
-(*
-let column_of_results (var : var) results : term list =
-  try
-    let i = List.assoc var results.vars in
-    List.map (fun binding -> binding.(i)) results.bindings
-  with Not_found ->
-    Firebug.console##log(string ("column_of_results: missing variable " ^ var));
-    [PlainLiteral ("see error","en")]
-*)
 
 let index_of_results_column (var : var) results : (term * int) list =
   try
@@ -464,11 +454,36 @@ let index_of_results_column (var : var) results : (term * int) list =
 	with Not_found ->
 	  Hashtbl.add ht term (ref 1))
       results.bindings;
-    Hashtbl.fold
-      (fun term cpt res -> (term,!cpt)::res)
-      ht []
+    let index =
+      Hashtbl.fold
+	(fun term cpt res -> (term,!cpt)::res)
+	ht [] in
+    List.sort
+      (fun (_,f1) (_,f2) -> Pervasives.compare f1 f2)
+      index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
+    []
+
+let index_of_results_2columns (var_x : var) (var_count : var) results : (term * int) list =
+  try
+    let i_x = List.assoc var_x results.vars in
+    let i_count = List.assoc var_count results.vars in
+    let index =
+      List.fold_left
+	(fun res binding ->
+	  let x = binding.(i_x) in
+	  let count =
+	    match binding.(i_count) with
+	      | TypedLiteral (s,dt) -> (try int_of_string s with _ -> 0)
+	      | _ -> 0 in
+	  (x, count)::res)
+	[] results.bindings in
+    List.sort
+      (fun (_,f1) (_,f2) -> Pervasives.compare f1 f2)
+      index
+  with Not_found ->
+    Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     []
 
 let sparql_results_of_json s_json =
@@ -652,23 +667,23 @@ object (self)
 
   method private refresh_term_increments focus_term_index dico_incrs =
     jquery_set_innerHTML "#terms"
-      (html_of_increment_list dico_incrs
-	 (List.map (fun (t,_) -> IncrTerm t) focus_term_index));
+      (html_of_increment_frequency_list dico_incrs
+	 (List.map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
     jquery_all "#terms .increment" (onclick (fun elt ev ->
       self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))
 
   method private refresh_class_increments focus_term_index dico_incrs =
     let sparql =
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      "SELECT DISTINCT ?class WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
+      "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
     Firebug.console##log(string sparql);
     ajax_sparql sparql (fun results ->
-      let class_index = index_of_results_column "class" results in
+      let class_index = index_of_results_2columns "class" "freq" results in
       jquery_set_innerHTML "#classes"
-	(html_of_increment_list dico_incrs
+	(html_of_increment_frequency_list dico_incrs
 	   (List.fold_left
 	      (fun res -> function
-		| (URI c, _) -> IncrClass c :: res
+		| (URI c, freq) -> (IncrClass c, freq) :: res
 		| _ -> res)
 	      [] class_index));
       jquery_all "#classes .increment" (onclick (fun elt ev ->
@@ -676,15 +691,15 @@ object (self)
  
   method private refresh_property_increments focus_term_index dico_incrs =
     let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-    let sparql = "SELECT DISTINCT ?prop WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
+    let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
     Firebug.console##log(string sparql);
     ajax_sparql sparql (fun results ->
-      let index = index_of_results_column "prop" results in
+      let index = index_of_results_2columns "prop" "freq" results in
       jquery_set_innerHTML "#properties"
-	(html_of_increment_list dico_incrs
+	(html_of_increment_frequency_list dico_incrs
 	   (List.fold_left
 	      (fun res -> function
-		| (URI c, _) -> IncrProp c :: res
+		| (URI c, freq) -> (IncrProp c, freq) :: res
 		| _ -> res)
 	      [] index));
       jquery_all "#properties .increment" (onclick (fun elt ev ->
@@ -692,15 +707,15 @@ object (self)
 
   method private refresh_inverse_property_increments focus_term_index dico_incrs =
     let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-    let sparql = "SELECT DISTINCT ?prop WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
+    let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
     Firebug.console##log(string sparql);
     ajax_sparql sparql (fun results ->
-      let index = index_of_results_column "prop" results in
+      let index = index_of_results_2columns "prop" "freq" results in
       jquery_set_innerHTML "#inverse-properties"
-	(html_of_increment_list dico_incrs
+	(html_of_increment_frequency_list dico_incrs
 	   (List.fold_left
 	      (fun res -> function
-		| (URI c, _) -> IncrInvProp c :: res
+		| (URI c, freq) -> (IncrInvProp c, freq) :: res
 		| _ -> res)
 	      [] index));
       jquery_all "#inverse-properties .increment" (onclick (fun elt ev ->
