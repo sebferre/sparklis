@@ -21,7 +21,7 @@ object
       with Not_found ->
 	prefix_cpt <- (prefix,1)::prefix_cpt;
 	1 in
-    let v = "?" ^ prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
+    let v = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
     vars <- v::vars;
     v
 
@@ -41,15 +41,28 @@ object
 *)
 end
 
-let prefix_of_uri uri =
+let prefix_of_uri uri = (* for variable names *)
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
+
+let name_of_uri uri =
+  match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
+    | Some (_,res) ->
+      ( match Regexp.matched_string res with "" -> uri | name -> name )
+    | None -> uri
 
 (* ------------------------- *)
 
 type uri = string
 type var = string
+
+type term =
+  | URI of uri
+  | PlainLiteral of string * string
+  | TypedLiteral of string * uri
+  | Bnode of string
+  | Var of var
 
 (* LISQL elts *)
 type elt_p1 =
@@ -60,7 +73,7 @@ type elt_p1 =
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
 and elt_s2 =
-  | Term of string
+  | Term of term
   | Something
   | Class of uri
 and elt_s =
@@ -98,12 +111,24 @@ let elt_s_of_focus = function
 
 type sparql = string
 
-let sparql_triple s p o = s ^ " " ^ p ^ " " ^ o ^ " . "
-let sparql_select lv gp =
-  "SELECT DISTINCT " ^ String.concat " " lv ^ " WHERE { " ^ gp ^ "}"
+let sparql_uri uri = 
+  if uri = "a"
+  then "a"
+  else "<" ^ uri ^ ">"
 
-let rec sparql_of_elt_p1 : elt_p1 -> (var -> sparql) = function
-  | Type c -> (fun x -> sparql_triple x "a" c)
+let sparql_term = function
+  | URI uri -> sparql_uri uri
+  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"@" ^ lang
+  | TypedLiteral (s,dt) -> "\"" ^ s ^ "\"^^" ^ sparql_uri dt
+  | Bnode name -> "_:" ^ name
+  | Var v -> "?" ^ v
+
+let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
+let sparql_select lv gp =
+  "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ " WHERE { " ^ gp ^ "}"
+
+let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
+  | Type c -> (fun x -> sparql_triple x "a" (URI c))
   | Has (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:"" np (fun y -> sparql_triple y p x))
   | And ar ->
@@ -113,24 +138,25 @@ let rec sparql_of_elt_p1 : elt_p1 -> (var -> sparql) = function
 	res := !res ^ sparql_of_elt_p1 ar.(i) x
       done;
       !res)
-and sparql_of_elt_s1 ~prefix : elt_s1 -> ((var -> sparql) -> sparql) = function
+and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> sparql) -> sparql) = function
   | Det (det,rel_opt) ->
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
     (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
-and sparql_of_elt_s2 ~prefix : elt_s2 -> ((var -> sparql) -> (var -> sparql) -> sparql) = function
+and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -> sparql) = function
   | Term t -> (fun d1 d2 -> d1 t ^ d2 t)
   | Something ->
     let prefix = if prefix = "" then "thing" else prefix in
-    (fun d1 d2 -> let x = genvar#get prefix in d2 x ^ d1 x)
+    (fun d1 d2 -> let t = Var (genvar#get prefix) in d2 t ^ d1 t)
   | Class c ->
     let prefix = prefix_of_uri c in
-    (fun d1 d2 -> let x = genvar#get prefix in d2 x ^ sparql_triple x "a" c ^ d1 x)
+    (fun d1 d2 -> let t = Var (genvar#get prefix) in d2 t ^ sparql_triple t "a" (URI c) ^ d1 t)
 and sparql_of_elt_s : elt_s -> sparql = function
   | Return np ->
-    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun x -> genvar#set_what x; "") in
+    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> 
+      (match t with Var v -> genvar#set_what v | _ -> ()); "") in
     sparql_select genvar#vars gp
 
-let rec sparql_of_ctx_p1 (d : var -> sparql) : ctx_p1 -> sparql = function
+let rec sparql_of_ctx_p1 (d : term -> sparql) : ctx_p1 -> sparql = function
   | DetThatX (det,ctx) ->
     let prefix =
       match ctx with
@@ -150,7 +176,7 @@ let rec sparql_of_ctx_p1 (d : var -> sparql) : ctx_p1 -> sparql = function
 	done;
 	!sparql)
       ctx
-and sparql_of_ctx_s1 (q : (var -> sparql) -> sparql) : ctx_s1 -> sparql = function
+and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = function
   | HasX (p,ctx) ->
     sparql_of_ctx_p1
       (fun x -> q (fun y -> sparql_triple x p y))
@@ -160,18 +186,27 @@ and sparql_of_ctx_s1 (q : (var -> sparql) -> sparql) : ctx_s1 -> sparql = functi
       (fun x -> q (fun y -> sparql_triple y p x))
       ctx
   | ReturnX ->
-    q (fun x -> genvar#set_what x; "")
+    q (fun t -> (match t with Var v -> genvar#set_what v | _ -> ()); "")
 
 let sparql_of_focus = function
   | AtP1 (f,ctx) ->
-    let gp = sparql_of_ctx_p1 (fun x -> genvar#set_focus x; sparql_of_elt_p1 f x) ctx in
+    let gp = sparql_of_ctx_p1
+      (fun t ->
+	(match t with Var v -> genvar#set_focus v | _ -> ());
+	sparql_of_elt_p1 f t)
+      ctx in
     sparql_select genvar#vars gp
   | AtS1 (f,ctx) ->
     let prefix =
       match ctx with
 	| HasX (p,_) -> prefix_of_uri p
 	| _ -> "" in
-    let gp = sparql_of_ctx_s1 (fun d -> sparql_of_elt_s1 ~prefix f (fun x -> genvar#set_focus x; d x)) ctx in
+    let gp = sparql_of_ctx_s1 (fun d ->
+      sparql_of_elt_s1 ~prefix f
+	(fun t ->
+	  (match t with Var v -> genvar#set_focus v | _ -> ());
+	  d t))
+      ctx in
     sparql_select genvar#vars gp
 
 (* pretty-printing of focus as HTML *)
@@ -181,9 +216,21 @@ let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
   "<pre>" ^ text ^ "</pre>"
 let html_span cl text = "<span class=\"" ^ cl ^ "\">" ^ text ^ "</span>"
-let html_term t = html_span "RDFTerm" t
-let html_class c = html_span "classURI" c
-let html_prop p = html_span "propURI" p
+
+let html_term ?(link = false) = function
+  | URI uri ->
+    let name = name_of_uri uri in
+    if link
+    then "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
+    else html_span "URI" name
+  | PlainLiteral (s,lang) -> html_span "Literal" (s ^ "@" ^ lang)
+  | TypedLiteral (s,dt) -> html_span "Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
+  | Bnode id -> "_:" ^ id
+  | Var v -> "?" ^ v
+let html_class c =
+  html_span "classURI" (name_of_uri c)
+let html_prop p =
+  html_span "propURI" (name_of_uri p)
 
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
@@ -195,7 +242,7 @@ let html_and ar =
   done;
   !html ^ "</ul>"
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
-let html_return np = "Give me " ^ np ^ "."
+let html_return np = "Give me " ^ np
 
 let rec html_of_elt_p1 = function
   | Type c -> html_is_a c
@@ -286,6 +333,12 @@ let left_focus = function
 
 (* increments *)
 
+type increment =
+  | IncrTerm of term
+  | IncrClass of uri
+  | IncrProp of uri
+  | IncrInvProp of uri
+
 let insert_term t = function
   | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Term t, ctx)))
   | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Term t, rel_opt), ctx))
@@ -321,6 +374,13 @@ let insert_inverse_property p focus =
     | Some foc -> down_focus foc
     | None -> None
 
+let insert_increment incr focus =
+  match incr with
+    | IncrTerm t -> insert_term t focus
+    | IncrClass c -> insert_class c focus
+    | IncrProp p -> insert_property p focus
+    | IncrInvProp p -> insert_inverse_property p focus
+
 let delete_and ctx ar i =
   let n = Array.length ar in
   let ar2 = Array.make (n-1) (Type "") in
@@ -333,21 +393,55 @@ let delete_focus = function
   | AtP1 (f, AndX (i,ar,ctx)) -> Some (delete_and ctx ar i)
   | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
 
+(* HTML of increment lists *)
+
+(*
+let html_of_increment = function
+  | IncrTerm t -> "<span class=\"incr-term\">" ^ html_term t ^ "</span>"
+  | IncrClass c -> "<span class=\"incr-class\">a " ^ html_class c ^ "</span>"
+  | IncrProp p -> "<span class=\"incr-property\">has " ^ html_prop p ^ " ...<span class=\"incr-property-uri\">" ^ p ^ "</span></span>"
+  | IncrInvProp p -> "<span class=\"incr-inverse-property\">is " ^ html_prop p ^ " of ...</span>"
+*)
+
+let html_of_increment dico_incrs incr =
+  let key = dico_incrs#add incr in
+  let text =
+    match incr with
+      | IncrTerm t -> html_term t
+      | IncrClass c -> "a " ^ html_class c
+      | IncrProp p -> "has " ^ html_prop p
+      | IncrInvProp p -> "is " ^ html_prop p ^ " of" in
+  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ "</span>"
+
+let html_of_increment_list dico_incrs li =
+  let buf = Buffer.create 1000 in
+  Buffer.add_string buf "<ul>";
+  List.iter
+    (fun incr ->
+      Buffer.add_string buf "<li>";
+      Buffer.add_string buf (html_of_increment dico_incrs incr);
+      Buffer.add_string buf "</li>")
+    li;
+  Buffer.add_string buf "</ul>";
+  Buffer.contents buf
+
 (* ------------------- *)
 
 (* SPARQL results JSon <--> OCaml *)
 
-type rdf_term =
-  | URI of uri
-  | PlainLiteral of string * string
-  | TypedLiteral of string * uri
-  | Bnode of string
-
 type sparql_results =
     { dim : int;
       vars : (string * int) list; (* the int is the rank of the string in the list *)
-      bindings : rdf_term array list;
+      bindings : term array list;
     }
+
+let column_of_results (var : var) results : term list =
+  try
+    let i = List.assoc var results.vars in
+    List.map (fun binding -> binding.(i)) results.bindings
+  with Not_found ->
+    Firebug.console##log(string ("column_of_results: missing variable " ^ var));
+    [PlainLiteral ("see error","en")]
 
 let sparql_results_of_json s_json =
   try
@@ -366,7 +460,6 @@ let sparql_results_of_json s_json =
       !res in
     let oresults = Unsafe.get ojson (string "results") in
     let obindings = Unsafe.get oresults (string "bindings") in
-    Firebug.console##log(obindings);
     let n = truncate (to_float (Unsafe.get obindings (string "length"))) in
     let bindings =
       let res = ref [] in
@@ -376,7 +469,6 @@ let sparql_results_of_json s_json =
 	List.iter
 	  (fun (var,i) ->
 	    let ocell = Unsafe.get obinding (string var) in
-	    Firebug.console##log(ocell);
 	    let otype = Unsafe.get ocell (string "type") in
 	    let ovalue = Unsafe.get ocell (string "value") in
 	    let term =
@@ -401,21 +493,18 @@ let sparql_results_of_json s_json =
     Firebug.console##log(string (Printexc.to_string exn));
     { dim=0; vars=[]; bindings=[]; }
 
-let name_of_uri uri =
-  match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
-    | Some (_,res) ->
-      ( match Regexp.matched_string res with "" -> uri | name -> name )
-    | None -> uri
-
-let html_of_term = function
+(*
+let html_cell_of_term = function
   | URI uri ->
     let name = name_of_uri uri in
     "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
   | PlainLiteral (s,lang) -> s ^ "@" ^ lang
   | TypedLiteral (s,dt) -> s ^ " (" ^ name_of_uri dt ^ ")"
   | Bnode id -> "_:" ^ id
+  | Var v -> "?" ^ v
+*)
 
-let extension_of_results results =
+let html_table_of_results results =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<table id=\"extension\"><tr>";
   List.iter
@@ -431,7 +520,7 @@ let extension_of_results results =
       for i = 0 to results.dim - 1 do
 	let t = binding.(i) in
 	Buffer.add_string buf "<td>";
-	Buffer.add_string buf (html_of_term t);
+	Buffer.add_string buf (html_term ~link:true t);
 	Buffer.add_string buf "</td>"
       done;
       Buffer.add_string buf "</tr>")
@@ -441,16 +530,21 @@ let extension_of_results results =
 
 (* ------------------ *)
 
-let jquery s k =
-  Opt.iter (Dom_html.document##querySelector(string s)) (fun elt ->
+let jquery_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k =
+  Opt.iter (root##querySelector(string s)) (fun elt ->
     k elt)
+let jquery s k = jquery_from (Dom_html.document :> Dom_html.nodeSelector t) s k
 
-let jquery_all s k =
-  let nodelist = Dom_html.document##querySelectorAll(string s) in
+let jquery_all_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k =
+  let nodelist = root##querySelectorAll(string s) in
   let n = nodelist##length in
   for i=0 to n-1 do
     Opt.iter nodelist##item(i) k
   done
+let jquery_all s k = jquery_all_from (Dom_html.document :> Dom_html.nodeSelector t) s k
+
+let jquery_set_innerHTML sel html =
+  jquery sel (fun elt -> elt##innerHTML <- string html)
 
 let onclick k elt =
   elt##onclick <- Dom.handler (fun ev -> k elt ev; bool true)
@@ -458,8 +552,44 @@ let onclick k elt =
 let ondblclick k elt =
   elt##ondblclick <- Dom.handler (fun ev -> k elt ev; bool true)
 
+let ajax_sparql (sparql : sparql) (k : sparql_results -> unit) =
+  Lwt.ignore_result
+    (Lwt.bind
+       (perform_raw_url
+	  ~headers:[("Accept","application/json")]
+	  ~post_args:[("query", sparql)]
+	  "http://dbpedia.org/sparql")
+       (fun xhr ->
+	 ( match xhr.code / 100 with
+	   | 2 ->
+	     let content = string xhr.content in
+	     Firebug.console##log(content);
+	     let results = sparql_results_of_json content in
+	     k results
+	   | _ ->
+	     Firebug.console##log(string ("SPARQL request unsuccessful: code " ^ string_of_int xhr.code)));
+	 Lwt.return_unit))
 
 (* -------------------- *)
+
+class dico_increments =
+object
+  val mutable cpt = 0
+  val ht : (string,increment) Hashtbl.t = Hashtbl.create 100
+
+  method add (incr : increment) : string =
+    cpt <- cpt + 1;
+    let key = "incr" ^ string_of_int cpt in
+    Hashtbl.add ht key incr;
+    key
+
+  method get (key : string) : increment =
+    try Hashtbl.find ht key
+    with _ ->
+      Firebug.console##log(string ("Missing increment: " ^ key));
+      failwith "Osparqlis.dico_increments#get"
+end
+
 
 (* navigation place *)
 class place =
@@ -472,36 +602,39 @@ object (self)
 
   val mutable limit = 10
 
-  val mutable focus = AtS1 (Det (Class ":Film", None), ReturnX)
+  val mutable focus = AtS1 (Det (Class "http://dbpedia.org/ontology/Film", None), ReturnX)
 
-  val mutable results : sparql_results = { dim=0; vars=[]; bindings=[]; }
-	  
-(*  method elt_s = elt_s_of_focus focus*)
+  method private sparql = prologue ^ sparql_of_focus focus ^ "\nLIMIT " ^ string_of_int limit
 
-  method sparql = prologue ^ sparql_of_focus focus ^ "\nLIMIT " ^ string_of_int limit
-  method html = html_of_focus focus
-  method extension = extension_of_results results
+  method private term_increments focus_terms =
+    List.map (fun t -> IncrTerm t) focus_terms
 
   method refresh =
     genvar#reset;
     let sparql = self#sparql in
-    jquery "#sparql" (fun elt ->
-      elt##innerHTML <- string (html_pre sparql));
-    jquery "#lisql" (fun elt ->
-      elt##innerHTML <- string self#html);
-    Lwt.ignore_result
-      (Lwt.bind
-	 (perform_raw_url
-	    ~headers:[("Accept","application/json")]
-	    ~post_args:[("query", sparql)]
-	    "http://dbpedia.org/sparql")
-	 (fun xhr ->
-	   let content = string xhr.content in
-	   Firebug.console##log(content);
-	   results <- sparql_results_of_json content;
-	   let extension = string self#extension (* content *) in
-	   jquery "#result" (fun elt -> elt##innerHTML <- extension);
-	   Lwt.return_unit));
+    jquery_set_innerHTML "#sparql" (html_pre sparql);
+    jquery_set_innerHTML "#lisql" (html_of_focus focus);
+    ajax_sparql sparql (fun results ->
+      jquery_set_innerHTML "#result" (html_table_of_results results);
+      let focus_terms = column_of_results genvar#get_focus results in
+      let dico_incrs = new dico_increments in
+      jquery_set_innerHTML "#terms" (html_of_increment_list dico_incrs (* (self#term_increments focus_terms); *)
+				       [IncrTerm (URI "http://dbpedia.org/resource/The_Terminal");
+					IncrTerm (URI "http://dbpedia.org/resource/Steven_Spielberg")]);
+      jquery_set_innerHTML "#classes" (html_of_increment_list dico_incrs
+					 [IncrClass "http://dbpedia.org/ontology/Person";
+					  IncrClass "http://dbpedia.org/ontology/Film"]);
+      jquery_set_innerHTML "#properties" (html_of_increment_list dico_incrs
+					    [IncrProp "http://dbpedia.org/ontology/director";
+					     IncrProp "http://dbpedia.org/ontology/birthDate";
+					     IncrProp "http://dbpedia.org/ontology/starring";
+					     IncrInvProp "http://dbpedia.org/ontology/director";
+					     IncrInvProp "http://dbpedia.org/ontology/starring"]);
+      jquery_all ".increment" (ondblclick (fun elt ev ->
+	let key = to_string (elt##id) in
+	(*Firebug.console##log(string key);*)
+	let incr = dico_incrs#get key in
+	self#focus_update (insert_increment incr))));
     ()
 
   method give_more =
@@ -537,19 +670,6 @@ let _ =
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
     jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
     jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
-
-    jquery_all ".incr-term" (ondblclick (fun elt ev ->
-      let t = to_string elt##innerHTML in
-      myplace#focus_update (insert_term t)));
-    jquery_all ".incr-class" (ondblclick (fun elt ev ->
-      let c = to_string elt##innerHTML in
-      myplace#focus_update (insert_class c)));
-    jquery_all ".incr-property" (ondblclick (fun elt ev ->
-      let p = to_string elt##innerHTML in
-      myplace#focus_update (insert_property p)));
-    jquery_all ".incr-inverse-property" (ondblclick (fun elt ev ->
-      let p = to_string elt##innerHTML in
-      myplace#focus_update (insert_inverse_property p)));
 
     myplace#refresh;
     bool true)

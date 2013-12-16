@@ -8,48 +8,29 @@
 </head>
 
 <body>
-<div id="lisql"></div>
-<div id="controls">
-  <button id="up">Focus UP</button>
-  <button id="down">Focus DOWN</button>
-  <button id="left">Focus LEFT</button>
-  <button id="right">Focus RIGHT</button>
-  <button id="delete">DELETE Focus</button>
-</div>
+  <div id="lisql"></div>
 
-<div id="increments">
-<div id="terms" class="incr-list">
-  <ul>
-    <li><span class="incr-term RDFTerm">res:The_Terminal</span></li>
-  </ul>
-</div>
+  <div id="controls">
+    <button id="up">Focus UP</button>
+    <button id="down">Focus DOWN</button>
+    <button id="left">Focus LEFT</button>
+    <button id="right">Focus RIGHT</button>
+    <button id="delete">DELETE Focus</button>
+  </div>
 
-<div id="classes" class="incr-list">
-  <ul>
-    <li>a <span class="incr-class classURI">:Film</span></li>
-    <li>a <span class="incr-class classURI">:Person</span></li>
-  </ul>
-</div>
+  <div id="increments">
+    <div id="terms" class="incr-list"></div>
+    <div id="classes" class="incr-list"></div>
+    <div id="properties" class="incr-list"></div>
+  </div>
 
-<div id="properties" class="incr-list">
-  <ul>
-    <li>has <span class="incr-property propURI">:director</span> ...</li>
-    <li>has <span class="incr-property propURI">:birthDate</span> ...</li>
-  </ul>
-</div>
+  <div id="extension">
+    <div id="result">No result</div>
+    <button id="more">Give more results</button>
+    <button id="less">Give less results</button>
+  </div>
 
-<div id="inverse-properties" class="incr-list">
-  <ul>
-    <li>is <span class="incr-inverse-property propURI">:director</span> of ...</li>
-  </ul>
-</div>
-</div>
-
-<div id="result">No result</div>
-<button id="more">Give more results</button>
-<button id="less">Give less results</button>
-
-<div id="sparql"></div>
+  <div id="sparql"></div>
 
 </body>
 </html>
