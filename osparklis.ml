@@ -438,8 +438,21 @@ let html_of_increment_frequency_list dico_incrs lif =
 type sparql_results =
     { dim : int;
       vars : (string * int) list; (* the int is the rank of the string in the list *)
+      length : int;
       bindings : term array list;
     }
+
+let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
+
+let page_of_results (offset : int) (limit : int) results : sparql_results =
+  let rec aux offset limit = function
+    | [] -> []
+    | binding::l ->
+      if offset > 0 then aux (offset-1) limit l
+      else if limit > 0 then binding :: aux offset (limit-1) l
+      else []
+  in
+  { results with bindings = aux offset limit results.bindings }
 
 let index_of_results_column (var : var) results : (term * int) list =
   try
@@ -504,7 +517,8 @@ let sparql_results_of_json s_json =
     let oresults = Unsafe.get ojson (string "results") in
     let obindings = Unsafe.get oresults (string "bindings") in
     let n = truncate (to_float (Unsafe.get obindings (string "length"))) in
-    let bindings =
+    let length, bindings =
+      let len = ref 0 in
       let res = ref [] in
       for j = n-1 downto 0 do
 	let obinding = Unsafe.get obindings (string (string_of_int j)) in
@@ -537,24 +551,14 @@ let sparql_results_of_json s_json =
 		  assert false in
 	    binding.(i) <- term)
 	  vars;
+	incr len;
 	res := binding::!res
       done;
-      !res in
-    { dim; vars; bindings; }
+      !len, !res in
+    { dim; vars; length; bindings; }
   with exn ->
     Firebug.console##log(string (Printexc.to_string exn));
-    { dim=0; vars=[]; bindings=[]; }
-
-(*
-let html_cell_of_term = function
-  | URI uri ->
-    let name = name_of_uri uri in
-    "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
-  | PlainLiteral (s,lang) -> s ^ "@" ^ lang
-  | TypedLiteral (s,dt) -> s ^ " (" ^ name_of_uri dt ^ ")"
-  | Bnode id -> "_:" ^ id
-  | Var v -> "?" ^ v
-*)
+    empty_results
 
 let html_table_of_results results =
   let buf = Buffer.create 1000 in
@@ -646,24 +650,29 @@ end
 (* navigation place *)
 class place =
 object (self)
-  val mutable prologue =
-    "PREFIX res: <http://dbpedia.org/resource/>\n" ^
-      "PREFIX dbo: <http://dbpedia.org/ontology/>\n" ^
-      "PREFIX dbp: <http://dbpedia.org/property/>\n" ^
-      "PREFIX : <http://dbpedia.org/ontology/>\n"
-
+  val mutable offset = 0
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Class "http://dbpedia.org/ontology/Film", None), ReturnX)
 
-  method private sparql =
-    let focus_term, select = sparql_of_focus focus in
-    focus_term, prologue ^ select ^ "\nLIMIT " ^ string_of_int limit
+  val mutable focus_term = Var ""
+  val mutable sparql = ""
+  method private define_sparql =
+    let t, s = sparql_of_focus focus in
+    focus_term <- t;
+    sparql <- s ^ "\nLIMIT 100"
+
+  val mutable results = empty_results
+
+  method private refresh_extension =
+    jquery_set_innerHTML "#result"
+      (html_table_of_results
+	 (page_of_results offset limit results))
 
   method private focus_term_index focus_term results : (term * int) list =
     match focus_term with
       | Var v -> index_of_results_column v results
-      | t -> [(t, List.length results.bindings)]
+      | t -> [(t, results.length)]
 
   method private refresh_term_increments focus_term_index dico_incrs =
     jquery_set_innerHTML "#terms"
@@ -722,12 +731,13 @@ object (self)
 	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
 
   method refresh =
-    genvar#reset;
-    let focus_term, sparql = self#sparql in
-    jquery_set_innerHTML "#sparql" (html_pre sparql);
     jquery_set_innerHTML "#lisql" (html_of_focus focus);
-    ajax_sparql sparql (fun results ->
-      jquery_set_innerHTML "#result" (html_table_of_results results);
+    genvar#reset;
+    self#define_sparql;
+    jquery_set_innerHTML "#sparql" (html_pre sparql);
+    ajax_sparql sparql (fun res ->
+      results <- res;
+      self#refresh_extension;
       let focus_term_index = self#focus_term_index focus_term results in
       let dico_incrs = new dico_increments in
       self#refresh_term_increments focus_term_index dico_incrs;
@@ -737,14 +747,33 @@ object (self)
     ()
 
   method give_more =
-    limit <- limit + 10;
-    self#refresh
+    if offset + limit < results.length
+    then begin
+      limit <- limit + 10;
+      self#refresh_extension
+    end
 
   method give_less =
     if limit > 10
     then begin
       limit <- limit - 10;
-      self#refresh
+      self#refresh_extension
+    end
+
+  method page_down =
+    let offset' = offset + limit in
+    if offset' < results.length
+    then begin
+      offset <- offset';
+      self#refresh_extension
+    end
+
+  method page_up =
+    let offset' = offset - limit in
+    if offset' >= 0
+    then begin
+      offset <- offset';
+      self#refresh_extension
     end
 
   method focus_update f =
@@ -763,6 +792,8 @@ let _ =
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#more" (onclick (fun elt ev -> myplace#give_more));
     jquery "#less" (onclick (fun elt ev -> myplace#give_less));
+    jquery "#page-down" (onclick (fun elt ev -> myplace#page_down));
+    jquery "#page-up" (onclick (fun elt ev -> myplace#page_up));
 
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
