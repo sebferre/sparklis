@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
+<title>Sparklis</title>
+<meta name="author" content="Sébastien Ferré"/>
+<meta name="description" content="Sparklis lets you explore a RDF dataset through a SPARQL endpoint without the need to read or write SPARQL queries. Queries are displayed in natural language syntax, and are incrementally built by clicking suggested query elements, and by inserting them at the current focus. Only relevant suggestions are made, so that empty results are avoided."/>
+<meta name="keywords" content="SPARQL, faceted search, semantic search, exploratory search, complex queries, natural language interface, logical information systems"/>
 <meta charset="UTF-8">
 <link rel="stylesheet" type="text/css" href="osparklis.css">
 <script src="osparklis.js">
@@ -8,9 +12,15 @@
 </head>
 
 <body>
+  <header>
+    <h1>Sparklis</h1>
+    <p><em>Complex queries and exploratory search for SPARQL endpoints at your fingertips!</em></p>
+  </header>
+
   <div id="lisql"></div>
 
   <div id="controls">
+    <button id="home">Home</button>
     <button id="up">Focus UP</button>
     <button id="down">Focus DOWN</button>
     <button id="left">Focus LEFT</button>
@@ -35,5 +45,9 @@
 
   <div id="sparql"></div>
 
+  <footer>
+    <p>Created by: Sébastien Ferré © 2013</p>
+    <p>Visit <a href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
+  </footer>
 </body>
 </html>

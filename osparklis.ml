@@ -25,22 +25,7 @@ object
     vars <- v::vars;
     v
 
-  val mutable var_what = ""
-  method set_what v = var_what <- v
-  method get_what = var_what
-
-(*
-  val mutable var_focus = ""
-  method set_focus v = var_focus <- v
-  method get_focus = var_focus
-*)
-
   method vars = List.rev vars
-(*
-    if var_focus = var_what || var_focus = "" || var_focus.[0] <> '?'
-    then [var_what]
-    else [var_what; var_focus]
-*)
 end
 
 let prefix_of_uri uri = (* for variable names *)
@@ -127,7 +112,7 @@ let sparql_term = function
   | Var v -> "?" ^ v
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
-let sparql_join lgp = String.concat "\n" lgp
+let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
 let sparql_select lv gp =
   "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
@@ -156,8 +141,7 @@ and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -
     (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
 and sparql_of_elt_s : elt_s -> sparql = function
   | Return np ->
-    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> 
-      (match t with Var v -> genvar#set_what v | _ -> ()); "") in
+    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> "") in
     sparql_select genvar#vars gp
 
 let rec sparql_of_ctx_p1 (d : term -> sparql) : ctx_p1 -> sparql = function
@@ -191,9 +175,9 @@ and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = funct
       (fun x -> q (fun y -> sparql_triple y p x))
       ctx
   | ReturnX ->
-    q (fun t -> (match t with Var v -> genvar#set_what v | _ -> ()); "")
+    q (fun t -> "")
 
-let sparql_of_focus : focus -> term * sparql = function
+let sparql_of_focus : focus -> term * sparql option = function
   | AtP1 (f,ctx) ->
     let focus = ref (Var "") in
     let gp = sparql_of_ctx_p1
@@ -201,7 +185,7 @@ let sparql_of_focus : focus -> term * sparql = function
 	focus := t;
 	sparql_of_elt_p1 f t)
       ctx in
-    !focus, sparql_select genvar#vars gp
+    !focus, (if gp = "" then None else Some (sparql_select genvar#vars gp))
   | AtS1 (f,ctx) ->
     let prefix =
       match ctx with
@@ -214,7 +198,7 @@ let sparql_of_focus : focus -> term * sparql = function
 	  focus := t;
 	  d t))
       ctx in
-    !focus, sparql_select genvar#vars gp
+    !focus, (if gp="" then None else Some (sparql_select genvar#vars gp))
 
 (* pretty-printing of focus as HTML *)
 
@@ -417,7 +401,11 @@ let html_of_increment_frequency dico_incrs (incr,freq) =
       | IncrClass c -> "a " ^ html_class c
       | IncrProp p -> "has " ^ html_prop p
       | IncrInvProp p -> "is " ^ html_prop p ^ " of" in
-  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ " [" ^ string_of_int freq ^ "]</span>"
+  let text_freq =
+    if freq = 1
+    then ""
+    else " [" ^ string_of_int freq ^ "]" in
+  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
 let html_of_increment_frequency_list dico_incrs lif =
   let buf = Buffer.create 1000 in
@@ -453,6 +441,14 @@ let page_of_results (offset : int) (limit : int) results : sparql_results =
       else []
   in
   { results with bindings = aux offset limit results.bindings }
+
+let list_of_results_column (var : var) results : term list =
+  try
+    let i = List.assoc var results.vars in
+    List.rev_map (fun binding -> binding.(i)) results.bindings
+  with Not_found ->
+    Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
+    []
 
 let index_of_results_column (var : var) results : (term * int) list =
   try
@@ -502,7 +498,6 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
 let sparql_results_of_json s_json =
   try
     let ojson = Json.unsafe_input s_json in
-    Firebug.console##log(ojson);
     let ohead = Unsafe.get ojson (string "head") in
     let ovars = Unsafe.get ohead (string "vars") in
     let dim = truncate (to_float (Unsafe.get ovars (string "length"))) in
@@ -608,7 +603,9 @@ let onclick k elt =
 let ondblclick k elt =
   elt##ondblclick <- Dom.handler (fun ev -> k elt ev; bool true)
 
-let ajax_sparql (sparql : sparql) (k : sparql_results -> unit) =
+let ajax_sparql_in (elt : Dom_html.element t) (sparql : sparql) (k : sparql_results -> unit) =
+  Firebug.console##log(string sparql);
+  elt##style##cursor <- string "progress";
   Lwt.ignore_result
     (Lwt.bind
        (perform_raw_url
@@ -619,12 +616,14 @@ let ajax_sparql (sparql : sparql) (k : sparql_results -> unit) =
 	 ( match xhr.code / 100 with
 	   | 2 ->
 	     let content = string xhr.content in
-	     Firebug.console##log(content);
 	     let results = sparql_results_of_json content in
-	     k results
+	     k results;
+	     elt##style##cursor <- string "default"
 	   | _ ->
 	     Firebug.console##log(string ("SPARQL request unsuccessful: code " ^ string_of_int xhr.code)));
 	 Lwt.return_unit))
+let ajax_sparql sparql k =
+  ajax_sparql_in (Dom_html.document##documentElement) sparql k
 
 (* -------------------- *)
 
@@ -653,14 +652,14 @@ object (self)
   val mutable offset = 0
   val mutable limit = 10
 
-  val mutable focus = AtS1 (Det (Class "http://dbpedia.org/ontology/Film", None), ReturnX)
+  val mutable focus = AtS1 (Det (Something, None), ReturnX)
 
-  val mutable focus_term = Var ""
-  val mutable sparql = ""
+  val mutable focus_term = Var "thing"
+  val mutable sparql_opt = None
   method private define_sparql =
-    let t, s = sparql_of_focus focus in
+    let t, s_opt = sparql_of_focus focus in
     focus_term <- t;
-    sparql <- s ^ "\nLIMIT 100"
+    sparql_opt <- (match s_opt with None -> None | Some s -> Some (s ^ "\nLIMIT 100"))
 
   val mutable results = empty_results
 
@@ -675,76 +674,120 @@ object (self)
       | t -> [(t, results.length)]
 
   method private refresh_term_increments focus_term_index dico_incrs =
-    jquery_set_innerHTML "#terms"
-      (html_of_increment_frequency_list dico_incrs
-	 (List.map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
-    jquery_all "#terms .increment" (onclick (fun elt ev ->
-      self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))
+    jquery "#terms" (fun elt ->
+      elt##innerHTML <- string
+	(html_of_increment_frequency_list dico_incrs
+	   (List.map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
+      jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+
+  method private refresh_class_increments_init dico_incrs =
+    jquery "#classes" (fun elt ->
+(*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
+      let sparql = "SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } } LIMIT 1000" in
+      ajax_sparql_in elt sparql (fun results ->
+	let class_list = list_of_results_column "class" results in
+	elt##innerHTML <- string
+	  (html_of_increment_frequency_list dico_incrs
+	     (List.fold_left
+		(fun res -> function
+		  | URI c -> (IncrClass c, 1) :: res
+		  | _ -> res)
+		[] class_list));
+	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
   method private refresh_class_increments focus_term_index dico_incrs =
-    let sparql =
-      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
-    Firebug.console##log(string sparql);
-    ajax_sparql sparql (fun results ->
-      let class_index = index_of_results_2columns "class" "freq" results in
-      jquery_set_innerHTML "#classes"
-	(html_of_increment_frequency_list dico_incrs
-	   (List.fold_left
-	      (fun res -> function
-		| (URI c, freq) -> (IncrClass c, freq) :: res
-		| _ -> res)
-	      [] class_index));
-      jquery_all "#classes .increment" (onclick (fun elt ev ->
-	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+    jquery "#classes" (fun elt ->
+      let sparql =
+	let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+	"SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
+      ajax_sparql_in elt sparql (fun results ->
+	let class_index = index_of_results_2columns "class" "freq" results in
+	elt##innerHTML <- string
+	  (html_of_increment_frequency_list dico_incrs
+	     (List.fold_left
+		(fun res -> function
+		  | (URI c, freq) -> (IncrClass c, freq) :: res
+		  | _ -> res)
+		[] class_index));
+	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
  
   method private refresh_property_increments focus_term_index dico_incrs =
-    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-    let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
-    Firebug.console##log(string sparql);
-    ajax_sparql sparql (fun results ->
-      let index = index_of_results_2columns "prop" "freq" results in
-      jquery_set_innerHTML "#properties"
-	(html_of_increment_frequency_list dico_incrs
-	   (List.fold_left
-	      (fun res -> function
-		| (URI c, freq) -> (IncrProp c, freq) :: res
-		| _ -> res)
-	      [] index));
-      jquery_all "#properties .increment" (onclick (fun elt ev ->
-	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+    jquery "#properties" (fun elt ->
+      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+      let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
+      ajax_sparql_in elt sparql (fun results ->
+	let index = index_of_results_2columns "prop" "freq" results in
+	elt##innerHTML <- string
+	  (html_of_increment_frequency_list dico_incrs
+	     (List.fold_left
+		(fun res -> function
+		  | (URI c, freq) -> (IncrProp c, freq) :: res
+		  | _ -> res)
+		[] index));
+	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
   method private refresh_inverse_property_increments focus_term_index dico_incrs =
-    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-    let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
-    Firebug.console##log(string sparql);
-    ajax_sparql sparql (fun results ->
-      let index = index_of_results_2columns "prop" "freq" results in
-      jquery_set_innerHTML "#inverse-properties"
-	(html_of_increment_frequency_list dico_incrs
-	   (List.fold_left
-	      (fun res -> function
-		| (URI c, freq) -> (IncrInvProp c, freq) :: res
-		| _ -> res)
-	      [] index));
-      jquery_all "#inverse-properties .increment" (onclick (fun elt ev ->
-	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+    jquery "#inverse-properties" (fun elt ->
+      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
+      ajax_sparql_in elt sparql (fun results ->
+	let index = index_of_results_2columns "prop" "freq" results in
+	elt##innerHTML <- string
+	  (html_of_increment_frequency_list dico_incrs
+	     (List.fold_left
+		(fun res -> function
+		  | (URI c, freq) -> (IncrInvProp c, freq) :: res
+		  | _ -> res)
+		[] index));
+	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
   method refresh =
     jquery_set_innerHTML "#lisql" (html_of_focus focus);
     genvar#reset;
     self#define_sparql;
-    jquery_set_innerHTML "#sparql" (html_pre sparql);
-    ajax_sparql sparql (fun res ->
-      results <- res;
-      self#refresh_extension;
-      let focus_term_index = self#focus_term_index focus_term results in
-      let dico_incrs = new dico_increments in
-      self#refresh_term_increments focus_term_index dico_incrs;
-      self#refresh_class_increments focus_term_index dico_incrs;
-      self#refresh_property_increments focus_term_index dico_incrs;
-      self#refresh_inverse_property_increments focus_term_index dico_incrs);
-    ()
+    match sparql_opt with
+      | None ->
+	jquery_set_innerHTML "#sparql" "";
+	( match focus_term with
+	  | Var v ->
+	    jquery_set_innerHTML "#result" "";
+	    let dico_incrs = new dico_increments in
+	    jquery_set_innerHTML "#terms" "";
+	    jquery_set_innerHTML "#classes" "";
+	    jquery_set_innerHTML "#properties" "";
+	    jquery_set_innerHTML "#inverse-properties" "";
+	    self#refresh_class_increments_init dico_incrs
+	  | term ->
+	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [|term|] ]; };
+	    self#refresh_extension;
+	    let focus_term_index = [(term,1)] in
+	    let dico_incrs = new dico_increments in
+	    self#refresh_term_increments focus_term_index dico_incrs;
+	    self#refresh_class_increments focus_term_index dico_incrs;
+	    self#refresh_property_increments focus_term_index dico_incrs;
+	    self#refresh_inverse_property_increments focus_term_index dico_incrs )
+      | Some sparql ->
+	jquery_set_innerHTML "#sparql" (html_pre sparql);
+	ajax_sparql sparql (fun res ->
+	  results <- res;
+	  self#refresh_extension;
+	  let focus_term_index = self#focus_term_index focus_term results in
+	  let dico_incrs = new dico_increments in
+	  self#refresh_term_increments focus_term_index dico_incrs;
+	  self#refresh_class_increments focus_term_index dico_incrs;
+	  self#refresh_property_increments focus_term_index dico_incrs;
+	  self#refresh_inverse_property_increments focus_term_index dico_incrs);
+	()
+
+  method home =
+    focus <- AtS1 (Det (Something, None), ReturnX);
+    offset <- 0;
+    self#refresh
 
   method give_more =
     if offset + limit < results.length
@@ -790,16 +833,18 @@ let myplace = new place
 let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    jquery "#more" (onclick (fun elt ev -> myplace#give_more));
-    jquery "#less" (onclick (fun elt ev -> myplace#give_less));
-    jquery "#page-down" (onclick (fun elt ev -> myplace#page_down));
-    jquery "#page-up" (onclick (fun elt ev -> myplace#page_up));
+    jquery "#home" (onclick (fun elt ev -> myplace#home));
 
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
     jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
     jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
+
+    jquery "#more" (onclick (fun elt ev -> myplace#give_more));
+    jquery "#less" (onclick (fun elt ev -> myplace#give_less));
+    jquery "#page-down" (onclick (fun elt ev -> myplace#page_down));
+    jquery "#page-up" (onclick (fun elt ev -> myplace#page_up));
 
     myplace#refresh;
     bool true)
