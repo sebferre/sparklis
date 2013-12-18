@@ -141,6 +141,13 @@ let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
 	      ar)))
 and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> sparql) -> sparql) = function
   | Det (det,rel_opt) ->
+    let prefix =
+      if prefix = ""
+      then
+	match rel_opt with
+	  | Some (IsOf (p,_)) -> prefix_of_uri p
+	  | _ -> prefix
+      else prefix in
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
     (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
 and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -> sparql) = function
@@ -156,17 +163,20 @@ and sparql_of_elt_s : elt_s -> sparql = function
     let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> "") in
     sparql_select genvar#vars gp
 
-let rec sparql_of_ctx_p1 (d : term -> sparql) : ctx_p1 -> sparql = function
+let rec sparql_of_ctx_p1 ~prefix (d : term -> sparql) : ctx_p1 -> sparql = function
   | DetThatX (det,ctx) ->
     let prefix =
-      match ctx with
-	| HasX (p,_) -> prefix_of_uri p
-	| _ -> "" in
+      if prefix = ""
+      then
+	match ctx with
+	  | HasX (p,_) -> prefix_of_uri p
+	  | _ -> prefix
+      else prefix in
     sparql_of_ctx_s1
       (fun d2 -> sparql_of_elt_s2 ~prefix det d d2) 
       ctx
   | AndX (i,ar,ctx) ->
-    sparql_of_ctx_p1
+    sparql_of_ctx_p1 ~prefix
       (fun x ->
 	sparql_join
 	  (Array.to_list
@@ -179,11 +189,11 @@ let rec sparql_of_ctx_p1 (d : term -> sparql) : ctx_p1 -> sparql = function
       ctx
 and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = function
   | HasX (p,ctx) ->
-    sparql_of_ctx_p1
+    sparql_of_ctx_p1 ~prefix:""
       (fun x -> q (fun y -> sparql_triple x p y))
       ctx
   | IsOfX (p,ctx) ->
-    sparql_of_ctx_p1
+    sparql_of_ctx_p1 ~prefix:(prefix_of_uri p)
       (fun x -> q (fun y -> sparql_triple y p x))
       ctx
   | ReturnX ->
@@ -191,8 +201,12 @@ and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = funct
 
 let sparql_of_focus : focus -> term * (var list * sparql) option = function
   | AtP1 (f,ctx) ->
+    let prefix =
+      match f with
+	| IsOf (p, _) -> prefix_of_uri p
+	| _ -> "" in
     let focus = ref (Var "") in
-    let gp = sparql_of_ctx_p1
+    let gp = sparql_of_ctx_p1 ~prefix
       (fun t ->
 	focus := t;
 	sparql_of_elt_p1 f t)
@@ -258,6 +272,7 @@ let html_and ar =
   done;
   !html ^ "</ul>"
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
+let html_the_of p np = "the " ^ html_prop p ^ " of " ^ np
 let html_return np = "Give me " ^ np
 
 let rec html_of_elt_p1 = function
@@ -267,6 +282,7 @@ let rec html_of_elt_p1 = function
   | And ar -> html_and (Array.map html_of_elt_p1 ar)
 and html_of_elt_s1 = function
   | Det (det, None) -> html_det (html_of_elt_s2 det) None
+  | Det (Something, Some (IsOf (p,np))) -> html_the_of p (html_of_elt_s1 np)
   | Det (det, Some rel) -> html_det (html_of_elt_s2 det) (Some (html_of_elt_p1 rel))
 and html_of_elt_s2 = function
   | Term t -> html_term t
@@ -283,12 +299,18 @@ let rec html_of_ctx_p1 html = function
     html_of_ctx_p1 (html_and ar_html) ctx
 and html_of_ctx_s1 html = function
   | HasX (p,ctx) -> html_of_ctx_p1 (html_has p html) ctx
+  | IsOfX (p, DetThatX (Something,ctx2)) -> html_of_ctx_s1 (html_the_of p html) ctx2
   | IsOfX (p,ctx) -> html_of_ctx_p1 (html_is_of p html) ctx
   | ReturnX -> html_return html
 
 let html_of_focus = function
-  | AtP1 (f,ctx) -> html_of_ctx_p1 (html_span ~classe:"focus" (html_of_elt_p1 f)) ctx
-  | AtS1 (f,ctx) -> html_of_ctx_s1 (html_span ~classe:"focus" (html_of_elt_s1 f)) ctx
+  | AtP1 (IsOf (p,np), DetThatX (Something, ctx))
+  | AtS1 (Det (Something, Some (IsOf (p,np))), ctx) ->
+    html_of_ctx_s1 (html_span ~classe:"focus" (html_the_of p (html_of_elt_s1 np))) ctx
+  | AtP1 (f,ctx) ->
+    html_of_ctx_p1 (html_span ~classe:"focus" (html_of_elt_p1 f)) ctx
+  | AtS1 (f,ctx) ->
+    html_of_ctx_s1 (html_span ~classe:"focus" (html_of_elt_s1 f)) ctx
 
 (* focus moves *)
 
@@ -299,15 +321,19 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
+  | Det (Something, Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (Something, ctx))))
+  | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
 let down_focus = function
   | AtP1 (f,ctx) -> down_p1 ctx f
   | AtS1 (f,ctx) -> down_s1 ctx f
 
-let up_p1 f = function
+let rec up_p1 f = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
-  | AndX (i,ar,ctx) -> ar.(i) <- f; Some (AtP1 (And ar, ctx))
+  | AndX (i,ar,ctx) -> ar.(i) <- f; up_p1 (And ar) ctx (* Some (AtP1 (And ar, ctx)) *)
 let up_s1 f = function
+  | HasX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (Has (p,f))), ctx))
+  | IsOfX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (IsOf (p,f))), ctx))
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | ReturnX -> None
@@ -865,6 +891,9 @@ object (self)
 	  self#refresh_property_increments focus_term_index dico_incrs);
 	()
 
+  method is_home =
+    focus = AtS1 (Det (Something, None), ReturnX)
+
   method home =
     focus <- AtS1 (Det (Something, None), ReturnX);
     offset <- 0;
@@ -914,6 +943,15 @@ object (self)
   method set_term_patterns lpat =
     term_patterns <- lpat;
     self#refresh
+
+(*
+  method set_class_patterns lpat =
+    if self#is_home
+    then begin
+      class_patterns <- lpat;
+      self#refresh_class_increments_init
+    end
+*)
 
   method pattern_changed ~(input : Dom_html.inputElement t) ~(elt_list : Dom_html.element t) (k : string list -> unit) =
     let pat = to_string (input##value) in
