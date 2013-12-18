@@ -113,13 +113,15 @@ let sparql_term = function
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
 
-let sparql_pattern t pat =
-  let lpat = Regexp.split (Regexp.regexp "[ ]+") pat in
-  let lfilter =
-    List.map
-      (fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
-      lpat in
-  "FILTER (" ^ String.concat " && " lfilter ^ ")"
+let sparql_pattern t lpat =
+  if lpat = []
+  then ""
+  else
+    let lfilter =
+      List.map
+	(fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
+	lpat in
+    "FILTER (" ^ String.concat " && " lfilter ^ ")"
 
 let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
 
@@ -418,7 +420,7 @@ let rec delete_and ctx ar i =
       Array.blit ar (i+1) ar2 i (n-i-1);
       if i = n-1 && i > 0 (* last elt is deleted *)
       then AtP1 (ar2.(i-1), AndX (i-1, ar2, ctx))
-      else AtP1 (ar2.(i+1), AndX (i+1, ar2, ctx))
+      else AtP1 (ar2.(i), AndX (i, ar2, ctx))
 
 let delete_focus = function
   | AtP1 (f, DetThatX (det,ctx)) -> Some (AtS1 (Det (det,None), ctx))
@@ -695,11 +697,15 @@ end
 (* navigation place *)
 class place =
 object (self)
+  val max_results = 200
+  val max_classes = 1000
+  val max_properties = 1000
+
   val mutable offset = 0
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
-  val mutable pattern = ""
+  val mutable term_patterns = []
 
   val mutable focus_term = Var "thing"
   val mutable sparql_opt = None
@@ -710,11 +716,8 @@ object (self)
       ( match s_opt with
 	| None -> None
 	| Some (lv,gp) ->
-	  let gp =
-	    if pattern = ""
-	    then gp
-	    else sparql_join [gp; sparql_pattern t pattern] in
-	  Some (sparql_select lv gp ^ "\nLIMIT 200") )
+	  let gp = sparql_join [gp; sparql_pattern t term_patterns] in
+	  Some (sparql_select lv gp ^ "\nLIMIT " ^ string_of_int max_results) )
 
   val mutable results = empty_results
 
@@ -752,11 +755,25 @@ object (self)
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
+  method private refresh_property_increments_init dico_incrs =
+    jquery "#properties" (fun elt ->
+      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } } LIMIT 1000" in
+      ajax_sparql_in elt sparql (fun results ->
+	let prop_list = list_of_results_column "prop" results in
+	elt##innerHTML <- string
+	  (html_of_increment_frequency_list dico_incrs
+	     (List.fold_left
+		(fun res -> function
+		  | URI c -> (IncrProp c, 1) :: (IncrInvProp c, 1) :: res
+		  | _ -> res)
+		[] prop_list));
+	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+
   method private refresh_class_increments focus_term_index dico_incrs =
     jquery "#classes" (fun elt ->
-      let sparql =
-	let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-	"SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT 100" in
+      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
       ajax_sparql_in elt sparql (fun results ->
 	let class_index = index_of_results_2columns "class" "freq" results in
 	elt##innerHTML <- string
@@ -772,23 +789,33 @@ object (self)
   method private refresh_property_increments focus_term_index dico_incrs =
     jquery "#properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT 100" in
-      ajax_sparql_in elt sparql (fun results ->
-	let index = index_of_results_2columns "prop" "freq" results in
-	elt##innerHTML <- string
-	  (html_of_increment_frequency_list dico_incrs
-	     (List.fold_left
-		(fun res -> function
-		  | (URI c, freq) -> (IncrProp c, freq) :: res
-		  | _ -> res)
-		[] index));
-	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+      let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
+      let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
+      ajax_sparql_in elt sparql_has (fun results_has -> (* decreasing *)
+	let index_has = index_of_results_2columns "prop" "freq" results_has in (* increasing *)
+	ajax_sparql_in elt sparql_isof (fun results_isof -> (* decreasing *)
+	  let index_isof = index_of_results_2columns "prop" "freq" results_isof in (* increasing *)
+	  let index = 
+	    let rec aux acc l1 l2 =
+	      match l1, l2 with
+		| (URI c1, freq1)::r1, (_, freq2)::r2 when freq1 <= freq2 -> aux ((IncrProp c1, freq1)::acc) r1 l2
+		| (_, freq1)::r1, (URI c2, freq2)::r2 when freq1 > freq2 -> aux ((IncrInvProp c2, freq2)::acc) l1 r2
+		| (URI c1, freq1)::r1, [] -> aux ((IncrProp c1, freq1)::acc) r1 []
+		| [], (URI c2, freq2)::r2 -> aux ((IncrInvProp c2, freq2)::acc) [] r2
+		| [], [] -> acc
+		| _ -> acc (* assert false *) in
+	    aux [] index_has index_isof in
+	  elt##innerHTML <- string
+	    (html_of_increment_frequency_list dico_incrs
+	       index);
+	  jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	    self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))))
 
+(*
   method private refresh_inverse_property_increments focus_term_index dico_incrs =
     jquery "#inverse-properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT 100" in
+      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
       ajax_sparql_in elt sparql (fun results ->
 	let index = index_of_results_2columns "prop" "freq" results in
 	elt##innerHTML <- string
@@ -800,6 +827,7 @@ object (self)
 		[] index));
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+*)
 
   method refresh =
     jquery_set_innerHTML "#lisql" (html_of_focus focus);
@@ -815,8 +843,8 @@ object (self)
 	    jquery_set_innerHTML "#terms" "";
 	    jquery_set_innerHTML "#classes" "";
 	    jquery_set_innerHTML "#properties" "";
-	    jquery_set_innerHTML "#inverse-properties" "";
-	    self#refresh_class_increments_init dico_incrs
+	    self#refresh_class_increments_init dico_incrs;
+	    self#refresh_property_increments_init dico_incrs
 	  | term ->
 	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [|term|] ]; };
 	    self#refresh_extension;
@@ -824,8 +852,7 @@ object (self)
 	    let dico_incrs = new dico_increments in
 	    self#refresh_term_increments focus_term_index dico_incrs;
 	    self#refresh_class_increments focus_term_index dico_incrs;
-	    self#refresh_property_increments focus_term_index dico_incrs;
-	    self#refresh_inverse_property_increments focus_term_index dico_incrs )
+	    self#refresh_property_increments focus_term_index dico_incrs )
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	ajax_sparql sparql (fun res ->
@@ -835,8 +862,7 @@ object (self)
 	  let dico_incrs = new dico_increments in
 	  self#refresh_term_increments focus_term_index dico_incrs;
 	  self#refresh_class_increments focus_term_index dico_incrs;
-	  self#refresh_property_increments focus_term_index dico_incrs;
-	  self#refresh_inverse_property_increments focus_term_index dico_incrs);
+	  self#refresh_property_increments focus_term_index dico_incrs);
 	()
 
   method home =
@@ -878,19 +904,31 @@ object (self)
     match f focus with
       | Some foc ->
 	focus <- foc;
-	pattern <- "";
-	jquery_input "#pattern" (fun elt -> elt##value <- string "");
+	term_patterns <- [];
+	jquery_input "#pattern-terms" (fun input -> input##value <- string "");
+	jquery_input "#pattern-classes" (fun input -> input##value <- string "");
+	jquery_input "#pattern-properties" (fun input -> input##value <- string "");
 	self#refresh
       | None -> ()
 
-  method pattern_changed pat =
-    let n = String.length pat in
-    if pat = "" || pat.[n-1] = ' '
-    then begin
-      Firebug.console##log(string pat);
-      pattern <- String.sub pat 0 (max 0 (n-1));
-      self#refresh
-    end
+  method set_term_patterns lpat =
+    term_patterns <- lpat;
+    self#refresh
+
+  method pattern_changed ~(input : Dom_html.inputElement t) ~(elt_list : Dom_html.element t) (k : string list -> unit) =
+    let pat = to_string (input##value) in
+    Firebug.console##log(string pat);
+    let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
+    let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
+    let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
+    let there_is_match = ref false in
+    jquery_all_from (elt_list :> Dom_html.nodeSelector t) "li" (fun elt_li ->
+      jquery_from (elt_li :> Dom_html.nodeSelector t) ".URI, .Literal, .classURI, .propURI" (fun elt_incr ->
+	if matcher (to_string elt_incr##innerHTML)
+	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
+	else elt_li##style##display <- string "none"));
+    if not !there_is_match && pat = "" || pat.[String.length pat - 1] = ' '
+    then k lpat
 
 end
   
@@ -901,13 +939,23 @@ let _ =
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> myplace#home));
 
-    jquery_input "#pattern" (oninput (fun input ev -> myplace#pattern_changed (to_string input##value)));
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
     jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
     jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
 
+    List.iter
+      (fun (sel_input, sel_list, k) ->
+	jquery_input sel_input (fun input ->
+	  jquery sel_list (fun elt_list ->
+	    (oninput
+	       (fun input ev -> myplace#pattern_changed ~input ~elt_list k)
+	       input))))
+      [("#pattern-terms", "#terms", (fun lpat -> myplace#set_term_patterns lpat));
+       ("#pattern-classes", "#classes", (fun lpat -> ()));
+       ("#pattern-properties", "#properties", (fun lpat -> ()))];
+    
     jquery "#more" (onclick (fun elt ev -> myplace#give_more));
     jquery "#less" (onclick (fun elt ev -> myplace#give_less));
     jquery "#page-down" (onclick (fun elt ev -> myplace#page_down));

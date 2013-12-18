@@ -42,26 +42,20 @@ margin:0px;
 .incr-box
 {
 float:left;
-width:300px;
-height:200px;
 border:4px inset grey;
 margin:5px;
 }
 
-#pattern
+.pattern-incr
 {
-width:98%;
+width:300px;
 }
 
 .incr-list
 {
+width:300px;
+height:200px;
 overflow:auto;
-}
-
-#terms
-{
-width:99%;
-height:84%;
 }
 
 .incr-list ul
