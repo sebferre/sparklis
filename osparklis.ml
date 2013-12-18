@@ -100,19 +100,29 @@ let elt_s_of_focus = function
 type sparql = string
 
 let sparql_uri uri = 
-  if uri = "a"
-  then "a"
+  if uri = "a" || uri = "bif:contains"
+  then uri
   else "<" ^ uri ^ ">"
 
 let sparql_term = function
   | URI uri -> sparql_uri uri
-  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"@" ^ lang
+  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"" ^ (if lang = "" then "" else "@" ^ lang)
   | TypedLiteral (s,dt) -> "\"" ^ s ^ "\"^^" ^ sparql_uri dt
   | Bnode name -> "_:" ^ name
   | Var v -> "?" ^ v
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
+
+let sparql_pattern t pat =
+  let lpat = Regexp.split (Regexp.regexp "[ ]+") pat in
+  let lfilter =
+    List.map
+      (fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
+      lpat in
+  "FILTER (" ^ String.concat " && " lfilter ^ ")"
+
 let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
+
 let sparql_select lv gp =
   "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
@@ -177,7 +187,7 @@ and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = funct
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus : focus -> term * sparql option = function
+let sparql_of_focus : focus -> term * (var list * sparql) option = function
   | AtP1 (f,ctx) ->
     let focus = ref (Var "") in
     let gp = sparql_of_ctx_p1
@@ -185,7 +195,7 @@ let sparql_of_focus : focus -> term * sparql option = function
 	focus := t;
 	sparql_of_elt_p1 f t)
       ctx in
-    !focus, (if gp = "" then None else Some (sparql_select genvar#vars gp))
+    !focus, (if gp = "" then None else Some (genvar#vars, gp))
   | AtS1 (f,ctx) ->
     let prefix =
       match ctx with
@@ -198,7 +208,7 @@ let sparql_of_focus : focus -> term * sparql option = function
 	  focus := t;
 	  d t))
       ctx in
-    !focus, (if gp="" then None else Some (sparql_select genvar#vars gp))
+    !focus, (if gp="" then None else Some (genvar#vars, gp))
 
 (* pretty-printing of focus as HTML *)
 
@@ -214,6 +224,12 @@ let html_span ?classe ?title text =
     (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</span>"
+
+let html_div ?classe ?title text =
+  "<div" ^
+    (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
+    (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
+    ">" ^ text ^ "</div>"
 
 let html_term ?(link = false) = function
   | URI uri ->
@@ -337,10 +353,16 @@ type increment =
   | IncrProp of uri
   | IncrInvProp of uri
 
-let insert_term t = function
-  | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Term t, ctx)))
-  | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Term t, rel_opt), ctx))
-  | _ -> None
+let insert_term t focus =
+  let focus2_opt =
+    match focus with
+      | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Term t, ctx)))
+      | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Term t, rel_opt), ctx))
+      | _ -> None in
+  match focus2_opt with
+    | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
+    | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
+    | other -> other
 
 let append_and ctx elt_p1 = function
   | And ar ->
@@ -379,12 +401,24 @@ let insert_increment incr focus =
     | IncrProp p -> insert_property p focus
     | IncrInvProp p -> insert_inverse_property p focus
 
-let delete_and ctx ar i =
+let rec delete_and ctx ar i =
   let n = Array.length ar in
-  let ar2 = Array.make (n-1) (Type "") in
-  Array.blit ar 0 ar2 0 i;
-  Array.blit ar (i+1) ar2 i (n-i-1);
-  AtP1 (And ar2, ctx)
+  if n = 1
+  then
+    match ctx with
+      | DetThatX (det, ctx2) -> AtS1 (Det (det, None), ctx2)
+      | AndX (i2, ar2, ctx2) -> delete_and ctx2 ar2 i2
+  else
+    if n = 2
+    then
+      AtP1 (ar.(1-i), ctx)
+    else
+      let ar2 = Array.make (n-1) (Type "") in
+      Array.blit ar 0 ar2 0 i;
+      Array.blit ar (i+1) ar2 i (n-i-1);
+      if i = n-1 && i > 0 (* last elt is deleted *)
+      then AtP1 (ar2.(i-1), AndX (i-1, ar2, ctx))
+      else AtP1 (ar2.(i+1), AndX (i+1, ar2, ctx))
 
 let delete_focus = function
   | AtP1 (f, DetThatX (det,ctx)) -> Some (AtS1 (Det (det,None), ctx))
@@ -468,7 +502,7 @@ let index_of_results_column (var : var) results : (term * int) list =
 	(fun term cpt res -> (term,!cpt)::res)
 	ht [] in
     List.sort
-      (fun (_,f1) (_,f2) -> Pervasives.compare f1 f2)
+      (fun (i1,f1) (i2,f2) -> Pervasives.compare (f1,i2) (f2,i1))
       index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
@@ -488,9 +522,12 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
 	      | _ -> 0 in
 	  (x, count)::res)
 	[] results.bindings in
+    index
+(*
     List.sort
       (fun (_,f1) (_,f2) -> Pervasives.compare f1 f2)
       index
+*)
   with Not_found ->
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     []
@@ -586,6 +623,12 @@ let jquery_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k 
     k elt)
 let jquery s k = jquery_from (Dom_html.document :> Dom_html.nodeSelector t) s k
 
+let jquery_input_from (root : Dom_html.nodeSelector Js.t) s k =
+  Opt.iter (root##querySelector(string s)) (fun elt ->
+    Opt.iter (Dom_html.CoerceTo.input elt) (fun input ->
+      k input))
+let jquery_input s k = jquery_input_from (Dom_html.document :> Dom_html.nodeSelector t) s k
+
 let jquery_all_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k =
   let nodelist = root##querySelectorAll(string s) in
   let n = nodelist##length in
@@ -602,6 +645,9 @@ let onclick k elt =
 
 let ondblclick k elt =
   elt##ondblclick <- Dom.handler (fun ev -> k elt ev; bool true)
+
+let oninput k elt =
+  elt##oninput <- Dom.handler (fun ev -> k elt ev; bool true)
 
 let ajax_sparql_in (elt : Dom_html.element t) (sparql : sparql) (k : sparql_results -> unit) =
   Firebug.console##log(string sparql);
@@ -653,13 +699,22 @@ object (self)
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
+  val mutable pattern = ""
 
   val mutable focus_term = Var "thing"
   val mutable sparql_opt = None
   method private define_sparql =
     let t, s_opt = sparql_of_focus focus in
     focus_term <- t;
-    sparql_opt <- (match s_opt with None -> None | Some s -> Some (s ^ "\nLIMIT 100"))
+    sparql_opt <-
+      ( match s_opt with
+	| None -> None
+	| Some (lv,gp) ->
+	  let gp =
+	    if pattern = ""
+	    then gp
+	    else sparql_join [gp; sparql_pattern t pattern] in
+	  Some (sparql_select lv gp ^ "\nLIMIT 200") )
 
   val mutable results = empty_results
 
@@ -677,7 +732,7 @@ object (self)
     jquery "#terms" (fun elt ->
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
-	   (List.map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
+	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
 
@@ -701,7 +756,7 @@ object (self)
     jquery "#classes" (fun elt ->
       let sparql =
 	let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-	"SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } LIMIT 100" in
+	"SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT 100" in
       ajax_sparql_in elt sparql (fun results ->
 	let class_index = index_of_results_2columns "class" "freq" results in
 	elt##innerHTML <- string
@@ -717,7 +772,7 @@ object (self)
   method private refresh_property_increments focus_term_index dico_incrs =
     jquery "#properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } LIMIT 100" in
+      let sparql = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT 100" in
       ajax_sparql_in elt sparql (fun results ->
 	let index = index_of_results_2columns "prop" "freq" results in
 	elt##innerHTML <- string
@@ -733,7 +788,7 @@ object (self)
   method private refresh_inverse_property_increments focus_term_index dico_incrs =
     jquery "#inverse-properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } LIMIT 100" in
+      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT 100" in
       ajax_sparql_in elt sparql (fun results ->
 	let index = index_of_results_2columns "prop" "freq" results in
 	elt##innerHTML <- string
@@ -823,8 +878,19 @@ object (self)
     match f focus with
       | Some foc ->
 	focus <- foc;
+	pattern <- "";
+	jquery_input "#pattern" (fun elt -> elt##value <- string "");
 	self#refresh
       | None -> ()
+
+  method pattern_changed pat =
+    let n = String.length pat in
+    if pat = "" || pat.[n-1] = ' '
+    then begin
+      Firebug.console##log(string pat);
+      pattern <- String.sub pat 0 (max 0 (n-1));
+      self#refresh
+    end
 
 end
   
@@ -835,6 +901,7 @@ let _ =
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> myplace#home));
 
+    jquery_input "#pattern" (oninput (fun input ev -> myplace#pattern_changed (to_string input##value)));
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));

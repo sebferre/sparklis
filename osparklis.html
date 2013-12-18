@@ -13,14 +13,14 @@
 
 <body>
   <header>
-    <h1>Sparklis</h1>
-    <p><em>Complex queries and exploratory search for SPARQL endpoints at your fingertips!</em></p>
+    <h2>Sparklis</h1>
+    <em>Complex queries and exploratory search for SPARQL endpoints at your fingertips!</em>
   </header>
 
   <div id="lisql"></div>
 
   <div id="controls">
-    <button id="home">Home</button>
+    <button id="home">Home</button> 
     <button id="up">Focus UP</button>
     <button id="down">Focus DOWN</button>
     <button id="left">Focus LEFT</button>
@@ -29,10 +29,13 @@
   </div>
 
   <div id="increments">
-    <div id="terms" class="incr-list"></div>
-    <div id="classes" class="incr-list"></div>
-    <div id="properties" class="incr-list"></div>
-    <div id="inverse-properties" class="incr-list"></div>
+    <div class="incr-box">
+      <input id="pattern" type="text">
+      <div id="terms" class="incr-list"></div>
+    </div>
+    <div id="classes" class="incr-box incr-list"></div>
+    <div id="properties" class="incr-box incr-list"></div>
+    <div id="inverse-properties" class="incr-box incr-list"></div>
   </div>
 
   <div id="extension">
@@ -46,8 +49,8 @@
   <div id="sparql"></div>
 
   <footer>
-    <p>Created by: Sébastien Ferré © 2013</p>
-    <p>Visit <a href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
+    <p>Created by Sébastien Ferré © 2013</p>
+    <p>Visit <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
   </footer>
 </body>
 </html>
