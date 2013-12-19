@@ -46,19 +46,19 @@ border:4px inset grey;
 margin:5px;
 }
 
-.pattern-incr
+.pattern-incrs
 {
 width:300px;
 }
 
-.incr-list
+.list-incrs
 {
 width:300px;
 height:200px;
 overflow:auto;
 }
 
-.incr-list ul
+.list-incrs ul
 {
 list-style-type: none;
 padding: 10px;
@@ -70,9 +70,18 @@ margin: 0px;
 cursor:pointer;
 }
 
-#result
+.count-incrs
+{
+text-align:right;
+}
+
+#extension
 {
 clear:both;
+}
+
+#list-results
+{
 margin:5px;
 }
 
@@ -89,4 +98,9 @@ border:1px solid black;
 th, td
 {
 padding:4px;
+}
+
+footer
+{
+clear:both;
 }

@@ -234,8 +234,6 @@ let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
   "<pre>" ^ text ^ "</pre>"
 
-(* let html_span cl text = "<span class=\"" ^ cl ^ "\">" ^ text ^ "</span>" *)
-
 let html_span ?classe ?title text =
   "<span" ^
     (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
@@ -247,6 +245,12 @@ let html_div ?classe ?title text =
     (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</div>"
+
+let html_count_unit count max unit units =
+  if count = 0 then "No " ^ unit
+  else if count = 1 then "1 " ^ unit
+  else if count >= max then string_of_int count ^ "+ " ^ units
+  else string_of_int count ^ " " ^ units
 
 let html_term ?(link = false) = function
   | URI uri ->
@@ -580,15 +584,17 @@ let sparql_results_of_json s_json =
     let ojson = Json.unsafe_input s_json in
     let ohead = Unsafe.get ojson (string "head") in
     let ovars = Unsafe.get ohead (string "vars") in
-    let dim = truncate (to_float (Unsafe.get ovars (string "length"))) in
-    let vars =
-      let res = ref [] in
-      for i = dim-1 downto 0 do
+    let m = truncate (to_float (Unsafe.get ovars (string "length"))) in
+    let dim, vars =
+      let dim = ref 0 in
+      let vars = ref [] in
+      for i = m-1 downto 0 do
 	let ovar = Unsafe.get ovars (string (string_of_int i)) in
 	let var = to_string (Unsafe.get ovar (string "fullBytes")) in
-	res := (var,i)::!res
+	if var <> "_star_fake"
+	then begin incr dim; vars := (var,i)::!vars end
       done;
-      !res in
+      !dim, !vars in
     let oresults = Unsafe.get ojson (string "results") in
     let obindings = Unsafe.get oresults (string "bindings") in
     let n = truncate (to_float (Unsafe.get obindings (string "length"))) in
@@ -597,7 +603,7 @@ let sparql_results_of_json s_json =
       let res = ref [] in
       for j = n-1 downto 0 do
 	let obinding = Unsafe.get obindings (string (string_of_int j)) in
-	let binding = Array.make dim (PlainLiteral ("","")) in
+	let binding = Array.make m (PlainLiteral ("","")) in
 	List.iter
 	  (fun (var,i) ->
 	    let ocell = Unsafe.get obinding (string var) in
@@ -645,15 +651,17 @@ let html_table_of_results results =
       Buffer.add_string buf "</th>")
     results.vars;
   Buffer.add_string buf "</tr>";
+  let li = List.map snd results.vars in
   List.iter
     (fun binding ->
       Buffer.add_string buf "<tr>";
-      for i = 0 to results.dim - 1 do
-	let t = binding.(i) in
-	Buffer.add_string buf "<td>";
-	Buffer.add_string buf (html_term ~link:true t);
-	Buffer.add_string buf "</td>"
-      done;
+      List.iter
+	(fun i ->
+	  let t = binding.(i) in
+	  Buffer.add_string buf "<td>";
+	  Buffer.add_string buf (html_term ~link:true t);
+	  Buffer.add_string buf "</td>")
+	li;
       Buffer.add_string buf "</tr>")
     results.bindings;
   Buffer.add_string buf "</table>";
@@ -773,20 +781,34 @@ object (self)
 	| t -> [(t, results.length)] )
 
   method private refresh_extension =
-    jquery_set_innerHTML "#result"
+    jquery_set_innerHTML "#list-results"
       (html_table_of_results
-	 (page_of_results offset limit results))
+	 (page_of_results offset limit results));
+    jquery_set_innerHTML "#count-results"
+      (if results.dim = 0 then
+	  if results.length = 0 then "False" else "True"
+       else if results.length = 0 then
+	 "No results"
+       else
+	 let a, b = offset+1, min results.length (offset+limit) in
+	 if a = 1 && b = results.length && results.length < max_results then
+	   string_of_int b ^ (if b=1 then " result" else " results")
+	 else
+	   "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+	     " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+"))
 
   method private refresh_term_increments =
-    jquery "#terms" (fun elt ->
+    jquery "#list-terms" (fun elt ->
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
+	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))));
+    jquery_set_innerHTML "#count-terms"
+      (html_count_unit (List.length focus_term_index) max_results "term" "terms")
 
   method private refresh_class_increments_init =
-    jquery "#classes" (fun elt ->
+    jquery "#list-classes" (fun elt ->
 (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
       let sparql = "SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^ sparql_pattern (Var "class") class_patterns ^ " } LIMIT 1000" in
       ajax_sparql_in elt sparql (fun results ->
@@ -799,10 +821,12 @@ object (self)
 		  | _ -> res)
 		[] class_list));
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	jquery_set_innerHTML "#count-classes"
+	  (html_count_unit (List.length class_list) 1000 "class" "classes")))
 
   method private refresh_property_increments_init =
-    jquery "#properties" (fun elt ->
+    jquery "#list-properties" (fun elt ->
 (*      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in *)
       let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in
       ajax_sparql_in elt sparql (fun results ->
@@ -815,10 +839,12 @@ object (self)
 		  | _ -> res)
 		[] prop_list));
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	jquery_set_innerHTML "#count-properties"
+	  (html_count_unit (List.length prop_list) 1000 "property" "properties")))
 
   method private refresh_class_increments =
-    jquery "#classes" (fun elt ->
+    jquery "#list-classes" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
       ajax_sparql_in elt sparql (fun results ->
@@ -831,10 +857,12 @@ object (self)
 		  | _ -> res)
 		[] class_index));
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
+	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	jquery_set_innerHTML "#count-classes"
+	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
  
   method private refresh_property_increments =
-    jquery "#properties" (fun elt ->
+    jquery "#list-properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
       let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
@@ -856,7 +884,9 @@ object (self)
 	    (html_of_increment_frequency_list dico_incrs
 	       index);
 	  jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	    self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))))
+	    self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  jquery_set_innerHTML "#count-properties"
+	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
 
 (*
   method private refresh_inverse_property_increments focus_term_index dico_incrs =
@@ -884,13 +914,18 @@ object (self)
       | None ->
 	jquery_set_innerHTML "#sparql" "";
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
+	jquery "#extension" (fun elt -> elt##style##display <- string "none");
 	( match focus_term with
 	  | Var v ->
-	    jquery_set_innerHTML "#result" "";
+	    jquery_set_innerHTML "#list-results" "";
+	    jquery_set_innerHTML "#count-results" "";
 	    dico_incrs <- new dico_increments;
-	    jquery_set_innerHTML "#terms" "";
-	    jquery_set_innerHTML "#classes" "";
-	    jquery_set_innerHTML "#properties" "";
+	    jquery_set_innerHTML "#list-terms" "";
+	    jquery_set_innerHTML "#count-terms" "---";
+	    jquery_set_innerHTML "#list-classes" "";
+	    jquery_set_innerHTML "#count-classes" "---";
+	    jquery_set_innerHTML "#list-properties" "";
+	    jquery_set_innerHTML "#count-properties" "---";
 	    self#refresh_class_increments_init;
 	    self#refresh_property_increments_init;
 	  | term ->
@@ -904,6 +939,7 @@ object (self)
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
+	jquery "#extension" (fun elt -> elt##style##display <- string "block");
 	ajax_sparql sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;
@@ -1028,9 +1064,9 @@ let _ =
 	    (oninput
 	       (fun input ev -> myplace#pattern_changed ~input ~elt_list k)
 	       input))))
-      [("#pattern-terms", "#terms", (fun lpat -> myplace#set_term_patterns lpat));
-       ("#pattern-classes", "#classes", (fun lpat -> myplace#set_class_patterns lpat));
-       ("#pattern-properties", "#properties", (fun lpat -> myplace#set_property_patterns lpat))];
+      [("#pattern-terms", "#list-terms", (fun lpat -> myplace#set_term_patterns lpat));
+       ("#pattern-classes", "#list-classes", (fun lpat -> myplace#set_class_patterns lpat));
+       ("#pattern-properties", "#list-properties", (fun lpat -> myplace#set_property_patterns lpat))];
     
     jquery "#more" (onclick (fun elt ev -> myplace#give_more));
     jquery "#less" (onclick (fun elt ev -> myplace#give_less));

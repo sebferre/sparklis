@@ -19,7 +19,7 @@
 
   <div id="lisql"></div>
 
-  <div id="controls">
+  <div id="control-incrs">
     <button id="home">Home</button> 
     <button id="up">Focus UP</button>
     <button id="down">Focus DOWN</button>
@@ -30,25 +30,31 @@
 
   <div id="increments">
     <div class="incr-box">
-      <input id="pattern-terms" class="pattern-incr" type="text">
-      <div id="terms" class="incr-list"></div>
+      <input id="pattern-terms" class="pattern-incrs" type="text">
+      <div id="list-terms" class="list-incrs"></div>
+      <div id="count-terms" class="count-incrs">No terms</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-classes" class="pattern-incr" type="text">
-      <div id="classes" class="incr-list"></div>
+      <input id="pattern-classes" class="pattern-incrs" type="text">
+      <div id="list-classes" class="list-incrs"></div>
+      <div id="count-classes" class="count-incrs">No classes</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-properties" class="pattern-incr" type="text">
-      <div id="properties" class="incr-list"></div>
+      <input id="pattern-properties" class="pattern-incrs" type="text">
+      <div id="list-properties" class="list-incrs"></div>
+      <div id="count-properties" class="count-incrs">No properties</div>
     </div>
   </div>
 
   <div id="extension">
-    <div id="result"></div>
-    <button id="page-down">Page Down</button>
-    <button id="page-up">Page Up</button>
-    <button id="more">Give more results</button>
-    <button id="less">Give less results</button>
+    <div id="control-results">
+      <span id="count-results">No results</span>
+      <button id="page-down">Page Down</button>
+      <button id="page-up">Page Up</button>
+      <button id="more">Give more results</button>
+      <button id="less">Give less results</button>
+    </div>
+    <div id="list-results"></div>
   </div>
 
   <div id="sparql"></div>
