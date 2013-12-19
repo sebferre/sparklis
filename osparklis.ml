@@ -126,7 +126,8 @@ let sparql_pattern t lpat =
 let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
 
 let sparql_select lv gp =
-  "SELECT DISTINCT " ^ String.concat " " (List.map (fun v -> "?" ^ v) lv) ^ "\nWHERE {\n" ^ gp ^ "\n}"
+  let sel = if lv = [] then "*" else String.concat " " (List.map (fun v -> "?" ^ v) lv) in
+  "SELECT DISTINCT " ^ sel ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
 let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
@@ -264,7 +265,7 @@ let html_prop p =
 
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
-let html_is_of p np = "is " ^ html_prop p ^ " of " ^ np
+let html_is_of p np = "is the " ^ html_prop p ^ " of " ^ np
 let html_and ar =
   let html = ref ("<ul class=\"list-and\"><li>" ^ ar.(0) ^ "</li>") in
   for i=1 to Array.length ar - 1 do
@@ -384,8 +385,14 @@ type increment =
 let insert_term t focus =
   let focus2_opt =
     match focus with
-      | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Term t, ctx)))
-      | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Term t, rel_opt), ctx))
+      | AtP1 (f, DetThatX (det,ctx)) ->
+	if det = Term t
+	then Some (AtP1 (f, DetThatX (Something, ctx)))
+	else Some (AtP1 (f, DetThatX (Term t, ctx)))
+      | AtS1 (Det (det,rel_opt), ctx) ->
+	if det = Term t
+	then Some (AtS1 (Det (Something, rel_opt), ctx))
+	else Some (AtS1 (Det (Term t, rel_opt), ctx))
       | _ -> None in
   match focus2_opt with
     | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
@@ -408,8 +415,16 @@ let insert_elt_p1 elt = function
   | AtS1 (Det (det, Some rel), ctx) -> Some (append_and (DetThatX (det,ctx)) elt rel)
 
 let insert_class c = function
-  | AtP1 (f, DetThatX (_,ctx)) -> Some (AtP1 (f, DetThatX (Class c, ctx)))
-  | AtS1 (Det (_,rel_opt), ctx) -> Some (AtS1 (Det (Class c, rel_opt), ctx)) 
+(*
+  | AtP1 (f, DetThatX (det,ctx)) ->
+    if det = Class c
+    then Some (AtP1 (f, DetThatX (Something, ctx)))
+    else Some (AtP1 (f, DetThatX (Class c, ctx)))
+*)
+  | AtS1 (Det (det,rel_opt), ctx) ->
+    if det = Class c
+    then Some (AtS1 (Det (Something, rel_opt), ctx))
+    else Some (AtS1 (Det (Class c, rel_opt), ctx))
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
@@ -462,7 +477,7 @@ let html_of_increment_frequency dico_incrs (incr,freq) =
       | IncrTerm t -> html_term t
       | IncrClass c -> "a " ^ html_class c
       | IncrProp p -> "has " ^ html_prop p
-      | IncrInvProp p -> "is " ^ html_prop p ^ " of" in
+      | IncrInvProp p -> "is the " ^ html_prop p ^ " of" in
   let text_freq =
     if freq = 1
     then ""
@@ -732,6 +747,8 @@ object (self)
 
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
   val mutable term_patterns = []
+  val mutable class_patterns = []
+  val mutable property_patterns = []
 
   val mutable focus_term = Var "thing"
   val mutable sparql_opt = None
@@ -746,18 +763,21 @@ object (self)
 	  Some (sparql_select lv gp ^ "\nLIMIT " ^ string_of_int max_results) )
 
   val mutable results = empty_results
+  val mutable focus_term_index : (term * int) list = []
+  val mutable dico_incrs = new dico_increments
+
+  method private define_focus_term_index =
+    focus_term_index <-
+      ( match focus_term with
+	| Var v -> index_of_results_column v results
+	| t -> [(t, results.length)] )
 
   method private refresh_extension =
     jquery_set_innerHTML "#result"
       (html_table_of_results
 	 (page_of_results offset limit results))
 
-  method private focus_term_index focus_term results : (term * int) list =
-    match focus_term with
-      | Var v -> index_of_results_column v results
-      | t -> [(t, results.length)]
-
-  method private refresh_term_increments focus_term_index dico_incrs =
+  method private refresh_term_increments =
     jquery "#terms" (fun elt ->
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
@@ -765,10 +785,10 @@ object (self)
       jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))))
 
-  method private refresh_class_increments_init dico_incrs =
+  method private refresh_class_increments_init =
     jquery "#classes" (fun elt ->
 (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
-      let sparql = "SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } } LIMIT 1000" in
+      let sparql = "SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^ sparql_pattern (Var "class") class_patterns ^ " } LIMIT 1000" in
       ajax_sparql_in elt sparql (fun results ->
 	let class_list = list_of_results_column "class" results in
 	elt##innerHTML <- string
@@ -781,9 +801,10 @@ object (self)
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
-  method private refresh_property_increments_init dico_incrs =
+  method private refresh_property_increments_init =
     jquery "#properties" (fun elt ->
-      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } } LIMIT 1000" in
+(*      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in *)
+      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in
       ajax_sparql_in elt sparql (fun results ->
 	let prop_list = list_of_results_column "prop" results in
 	elt##innerHTML <- string
@@ -796,7 +817,7 @@ object (self)
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
 
-  method private refresh_class_increments focus_term_index dico_incrs =
+  method private refresh_class_increments =
     jquery "#classes" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
@@ -812,7 +833,7 @@ object (self)
 	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
  
-  method private refresh_property_increments focus_term_index dico_incrs =
+  method private refresh_property_increments =
     jquery "#properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
@@ -862,33 +883,35 @@ object (self)
     match sparql_opt with
       | None ->
 	jquery_set_innerHTML "#sparql" "";
+	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
 	( match focus_term with
 	  | Var v ->
 	    jquery_set_innerHTML "#result" "";
-	    let dico_incrs = new dico_increments in
+	    dico_incrs <- new dico_increments;
 	    jquery_set_innerHTML "#terms" "";
 	    jquery_set_innerHTML "#classes" "";
 	    jquery_set_innerHTML "#properties" "";
-	    self#refresh_class_increments_init dico_incrs;
-	    self#refresh_property_increments_init dico_incrs
+	    self#refresh_class_increments_init;
+	    self#refresh_property_increments_init;
 	  | term ->
 	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [|term|] ]; };
 	    self#refresh_extension;
-	    let focus_term_index = [(term,1)] in
-	    let dico_incrs = new dico_increments in
-	    self#refresh_term_increments focus_term_index dico_incrs;
-	    self#refresh_class_increments focus_term_index dico_incrs;
-	    self#refresh_property_increments focus_term_index dico_incrs )
+	    focus_term_index <- [(term,1)];
+	    dico_incrs <- new dico_increments;
+	    self#refresh_term_increments;
+	    self#refresh_class_increments;
+	    self#refresh_property_increments )
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
+	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	ajax_sparql sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;
-	  let focus_term_index = self#focus_term_index focus_term results in
-	  let dico_incrs = new dico_increments in
-	  self#refresh_term_increments focus_term_index dico_incrs;
-	  self#refresh_class_increments focus_term_index dico_incrs;
-	  self#refresh_property_increments focus_term_index dico_incrs);
+	  self#define_focus_term_index;
+	  dico_incrs <- new dico_increments;
+	  self#refresh_term_increments;
+	  self#refresh_class_increments;
+	  self#refresh_property_increments);
 	()
 
   method is_home =
@@ -897,6 +920,7 @@ object (self)
   method home =
     focus <- AtS1 (Det (Something, None), ReturnX);
     offset <- 0;
+    self#reset_patterns;
     self#refresh
 
   method give_more =
@@ -933,25 +957,38 @@ object (self)
     match f focus with
       | Some foc ->
 	focus <- foc;
-	term_patterns <- [];
-	jquery_input "#pattern-terms" (fun input -> input##value <- string "");
-	jquery_input "#pattern-classes" (fun input -> input##value <- string "");
-	jquery_input "#pattern-properties" (fun input -> input##value <- string "");
+	self#reset_patterns;
 	self#refresh
       | None -> ()
 
-  method set_term_patterns lpat =
-    term_patterns <- lpat;
-    self#refresh
+  method reset_patterns =
+    term_patterns <- [];
+    class_patterns <- [];
+    property_patterns <- [];
+    jquery_input "#pattern-terms" (fun input -> input##value <- string "");
+    jquery_input "#pattern-classes" (fun input -> input##value <- string "");
+    jquery_input "#pattern-properties" (fun input -> input##value <- string "")
 
-(*
+  method set_term_patterns lpat =
+    if not self#is_home
+    then begin
+      term_patterns <- lpat;
+      self#refresh
+    end
+
   method set_class_patterns lpat =
     if self#is_home
     then begin
       class_patterns <- lpat;
       self#refresh_class_increments_init
     end
-*)
+
+  method set_property_patterns lpat =
+    if self#is_home
+    then begin
+      property_patterns <- lpat;
+      self#refresh_property_increments_init
+    end
 
   method pattern_changed ~(input : Dom_html.inputElement t) ~(elt_list : Dom_html.element t) (k : string list -> unit) =
     let pat = to_string (input##value) in
@@ -965,11 +1002,12 @@ object (self)
 	if matcher (to_string elt_incr##innerHTML)
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"));
-    if not !there_is_match && pat = "" || pat.[String.length pat - 1] = ' '
+    let n = String.length pat in
+    if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
     then k lpat
 
 end
-  
+
 let myplace = new place
 
 let _ =
@@ -991,8 +1029,8 @@ let _ =
 	       (fun input ev -> myplace#pattern_changed ~input ~elt_list k)
 	       input))))
       [("#pattern-terms", "#terms", (fun lpat -> myplace#set_term_patterns lpat));
-       ("#pattern-classes", "#classes", (fun lpat -> ()));
-       ("#pattern-properties", "#properties", (fun lpat -> ()))];
+       ("#pattern-classes", "#classes", (fun lpat -> myplace#set_class_patterns lpat));
+       ("#pattern-properties", "#properties", (fun lpat -> myplace#set_property_patterns lpat))];
     
     jquery "#more" (onclick (fun elt ev -> myplace#give_more));
     jquery "#less" (onclick (fun elt ev -> myplace#give_less));
