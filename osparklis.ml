@@ -239,8 +239,9 @@ let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
   "<pre>" ^ text ^ "</pre>"
 
-let html_span ?classe ?title text =
+let html_span ?id ?classe ?title text =
   "<span" ^
+    (match id with None -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
     (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</span>"
@@ -278,52 +279,100 @@ let html_prop p =
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
 let html_is_of p np = "is the " ^ html_prop p ^ " of " ^ np
-let html_and ar =
-  let html = ref ("<ul class=\"list-and\"><li>" ^ ar.(0) ^ "</li>") in
-  for i=1 to Array.length ar - 1 do
-    html := !html ^ " <li> and " ^ ar.(i) ^ "</li>"
+let html_and ar_html =
+  let html = ref ("<ul class=\"list-and\"><li>" ^ ar_html.(0) ^ "</li>") in
+  for i=1 to Array.length ar_html - 1 do
+    html := !html ^ " <li>and " ^ ar_html.(i) ^ "</li>"
   done;
   !html ^ "</ul>"
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
 let html_the_of p np = "the " ^ html_prop p ^ " of " ^ np
 let html_return np = "Give me " ^ np
 
-let rec html_of_elt_p1 = function
-  | Type c -> html_is_a c
-  | Has (p,np) -> html_has p (html_of_elt_s1 np)
-  | IsOf (p,np) -> html_is_of p (html_of_elt_s1 np) 
-  | And ar -> html_and (Array.map html_of_elt_p1 ar)
-and html_of_elt_s1 = function
-  | Det (det, None) -> html_det (html_of_elt_s2 det) None
-  | Det (Something, Some (IsOf (p,np))) -> html_the_of p (html_of_elt_s1 np)
-  | Det (det, Some rel) -> html_det (html_of_elt_s2 det) (Some (html_of_elt_p1 rel))
+let html_focus dico foc hl (* highlight *) html =
+  let id = dico#add foc in
+  "<span id=\"" ^ id ^ "\" class=\"focus" ^ (if hl then " in-current-focus" else "") ^ "\">" ^ html ^ "</span>"
+
+let rec html_of_elt_p1 dico ctx hl f =
+  let html =
+    match f with
+      | Type c -> html_is_a c
+      | Has (p,np) -> html_has p (html_of_elt_s1 dico (HasX (p,ctx)) hl np)
+      | IsOf (p,np) -> html_is_of p (html_of_elt_s1 dico (IsOfX (p,ctx)) hl np) 
+      | And ar -> html_and (Array.mapi (fun i elt -> html_of_elt_p1 dico (AndX (i,ar,ctx)) hl elt) ar) in
+  html_focus dico (AtP1 (f,ctx)) hl html
+and html_of_elt_s1 dico ctx hl f =
+  let html =
+    match f with
+      | Det (det, None) -> html_det (html_of_elt_s2 det) None
+      | Det (Something, Some (IsOf (p,np))) -> html_the_of p (html_of_elt_s1 dico (IsOfX (p, DetThatX (Something, ctx))) hl np)
+      | Det (det, Some rel) -> html_det (html_of_elt_s2 det) (Some (html_of_elt_p1 dico (DetThatX (det,ctx)) hl rel)) in
+  html_focus dico (AtS1 (f,ctx)) hl html
 and html_of_elt_s2 = function
   | Term t -> html_term t
   | Something -> "something"
   | Class c -> "a " ^ html_class c
-and html_of_elt_s = function
-  | Return np -> html_return (html_of_elt_s1 np)
 
-let rec html_of_ctx_p1 html = function
-  | DetThatX (det,ctx) -> html_of_ctx_s1 (html_det (html_of_elt_s2 det) (Some html)) ctx
-  | AndX (i,ar,ctx) ->
-    let ar_html = Array.map html_of_elt_p1 ar in
-    ar_html.(i) <- html;
-    html_of_ctx_p1 (html_and ar_html) ctx
-and html_of_ctx_s1 html = function
-  | HasX (p,ctx) -> html_of_ctx_p1 (html_has p html) ctx
-  | IsOfX (p, DetThatX (Something,ctx2)) -> html_of_ctx_s1 (html_the_of p html) ctx2
-  | IsOfX (p,ctx) -> html_of_ctx_p1 (html_is_of p html) ctx
-  | ReturnX -> html_return html
+let rec html_of_ctx_p1 dico f html ctx =
+  match ctx with
+    | DetThatX (det,ctx2) ->
+      let f2 = Det (det, Some f) in
+      let html2 =
+	html_focus dico (AtS1 (f2, ctx2)) false
+	  (html_det (html_of_elt_s2 det) (Some html)) in
+      html_of_ctx_s1 dico f2 html2 ctx2
+    | AndX (i,ar,ctx2) ->
+      let f2 = ar.(i) <- f; And ar in
+      let html2 =
+	html_focus dico (AtP1 (f2,ctx2)) false
+	  (html_and
+	     (Array.mapi
+		(fun j elt -> if j=i then html else html_of_elt_p1 dico (AndX (j,ar,ctx2)) false elt)
+		ar)) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+and html_of_ctx_s1 dico f html ctx =
+  match ctx with
+    | HasX (p,ctx2) ->
+      let f2 = Has (p,f) in
+      let html2 =
+	html_focus dico (AtP1 (f2,ctx2)) false
+	  (html_has p html) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+    | IsOfX (p, DetThatX (Something,ctx2)) ->
+      let f2 = Det (Something, Some (IsOf (p,f))) in
+      let html2 =
+	html_focus dico (AtS1 (f2,ctx2)) false
+	  (html_the_of p html) in
+      html_of_ctx_s1 dico f2 html2 ctx2
+    | IsOfX (p,ctx2) ->
+      let f2 = IsOf (p,f) in
+      let html2 =
+	html_focus dico (AtP1 (f2,ctx2)) false
+	  (html_is_of p html) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+    | ReturnX -> html_return html
 
-let html_of_focus = function
-  | AtP1 (IsOf (p,np), DetThatX (Something, ctx))
-  | AtS1 (Det (Something, Some (IsOf (p,np))), ctx) ->
-    html_of_ctx_s1 (html_span ~classe:"focus" (html_the_of p (html_of_elt_s1 np))) ctx
-  | AtP1 (f,ctx) ->
-    html_of_ctx_p1 (html_span ~classe:"focus" (html_of_elt_p1 f)) ctx
-  | AtS1 (f,ctx) ->
-    html_of_ctx_s1 (html_span ~classe:"focus" (html_of_elt_s1 f)) ctx
+let html_of_focus dico focus =
+  match focus with
+    | AtP1 (IsOf (p,np), DetThatX (Something, ctx))
+    | AtS1 (Det (Something, Some (IsOf (p,np))), ctx) ->
+      let f = Det (Something, Some (IsOf (p,np))) in
+      html_of_ctx_s1 dico f
+	(html_span ~id:"current-focus"
+	   (html_focus dico (AtS1 (f,ctx)) true
+	      (html_the_of p
+		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (Something, ctx))) true np))))
+	ctx
+    | AtP1 (f,ctx) ->
+      html_of_ctx_p1 dico f
+	(html_span ~id:"current-focus"
+	   (html_of_elt_p1 dico ctx true f))
+	ctx
+    | AtS1 (f,ctx) ->
+      html_of_ctx_s1 dico f
+	(html_span ~id:"current-focus"
+	   (html_of_elt_s1 dico ctx true f))
+	ctx
 
 (* focus moves *)
 
@@ -678,12 +727,15 @@ let html_cell t =
       else html_term ~link:true t
     | _ -> html_term ~link:true t
 
-let html_table_of_results results =
+let html_table_of_results ~focus_var results =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<table id=\"extension\"><tr>";
   List.iter
     (fun (var,i) ->
-      Buffer.add_string buf "<th>";
+      Buffer.add_string buf
+	(if var = focus_var
+	 then "<th class=\"in-current-focus\">"
+	 else "<th>");
       Buffer.add_string buf var;
       Buffer.add_string buf "</th>")
     results.vars;
@@ -738,7 +790,7 @@ let oninput k elt =
   elt##oninput <- Dom.handler (fun ev -> k elt ev; bool true)
 
 let ajax_sparql_in (elt : Dom_html.element t) (sparql : sparql) (k : sparql_results -> unit) =
-  Firebug.console##log(string sparql);
+  (*Firebug.console##log(string sparql);*)
   elt##style##cursor <- string "progress";
   Lwt.ignore_result
     (Lwt.bind
@@ -761,39 +813,57 @@ let ajax_sparql sparql k =
 
 (* -------------------- *)
 
-class dico_increments =
+class ['a] dico (prefix : string) =
 object
   val mutable cpt = 0
-  val ht : (string,increment) Hashtbl.t = Hashtbl.create 100
+  val ht : (string,'a) Hashtbl.t = Hashtbl.create 100
 
-  method add (incr : increment) : string =
+  method add (x : 'a) : string =
     cpt <- cpt + 1;
-    let key = "incr" ^ string_of_int cpt in
-    Hashtbl.add ht key incr;
+    let key = prefix ^ string_of_int cpt in
+    Hashtbl.add ht key x;
     key
 
-  method get (key : string) : increment =
+  method get (key : string) : 'a =
     try Hashtbl.find ht key
     with _ ->
-      Firebug.console##log(string ("Missing increment: " ^ key));
-      failwith "Osparqlis.dico_increments#get"
+      Firebug.console##log(string ("Missing element in dico: " ^ key));
+      failwith "Osparqlis.dico#get"
 end
 
+class dico_foci =
+object
+  inherit [focus] dico "focus"
+end
+
+class dico_increments =
+object
+  inherit [increment] dico "incr"
+end
 
 (* navigation place *)
 class place =
 object (self)
+  (* constants *)
+
   val max_results = 200
   val max_classes = 1000
   val max_properties = 1000
+
+  (* essential state *)
 
   val mutable offset = 0
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
+
   val mutable term_patterns = []
   val mutable class_patterns = []
   val mutable property_patterns = []
+
+  (* derived state *)
+
+  val mutable dico_foci = new dico_foci
 
   val mutable focus_term = Var "thing"
   val mutable sparql_opt = None
@@ -817,9 +887,20 @@ object (self)
 	| Var v -> index_of_results_column v results
 	| t -> [(t, results.length)] )
 
+  method refresh_lisql =
+    jquery "#lisql" (fun elt ->
+      elt##innerHTML <- string (html_of_focus dico_foci focus);
+      jquery_all_from (elt :> Dom_html.nodeSelector t) ".focus" (onclick (fun elt_foc ev ->
+	Dom_html.stopPropagation ev;
+	self#focus_update (fun _ ->
+	  let key = to_string (elt_foc##id) in
+	  Firebug.console##log(string key);
+	  Some (dico_foci#get key)))))
+
   method private refresh_extension =
     jquery_set_innerHTML "#list-results"
       (html_table_of_results
+	 ~focus_var:(match focus_term with Var v -> v | _ -> "")
 	 (page_of_results offset limit results));
     jquery_set_innerHTML "#count-results"
       (if results.dim = 0 then
@@ -925,28 +1006,12 @@ object (self)
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
 
-(*
-  method private refresh_inverse_property_increments focus_term_index dico_incrs =
-    jquery "#inverse-properties" (fun elt ->
-      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-      ajax_sparql_in elt sparql (fun results ->
-	let index = index_of_results_2columns "prop" "freq" results in
-	elt##innerHTML <- string
-	  (html_of_increment_frequency_list dico_incrs
-	     (List.fold_left
-		(fun res -> function
-		  | (URI c, freq) -> (IncrInvProp c, freq) :: res
-		  | _ -> res)
-		[] index));
-	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))))))
-*)
-
   method refresh =
-    jquery_set_innerHTML "#lisql" (html_of_focus focus);
+    dico_foci <- new dico_foci;
+    self#refresh_lisql;
     genvar#reset;
     self#define_sparql;
+    dico_incrs <- new dico_increments;
     match sparql_opt with
       | None ->
 	jquery_set_innerHTML "#sparql" "";
@@ -956,7 +1021,6 @@ object (self)
 	  | Var v ->
 	    jquery_set_innerHTML "#list-results" "";
 	    jquery_set_innerHTML "#count-results" "";
-	    dico_incrs <- new dico_increments;
 	    jquery_set_innerHTML "#list-terms" "";
 	    jquery_set_innerHTML "#count-terms" "---";
 	    jquery_set_innerHTML "#list-classes" "";
@@ -969,7 +1033,6 @@ object (self)
 	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [|term|] ]; };
 	    self#refresh_extension;
 	    focus_term_index <- [(term,1)];
-	    dico_incrs <- new dico_increments;
 	    self#refresh_term_increments;
 	    self#refresh_class_increments;
 	    self#refresh_property_increments )
@@ -981,7 +1044,6 @@ object (self)
 	  results <- res;
 	  self#refresh_extension;
 	  self#define_focus_term_index;
-	  dico_incrs <- new dico_increments;
 	  self#refresh_term_increments;
 	  self#refresh_class_increments;
 	  self#refresh_property_increments);
@@ -995,36 +1057,6 @@ object (self)
     offset <- 0;
     self#reset_patterns;
     self#refresh
-
-  method give_more =
-    if offset + limit < results.length
-    then begin
-      limit <- limit + 10;
-      self#refresh_extension
-    end
-
-  method give_less =
-    if limit > 10
-    then begin
-      limit <- limit - 10;
-      self#refresh_extension
-    end
-
-  method page_down =
-    let offset' = offset + limit in
-    if offset' < results.length
-    then begin
-      offset <- offset';
-      self#refresh_extension
-    end
-
-  method page_up =
-    let offset' = offset - limit in
-    if offset' >= 0
-    then begin
-      offset <- offset';
-      self#refresh_extension
-    end
 
   method focus_update f =
     match f focus with
@@ -1080,6 +1112,36 @@ object (self)
     if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
     then k lpat
 
+  method give_more =
+    if offset + limit < results.length
+    then begin
+      limit <- limit + 10;
+      self#refresh_extension
+    end
+
+  method give_less =
+    if limit > 10
+    then begin
+      limit <- limit - 10;
+      self#refresh_extension
+    end
+
+  method page_down =
+    let offset' = offset + limit in
+    if offset' < results.length
+    then begin
+      offset <- offset';
+      self#refresh_extension
+    end
+
+  method page_up =
+    let offset' = offset - limit in
+    if offset' >= 0
+    then begin
+      offset <- offset';
+      self#refresh_extension
+    end
+
 end
 
 let myplace = new place
@@ -1088,12 +1150,14 @@ let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> myplace#home));
+    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
 
+(*
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
     jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
-    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
+*)
 
     List.iter
       (fun (sel_input, sel_list, k) ->

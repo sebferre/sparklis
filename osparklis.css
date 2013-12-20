@@ -1,9 +1,3 @@
-#lisql
-{
-/*font-size:150%;*/
-margin:10px;
-}
-
 .classURI
 {
 color:darkorange;
@@ -24,14 +18,27 @@ color:darkblue;
 color:darkgreen;
 }
 
-.focus
+#lisql
 {
-background-color:lightgreen;
+margin:10px;
 }
 
-ul.list-and
+#current-focus
 {
-list-style:none;
+}
+
+.focus
+{
+}
+
+.in-current-focus
+{
+background-color:#ffff55;
+}
+
+.list-and
+{
+list-style-type:none;
 margin:0px;
 }
 
@@ -42,7 +49,7 @@ margin:0px;
 .incr-box
 {
 float:left;
-border:4px inset grey;
+border:4px groove #ffff22;
 margin:5px;
 }
 
