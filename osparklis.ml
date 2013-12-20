@@ -352,25 +352,29 @@ and html_of_ctx_s1 dico f html ctx =
       html_of_ctx_p1 dico f2 html2 ctx2
     | ReturnX -> html_return html
 
+let html_current_focus html =
+  html_span ~id:"current-focus" ~classe:"in-current-focus"
+      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\">")
+
 let html_of_focus dico focus =
   match focus with
     | AtP1 (IsOf (p,np), DetThatX (Something, ctx))
     | AtS1 (Det (Something, Some (IsOf (p,np))), ctx) ->
       let f = Det (Something, Some (IsOf (p,np))) in
       html_of_ctx_s1 dico f
-	(html_span ~id:"current-focus"
+	(html_current_focus
 	   (html_focus dico (AtS1 (f,ctx)) true
 	      (html_the_of p
 		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (Something, ctx))) true np))))
 	ctx
     | AtP1 (f,ctx) ->
       html_of_ctx_p1 dico f
-	(html_span ~id:"current-focus"
+	(html_current_focus
 	   (html_of_elt_p1 dico ctx true f))
 	ctx
     | AtS1 (f,ctx) ->
       html_of_ctx_s1 dico f
-	(html_span ~id:"current-focus"
+	(html_current_focus
 	   (html_of_elt_s1 dico ctx true f))
 	ctx
 
@@ -758,24 +762,24 @@ let html_table_of_results ~focus_var results =
 
 (* ------------------ *)
 
-let jquery_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k =
+let jquery_from (root : #Dom_html.nodeSelector Js.t) s k =
   Opt.iter (root##querySelector(string s)) (fun elt ->
     k elt)
-let jquery s k = jquery_from (Dom_html.document :> Dom_html.nodeSelector t) s k
+let jquery s k = jquery_from Dom_html.document s k
 
-let jquery_input_from (root : Dom_html.nodeSelector Js.t) s k =
+let jquery_input_from (root : #Dom_html.nodeSelector Js.t) s k =
   Opt.iter (root##querySelector(string s)) (fun elt ->
     Opt.iter (Dom_html.CoerceTo.input elt) (fun input ->
       k input))
-let jquery_input s k = jquery_input_from (Dom_html.document :> Dom_html.nodeSelector t) s k
+let jquery_input s k = jquery_input_from Dom_html.document s k
 
-let jquery_all_from (root : Dom_html.nodeSelector Js.t (*= Dom_html.document*)) s k =
+let jquery_all_from (root : #Dom_html.nodeSelector Js.t) s k =
   let nodelist = root##querySelectorAll(string s) in
   let n = nodelist##length in
   for i=0 to n-1 do
     Opt.iter nodelist##item(i) k
   done
-let jquery_all s k = jquery_all_from (Dom_html.document :> Dom_html.nodeSelector t) s k
+let jquery_all s k = jquery_all_from Dom_html.document s k
 
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
@@ -890,12 +894,15 @@ object (self)
   method refresh_lisql =
     jquery "#lisql" (fun elt ->
       elt##innerHTML <- string (html_of_focus dico_foci focus);
-      jquery_all_from (elt :> Dom_html.nodeSelector t) ".focus" (onclick (fun elt_foc ev ->
+      jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
 	self#focus_update (fun _ ->
 	  let key = to_string (elt_foc##id) in
 	  Firebug.console##log(string key);
-	  Some (dico_foci#get key)))))
+	  Some (dico_foci#get key))));
+      jquery_from elt "#delete-current-focus"
+	(onclick (fun elt_button ev ->
+	  self#focus_update delete_focus)))
 
   method private refresh_extension =
     jquery_set_innerHTML "#list-results"
@@ -920,7 +927,7 @@ object (self)
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
-      jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+      jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length focus_term_index) max_results "term" "terms")
@@ -938,7 +945,7 @@ object (self)
 		  | URI c -> (IncrClass c, 1) :: res
 		  | _ -> res)
 		[] class_list));
-	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_list) 1000 "class" "classes")))
@@ -956,7 +963,7 @@ object (self)
 		  | URI c -> (IncrProp c, 1) :: (IncrInvProp c, 1) :: res
 		  | _ -> res)
 		[] prop_list));
-	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-properties"
 	  (html_count_unit (List.length prop_list) 1000 "property" "properties")))
@@ -974,7 +981,7 @@ object (self)
 		  | (URI c, freq) -> (IncrClass c, freq) :: res
 		  | _ -> res)
 		[] class_index));
-	jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
@@ -1001,7 +1008,7 @@ object (self)
 	  elt##innerHTML <- string
 	    (html_of_increment_frequency_list dico_incrs
 	       index);
-	  jquery_all_from (elt :> Dom_html.nodeSelector t) ".increment" (onclick (fun elt ev ->
+	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
@@ -1103,8 +1110,8 @@ object (self)
     let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
     let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
     let there_is_match = ref false in
-    jquery_all_from (elt_list :> Dom_html.nodeSelector t) "li" (fun elt_li ->
-      jquery_from (elt_li :> Dom_html.nodeSelector t) ".URI, .Literal, .classURI, .propURI" (fun elt_incr ->
+    jquery_all_from elt_list "li" (fun elt_li ->
+      jquery_from elt_li ".URI, .Literal, .classURI, .propURI" (fun elt_incr ->
 	if matcher (to_string elt_incr##innerHTML)
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"));
@@ -1150,9 +1157,8 @@ let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> myplace#home));
-    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
-
 (*
+    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
     jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
     jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
     jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
