@@ -40,6 +40,11 @@ let name_of_uri uri =
       ( match Regexp.matched_string res with "" -> uri | name -> name )
     | None -> uri
 
+let uri_has_ext uri exts =
+  List.exists
+    (fun ext -> Filename.check_suffix uri ext)
+    exts
+
 (* ------------------------- *)
 
 type uri = string
@@ -246,6 +251,9 @@ let html_div ?classe ?title text =
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</div>"
 
+let html_a url html =
+  "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
+
 let html_count_unit count max unit units =
   if count = 0 then "No " ^ unit
   else if count = 1 then "1 " ^ unit
@@ -256,7 +264,7 @@ let html_term ?(link = false) = function
   | URI uri ->
     let name = name_of_uri uri in
     if link
-    then "<a target=\"_blank\" href=\"" ^ uri ^ "\">" ^ name ^ "</a>"
+    then html_a uri name
     else html_span ~classe:"URI" ~title:uri name
   | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ "@" ^ lang)
   | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
@@ -641,6 +649,35 @@ let sparql_results_of_json s_json =
     Firebug.console##log(string (Printexc.to_string exn));
     empty_results
 
+let html_img url =
+  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" width=\"100\" height=\"100\">"
+
+let html_video url mime =
+  "<video width=\"320\" height=\"240\" controls>\
+  <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
+  Your browser does not support the video tag.\
+  </video>"
+
+let html_audio url mime =
+  "<audio controls>\
+  <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
+  Your browser does not support this audio format.\
+  </audio>"
+
+let html_cell t =
+  match t with
+    | URI uri ->
+      if uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
+	html_a uri (html_img uri)
+      else if uri_has_ext uri ["mp4"; "MP4"] then
+	html_video uri "video/mp4"
+      else if uri_has_ext uri ["ogg"; "OGG"] then
+	html_video uri "video/ogg"
+      else if uri_has_ext uri ["mp3"; "MP3"] then
+	html_audio uri "audio/mpeg"
+      else html_term ~link:true t
+    | _ -> html_term ~link:true t
+
 let html_table_of_results results =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<table id=\"extension\"><tr>";
@@ -659,7 +696,7 @@ let html_table_of_results results =
 	(fun i ->
 	  let t = binding.(i) in
 	  Buffer.add_string buf "<td>";
-	  Buffer.add_string buf (html_term ~link:true t);
+	  Buffer.add_string buf (html_cell t);
 	  Buffer.add_string buf "</td>")
 	li;
       Buffer.add_string buf "</tr>")
@@ -993,6 +1030,7 @@ object (self)
     match f focus with
       | Some foc ->
 	focus <- foc;
+	offset <- 0;
 	self#reset_patterns;
 	self#refresh
       | None -> ()
