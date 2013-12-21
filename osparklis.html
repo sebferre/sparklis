@@ -17,9 +17,12 @@
   </header>
 
   <div id="control-navig">
-    <img id="home" src="icon-home.png" height="40" alt="Home">
-    <img id="backward" src="icon-backward.png" height="50" alt="Back">
-    <img id="forward" src="icon-forward.png" height="50" alt="Forward">
+    <img id="home" src="icon-home.png" height="40" alt="Home"
+	 title="Click to reset the query">
+    <img id="backward" src="icon-backward.png" height="50" alt="Back"
+	 title="Click to go back in navigation history">
+    <img id="forward" src="icon-forward.png" height="50" alt="Forward"
+	 title="Click to go forward in navigation history">
 <!--
     <button id="delete">DELETE Focus</button>
     <button id="up">Focus UP</button>
@@ -29,22 +32,33 @@
 -->
   </div>
 
-  <div id="lisql"></div>
+  <div id="lisql"
+       title="Click on a query element to change focus">
+  </div>
 
   <div id="increments">
     <div class="incr-box">
-      <input id="pattern-terms" class="pattern-incrs" type="text">
-      <div id="list-terms" class="list-incrs"></div>
+      <input id="pattern-terms" class="pattern-incrs" type="text"
+	     title="Input keywords to filter terms, and trailing spaces to force loading more matches">
+      <div id="list-terms" class="list-incrs"
+	   title="Click a term to insert in the query at the focus">
+      </div>
       <div id="count-terms" class="count-incrs">No terms</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-classes" class="pattern-incrs" type="text">
-      <div id="list-classes" class="list-incrs"></div>
+      <input id="pattern-classes" class="pattern-incrs" type="text"
+	     title="Input keywords to filter classes, and trailing spaces to force loading more matches">
+      <div id="list-classes" class="list-incrs"
+	   title="Click a class to insert in the query at the focus">
+      </div>
       <div id="count-classes" class="count-incrs">No classes</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-properties" class="pattern-incrs" type="text">
-      <div id="list-properties" class="list-incrs"></div>
+      <input id="pattern-properties" class="pattern-incrs" type="text"
+	     title="Input keywords to filter properties, and trailing spaces to force loading more matches">
+      <div id="list-properties" class="list-incrs"
+	   title="Click a property to insert in the query at the focus">
+      </div>
       <div id="count-properties" class="count-incrs">No properties</div>
     </div>
   </div>
@@ -52,15 +66,17 @@
   <div id="extension">
     <div id="control-results">
       <span id="count-results">No results</span>
-      <button id="page-down">Page Down</button>
-      <button id="page-up">Page Up</button>
-      <button id="more">Give more results</button>
-      <button id="less">Give less results</button>
+      <button id="page-down" title="Click to show next page of results">Page Down</button>
+      <button id="page-up" title="Click to show previous page of results">Page Up</button>
+      <button id="more" title="Click to show more results per page">Give more results</button>
+      <button id="less" title="Click to show less results per page">Give less results</button>
     </div>
     <div id="list-results"></div>
   </div>
 
-  <div id="sparql"></div>
+  <div id="sparql"
+       title="This is the SPARQL version of your query">
+  </div>
 
   <footer>
     <p>Created by Sébastien Ferré © 2013</p>

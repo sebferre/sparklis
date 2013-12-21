@@ -354,7 +354,7 @@ and html_of_ctx_s1 dico f html ctx =
 
 let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
-      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\">")
+      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
 
 let html_of_focus dico focus =
   match focus with
