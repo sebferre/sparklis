@@ -845,7 +845,8 @@ object
   inherit [increment] dico "incr"
 end
 
-(* navigation place *)
+(* navigation place and history *)
+
 class place =
 object (self)
   (* constants *)
@@ -860,6 +861,10 @@ object (self)
   val mutable limit = 10
 
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
+  method focus = focus
+
+  val mutable update_focus : (focus -> focus option) -> unit = (fun f -> ())
+  method set_update_focus f = update_focus <- f
 
   val mutable term_patterns = []
   val mutable class_patterns = []
@@ -896,13 +901,13 @@ object (self)
       elt##innerHTML <- string (html_of_focus dico_foci focus);
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
-	self#focus_update (fun _ ->
+	update_focus (fun _ ->
 	  let key = to_string (elt_foc##id) in
 	  Firebug.console##log(string key);
 	  Some (dico_foci#get key))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
-	  self#focus_update delete_focus)))
+	  update_focus delete_focus)))
 
   method private refresh_extension =
     jquery_set_innerHTML "#list-results"
@@ -928,7 +933,7 @@ object (self)
 	(html_of_increment_frequency_list dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id)))))));
+	update_focus (insert_increment (dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length focus_term_index) max_results "term" "terms")
 
@@ -946,7 +951,7 @@ object (self)
 		  | _ -> res)
 		[] class_list));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_list) 1000 "class" "classes")))
 
@@ -964,7 +969,7 @@ object (self)
 		  | _ -> res)
 		[] prop_list));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-properties"
 	  (html_count_unit (List.length prop_list) 1000 "property" "properties")))
 
@@ -982,7 +987,7 @@ object (self)
 		  | _ -> res)
 		[] class_index));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
  
@@ -1009,11 +1014,14 @@ object (self)
 	    (html_of_increment_frequency_list dico_incrs
 	       index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    self#focus_update (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	    update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
 
   method refresh =
+    jquery_input "#pattern-terms" (fun input -> input##value <- string "");
+    jquery_input "#pattern-classes" (fun input -> input##value <- string "");
+    jquery_input "#pattern-properties" (fun input -> input##value <- string "");
     dico_foci <- new dico_foci;
     self#refresh_lisql;
     genvar#reset;
@@ -1058,29 +1066,6 @@ object (self)
 
   method is_home =
     focus = AtS1 (Det (Something, None), ReturnX)
-
-  method home =
-    focus <- AtS1 (Det (Something, None), ReturnX);
-    offset <- 0;
-    self#reset_patterns;
-    self#refresh
-
-  method focus_update f =
-    match f focus with
-      | Some foc ->
-	focus <- foc;
-	offset <- 0;
-	self#reset_patterns;
-	self#refresh
-      | None -> ()
-
-  method reset_patterns =
-    term_patterns <- [];
-    class_patterns <- [];
-    property_patterns <- [];
-    jquery_input "#pattern-terms" (fun input -> input##value <- string "");
-    jquery_input "#pattern-classes" (fun input -> input##value <- string "");
-    jquery_input "#pattern-properties" (fun input -> input##value <- string "")
 
   method set_term_patterns lpat =
     if not self#is_home
@@ -1149,20 +1134,74 @@ object (self)
       self#refresh_extension
     end
 
+  method new_place foc =
+    {< focus = foc;
+       offset = 0;
+       term_patterns = [];
+       class_patterns = [];
+       property_patterns = []; >}
+
 end
 
-let myplace = new place
+let history =
+object (self)
+  val mutable past : place list = []
+  val mutable present : place = new place
+  val mutable future : place list = []
+
+  initializer present#set_update_focus self#update_focus
+
+  method present : place = present
+
+  method tick (foc : focus) : unit =
+    let p = present#new_place foc in
+    p#set_update_focus self#update_focus;
+    past <- present::past;
+    present <- p;
+    future <- [];
+    p#refresh
+
+  method home =
+    self#tick (AtS1 (Det (Something, None), ReturnX))
+
+  method update_focus f =
+    match f present#focus with
+      | None -> ()
+      | Some foc -> self#tick foc
+
+  method back : unit =
+    match past with
+      | [] -> ()
+      | p::lp ->
+	future <- present::future;
+	present <- p;
+	past <- lp;
+	p#refresh
+
+  method forward : unit =
+    match future with
+      | [] -> ()
+      | p::lp ->
+	future <- lp;
+	present <- p;
+	past <- present::past;
+	p#refresh
+
+end
+
 
 let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    jquery "#home" (onclick (fun elt ev -> myplace#home));
+    jquery "#home" (onclick (fun elt ev -> history#home));
+    jquery "#back" (onclick (fun elt ev -> history#back));
+    jquery "#forward" (onclick (fun elt ev -> history#forward));
 (*
-    jquery "#delete" (onclick (fun elt ev -> myplace#focus_update delete_focus));
-    jquery "#down" (onclick (fun elt ev -> myplace#focus_update down_focus));
-    jquery "#up" (onclick (fun elt ev -> myplace#focus_update up_focus));
-    jquery "#right" (onclick (fun elt ev -> myplace#focus_update right_focus));
-    jquery "#left" (onclick (fun elt ev -> myplace#focus_update left_focus));
+    jquery "#delete" (onclick (fun elt ev -> history#update_focus delete_focus));
+    jquery "#down" (onclick (fun elt ev -> history#update_focus down_focus));
+    jquery "#up" (onclick (fun elt ev -> history#update_focus up_focus));
+    jquery "#right" (onclick (fun elt ev -> history#update_focus right_focus));
+    jquery "#left" (onclick (fun elt ev -> history#update_focus left_focus));
 *)
 
     List.iter
@@ -1170,16 +1209,16 @@ let _ =
 	jquery_input sel_input (fun input ->
 	  jquery sel_list (fun elt_list ->
 	    (oninput
-	       (fun input ev -> myplace#pattern_changed ~input ~elt_list k)
+	       (fun input ev -> history#present#pattern_changed ~input ~elt_list k)
 	       input))))
-      [("#pattern-terms", "#list-terms", (fun lpat -> myplace#set_term_patterns lpat));
-       ("#pattern-classes", "#list-classes", (fun lpat -> myplace#set_class_patterns lpat));
-       ("#pattern-properties", "#list-properties", (fun lpat -> myplace#set_property_patterns lpat))];
+      [("#pattern-terms", "#list-terms", (fun lpat -> history#present#set_term_patterns lpat));
+       ("#pattern-classes", "#list-classes", (fun lpat -> history#present#set_class_patterns lpat));
+       ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat))];
     
-    jquery "#more" (onclick (fun elt ev -> myplace#give_more));
-    jquery "#less" (onclick (fun elt ev -> myplace#give_less));
-    jquery "#page-down" (onclick (fun elt ev -> myplace#page_down));
-    jquery "#page-up" (onclick (fun elt ev -> myplace#page_up));
+    jquery "#more" (onclick (fun elt ev -> history#present#give_more));
+    jquery "#less" (onclick (fun elt ev -> history#present#give_less));
+    jquery "#page-down" (onclick (fun elt ev -> history#present#page_down));
+    jquery "#page-up" (onclick (fun elt ev -> history#present#page_up));
 
-    myplace#refresh;
+    history#present#refresh;
     bool true)
