@@ -857,14 +857,15 @@ object (self)
 
   (* essential state *)
 
-  val mutable offset = 0
-  val mutable limit = 10
-
   val mutable focus = AtS1 (Det (Something, None), ReturnX)
   method focus = focus
 
-  val mutable update_focus : (focus -> focus option) -> unit = (fun f -> ())
+  val mutable update_focus : push_in_history:bool -> (focus -> focus option) -> unit = (fun ~push_in_history f -> ())
+    (* what to do with focus change *)
   method set_update_focus f = update_focus <- f
+
+  val mutable offset = 0
+  val mutable limit = 10
 
   val mutable term_patterns = []
   val mutable class_patterns = []
@@ -901,13 +902,14 @@ object (self)
       elt##innerHTML <- string (html_of_focus dico_foci focus);
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
-	update_focus (fun _ ->
+	update_focus ~push_in_history:false (fun _ ->
 	  let key = to_string (elt_foc##id) in
 	  Firebug.console##log(string key);
 	  Some (dico_foci#get key))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
-	  update_focus delete_focus)))
+	  Dom_html.stopPropagation ev;
+	  update_focus ~push_in_history:true delete_focus)))
 
   method private refresh_extension =
     jquery_set_innerHTML "#list-results"
@@ -933,7 +935,8 @@ object (self)
 	(html_of_increment_frequency_list dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	update_focus (insert_increment (dico_incrs#get (to_string (elt##id)))))));
+	update_focus ~push_in_history:true
+	  (insert_increment (dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length focus_term_index) max_results "term" "terms")
 
@@ -951,7 +954,8 @@ object (self)
 		  | _ -> res)
 		[] class_list));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus ~push_in_history:true
+	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_list) 1000 "class" "classes")))
 
@@ -969,7 +973,8 @@ object (self)
 		  | _ -> res)
 		[] prop_list));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus ~push_in_history:true
+	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-properties"
 	  (html_count_unit (List.length prop_list) 1000 "property" "properties")))
 
@@ -987,7 +992,8 @@ object (self)
 		  | _ -> res)
 		[] class_index));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  update_focus ~push_in_history:true
+	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
  
@@ -1014,7 +1020,8 @@ object (self)
 	    (html_of_increment_frequency_list dico_incrs
 	       index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    update_focus (insert_increment (dico_incrs#get (to_string (elt##id))))));
+	    update_focus ~push_in_history:true
+	      (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
 
@@ -1153,21 +1160,23 @@ object (self)
 
   method present : place = present
 
-  method tick (foc : focus) : unit =
-    let p = present#new_place foc in
-    p#set_update_focus self#update_focus;
+  method push (p : place) : unit =
     past <- present::past;
     present <- p;
-    future <- [];
-    p#refresh
+    future <- []
 
-  method home =
-    self#tick (AtS1 (Det (Something, None), ReturnX))
-
-  method update_focus f =
+  method update_focus ~push_in_history f =
     match f present#focus with
       | None -> ()
-      | Some foc -> self#tick foc
+      | Some foc -> 
+	let p = present#new_place foc in
+	p#set_update_focus self#update_focus;
+	if push_in_history then self#push p else present <- p;
+	p#refresh
+
+  method home =
+    self#update_focus ~push_in_history:true
+      (fun _ -> Some (AtS1 (Det (Something, None), ReturnX)))
 
   method back : unit =
     match past with
@@ -1215,10 +1224,10 @@ let _ =
        ("#pattern-classes", "#list-classes", (fun lpat -> history#present#set_class_patterns lpat));
        ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat))];
     
+    jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
+    jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
     jquery "#more" (onclick (fun elt ev -> history#present#give_more));
     jquery "#less" (onclick (fun elt ev -> history#present#give_less));
-    jquery "#page-down" (onclick (fun elt ev -> history#present#page_down));
-    jquery "#page-up" (onclick (fun elt ev -> history#present#page_up));
 
     history#present#refresh;
     bool true)
