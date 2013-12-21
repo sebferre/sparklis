@@ -1182,9 +1182,9 @@ object (self)
     match future with
       | [] -> ()
       | p::lp ->
-	future <- lp;
-	present <- p;
 	past <- present::past;
+	present <- p;
+	future <- lp;
 	p#refresh
 
 end
