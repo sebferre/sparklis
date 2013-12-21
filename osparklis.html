@@ -23,6 +23,11 @@
 	 title="Click to go back in navigation history">
     <img id="forward" src="icon-forward.png" height="50" alt="Forward"
 	 title="Click to go forward in navigation history">
+    <span id="sparql-endpoint">
+      SPARQL endpoint: 
+      <input id="sparql-endpoint-input" type="url" value="http://dbpedia.org/sparql">
+      <input id="sparql-endpoint-button" type="button" value="Go">
+    </span>
 <!--
     <button id="delete">DELETE Focus</button>
     <button id="up">Focus UP</button>
@@ -64,17 +69,35 @@
   </div>
 
   <div id="extension">
-    <div id="control-results">
-      <img id="previous-results" src="icon-previous.png" height="20" alt="Previous"
+    <div id="control-results-top">
+      <img class="previous-results" src="icon-previous.png" height="20" alt="Previous"
 	   title="Click to show the previous page of results">
-      <span id="count-results">No results</span>
-      <img id="next-results" src="icon-next.png" height="20" alt="Next"
+      <span class="count-results">No results</span>
+      <img class="next-results" src="icon-next.png" height="20" alt="Next"
 	   title="Click to show the next page of results">
-      <button id="more" title="Click to show more results per page">Give more results</button>
-      <button id="less" title="Click to show less results per page">Give less results</button>
+      <select class="limit-results">
+	<option value="10">Show 10 results</option>
+	<option value="20">Show 20 results</option>
+	<option value="50">Show 50 results</option>
+	<option value="100">Show 100 results</option>
+      </select>
     </div>
+    <!-- duplicated controls -->
     <div id="list-results"></div>
-  </div>
+     <div id="control-results-bottom">
+      <img class="previous-results" src="icon-previous.png" height="20" alt="Previous"
+	   title="Click to show the previous page of results">
+      <span class="count-results">No results</span>
+      <img class="next-results" src="icon-next.png" height="20" alt="Next"
+	   title="Click to show the next page of results">
+      <select class="limit-results">
+	<option value="10">Show 10 results</option>
+	<option value="20">Show 20 results</option>
+	<option value="50">Show 50 results</option>
+	<option value="100">Show 100 results</option>
+      </select>
+    </div>
+ </div>
 
   <div id="sparql"
        title="This is the SPARQL version of your query">

@@ -18,6 +18,11 @@ color:darkblue;
 color:darkgreen;
 }
 
+#sparql-endpoint
+{
+text-align:right;
+}
+
 #lisql
 {
 margin:10px;

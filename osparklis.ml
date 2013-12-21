@@ -793,6 +793,9 @@ let ondblclick k elt =
 let oninput k elt =
   elt##oninput <- Dom.handler (fun ev -> k elt ev; bool true)
 
+let onchange k elt =
+  elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
+
 let ajax_sparql_in (elt : Dom_html.element t) (sparql : sparql) (k : sparql_results -> unit) =
   (*Firebug.console##log(string sparql);*)
   elt##style##cursor <- string "progress";
@@ -916,18 +919,19 @@ object (self)
       (html_table_of_results
 	 ~focus_var:(match focus_term with Var v -> v | _ -> "")
 	 (page_of_results offset limit results));
-    jquery_set_innerHTML "#count-results"
-      (if results.dim = 0 then
-	  if results.length = 0 then "False" else "True"
-       else if results.length = 0 then
-	 "No results"
-       else
-	 let a, b = offset+1, min results.length (offset+limit) in
-	 if a = 1 && b = results.length && results.length < max_results then
-	   string_of_int b ^ (if b=1 then " result" else " results")
+    jquery_all ".count-results" (fun elt ->
+      elt##innerHTML <- string
+	(if results.dim = 0 then
+	    if results.length = 0 then "False" else "True"
+	 else if results.length = 0 then
+	   "No results"
 	 else
-	   "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-	     " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+"))
+	   let a, b = offset+1, min results.length (offset+limit) in
+	   if a = 1 && b = results.length && results.length < max_results then
+	     string_of_int b ^ (if b=1 then " result" else " results")
+	   else
+	     "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+	       " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+")))
 
   method private refresh_term_increments =
     jquery "#list-terms" (fun elt ->
@@ -1111,19 +1115,17 @@ object (self)
     if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
     then k lpat
 
+  method set_limit n =
+    limit <- n;
+    self#refresh_extension
+
   method give_more =
     if offset + limit < results.length
-    then begin
-      limit <- limit + 10;
-      self#refresh_extension
-    end
+    then self#set_limit (limit+10)
 
   method give_less =
     if limit > 10
-    then begin
-      limit <- limit - 10;
-      self#refresh_extension
-    end
+    then self#set_limit (limit-10)
 
   method page_down =
     let offset' = offset + limit in
@@ -1138,6 +1140,9 @@ object (self)
     if offset' >= 0
     then begin
       offset <- offset';
+      self#refresh_extension end
+    else begin
+      offset <- 0;
       self#refresh_extension
     end
 
@@ -1224,10 +1229,13 @@ let _ =
        ("#pattern-classes", "#list-classes", (fun lpat -> history#present#set_class_patterns lpat));
        ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat))];
     
-    jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
-    jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
-    jquery "#more" (onclick (fun elt ev -> history#present#give_more));
-    jquery "#less" (onclick (fun elt ev -> history#present#give_less));
+    jquery_all ".previous-results" (onclick (fun elt ev -> history#present#page_up));
+    jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));
+    jquery_all ".limit-results" (fun elt ->
+      Opt.iter (Dom_html.CoerceTo.select elt) (onchange (fun select ev ->
+	Firebug.console##log(select##value);
+	let limit = int_of_string (to_string (select##value)) in
+	history#present#set_limit limit)));
 
     history#present#refresh;
     bool true)
