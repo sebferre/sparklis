@@ -53,9 +53,13 @@ margin:0px;
 
 .incr-box
 {
-float:left;
-border:4px groove #aaffaa;
-margin:5px;
+    border:4px groove #aaffaa;
+    margin:5px;
+}
+@media screen
+{
+    .incr-box
+    { float:left; }
 }
 
 .pattern-incrs

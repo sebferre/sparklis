@@ -1315,7 +1315,6 @@ object (self)
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-(*	jquery "#results" (fun elt -> elt##style##display <- string "block"); *)
 	ajax_sparql_in [Dom_html.document##documentElement] endpoint sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;
