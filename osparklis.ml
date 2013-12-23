@@ -44,6 +44,7 @@ let uri_has_ext uri exts =
   List.exists
     (fun ext -> Filename.check_suffix uri ext)
     exts
+let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"]
 
 (* ------------------------- *)
 
@@ -102,8 +103,6 @@ let elt_s_of_focus = function
 
 (* translation from LISQL elts to SPARQL queries *)
 
-type sparql = string
-
 let sparql_uri uri = 
   if uri = "a"
   then uri
@@ -130,11 +129,13 @@ let sparql_pattern t lpat =
 
 let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
 
+let sparql_ask gp =
+  "ASK WHERE {\n" ^ gp ^ "\n}"
 let sparql_select lv gp =
   let sel = if lv = [] then "*" else String.concat " " (List.map (fun v -> "?" ^ v) lv) in
   "SELECT DISTINCT " ^ sel ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
-let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
+let rec sparql_of_elt_p1 : elt_p1 -> (term -> string) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
   | Has (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:"" np (fun y -> sparql_triple y p x))
@@ -145,7 +146,7 @@ let rec sparql_of_elt_p1 : elt_p1 -> (term -> sparql) = function
 	   (Array.map
 	      (fun elt -> sparql_of_elt_p1 elt x)
 	      ar)))
-and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> sparql) -> sparql) = function
+and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> string) -> string) = function
   | Det (det,rel_opt) ->
     let prefix =
       if prefix = ""
@@ -156,7 +157,7 @@ and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> sparql) -> sparql) = function
       else prefix in
     let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
     (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
-and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -> sparql) = function
+and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> string) -> (term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
   | Something ->
     let prefix = if prefix = "" then "thing" else prefix in
@@ -164,12 +165,12 @@ and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> sparql) -> (term -> sparql) -
   | Class c ->
     let prefix = prefix_of_uri c in
     (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
-and sparql_of_elt_s : elt_s -> sparql = function
+and sparql_of_elt_s : elt_s -> string = function
   | Return np ->
     let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> "") in
     sparql_select genvar#vars gp
 
-let rec sparql_of_ctx_p1 ~prefix (d : term -> sparql) : ctx_p1 -> sparql = function
+let rec sparql_of_ctx_p1 ~prefix (d : term -> string) : ctx_p1 -> string = function
   | DetThatX (det,ctx) ->
     let prefix =
       if prefix = ""
@@ -193,7 +194,7 @@ let rec sparql_of_ctx_p1 ~prefix (d : term -> sparql) : ctx_p1 -> sparql = funct
 		  else sparql_of_elt_p1 elt x)
 		ar)))
       ctx
-and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = function
+and sparql_of_ctx_s1 (q : (term -> string) -> string) : ctx_s1 -> string = function
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 ~prefix:""
       (fun x -> q (fun y -> sparql_triple x p y))
@@ -205,7 +206,7 @@ and sparql_of_ctx_s1 (q : (term -> sparql) -> sparql) : ctx_s1 -> sparql = funct
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus : focus -> term * (var list * sparql) option = function
+let sparql_of_focus : focus -> term * (var list * string) option = function
   | AtP1 (f,ctx) ->
     let prefix =
       match f with
@@ -255,6 +256,9 @@ let html_div ?classe ?title text =
 let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
+let html_img ?(height = 120) url =
+  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">"
+
 let html_count_unit count max unit units =
   if count = 0 then "No " ^ unit
   else if count = 1 then "1 " ^ unit
@@ -263,10 +267,16 @@ let html_count_unit count max unit units =
 
 let html_term ?(link = false) = function
   | URI uri ->
-    let name = name_of_uri uri in
-    if link
-    then html_a uri name
-    else html_span ~classe:"URI" ~title:uri name
+    (*if uri_is_image uri (* too heavy loading *)
+    then
+      if link
+      then html_a uri (html_img uri)
+      else html_img ~height:60 uri
+    else*)
+      let name = name_of_uri uri in
+      if link
+      then html_a uri name
+      else html_span ~classe:"URI" ~title:uri name
   | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ "@" ^ lang)
   | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
   | Bnode id -> "_:" ^ id
@@ -682,64 +692,70 @@ struct
 end
 
 let sparql_results_of_xml (doc_xml : Dom.element Dom.document t) =
+  Firebug.console##log(string "Entering sparql_results_of_xml");
   try
-    Firebug.console##log(string "Entering sparql_results_of_xml");
     let elt_xml : Dom.element t = doc_xml##documentElement in
-    let elt_head : Dom.element t = Xml.find elt_xml "head" in
-    let elts_var = Xml.find_all elt_head "variable" in
-    let dim, rev_vars =
-      List.fold_left
-	(fun (i, vars as res) elt_var ->
-	  Opt.case (elt_var##getAttribute(string "name"))
-	    (fun _ -> res)
-	    (fun v ->
-	      let v = to_string v in
-	      if v = "_star_fake"
-	      then res
-	      else (i+1, (v,i)::vars)))
-	(0,[]) elts_var in
-    let vars = List.rev rev_vars in
-    let elt_results = Xml.find elt_xml "results" in
-    let elts_result = Xml.find_all elt_results "result" in
-    let length, rev_bindings =
-      List.fold_left
-	(fun (j,l) elt_result ->
-	  let binding = Array.make dim None in
-	  let elts_binding = Xml.find_all elt_result "binding" in
-	  List.iter
-	    (fun elt_binding ->
-	      Opt.case (elt_binding##getAttribute(string "name"))
-		(fun () -> ())
-		(fun v ->
-		  let i = List.assoc (to_string v) vars in
-		  let term_opt =
-		    try
-		      let elt_uri = Xml.find elt_binding "uri" in
-		      let uri = Xml.get_text elt_uri in
-		      Some (URI uri)
-		    with _ ->
+    (try
+      let elt_boolean = Xml.find elt_xml "boolean" in
+      match Xml.get_text elt_boolean with
+	| "true" -> { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
+	| _ -> empty_results
+    with _ ->
+      let elt_head : Dom.element t = Xml.find elt_xml "head" in
+      let elts_var = Xml.find_all elt_head "variable" in
+      let dim, rev_vars =
+	List.fold_left
+	  (fun (i, vars as res) elt_var ->
+	    Opt.case (elt_var##getAttribute(string "name"))
+	      (fun _ -> res)
+	      (fun v ->
+		let v = to_string v in
+		if v = "_star_fake"
+		then res
+		else (i+1, (v,i)::vars)))
+	  (0,[]) elts_var in
+      let vars = List.rev rev_vars in
+      let elt_results = Xml.find elt_xml "results" in
+      let elts_result = Xml.find_all elt_results "result" in
+      let length, rev_bindings =
+	List.fold_left
+	  (fun (j,l) elt_result ->
+	    let binding = Array.make dim None in
+	    let elts_binding = Xml.find_all elt_result "binding" in
+	    List.iter
+	      (fun elt_binding ->
+		Opt.case (elt_binding##getAttribute(string "name"))
+		  (fun () -> ())
+		  (fun v ->
+		    let i = List.assoc (to_string v) vars in
+		    let term_opt =
 		      try
-			let elt_lit = Xml.find elt_binding "literal" in
-			let s = Xml.get_text elt_lit in
-			Opt.case (elt_lit##getAttribute(string "xml:lang"))
-			  (fun () ->
-			    Opt.case (elt_lit##getAttribute(string "datatype"))
-			      (fun () -> Some (PlainLiteral (s, "")))
-			      (fun dt -> Some (TypedLiteral (s, to_string dt))))
-			  (fun lang -> Some (PlainLiteral (s, to_string lang)))
+			let elt_uri = Xml.find elt_binding "uri" in
+			let uri = Xml.get_text elt_uri in
+			Some (URI uri)
 		      with _ ->
 			try
-			  let elt_bnode = Xml.find elt_binding "bnode" in
-			  let id = Xml.get_text elt_bnode in
-			  Some (Bnode id)
+			  let elt_lit = Xml.find elt_binding "literal" in
+			  let s = Xml.get_text elt_lit in
+			  Opt.case (elt_lit##getAttribute(string "xml:lang"))
+			    (fun () ->
+			      Opt.case (elt_lit##getAttribute(string "datatype"))
+				(fun () -> Some (PlainLiteral (s, "")))
+				(fun dt -> Some (TypedLiteral (s, to_string dt))))
+			    (fun lang -> Some (PlainLiteral (s, to_string lang)))
 			with _ ->
-			  None in
-		  binding.(i) <- term_opt))
-	    elts_binding;
-	  (j+1, binding::l))
-	(0,[]) elts_result in
-    let bindings = List.rev rev_bindings in
-    { dim; vars; length; bindings; }
+			  try
+			    let elt_bnode = Xml.find elt_binding "bnode" in
+			    let id = Xml.get_text elt_bnode in
+			    Some (Bnode id)
+			  with _ ->
+			    None in
+		    binding.(i) <- term_opt))
+	      elts_binding;
+	    (j+1, binding::l))
+	  (0,[]) elts_result in
+      let bindings = List.rev rev_bindings in
+      { dim; vars; length; bindings; })
   with exn ->
     Firebug.console##log(string (Printexc.to_string exn));
     empty_results
@@ -809,9 +825,6 @@ let sparql_results_of_json s_json =
     Firebug.console##log(s_json);
     Firebug.console##log(string (Printexc.to_string exn));
     empty_results
-
-let html_img url =
-  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" height=\"120\">"
 
 let html_video url mime =
   "<video width=\"320\" height=\"240\" controls>\
@@ -905,8 +918,7 @@ let oninput k elt =
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
 
-
-let direct_ajax_sparql (endpoint : string) (sparql : sparql) (k : sparql_results -> unit) =
+let direct_ajax_sparql (endpoint : string) (sparql : string) (k : sparql_results -> unit) =
   let fields : (string * Form.form_elt) list =
     [("query", `String (string sparql))] in
   let req = create () in
@@ -960,7 +972,7 @@ let direct_ajax_sparql (endpoint : string) (sparql : sparql) (k : sparql_results
 	 l) in
   req##send(Js.some (string (encode_fields fields)))
 
-let lwt_ajax_sparql (endpoint : string) (sparql : sparql) (k : sparql_results -> unit) =
+let lwt_ajax_sparql (endpoint : string) (sparql : string) (k : sparql_results -> unit) =
   (*Firebug.console##log(string sparql);*)
   Lwt.ignore_result
     (Lwt.bind
@@ -1092,7 +1104,9 @@ object (self)
 	| None -> None
 	| Some (lv,gp) ->
 	  let gp = sparql_join [gp; sparql_pattern t term_patterns] in
-	  Some (sparql_select lv gp ^ "\nLIMIT " ^ string_of_int max_results) )
+	  if lv = []
+	  then Some (sparql_ask gp)
+	  else Some (sparql_select lv gp ^ "\nLIMIT " ^ string_of_int max_results) )
 
   val mutable results = empty_results
   val mutable focus_term_index : (term * int) list = []
@@ -1119,23 +1133,27 @@ object (self)
 	  navigation#update_focus ~push_in_history:true delete_focus)))
 
   method private refresh_extension =
-    jquery_set_innerHTML "#list-results"
-      (html_table_of_results
-	 ~focus_var:(match focus_term with Var v -> v | _ -> "")
-	 (page_of_results offset limit results));
-    jquery_all ".count-results" (fun elt ->
-      elt##innerHTML <- string
-	(if results.dim = 0 then
-	    if results.length = 0 then "False" else "True"
-	 else if results.length = 0 then
-	   "No results"
-	 else
-	   let a, b = offset+1, min results.length (offset+limit) in
-	   if a = 1 && b = results.length && results.length < max_results then
-	     string_of_int b ^ (if b=1 then " result" else " results")
-	   else
-	     "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-	       " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+")))
+    jquery "#results" (fun elt_results ->
+      if results.dim = 0 then begin
+	elt_results##style##display <- string "none" end
+      else begin
+	elt_results##style##display <- string "block";
+	jquery_set_innerHTML "#list-results"
+	  (html_table_of_results
+	     ~focus_var:(match focus_term with Var v -> v | _ -> "")
+	     (page_of_results offset limit results));
+	jquery_all ".count-results" (fun elt ->
+	  elt##innerHTML <- string
+	    (if results.length = 0
+	     then "No results"
+	     else
+	       let a, b = offset+1, min results.length (offset+limit) in
+	       if a = 1 && b = results.length && results.length < max_results then
+		 string_of_int b ^ (if b=1 then " result" else " results")
+	       else
+		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		   " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+")))
+      end)
 
   method private refresh_term_increments =
     jquery "#list-terms" (fun elt ->
@@ -1274,9 +1292,9 @@ object (self)
       | None ->
 	jquery_set_innerHTML "#sparql" "";
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
-	jquery "#extension" (fun elt -> elt##style##display <- string "none");
 	( match focus_term with
 	  | Var v ->
+	    jquery "#results" (fun elt -> elt##style##display <- string "none");
 	    jquery_set_innerHTML "#list-results" "";
 	    jquery_set_innerHTML "#count-results" "";
 	    jquery_set_innerHTML "#list-terms" "";
@@ -1297,7 +1315,7 @@ object (self)
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	jquery "#extension" (fun elt -> elt##style##display <- string "block");
+(*	jquery "#results" (fun elt -> elt##style##display <- string "block"); *)
 	ajax_sparql_in [Dom_html.document##documentElement] endpoint sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;

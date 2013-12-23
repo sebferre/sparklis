@@ -38,7 +38,7 @@ margin:10px;
 
 .in-current-focus
 {
-background-color:#88ff88;
+background-color:#aaffaa;
 }
 
 .list-and
@@ -54,7 +54,7 @@ margin:0px;
 .incr-box
 {
 float:left;
-border:4px groove #88ff88;
+border:4px groove #aaffaa;
 margin:5px;
 }
 
@@ -87,7 +87,7 @@ cursor:pointer;
 text-align:right;
 }
 
-#extension
+#results
 {
 clear:both;
 }
@@ -110,6 +110,11 @@ border:1px solid black;
 th, td
 {
 padding:4px;
+}
+
+#sparql
+{
+clear:both;
 }
 
 footer
