@@ -105,9 +105,9 @@ let elt_s_of_focus = function
 type sparql = string
 
 let sparql_uri uri = 
-  if uri = "a" || uri = "bif:contains"
+  if uri = "a"
   then uri
-  else "<" ^ uri ^ ">"
+  else "<" ^ to_string (encodeURI (string uri)) ^ ">"
 
 let sparql_term = function
   | URI uri -> sparql_uri uri
@@ -380,6 +380,8 @@ let html_of_focus dico focus =
 
 (* focus moves *)
 
+let home_focus = AtS1 (Det (Something, None), ReturnX)
+
 let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Type _ -> None
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
@@ -569,7 +571,7 @@ type sparql_results =
     { dim : int;
       vars : (string * int) list; (* the int is the rank of the string in the list *)
       length : int;
-      bindings : term array list;
+      bindings : term option array list;
     }
 
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
@@ -587,7 +589,12 @@ let page_of_results (offset : int) (limit : int) results : sparql_results =
 let list_of_results_column (var : var) results : term list =
   try
     let i = List.assoc var results.vars in
-    List.rev_map (fun binding -> binding.(i)) results.bindings
+    List.fold_left
+      (fun res binding ->
+	match binding.(i) with
+	  | None -> res
+	  | Some t -> t::res)
+      [] results.bindings
   with Not_found ->
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
@@ -598,12 +605,14 @@ let index_of_results_column (var : var) results : (term * int) list =
     let ht = Hashtbl.create 1000 in
     List.iter
       (fun binding ->
-	let term = binding.(i) in
-	try
-	  let cpt = Hashtbl.find ht term in
-	  incr cpt
-	with Not_found ->
-	  Hashtbl.add ht term (ref 1))
+	match binding.(i) with
+	  | None -> ()
+	  | Some term ->
+	    try
+	      let cpt = Hashtbl.find ht term in
+	      incr cpt
+	    with Not_found ->
+	      Hashtbl.add ht term (ref 1))
       results.bindings;
     let index =
       Hashtbl.fold
@@ -623,12 +632,14 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
     let index =
       List.fold_left
 	(fun res binding ->
-	  let x = binding.(i_x) in
-	  let count =
-	    match binding.(i_count) with
-	      | TypedLiteral (s,dt) -> (try int_of_string s with _ -> 0)
-	      | _ -> 0 in
-	  (x, count)::res)
+	  match binding.(i_x) with
+	    | None -> res
+	    | Some x ->
+	      let count =
+		match binding.(i_count) with
+		  | Some (TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
+		  | _ -> 0 in
+	      (x, count)::res)
 	[] results.bindings in
     index
 (*
@@ -640,9 +651,102 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     []
 
+module Xml =
+struct
+  let find (elt : Dom.element t) (tag : string) : Dom.element t =
+    let nodelist = elt##getElementsByTagName(string tag) in
+    Opt.get (nodelist##item(0))
+      (fun () -> failwith ("Xml.find: unfound tag: " ^ tag))
+
+  let find_all (elt : Dom.element t) (tag : string) : Dom.element t list =
+    let nodelist = elt##getElementsByTagName(string tag) in
+    let l = nodelist##length in
+    let res = ref [] in
+    for i = l-1 downto 0 do
+      Opt.case (nodelist##item(i))
+	(fun () -> ())
+	(fun e -> res := e::!res)
+    done;
+    !res
+
+  let get_text (elt : Dom.element t) : string =
+    Opt.case (elt##firstChild)
+      (fun () -> "")
+      (fun node ->
+	if node##nodeType = Dom.TEXT
+	then
+	  Opt.case (node##nodeValue)
+	    (fun () -> "")
+	    (fun s -> to_string s)
+	else "")
+end
+
+let sparql_results_of_xml (doc_xml : Dom.element Dom.document t) =
+  try
+    Firebug.console##log(string "Entering sparql_results_of_xml");
+    let elt_xml : Dom.element t = doc_xml##documentElement in
+    let elt_head : Dom.element t = Xml.find elt_xml "head" in
+    let elts_var = Xml.find_all elt_head "variable" in
+    let dim, rev_vars =
+      List.fold_left
+	(fun (i, vars as res) elt_var ->
+	  Opt.case (elt_var##getAttribute(string "name"))
+	    (fun _ -> res)
+	    (fun v ->
+	      let v = to_string v in
+	      if v = "_star_fake"
+	      then res
+	      else (i+1, (v,i)::vars)))
+	(0,[]) elts_var in
+    let vars = List.rev rev_vars in
+    let elt_results = Xml.find elt_xml "results" in
+    let elts_result = Xml.find_all elt_results "result" in
+    let length, rev_bindings =
+      List.fold_left
+	(fun (j,l) elt_result ->
+	  let binding = Array.make dim None in
+	  let elts_binding = Xml.find_all elt_result "binding" in
+	  List.iter
+	    (fun elt_binding ->
+	      Opt.case (elt_binding##getAttribute(string "name"))
+		(fun () -> ())
+		(fun v ->
+		  let i = List.assoc (to_string v) vars in
+		  let term_opt =
+		    try
+		      let elt_uri = Xml.find elt_binding "uri" in
+		      let uri = Xml.get_text elt_uri in
+		      Some (URI uri)
+		    with _ ->
+		      try
+			let elt_lit = Xml.find elt_binding "literal" in
+			let s = Xml.get_text elt_lit in
+			Opt.case (elt_lit##getAttribute(string "xml:lang"))
+			  (fun () ->
+			    Opt.case (elt_lit##getAttribute(string "datatype"))
+			      (fun () -> Some (PlainLiteral (s, "")))
+			      (fun dt -> Some (TypedLiteral (s, to_string dt))))
+			  (fun lang -> Some (PlainLiteral (s, to_string lang)))
+		      with _ ->
+			try
+			  let elt_bnode = Xml.find elt_binding "bnode" in
+			  let id = Xml.get_text elt_bnode in
+			  Some (Bnode id)
+			with _ ->
+			  None in
+		  binding.(i) <- term_opt))
+	    elts_binding;
+	  (j+1, binding::l))
+	(0,[]) elts_result in
+    let bindings = List.rev rev_bindings in
+    { dim; vars; length; bindings; }
+  with exn ->
+    Firebug.console##log(string (Printexc.to_string exn));
+    empty_results
+
 let sparql_results_of_json s_json =
   try
-    let ojson = Json.unsafe_input s_json in
+    let ojson = Json.unsafe_input (string s_json) in
     let ohead = Unsafe.get ojson (string "head") in
     let ovars = Unsafe.get ohead (string "vars") in
     let m = truncate (to_float (Unsafe.get ovars (string "length"))) in
@@ -664,34 +768,37 @@ let sparql_results_of_json s_json =
       let res = ref [] in
       for j = n-1 downto 0 do
 	let obinding = Unsafe.get obindings (string (string_of_int j)) in
-	let binding = Array.make m (PlainLiteral ("","")) in
+	let binding = Array.make m None in
 	List.iter
 	  (fun (var,i) ->
-	    let ocell = Unsafe.get obinding (string var) in
-	    let otype = Unsafe.get ocell (string "type") in
-	    let ovalue = Unsafe.get ocell (string "value") in
-	    let term =
-	      let v = Unsafe.get ovalue (string "fullBytes") in
-	      match to_string (Unsafe.get otype (string "fullBytes")) with
-		| "uri" -> URI (to_string v (*decodeURI v*))
-		| "bnode" -> Bnode (to_string v)
-		| "typed-literal" ->
-		  let odatatype = Unsafe.get ocell (string "datatype") in
-		  TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
-		| "plain-literal" ->
-		  let olang = Unsafe.get ocell (string "xml:lang") in
-		  PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
-		| "literal" ->
-		  ( try
-		      let odatatype = Unsafe.get ocell (string "datatype") in
-		      TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
-		    with _ ->
-		      let olang = Unsafe.get ocell (string "xml:lang") in
-		      PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes"))) )
-		| other ->
-		  Firebug.console##log(string ("unexpected value type in SPARQL results: " ^ other));
-		  assert false in
-	    binding.(i) <- term)
+	    try
+	      let ocell = Unsafe.get obinding (string var) in
+	      let otype = Unsafe.get ocell (string "type") in
+	      let ovalue = Unsafe.get ocell (string "value") in
+	      let term =
+		let v = Unsafe.get ovalue (string "fullBytes") in
+		match to_string (Unsafe.get otype (string "fullBytes")) with
+		  | "uri" -> URI (to_string v (*decodeURI v*))
+		  | "bnode" -> Bnode (to_string v)
+		  | "typed-literal" ->
+		    let odatatype = Unsafe.get ocell (string "datatype") in
+		    TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+		  | "plain-literal" ->
+		    let olang = Unsafe.get ocell (string "xml:lang") in
+		    PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
+		  | "literal" ->
+		    ( try
+			let odatatype = Unsafe.get ocell (string "datatype") in
+			TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+		      with _ ->
+			let olang = Unsafe.get ocell (string "xml:lang") in
+			PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes"))) )
+		  | other ->
+		    Firebug.console##log(string ("unexpected value type in SPARQL results: " ^ other));
+		    assert false in
+	      binding.(i) <- Some term
+	    with _ ->
+	      binding.(i) <- None)
 	  vars;
 	incr len;
 	res := binding::!res
@@ -699,11 +806,12 @@ let sparql_results_of_json s_json =
       !len, !res in
     { dim; vars; length; bindings; }
   with exn ->
+    Firebug.console##log(s_json);
     Firebug.console##log(string (Printexc.to_string exn));
     empty_results
 
 let html_img url =
-  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" width=\"100\" height=\"100\">"
+  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" height=\"120\">"
 
 let html_video url mime =
   "<video width=\"320\" height=\"240\" controls>\
@@ -750,9 +858,10 @@ let html_table_of_results ~focus_var results =
       Buffer.add_string buf "<tr>";
       List.iter
 	(fun i ->
-	  let t = binding.(i) in
 	  Buffer.add_string buf "<td>";
-	  Buffer.add_string buf (html_cell t);
+	  ( match binding.(i) with
+	    | None -> ()
+	    | Some t -> Buffer.add_string buf (html_cell t) );
 	  Buffer.add_string buf "</td>")
 	li;
       Buffer.add_string buf "</tr>")
@@ -796,27 +905,113 @@ let oninput k elt =
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
 
-let ajax_sparql_in (elt : Dom_html.element t) (sparql : sparql) (k : sparql_results -> unit) =
+
+let direct_ajax_sparql (endpoint : string) (sparql : sparql) (k : sparql_results -> unit) =
+  let fields : (string * Form.form_elt) list =
+    [("query", `String (string sparql))] in
+  let req = create () in
+  req##_open (Js.string "POST", Js.string endpoint, Js._true);
+  req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
+  req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
+(*
+  let headers s =
+    Opt.case
+      (req##getResponseHeader (Js.bytestring s))
+      (fun () -> None)
+      (fun v -> Some (Js.to_string v)) in  
+*)
+  let do_check_headers () = () in
+  req##onreadystatechange <- Js.wrap_callback
+    (fun _ ->
+       (match req##readyState with
+          (* IE doesn't have the same semantics for HEADERS_RECEIVED.
+             so we wait til LOADING to check headers. See:
+             http://msdn.microsoft.com/en-us/library/ms534361(v=vs.85).aspx *)
+        | HEADERS_RECEIVED when not Dom_html.onIE -> do_check_headers ()
+        | LOADING when Dom_html.onIE -> do_check_headers ()
+        | DONE ->
+	  do_check_headers ();
+	  let code = req##status in
+	  ( match code / 100 with
+	    | 2 ->
+	     (*Firebug.console##log(string req##responseText);*)
+	     (*	let results = sparql_results_of_json xhr.content in *)
+              let results_opt =
+                match Js.Opt.to_option (req##responseXML) with
+                  | None -> None
+                  | Some doc ->
+                    if (Js.some doc##documentElement) == Js.null
+                    then None
+                    else Some (sparql_results_of_xml doc) in
+	      ( match results_opt with
+		| None ->
+		  Firebug.console##log(string "No XML content");
+		  ()
+		| Some results -> k results )
+	    | _ ->
+	      Firebug.console##log(string ("SPARQL request unsuccessful: code " ^ string_of_int code)))
+        | _ -> ()));
+  let encode_fields l =
+    String.concat "&"
+      (List.map
+	 (function
+           | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
+           | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
+	 l) in
+  req##send(Js.some (string (encode_fields fields)))
+
+let lwt_ajax_sparql (endpoint : string) (sparql : sparql) (k : sparql_results -> unit) =
   (*Firebug.console##log(string sparql);*)
-  elt##style##cursor <- string "progress";
   Lwt.ignore_result
     (Lwt.bind
        (perform_raw_url
-	  ~headers:[("Accept","application/json")]
-	  ~post_args:[("query", sparql)]
-	  "http://dbpedia.org/sparql")
+(*	  ~headers:[("Accept","application/json")] (* OK on Virtuoso, KO on Fuseki *) *)
+	  ~headers:[("Accept","application/sparql-results+xml")] (* OK on Virtuoso *)
+(*	  ~get_args:[("query", sparql)] (* OK on Fuseki *) *)
+	  ~post_args:[("query", sparql)] (* OK on Virtuoso, KO on Fuseki *)
+	  endpoint)
        (fun xhr ->
+	 Firebug.console##log(string (string_of_int xhr.code));
 	 ( match xhr.code / 100 with
 	   | 2 ->
-	     let content = string xhr.content in
-	     let results = sparql_results_of_json content in
-	     k results;
-	     elt##style##cursor <- string "default"
+	     (*Firebug.console##log(string xhr.content);*)
+	     (*	let results = sparql_results_of_json xhr.content in *)
+	     let results =
+	       match xhr.content_xml () with
+		 | None ->
+		   Firebug.console##log(string "No XML content");
+		   empty_results
+		 | Some doc -> sparql_results_of_xml doc in
+	     k results
 	   | _ ->
 	     Firebug.console##log(string ("SPARQL request unsuccessful: code " ^ string_of_int xhr.code)));
 	 Lwt.return_unit))
-let ajax_sparql sparql k =
-  ajax_sparql_in (Dom_html.document##documentElement) sparql k
+
+let ajax_sparql endpoint sparql k =
+  direct_ajax_sparql endpoint sparql k
+
+let rec ajax_sparql_list endpoint sparql_list k =
+  match sparql_list with
+    | [] -> k []
+    | s::ls ->
+      ajax_sparql endpoint s (fun r ->
+	ajax_sparql_list endpoint ls (fun rs ->
+	  k (r::rs)))
+
+let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> unit) (k : 'a -> unit) : unit =
+  List.iter (* setting progress cursor *)
+    (fun elt -> elt##style##cursor <- string "progress")
+    elts;
+  main (fun x ->
+    k x;
+    List.iter (* restoring default cursor *)
+      (fun elt -> elt##style##cursor <- string "default")
+      elts)
+
+let ajax_sparql_in elts endpoint sparql k =
+  progress elts (ajax_sparql endpoint sparql) k
+let ajax_sparql_list_in elts endpoint sparql_list k =
+  progress elts (ajax_sparql_list endpoint sparql_list) k
 
 (* -------------------- *)
 
@@ -850,6 +1045,12 @@ end
 
 (* navigation place and history *)
 
+class navigation =
+object
+  method change_endpoint (url : string) : unit = ()
+  method update_focus ~(push_in_history : bool) (f : focus -> focus option) : unit = ()
+end
+
 class place =
 object (self)
   (* constants *)
@@ -860,12 +1061,15 @@ object (self)
 
   (* essential state *)
 
-  val mutable focus = AtS1 (Det (Something, None), ReturnX)
+  val mutable endpoint = "http://dbpedia.org/sparql"
+(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
+  method endpoint = endpoint
+
+  val mutable focus = home_focus
   method focus = focus
 
-  val mutable update_focus : push_in_history:bool -> (focus -> focus option) -> unit = (fun ~push_in_history f -> ())
-    (* what to do with focus change *)
-  method set_update_focus f = update_focus <- f
+  val mutable navigation = new navigation
+  method set_navigation (navig : navigation) = navigation <- navig
 
   val mutable offset = 0
   val mutable limit = 10
@@ -905,14 +1109,14 @@ object (self)
       elt##innerHTML <- string (html_of_focus dico_foci focus);
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
-	update_focus ~push_in_history:false (fun _ ->
+	navigation#update_focus ~push_in_history:false (fun _ ->
 	  let key = to_string (elt_foc##id) in
 	  Firebug.console##log(string key);
 	  Some (dico_foci#get key))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
 	  Dom_html.stopPropagation ev;
-	  update_focus ~push_in_history:true delete_focus)))
+	  navigation#update_focus ~push_in_history:true delete_focus)))
 
   method private refresh_extension =
     jquery_set_innerHTML "#list-results"
@@ -939,54 +1143,80 @@ object (self)
 	(html_of_increment_frequency_list dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	update_focus ~push_in_history:true
+	navigation#update_focus ~push_in_history:true
 	  (insert_increment (dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length focus_term_index) max_results "term" "terms")
 
   method private refresh_class_increments_init =
+    let process elt results =
+      let class_list = list_of_results_column "class" results in
+      elt##innerHTML <- string
+	(html_of_increment_frequency_list dico_incrs
+	   (List.fold_left
+	      (fun res -> function
+		| URI c -> (IncrClass c, 1) :: res
+		| _ -> res)
+	      [] class_list));
+      jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	navigation#update_focus ~push_in_history:true
+	  (insert_increment (dico_incrs#get (to_string (elt##id))))));
+      jquery_set_innerHTML "#count-classes"
+	(html_count_unit (List.length class_list) 1000 "class" "classes")
+    in
     jquery "#list-classes" (fun elt ->
 (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
-      let sparql = "SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^ sparql_pattern (Var "class") class_patterns ^ " } LIMIT 1000" in
-      ajax_sparql_in elt sparql (fun results ->
-	let class_list = list_of_results_column "class" results in
-	elt##innerHTML <- string
-	  (html_of_increment_frequency_list dico_incrs
-	     (List.fold_left
-		(fun res -> function
-		  | URI c -> (IncrClass c, 1) :: res
-		  | _ -> res)
-		[] class_list));
-	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus ~push_in_history:true
-	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
-	jquery_set_innerHTML "#count-classes"
-	  (html_count_unit (List.length class_list) 1000 "class" "classes")))
+      let sparql =
+	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
+         SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } UNION { ?class a rdfs:Class } " ^
+	  sparql_pattern (Var "class") class_patterns ^
+	  " } LIMIT 1000" in
+      ajax_sparql_in [elt] endpoint sparql (fun results ->
+	if results.length > 0
+	then process elt results
+	else
+(*	  let sparql = "SELECT DISTINCT ?class WHERE { ?x a ?class } GROUP BY ?class ORDER BY DESC(COUNT(DISTINCT ?x)) LIMIT 1000" in *)
+	  let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class } LIMIT 1000" in
+	  ajax_sparql_in [elt] endpoint sparql (fun results ->
+	    process elt results)))
 
   method private refresh_property_increments_init =
+    let process elt results =
+      let prop_list = list_of_results_column "prop" results in
+      elt##innerHTML <- string
+	(html_of_increment_frequency_list dico_incrs
+	   (List.fold_left
+	      (fun res -> function
+		| URI c -> (IncrProp c, 1) :: (IncrInvProp c, 1) :: res
+		| _ -> res)
+	      [] prop_list));
+      jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	navigation#update_focus ~push_in_history:true
+	  (insert_increment (dico_incrs#get (to_string (elt##id))))));
+      jquery_set_innerHTML "#count-properties"
+	(html_count_unit (List.length prop_list) 1000 "property" "properties")
+    in
     jquery "#list-properties" (fun elt ->
 (*      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in *)
-      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in
-      ajax_sparql_in elt sparql (fun results ->
-	let prop_list = list_of_results_column "prop" results in
-	elt##innerHTML <- string
-	  (html_of_increment_frequency_list dico_incrs
-	     (List.fold_left
-		(fun res -> function
-		  | URI c -> (IncrProp c, 1) :: (IncrInvProp c, 1) :: res
-		  | _ -> res)
-		[] prop_list));
-	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus ~push_in_history:true
-	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
-	jquery_set_innerHTML "#count-properties"
-	  (html_count_unit (List.length prop_list) 1000 "property" "properties")))
+      let sparql =
+	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
+         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
+         SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^
+	  sparql_pattern (Var "prop") property_patterns ^
+	  " } LIMIT 1000" in
+      ajax_sparql_in [elt] endpoint sparql (fun results ->
+	if results.length > 0
+	then process elt results
+	else
+	  let sparql = "SELECT DISTINCT ?prop WHERE { [] ?prop [] } LIMIT 1000" in
+	  ajax_sparql_in [elt] endpoint sparql (fun results ->
+	    process elt results)))
 
   method private refresh_class_increments =
     jquery "#list-classes" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
-      ajax_sparql_in elt sparql (fun results ->
+      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } GROUP BY ?class ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
+      ajax_sparql_in [elt] endpoint sparql (fun results ->
 	let class_index = index_of_results_2columns "class" "freq" results in
 	elt##innerHTML <- string
 	  (html_of_increment_frequency_list dico_incrs
@@ -996,7 +1226,7 @@ object (self)
 		  | _ -> res)
 		[] class_index));
 	jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	  update_focus ~push_in_history:true
+	  navigation#update_focus ~push_in_history:true
 	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
@@ -1004,11 +1234,11 @@ object (self)
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-      let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-      ajax_sparql_in elt sparql_has (fun results_has -> (* decreasing *)
-	let index_has = index_of_results_2columns "prop" "freq" results_has in (* increasing *)
-	ajax_sparql_in elt sparql_isof (fun results_isof -> (* decreasing *)
+      let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
+      let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
+      ajax_sparql_list_in [elt] endpoint [sparql_has; sparql_isof] (function
+	| [results_has; results_isof] -> (* decreasing *)
+	  let index_has = index_of_results_2columns "prop" "freq" results_has in (* increasing *)
 	  let index_isof = index_of_results_2columns "prop" "freq" results_isof in (* increasing *)
 	  let index = 
 	    let rec aux acc l1 l2 =
@@ -1024,15 +1254,17 @@ object (self)
 	    (html_of_increment_frequency_list dico_incrs
 	       index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    update_focus ~push_in_history:true
+	    navigation#update_focus ~push_in_history:true
 	      (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties"))))
+	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties")
+	| _ -> assert false))
 
   method refresh =
-    jquery_input "#pattern-terms" (fun input -> input##value <- string "");
-    jquery_input "#pattern-classes" (fun input -> input##value <- string "");
-    jquery_input "#pattern-properties" (fun input -> input##value <- string "");
+    jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string endpoint);
+    jquery_input "#pattern-terms" (fun input -> input##value <- string (String.concat " " term_patterns));
+    jquery_input "#pattern-classes" (fun input -> input##value <- string (String.concat " " class_patterns));
+    jquery_input "#pattern-properties" (fun input -> input##value <- string (String.concat " " property_patterns));
     dico_foci <- new dico_foci;
     self#refresh_lisql;
     genvar#reset;
@@ -1056,7 +1288,7 @@ object (self)
 	    self#refresh_class_increments_init;
 	    self#refresh_property_increments_init;
 	  | term ->
-	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [|term|] ]; };
+	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [| Some term |] ]; };
 	    self#refresh_extension;
 	    focus_term_index <- [(term,1)];
 	    self#refresh_term_increments;
@@ -1066,7 +1298,7 @@ object (self)
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	jquery "#extension" (fun elt -> elt##style##display <- string "block");
-	ajax_sparql sparql (fun res ->
+	ajax_sparql_in [Dom_html.document##documentElement] endpoint sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;
 	  self#define_focus_term_index;
@@ -1076,7 +1308,7 @@ object (self)
 	()
 
   method is_home =
-    focus = AtS1 (Det (Something, None), ReturnX)
+    focus = home_focus
 
   method set_term_patterns lpat =
     if not self#is_home
@@ -1146,8 +1378,9 @@ object (self)
       self#refresh_extension
     end
 
-  method new_place foc =
-    {< focus = foc;
+  method new_place endpoint focus =
+    {< endpoint = endpoint;
+       focus = focus;
        offset = 0;
        term_patterns = [];
        class_patterns = [];
@@ -1161,7 +1394,8 @@ object (self)
   val mutable present : place = new place
   val mutable future : place list = []
 
-  initializer present#set_update_focus self#update_focus
+(*  initializer present#set_update_focus self#update_focus *)
+  initializer present#set_navigation (self :> navigation)
 
   method present : place = present
 
@@ -1170,18 +1404,24 @@ object (self)
     present <- p;
     future <- []
 
+  method change_endpoint url =
+    let p = present#new_place url home_focus in
+    p#set_navigation (self :> navigation);
+    self#push p;
+    p#refresh
+
   method update_focus ~push_in_history f =
     match f present#focus with
       | None -> ()
       | Some foc -> 
-	let p = present#new_place foc in
-	p#set_update_focus self#update_focus;
+	let p = present#new_place present#endpoint foc in
+	p#set_navigation (self :> navigation);
 	if push_in_history then self#push p else present <- p;
 	p#refresh
 
   method home =
     self#update_focus ~push_in_history:true
-      (fun _ -> Some (AtS1 (Det (Something, None), ReturnX)))
+      (fun _ -> Some home_focus)
 
   method back : unit =
     match past with
@@ -1203,20 +1443,16 @@ object (self)
 
 end
 
-
 let _ =
   Firebug.console##log(string "Starting Sparklis");
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
     jquery "#forward" (onclick (fun elt ev -> history#forward));
-(*
-    jquery "#delete" (onclick (fun elt ev -> history#update_focus delete_focus));
-    jquery "#down" (onclick (fun elt ev -> history#update_focus down_focus));
-    jquery "#up" (onclick (fun elt ev -> history#update_focus up_focus));
-    jquery "#right" (onclick (fun elt ev -> history#update_focus right_focus));
-    jquery "#left" (onclick (fun elt ev -> history#update_focus left_focus));
-*)
+    jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
+      jquery_input "#sparql-endpoint-input" (fun input ->
+	let url = to_string (input##value) in
+	history#change_endpoint url)));
 
     List.iter
       (fun (sel_input, sel_list, k) ->

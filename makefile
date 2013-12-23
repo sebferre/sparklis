@@ -9,4 +9,3 @@ install:
 	cp osparklis.js /local/ferre/web/ferre/sparklis
 	cp *.png /local/ferre/web/ferre/sparklis
 
-
