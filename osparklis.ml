@@ -4,30 +4,6 @@ open XmlHttpRequest
 
 (* ------------------------ *)
 
-(* SPARQL variable generator *)
-let genvar =
-object
-  val mutable prefix_cpt = []
-  val mutable vars = []
-  method reset =
-    prefix_cpt <- [];
-    vars <- []
-  method get prefix =
-    let k =
-      try
-	let cpt = List.assoc prefix prefix_cpt in
-	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
-	cpt+1
-      with Not_found ->
-	prefix_cpt <- (prefix,1)::prefix_cpt;
-	1 in
-    let v = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
-    vars <- v::vars;
-    v
-
-  method vars = List.rev vars
-end
-
 let prefix_of_uri uri = (* for variable names *)
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) -> Regexp.matched_string res
@@ -103,6 +79,32 @@ let elt_s_of_focus = function
 
 (* translation from LISQL elts to SPARQL queries *)
 
+(* SPARQL variable generator *)
+class sparql_state =
+object
+  val mutable prefix_cpt = []
+  val mutable vars = []
+
+  method new_var prefix =
+    let k =
+      try
+	let cpt = List.assoc prefix prefix_cpt in
+	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
+	cpt+1
+      with Not_found ->
+	prefix_cpt <- (prefix,1)::prefix_cpt;
+	1 in
+    let v = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
+    vars <- v::vars;
+    v
+
+  method vars = List.rev vars
+
+  val mutable focus_term : term = Var ""
+  method set_focus_term t = focus_term <- t
+  method focus_term = focus_term
+end
+
 let sparql_uri uri = 
   if uri = "a"
   then uri
@@ -135,18 +137,18 @@ let sparql_select lv gp =
   let sel = if lv = [] then "*" else String.concat " " (List.map (fun v -> "?" ^ v) lv) in
   "SELECT DISTINCT " ^ sel ^ "\nWHERE {\n" ^ gp ^ "\n}"
 
-let rec sparql_of_elt_p1 : elt_p1 -> (term -> string) = function
+let rec sparql_of_elt_p1 state : elt_p1 -> (term -> string) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
-  | Has (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
-  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 ~prefix:"" np (fun y -> sparql_triple y p x))
+  | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
+  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y p x))
   | And ar ->
     (fun x ->
       sparql_join
 	(Array.to_list
 	   (Array.map
-	      (fun elt -> sparql_of_elt_p1 elt x)
+	      (fun elt -> sparql_of_elt_p1 state elt x)
 	      ar)))
-and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> string) -> string) = function
+and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((term -> string) -> string) = function
   | Det (det,rel_opt) ->
     let prefix =
       if prefix = ""
@@ -155,22 +157,22 @@ and sparql_of_elt_s1 ~prefix : elt_s1 -> ((term -> string) -> string) = function
 	  | Some (IsOf (p,_)) -> prefix_of_uri p
 	  | _ -> prefix
       else prefix in
-    let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 rel in
-    (fun d -> sparql_of_elt_s2 ~prefix det d1 d)
-and sparql_of_elt_s2 ~prefix : elt_s2 -> ((term -> string) -> (term -> string) -> string) = function
+    let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 state rel in
+    (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
+and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((term -> string) -> (term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
   | Something ->
     let prefix = if prefix = "" then "thing" else prefix in
-    (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; d1 t])
+    (fun d1 d2 -> let t = Var (state#new_var prefix) in sparql_join [d2 t; d1 t])
   | Class c ->
     let prefix = prefix_of_uri c in
-    (fun d1 d2 -> let t = Var (genvar#get prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
-and sparql_of_elt_s : elt_s -> string = function
+    (fun d1 d2 -> let t = Var (state#new_var prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
+and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
-    let gp = sparql_of_elt_s1 ~prefix:"Result" np (fun t -> "") in
-    sparql_select genvar#vars gp
+    let gp = sparql_of_elt_s1 state ~prefix:"Result" np (fun t -> "") in
+    sparql_select state#vars gp
 
-let rec sparql_of_ctx_p1 ~prefix (d : term -> string) : ctx_p1 -> string = function
+let rec sparql_of_ctx_p1 state ~prefix (d : term -> string) : ctx_p1 -> string = function
   | DetThatX (det,ctx) ->
     let prefix =
       if prefix = ""
@@ -179,11 +181,11 @@ let rec sparql_of_ctx_p1 ~prefix (d : term -> string) : ctx_p1 -> string = funct
 	  | HasX (p,_) -> prefix_of_uri p
 	  | _ -> prefix
       else prefix in
-    sparql_of_ctx_s1
-      (fun d2 -> sparql_of_elt_s2 ~prefix det d d2) 
+    sparql_of_ctx_s1 state 
+      (fun d2 -> sparql_of_elt_s2 state ~prefix det d d2) 
       ctx
   | AndX (i,ar,ctx) ->
-    sparql_of_ctx_p1 ~prefix
+    sparql_of_ctx_p1 state ~prefix
       (fun x ->
 	sparql_join
 	  (Array.to_list
@@ -191,47 +193,47 @@ let rec sparql_of_ctx_p1 ~prefix (d : term -> string) : ctx_p1 -> string = funct
 		(fun j elt ->
 		  if j=i
 		  then d x
-		  else sparql_of_elt_p1 elt x)
+		  else sparql_of_elt_p1 state elt x)
 		ar)))
       ctx
-and sparql_of_ctx_s1 (q : (term -> string) -> string) : ctx_s1 -> string = function
+and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string = function
   | HasX (p,ctx) ->
-    sparql_of_ctx_p1 ~prefix:""
+    sparql_of_ctx_p1 state ~prefix:""
       (fun x -> q (fun y -> sparql_triple x p y))
       ctx
   | IsOfX (p,ctx) ->
-    sparql_of_ctx_p1 ~prefix:(prefix_of_uri p)
+    sparql_of_ctx_p1 state ~prefix:(prefix_of_uri p)
       (fun x -> q (fun y -> sparql_triple y p x))
       ctx
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus : focus -> term * (var list * string) option = function
-  | AtP1 (f,ctx) ->
-    let prefix =
-      match f with
-	| IsOf (p, _) -> prefix_of_uri p
-	| _ -> "" in
-    let focus = ref (Var "") in
-    let gp = sparql_of_ctx_p1 ~prefix
-      (fun t ->
-	focus := t;
-	sparql_of_elt_p1 f t)
-      ctx in
-    !focus, (if gp = "" then None else Some (genvar#vars, gp))
-  | AtS1 (f,ctx) ->
-    let prefix =
-      match ctx with
-	| HasX (p,_) -> prefix_of_uri p
-	| _ -> "" in
-    let focus = ref (Var "") in
-    let gp = sparql_of_ctx_s1 (fun d ->
-      sparql_of_elt_s1 ~prefix f
+let sparql_of_focus (focus : focus) : term * (var list * string) option =
+  let state = new sparql_state in
+  match focus with
+    | AtP1 (f,ctx) ->
+      let prefix =
+	match f with
+	  | IsOf (p, _) -> prefix_of_uri p
+	  | _ -> "" in
+      let gp = sparql_of_ctx_p1 state ~prefix
 	(fun t ->
-	  focus := t;
-	  d t))
-      ctx in
-    !focus, (if gp="" then None else Some (genvar#vars, gp))
+	  state#set_focus_term t;
+	  sparql_of_elt_p1 state f t)
+	ctx in
+      state#focus_term, (if gp = "" then None else Some (state#vars, gp))
+    | AtS1 (f,ctx) ->
+      let prefix =
+	match ctx with
+	  | HasX (p,_) -> prefix_of_uri p
+	  | _ -> "" in
+      let gp = sparql_of_ctx_s1 state (fun d ->
+	sparql_of_elt_s1 state ~prefix f
+	  (fun t ->
+	    state#set_focus_term t;
+	    d t))
+	ctx in
+      state#focus_term, (if gp="" then None else Some (state#vars, gp))
 
 (* pretty-printing of focus as HTML *)
 
@@ -277,7 +279,7 @@ let html_term ?(link = false) = function
       if link
       then html_a uri name
       else html_span ~classe:"URI" ~title:uri name
-  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ "@" ^ lang)
+  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ (if lang="" then "" else "@" ^ lang))
   | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
   | Bnode id -> "_:" ^ id
   | Var v -> "?" ^ v
@@ -1073,8 +1075,8 @@ object (self)
 
   (* essential state *)
 
-  val mutable endpoint = "http://dbpedia.org/sparql"
-(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
+(*  val mutable endpoint = "http://dbpedia.org/sparql" *)
+  val mutable endpoint = "http://localhost:3030/ds/sparql"
   method endpoint = endpoint
 
   val mutable focus = home_focus
@@ -1291,7 +1293,6 @@ object (self)
     jquery_input "#pattern-properties" (fun input -> input##value <- string (String.concat " " property_patterns));
     dico_foci <- new dico_foci;
     self#refresh_lisql;
-    genvar#reset;
     self#define_sparql;
     dico_incrs <- new dico_increments;
     match sparql_opt with
