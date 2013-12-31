@@ -106,7 +106,7 @@ let elt_s_of_focus = function
 let sparql_uri uri = 
   if uri = "a"
   then uri
-  else "<" ^ to_string (encodeURI (string uri)) ^ ">"
+  else "<" ^ uri ^ ">"
 
 let sparql_term = function
   | URI uri -> sparql_uri uri
@@ -1115,7 +1115,13 @@ object (self)
   method private define_focus_term_index =
     focus_term_index <-
       ( match focus_term with
-	| Var v -> index_of_results_column v results
+	| Var v ->
+	  List.filter
+	    (function
+	      | (URI uri, _) when String.contains uri ' ' -> false
+		(* URIs with spaces inside are not allowed in SPARQL queries *)
+	      | _ -> true)
+	    (index_of_results_column v results)
 	| t -> [(t, results.length)] )
 
   method refresh_lisql =
