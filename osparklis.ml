@@ -40,6 +40,10 @@ type elt_p1 =
   | Has of uri * elt_s1
   | IsOf of uri * elt_s1
   | And of elt_p1 array
+  | Or of elt_p1 array
+  | Maybe of elt_p1
+  | Not of elt_p1
+  | IsThere
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
 and elt_s2 =
@@ -53,6 +57,9 @@ and elt_s =
 type ctx_p1 =
   | DetThatX of elt_s2 * ctx_s1
   | AndX of int * elt_p1 array * ctx_p1
+  | OrX of int * elt_p1 array * ctx_p1
+  | MaybeX of ctx_p1
+  | NotX of ctx_p1
 and ctx_s1 =
   | HasX of uri * ctx_p1
   | IsOfX of uri * ctx_p1
@@ -67,6 +74,9 @@ type focus =
 let rec elt_s_of_ctx_p1 (f : elt_p1) = function
   | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det (det, Some f)) ctx
   | AndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_p1 (And ar) ctx
+  | OrX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_p1 (Or ar) ctx
+  | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe f) ctx
+  | NotX ctx -> elt_s_of_ctx_p1 (Not f) ctx
 and elt_s_of_ctx_s1 (f : elt_s1) = function
   | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
   | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
@@ -117,6 +127,8 @@ let sparql_term = function
   | Bnode name -> "_:" ^ name
   | Var v -> "?" ^ v
 
+let sparql_empty = ""
+
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
 
 let sparql_pattern t lpat =
@@ -129,7 +141,16 @@ let sparql_pattern t lpat =
 	lpat in
     "FILTER (" ^ String.concat " && " lfilter ^ ")"
 
-let sparql_join lgp = String.concat "\n" (List.filter ((<>) "") lgp)
+let sparql_join lgp =
+  String.concat "\n"
+    (List.filter ((<>) "") lgp)
+let sparql_union lgp =
+  String.concat " UNION "
+    (List.map
+       (fun gp -> "{ " ^ gp ^ " }")
+       (List.filter ((<>) "") lgp))
+let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
+let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
@@ -148,6 +169,16 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (term -> string) = function
 	   (Array.map
 	      (fun elt -> sparql_of_elt_p1 state elt x)
 	      ar)))
+  | Or ar ->
+    (fun x ->
+      sparql_union
+	(Array.to_list
+	   (Array.map
+	      (fun elt -> sparql_of_elt_p1 state elt x)
+	      ar)))
+  | Maybe f -> (fun x -> sparql_optional (sparql_of_elt_p1 state f x))
+  | Not f -> (fun x -> sparql_not_exists (sparql_of_elt_p1 state f x))
+  | IsThere -> (fun x -> sparql_empty)
 and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((term -> string) -> string) = function
   | Det (det,rel_opt) ->
     let prefix =
@@ -196,6 +227,10 @@ let rec sparql_of_ctx_p1 state ~prefix (d : term -> string) : ctx_p1 -> string =
 		  else sparql_of_elt_p1 state elt x)
 		ar)))
       ctx
+  (* ignoring algebra in ctx *)
+  | OrX (i,ar,ctx) -> sparql_of_ctx_p1 state ~prefix d ctx
+  | MaybeX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
+  | NotX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
 and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string = function
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:""
@@ -221,7 +256,7 @@ let sparql_of_focus (focus : focus) : term * (var list * string) option =
 	  state#set_focus_term t;
 	  sparql_of_elt_p1 state f t)
 	ctx in
-      state#focus_term, (if gp = "" then None else Some (state#vars, gp))
+      state#focus_term, (if gp = sparql_empty then None else Some (state#vars, gp))
     | AtS1 (f,ctx) ->
       let prefix =
 	match ctx with
@@ -233,7 +268,7 @@ let sparql_of_focus (focus : focus) : term * (var list * string) option =
 	    state#set_focus_term t;
 	    d t))
 	ctx in
-      state#focus_term, (if gp="" then None else Some (state#vars, gp))
+      state#focus_term, (if gp = sparql_empty then None else Some (state#vars, gp))
 
 (* pretty-printing of focus as HTML *)
 
@@ -291,12 +326,23 @@ let html_prop p =
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
 let html_is_of p np = "is the " ^ html_prop p ^ " of " ^ np
+
 let html_and ar_html =
   let html = ref ("<ul class=\"list-and\"><li>" ^ ar_html.(0) ^ "</li>") in
   for i=1 to Array.length ar_html - 1 do
     html := !html ^ " <li>and " ^ ar_html.(i) ^ "</li>"
   done;
   !html ^ "</ul>"
+let html_or ar_html =
+  let html = ref ("<ul class=\"list-or\"><li>" ^ ar_html.(0) ^ "</li>") in
+  for i=1 to Array.length ar_html - 1 do
+    html := !html ^ " <li>" ^ html_span ~classe:"modifier" "or" ^ " " ^ ar_html.(i) ^ "</li>"
+  done;
+  !html ^ "</ul>"
+let html_maybe html = html_span ~classe:"modifier" "optionally" ^ " " ^ html
+let html_not html = html_span ~classe:"modifier" "not" ^ " " ^ html
+let html_is_there = "..."
+
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
 let html_the_of p np = "the " ^ html_prop p ^ " of " ^ np
 let html_return np = "Give me " ^ np
@@ -304,6 +350,8 @@ let html_return np = "Give me " ^ np
 let html_focus dico foc hl (* highlight *) html =
   let id = dico#add foc in
   "<span id=\"" ^ id ^ "\" class=\"focus" ^ (if hl then " in-current-focus" else "") ^ "\">" ^ html ^ "</span>"
+let html_focus_dummy =
+  "<span class=\"in-current-focus\">___</span>"
 
 let rec html_of_elt_p1 dico ctx hl f =
   let html =
@@ -311,7 +359,12 @@ let rec html_of_elt_p1 dico ctx hl f =
       | Type c -> html_is_a c
       | Has (p,np) -> html_has p (html_of_elt_s1 dico (HasX (p,ctx)) hl np)
       | IsOf (p,np) -> html_is_of p (html_of_elt_s1 dico (IsOfX (p,ctx)) hl np) 
-      | And ar -> html_and (Array.mapi (fun i elt -> html_of_elt_p1 dico (AndX (i,ar,ctx)) hl elt) ar) in
+      | And ar -> html_and (Array.mapi (fun i elt -> html_of_elt_p1 dico (AndX (i,ar,ctx)) hl elt) ar)
+      | Or ar -> html_or (Array.mapi (fun i elt -> html_of_elt_p1 dico (OrX (i,ar,ctx)) hl elt) ar)
+      | Maybe elt -> html_maybe (html_of_elt_p1 dico (MaybeX ctx) hl elt)
+      | Not elt -> html_not (html_of_elt_p1 dico (NotX ctx) hl elt)
+      | IsThere -> html_is_there
+  in
   html_focus dico (AtP1 (f,ctx)) hl html
 and html_of_elt_s1 dico ctx hl f =
   let html =
@@ -341,6 +394,23 @@ let rec html_of_ctx_p1 dico f html ctx =
 	     (Array.mapi
 		(fun j elt -> if j=i then html else html_of_elt_p1 dico (AndX (j,ar,ctx2)) false elt)
 		ar)) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+    | OrX (i,ar,ctx2) ->
+      let f2 = ar.(i) <- f; Or ar in
+      let html2 =
+	html_focus dico (AtP1 (f2,ctx2)) false
+	  (html_or
+	     (Array.mapi
+		(fun j elt -> if j=i then html else html_of_elt_p1 dico (OrX (j,ar,ctx2)) false elt)
+		ar)) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+    | MaybeX ctx2 ->
+      let f2 = Maybe f in
+      let html2 = html_focus dico (AtP1 (f2,ctx2)) false (html_maybe html) in
+      html_of_ctx_p1 dico f2 html2 ctx2
+    | NotX ctx2 ->
+      let f2 = Not f in
+      let html2 = html_focus dico (AtP1 (f2,ctx2)) false (html_not html) in
       html_of_ctx_p1 dico f2 html2 ctx2
 and html_of_ctx_s1 dico f html ctx =
   match ctx with
@@ -399,6 +469,10 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
   | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
   | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
+  | Or ar -> Some (AtP1 (ar.(0), OrX (0,ar,ctx)))
+  | Maybe elt -> Some (AtP1 (elt, MaybeX ctx))
+  | Not elt -> Some (AtP1 (elt, NotX ctx))
+  | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
   | Det (Something, Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (Something, ctx))))
@@ -411,6 +485,9 @@ let down_focus = function
 let rec up_p1 f = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
   | AndX (i,ar,ctx) -> ar.(i) <- f; up_p1 (And ar) ctx (* Some (AtP1 (And ar, ctx)) *)
+  | OrX (i,ar,ctx) -> ar.(i) <- f; Some (AtP1 (Or ar, ctx))
+  | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
+  | NotX ctx -> Some (AtP1 (Not f, ctx))
 let up_s1 f = function
   | HasX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (Has (p,f))), ctx))
   | IsOfX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (IsOf (p,f))), ctx))
@@ -429,6 +506,14 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
       ar.(i) <- f;
       Some (AtP1 (ar.(i+1), AndX (i+1, ar, ctx))) end
     else None
+  | OrX (i,ar,ctx) ->
+    if i < Array.length ar - 1
+    then begin
+      ar.(i) <- f;
+      Some (AtP1 (ar.(i+1), OrX (i+1, ar, ctx))) end
+    else None
+  | MaybeX ctx -> None
+  | NotX ctx -> None
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
@@ -445,6 +530,14 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
       ar.(i) <- f;
       Some (AtP1 (ar.(i-1), AndX (i-1, ar, ctx))) end
     else None
+  | OrX (i,ar,ctx) ->
+    if i > 0
+    then begin
+      ar.(i) <- f;
+      Some (AtP1 (ar.(i-1), OrX (i-1, ar, ctx))) end
+    else None
+  | MaybeX ctx -> None
+  | NotX ctx -> None
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
@@ -460,6 +553,9 @@ type increment =
   | IncrClass of uri
   | IncrProp of uri
   | IncrInvProp of uri
+  | IncrOr
+  | IncrMaybe
+  | IncrNot
 
 let insert_term t focus =
   let focus2_opt =
@@ -486,8 +582,17 @@ let append_and ctx elt_p1 = function
     AtP1 (elt_p1, AndX (n, ar2, ctx))
   | p1 ->
     AtP1 (elt_p1, AndX (1, [|p1; elt_p1|], ctx))
+let append_or ctx elt_p1 = function
+  | Or ar ->
+    let n = Array.length ar in
+    let ar2 = Array.make (n+1) elt_p1 in
+    Array.blit ar 0 ar2 0 n;
+    AtP1 (elt_p1, OrX (n, ar2, ctx))
+  | p1 ->
+    AtP1 (elt_p1, OrX (1, [|p1; elt_p1|], ctx))
 
 let insert_elt_p1 elt = function
+  | AtP1 (IsThere, ctx) -> Some (AtP1 (elt, ctx))
   | AtP1 (f, AndX (i,ar,ctx)) -> ar.(i) <- f; Some (append_and ctx elt (And ar))
   | AtP1 (f, ctx) -> Some (append_and ctx elt f)
   | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
@@ -516,36 +621,66 @@ let insert_inverse_property p focus =
     | Some foc -> down_focus foc
     | None -> None
 
+let insert_or = function
+  | AtP1 (Or ar, ctx) -> Some (append_or ctx IsThere (Or ar))
+  | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or ctx2 IsThere (Or ar))
+  | AtP1 (f, ctx) -> Some (append_or ctx IsThere f)
+  | AtS1 _ -> None
+
+let insert_maybe = function
+  | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (f, ctx) -> Some (AtP1 (Maybe f, ctx))
+  | _ -> None
+
+let insert_not = function
+  | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (f, ctx) -> Some (AtP1 (Not f, ctx))
+  | _ -> None
+
 let insert_increment incr focus =
   match incr with
     | IncrTerm t -> insert_term t focus
     | IncrClass c -> insert_class c focus
     | IncrProp p -> insert_property p focus
     | IncrInvProp p -> insert_inverse_property p focus
+    | IncrOr -> insert_or focus
+    | IncrMaybe -> insert_maybe focus
+    | IncrNot -> insert_not focus
 
-let rec delete_and ctx ar i =
+let delete_array ar i =
   let n = Array.length ar in
-  if n = 1
-  then
-    match ctx with
-      | DetThatX (det, ctx2) -> AtS1 (Det (det, None), ctx2)
-      | AndX (i2, ar2, ctx2) -> delete_and ctx2 ar2 i2
+  if n = 1 then `Empty
+  else if n = 2 then `Single ar.(1-i)
   else
-    if n = 2
-    then
-      AtP1 (ar.(1-i), ctx)
-    else
-      let ar2 = Array.make (n-1) (Type "") in
-      Array.blit ar 0 ar2 0 i;
-      Array.blit ar (i+1) ar2 i (n-i-1);
-      if i = n-1 && i > 0 (* last elt is deleted *)
-      then AtP1 (ar2.(i-1), AndX (i-1, ar2, ctx))
-      else AtP1 (ar2.(i), AndX (i, ar2, ctx))
+    let ar2 = Array.make (n-1) (Type "") in
+    Array.blit ar 0 ar2 0 i;
+    Array.blit ar (i+1) ar2 i (n-i-1);
+    if i = n-1 && i > 0 (* last elt is deleted *)
+    then `Array (ar2, i-1)
+    else `Array (ar2, i)
+
+let rec delete_ctx_p1 = function
+  | DetThatX (det,ctx) -> Some (AtS1 (Det (det,None), ctx))
+  | AndX (i,ar,ctx) ->
+    ( match delete_array ar i with
+      | `Empty -> delete_ctx_p1 ctx
+      | `Single elt -> Some (AtP1 (elt, ctx))
+      | `Array (ar2,i2) -> Some (AtP1 (ar2.(i2), AndX (i2,ar2,ctx))) )
+  | OrX (i,ar,ctx) ->
+    ( match delete_array ar i with
+      | `Empty -> delete_ctx_p1 ctx
+      | `Single elt -> Some (AtP1 (elt, ctx))
+      | `Array (ar2, i2) -> Some (AtP1 (ar2.(i2), OrX (i2, ar2, ctx))) )
+  | MaybeX ctx -> delete_ctx_p1 ctx
+  | NotX ctx -> delete_ctx_p1 ctx
 
 let delete_focus = function
-  | AtP1 (f, DetThatX (det,ctx)) -> Some (AtS1 (Det (det,None), ctx))
-  | AtP1 (f, AndX (i,ar,ctx)) -> Some (delete_and ctx ar i)
+  | AtP1 (_,ctx) -> delete_ctx_p1 ctx
   | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
+
+let focus_modifier_increments = function
+  | AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
+  | AtS1 _ -> []
 
 (* HTML of increment lists *)
 
@@ -556,7 +691,11 @@ let html_of_increment_frequency dico_incrs (incr,freq) =
       | IncrTerm t -> html_term t
       | IncrClass c -> "a " ^ html_class c
       | IncrProp p -> "has " ^ html_prop p
-      | IncrInvProp p -> "is the " ^ html_prop p ^ " of" in
+      | IncrInvProp p -> "is the " ^ html_prop p ^ " of"
+      | IncrOr -> html_or [|html_focus_dummy; html_is_there|]
+      | IncrMaybe -> html_maybe html_focus_dummy
+      | IncrNot -> html_not html_focus_dummy
+  in
   let text_freq =
     if freq = 1
     then ""
@@ -1075,8 +1214,8 @@ object (self)
 
   (* essential state *)
 
-(*  val mutable endpoint = "http://dbpedia.org/sparql" *)
-  val mutable endpoint = "http://localhost:3030/ds/sparql"
+  val mutable endpoint = "http://dbpedia.org/sparql"
+(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
   method endpoint = endpoint
 
   val mutable focus = home_focus
@@ -1286,6 +1425,18 @@ object (self)
 	    (html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties")
 	| _ -> assert false))
 
+  method private refresh_modifier_increments =
+    jquery "#list-modifiers" (fun elt ->
+      let modif_list = focus_modifier_increments focus in
+      elt##innerHTML <- string
+	(html_of_increment_frequency_list dico_incrs
+	   (List.map (fun incr -> (incr,1)) modif_list));
+      jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	navigation#update_focus ~push_in_history:true
+	  (insert_increment (dico_incrs#get (to_string (elt##id))))));
+      jquery_set_innerHTML "#count-modifiers"
+	(html_count_unit (List.length modif_list) max_int "modifier" "modifiers"))
+
   method refresh =
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string endpoint);
     jquery_input "#pattern-terms" (fun input -> input##value <- string (String.concat " " term_patterns));
@@ -1306,10 +1457,8 @@ object (self)
 	    jquery_set_innerHTML "#count-results" "";
 	    jquery_set_innerHTML "#list-terms" "";
 	    jquery_set_innerHTML "#count-terms" "---";
-	    jquery_set_innerHTML "#list-classes" "";
-	    jquery_set_innerHTML "#count-classes" "---";
-	    jquery_set_innerHTML "#list-properties" "";
-	    jquery_set_innerHTML "#count-properties" "---";
+	    jquery_set_innerHTML "#list-modifiers" "";
+	    jquery_set_innerHTML "#count-modifiers" "---";
 	    self#refresh_class_increments_init;
 	    self#refresh_property_increments_init;
 	  | term ->
@@ -1318,7 +1467,8 @@ object (self)
 	    focus_term_index <- [(term,1)];
 	    self#refresh_term_increments;
 	    self#refresh_class_increments;
-	    self#refresh_property_increments )
+	    self#refresh_property_increments;
+	    self#refresh_modifier_increments )
       | Some sparql ->
 	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
@@ -1328,7 +1478,8 @@ object (self)
 	  self#define_focus_term_index;
 	  self#refresh_term_increments;
 	  self#refresh_class_increments;
-	  self#refresh_property_increments);
+	  self#refresh_property_increments;
+	  self#refresh_modifier_increments);
 	()
 
   method is_home =
@@ -1363,7 +1514,7 @@ object (self)
     let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
-      jquery_from elt_li ".URI, .Literal, .classURI, .propURI" (fun elt_incr ->
+      jquery_from elt_li ".URI, .Literal, .classURI, .propURI, .modifier" (fun elt_incr ->
 	if matcher (to_string elt_incr##innerHTML)
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"));
@@ -1487,7 +1638,8 @@ let _ =
 	       input))))
       [("#pattern-terms", "#list-terms", (fun lpat -> history#present#set_term_patterns lpat));
        ("#pattern-classes", "#list-classes", (fun lpat -> history#present#set_class_patterns lpat));
-       ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat))];
+       ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat));
+       ("#pattern-modifiers", "#list-modifiers", (fun lpat -> ()))];
     
     jquery_all ".previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));

@@ -18,6 +18,11 @@ color:darkblue;
 color:darkgreen;
 }
 
+.modifier
+{
+color:darkred;
+}
+
 #sparql-endpoint
 {
 text-align:right;
@@ -42,6 +47,12 @@ background-color:#aaffaa;
 }
 
 .list-and
+{
+list-style-type:none;
+margin:0px;
+}
+
+.list-or
 {
 list-style-type:none;
 margin:0px;
