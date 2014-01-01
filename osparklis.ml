@@ -48,10 +48,13 @@ and elt_s1 =
   | Det of elt_s2 * elt_p1 option
 and elt_s2 =
   | Term of term
-  | Something
-  | Class of uri
+  | An of uri option
 and elt_s =
   | Return of elt_s1
+
+let top_p1 = IsThere
+let top_s2 = An None
+let top_s1 = Det (top_s2,None)
 
 (* LISQL contexts *)
 type ctx_p1 =
@@ -192,12 +195,16 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((term -> string) -> string) = fu
     (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((term -> string) -> (term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
-  | Something ->
-    let prefix = if prefix = "" then "thing" else prefix in
-    (fun d1 d2 -> let t = Var (state#new_var prefix) in sparql_join [d2 t; d1 t])
-  | Class c ->
-    let prefix = prefix_of_uri c in
-    (fun d1 d2 -> let t = Var (state#new_var prefix) in sparql_join [d2 t; sparql_triple t "a" (URI c); d1 t])
+  | An c_opt ->
+    let prefix =
+      if prefix <> ""
+      then prefix
+      else match c_opt with None -> "thing" | Some c -> prefix_of_uri c in
+    let dc =
+      match c_opt with
+	| None -> (fun t -> sparql_empty)
+	| Some c -> (fun t -> sparql_triple t "a" (URI c)) in
+    (fun d1 d2 -> let t = Var (state#new_var prefix) in sparql_join [d2 t; dc t; d1 t])
 and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
     let gp = sparql_of_elt_s1 state ~prefix:"Result" np (fun t -> "") in
@@ -370,13 +377,13 @@ and html_of_elt_s1 dico ctx hl f =
   let html =
     match f with
       | Det (det, None) -> html_det (html_of_elt_s2 det) None
-      | Det (Something, Some (IsOf (p,np))) -> html_the_of p (html_of_elt_s1 dico (IsOfX (p, DetThatX (Something, ctx))) hl np)
+      | Det (An None, Some (IsOf (p,np))) -> html_the_of p (html_of_elt_s1 dico (IsOfX (p, DetThatX (An None, ctx))) hl np)
       | Det (det, Some rel) -> html_det (html_of_elt_s2 det) (Some (html_of_elt_p1 dico (DetThatX (det,ctx)) hl rel)) in
   html_focus dico (AtS1 (f,ctx)) hl html
 and html_of_elt_s2 = function
   | Term t -> html_term t
-  | Something -> "something"
-  | Class c -> "a " ^ html_class c
+  | An None -> "something"
+  | An (Some c) -> "a " ^ html_class c
 
 let rec html_of_ctx_p1 dico f html ctx =
   match ctx with
@@ -420,8 +427,8 @@ and html_of_ctx_s1 dico f html ctx =
 	html_focus dico (AtP1 (f2,ctx2)) false
 	  (html_has p html) in
       html_of_ctx_p1 dico f2 html2 ctx2
-    | IsOfX (p, DetThatX (Something,ctx2)) ->
-      let f2 = Det (Something, Some (IsOf (p,f))) in
+    | IsOfX (p, DetThatX (An None, ctx2)) ->
+      let f2 = Det (An None, Some (IsOf (p,f))) in
       let html2 =
 	html_focus dico (AtS1 (f2,ctx2)) false
 	  (html_the_of p html) in
@@ -440,14 +447,14 @@ let html_current_focus html =
 
 let html_of_focus dico focus =
   match focus with
-    | AtP1 (IsOf (p,np), DetThatX (Something, ctx))
-    | AtS1 (Det (Something, Some (IsOf (p,np))), ctx) ->
-      let f = Det (Something, Some (IsOf (p,np))) in
+    | AtP1 (IsOf (p,np), DetThatX (An None, ctx))
+    | AtS1 (Det (An None, Some (IsOf (p,np))), ctx) ->
+      let f = Det (An None, Some (IsOf (p,np))) in
       html_of_ctx_s1 dico f
 	(html_current_focus
 	   (html_focus dico (AtS1 (f,ctx)) true
 	      (html_the_of p
-		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (Something, ctx))) true np))))
+		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (An None, ctx))) true np))))
 	ctx
     | AtP1 (f,ctx) ->
       html_of_ctx_p1 dico f
@@ -462,7 +469,7 @@ let html_of_focus dico focus =
 
 (* focus moves *)
 
-let home_focus = AtS1 (Det (Something, None), ReturnX)
+let home_focus = AtS1 (Det (An None, None), ReturnX)
 
 let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Type _ -> None
@@ -475,7 +482,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
-  | Det (Something, Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (Something, ctx))))
+  | Det (An None, Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An None, ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
 let down_focus = function
@@ -489,8 +496,8 @@ let rec up_p1 f = function
   | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
   | NotX ctx -> Some (AtP1 (Not f, ctx))
 let up_s1 f = function
-  | HasX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (Has (p,f))), ctx))
-  | IsOfX (p, DetThatX (Something, ctx)) -> Some (AtS1 (Det (Something, Some (IsOf (p,f))), ctx))
+  | HasX (p, DetThatX (An None, ctx)) -> Some (AtS1 (Det (An None, Some (Has (p,f))), ctx))
+  | IsOfX (p, DetThatX (An None, ctx)) -> Some (AtS1 (Det (An None, Some (IsOf (p,f))), ctx))
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | ReturnX -> None
@@ -562,11 +569,11 @@ let insert_term t focus =
     match focus with
       | AtP1 (f, DetThatX (det,ctx)) ->
 	if det = Term t
-	then Some (AtP1 (f, DetThatX (Something, ctx)))
+	then Some (AtP1 (f, DetThatX (top_s2, ctx)))
 	else Some (AtP1 (f, DetThatX (Term t, ctx)))
       | AtS1 (Det (det,rel_opt), ctx) ->
 	if det = Term t
-	then Some (AtS1 (Det (Something, rel_opt), ctx))
+	then Some (AtS1 (Det (top_s2, rel_opt), ctx))
 	else Some (AtS1 (Det (Term t, rel_opt), ctx))
       | _ -> None in
   match focus2_opt with
@@ -606,18 +613,18 @@ let insert_class c = function
     else Some (AtP1 (f, DetThatX (Class c, ctx)))
 *)
   | AtS1 (Det (det,rel_opt), ctx) ->
-    if det = Class c
-    then Some (AtS1 (Det (Something, rel_opt), ctx))
-    else Some (AtS1 (Det (Class c, rel_opt), ctx))
+    if det = An (Some c)
+    then Some (AtS1 (Det (top_s2, rel_opt), ctx))
+    else Some (AtS1 (Det (An (Some c), rel_opt), ctx))
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
-  match insert_elt_p1 (Has (p, Det (Something, None))) focus with
+  match insert_elt_p1 (Has (p, top_s1)) focus with
     | Some foc -> down_focus foc
     | None -> None
 
 let insert_inverse_property p focus =
-  match insert_elt_p1 (IsOf (p, Det (Something, None))) focus with
+  match insert_elt_p1 (IsOf (p, top_s1)) focus with
     | Some foc -> down_focus foc
     | None -> None
 
@@ -676,7 +683,7 @@ let rec delete_ctx_p1 = function
 
 let delete_focus = function
   | AtP1 (_,ctx) -> delete_ctx_p1 ctx
-  | AtS1 (Det _, ctx) -> Some (AtS1 (Det (Something, None), ctx))
+  | AtS1 (Det _, ctx) -> Some (AtS1 (top_s1, ctx))
 
 let focus_modifier_increments = function
   | AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
@@ -1214,8 +1221,8 @@ object (self)
 
   (* essential state *)
 
-  val mutable endpoint = "http://dbpedia.org/sparql"
-(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
+(*  val mutable endpoint = "http://dbpedia.org/sparql"*)
+  val mutable endpoint = "http://localhost:3030/ds/sparql"
   method endpoint = endpoint
 
   val mutable focus = home_focus
