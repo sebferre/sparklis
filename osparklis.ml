@@ -168,9 +168,15 @@ let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
-let sparql_select ~ordering ?limit lv gp =
-  let sel = if lv = [] then "*" else String.concat " " (List.map (fun v -> sparql_var v) lv) in
+let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
+  let sel =
+    String.concat " " (List.map sparql_var dimensions) ^ " " ^
+      String.concat " " (List.map (function `Count v -> "(COUNT(DISTINCT " ^ sparql_var v ^ ") AS " ^ sparql_var ("number_of_" ^ v) ^ ")") aggregations) in
   let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
+  let s =
+    if aggregations = []
+    then s
+    else s ^ "\nGROUP BY " ^ String.concat " " (List.map sparql_var dimensions) in
   let s =
     if ordering = []
     then s
@@ -308,15 +314,22 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
       if lv = []
       then Some (sparql_ask gp)
       else
+	let dimensions, aggregations =
+	  List.fold_right
+	    (fun v (dims,aggregs) ->
+	      match state#modif v with
+		| NumberOf -> dims, (`Count v)::aggregs
+		| _ -> v::dims, aggregs)
+	    lv ([],[]) in
 	let ordering =
 	  List.fold_right
-	    (fun v res ->
+	    (fun v order ->
 	      match state#modif v with
-		| Lowest -> `ASC v :: res
-		| Highest -> `DESC v :: res
-		| _ -> res)
+		| Lowest -> `ASC v :: order
+		| Highest -> `DESC v :: order
+		| _ -> order)
 	    lv [] in
-	Some (sparql_select ~ordering ~limit lv gp) in
+	Some (sparql_select ~dimensions ~aggregations ~ordering ~limit gp) in
   t, query_opt
 
 (* pretty-printing of focus as HTML *)
