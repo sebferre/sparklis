@@ -35,6 +35,7 @@ type term =
   | Var of var
 
 type modif_s2 = Id | Highest | Lowest | NumberOf
+type aggreg = Count
 
 (* LISQL elts *)
 type elt_p1 =
@@ -50,12 +51,16 @@ and elt_s1 =
   | Det of elt_s2 * elt_p1 option
 and elt_s2 =
   | Term of term
-  | An of modif_s2 * uri option
+  | An of modif_s2 * elt_head
+and elt_head =
+  | Thing
+  | Class of uri
+(*  | Aggreg of aggreg * elt_head * elt_p1 option *)
 and elt_s =
   | Return of elt_s1
 
 let top_p1 = IsThere
-let top_s2 = An (Id, None)
+let top_s2 = An (Id, Thing)
 let top_s1 = Det (top_s2,None)
 
 (* LISQL contexts *)
@@ -214,24 +219,26 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((term -> string) -> string) = fu
 	  | Some (IsOf (p,_)) -> prefix_of_uri p
 	  | _ -> prefix
       else prefix in
-    let d1 = match rel_opt with None -> (fun x -> "") | Some rel -> sparql_of_elt_p1 state rel in
+    let d1 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
     (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((term -> string) -> (term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
-  | An (modif, c_opt) ->
-    let prefix =
-      if prefix <> ""
-      then prefix
-      else match c_opt with None -> "thing" | Some c -> prefix_of_uri c in
-    let dc =
-      match c_opt with
-	| None -> (fun t -> sparql_empty)
-	| Some c -> (fun t -> sparql_triple t "a" (URI c)) in
+  | An (modif, head) ->
     (fun d1 d2 ->
-      let v = state#new_var prefix in
+      let v, dhead = sparql_of_elt_head state ~prefix head in
       state#set_modif v modif;
       let t = Var v in
-      sparql_join [d2 t; dc t; d1 t])
+      sparql_join [d2 t; dhead t; d1 t])
+and sparql_of_elt_head state ~prefix : elt_head -> var * (term -> string) = function
+  | Thing -> state#new_var prefix, (fun t -> sparql_empty)
+  | Class c -> state#new_var (prefix_of_uri c), (fun t -> sparql_triple t "a" (URI c))
+(*
+  | Aggreg (g, head2, rel2_opt) ->
+    let v2, dhead2 = sparql_of_elt_head state ~prefix head2 in
+    let v = match g with Count -> "number_of_" ^ v in
+    let drel2 = match rel2_opt with None -> (fun t2 -> sparql_empty) | Some rel2 -> sparql_of_elt_p1 state rel2 in
+    v, (fun t -> sparql_aggreg g t v2 (fun t2 -> sparql_join [dhead2 t2; drel2 t2]))
+*)
 (*
 and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
@@ -433,10 +440,10 @@ and html_of_elt_s1 dico ctx hl f =
   let html =
     match f with
       | Det (det, None) -> html_det (html_of_elt_s2 det) None
-      | Det (An (modif, None), Some (IsOf (p,np))) ->
+      | Det (An (modif, Thing), Some (IsOf (p,np))) ->
 	html_of
 	  (html_of_modif_s2_noun modif (html_prop p))
-	  (html_of_elt_s1 dico (IsOfX (p, DetThatX (An (modif, None), ctx))) hl np)
+	  (html_of_elt_s1 dico (IsOfX (p, DetThatX (An (modif, Thing), ctx))) hl np)
       | Det (det, Some rel) ->
 	html_det
 	  (html_of_elt_s2 det)
@@ -444,8 +451,8 @@ and html_of_elt_s1 dico ctx hl f =
   html_focus dico (AtS1 (f,ctx)) hl html
 and html_of_elt_s2 = function
   | Term t -> html_term t
-  | An (Id, None) -> "something"
-  | An (modif, c_opt) -> html_of_modif_s2_noun modif (match c_opt with None -> "thing" | Some c -> html_class c)
+  | An (Id, Thing) -> "something"
+  | An (modif, head) -> html_of_modif_s2_noun modif (match head with Thing -> "thing" | Class c -> html_class c)
 and html_of_modif_s2_noun modif noun =
   match modif with
     | Id -> (if noun <> "" && List.mem noun.[0] ['a';'e';'i';'o';'u'] then "an " else "a ") ^ noun
@@ -495,8 +502,8 @@ and html_of_ctx_s1 dico f html ctx =
 	html_focus dico (AtP1 (f2,ctx2)) false
 	  (html_has p html) in
       html_of_ctx_p1 dico f2 html2 ctx2
-    | IsOfX (p, DetThatX (An (modif, None), ctx2)) ->
-      let f2 = Det (An (modif, None), Some (IsOf (p,f))) in
+    | IsOfX (p, DetThatX (An (modif, Thing), ctx2)) ->
+      let f2 = Det (An (modif, Thing), Some (IsOf (p,f))) in
       let html2 =
 	html_focus dico (AtS1 (f2,ctx2)) false
 	  (html_of
@@ -517,15 +524,15 @@ let html_current_focus html =
 
 let html_of_focus dico focus =
   match focus with
-    | AtP1 (IsOf (p,np), DetThatX (An (modif, None), ctx))
-    | AtS1 (Det (An (modif, None), Some (IsOf (p,np))), ctx) ->
-      let f = Det (An (modif, None), Some (IsOf (p,np))) in
+    | AtP1 (IsOf (p,np), DetThatX (An (modif, Thing), ctx))
+    | AtS1 (Det (An (modif, Thing), Some (IsOf (p,np))), ctx) ->
+      let f = Det (An (modif, Thing), Some (IsOf (p,np))) in
       html_of_ctx_s1 dico f
 	(html_current_focus
 	   (html_focus dico (AtS1 (f,ctx)) true
 	      (html_of
 		 (html_of_modif_s2_noun modif (html_prop p))
-		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (An (modif, None), ctx))) true np))))
+		 (html_of_elt_s1 dico (IsOfX (p, DetThatX (An (modif, Thing), ctx))) true np))))
 	ctx
     | AtP1 (f,ctx) ->
       html_of_ctx_p1 dico f
@@ -553,7 +560,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
-  | Det (An (modif, None), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, None), ctx))))
+  | Det (An (modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
 let down_focus = function
@@ -567,8 +574,8 @@ let rec up_p1 f = function
   | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
   | NotX ctx -> Some (AtP1 (Not f, ctx))
 let up_s1 f = function
-  | HasX (p, DetThatX (An (modif, None), ctx)) -> Some (AtS1 (Det (An (modif, None), Some (Has (p,f))), ctx))
-  | IsOfX (p, DetThatX (An (modif, None), ctx)) -> Some (AtS1 (Det (An (modif, None), Some (IsOf (p,f))), ctx))
+  | HasX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (Has (p,f))), ctx))
+  | IsOfX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (IsOf (p,f))), ctx))
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | ReturnX -> None
@@ -687,11 +694,11 @@ let insert_class c = function
   | AtS1 (Det (det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
-	Some (AtS1 (Det (An (Id, Some c), rel_opt), ctx))
-      | An (modif, Some c2) when c2 = c ->
-	Some (AtS1 (Det (An (modif, None), rel_opt), ctx))
+	Some (AtS1 (Det (An (Id, Class c), rel_opt), ctx))
+      | An (modif, Class c2) when c2 = c ->
+	Some (AtS1 (Det (An (modif, Thing), rel_opt), ctx))
       | An (modif, _) ->
-	Some (AtS1 (Det (An (modif, Some c), rel_opt), ctx)) )
+	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx)) )
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
@@ -721,12 +728,12 @@ let insert_not = function
   | _ -> None
 
 let insert_modif_s2 modif = function
-  | AtS1 (Det (An (modif0, c_opt), rel_opt), ctx) ->
+  | AtS1 (Det (An (modif0, head), rel_opt), ctx) ->
     let modif2 =
       if modif = modif0
       then Id
       else modif in
-    Some (AtS1 (Det (An (modif2, c_opt), rel_opt), ctx))
+    Some (AtS1 (Det (An (modif2, head), rel_opt), ctx))
   | _ -> None
 
 let insert_increment incr focus =
