@@ -34,8 +34,8 @@ type term =
   | Bnode of string
   | Var of var
 
-type modif_s2 = Id | Highest | Lowest | NumberOf
-type aggreg = Count
+(*type aggreg = Count*)
+type modif_s2 = Id | Highest | Lowest | Any | NumberOf
 
 (* LISQL elts *)
 type elt_p1 =
@@ -49,6 +49,7 @@ type elt_p1 =
   | IsThere
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
+(*  | Aggreg of modif_s2 * aggreg * elt_s1 *)
 and elt_s2 =
   | Term of term
   | An of modif_s2 * elt_head
@@ -73,6 +74,7 @@ type ctx_p1 =
 and ctx_s1 =
   | HasX of uri * ctx_p1
   | IsOfX of uri * ctx_p1
+(*  | AggregX of modif_s2 * aggreg * ctx_s1 *)
   | ReturnX
 
 (* LISQL focus *)
@@ -179,7 +181,7 @@ let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
       String.concat " " (List.map (function `Count v -> "(COUNT(DISTINCT " ^ sparql_var v ^ ") AS " ^ sparql_var ("number_of_" ^ v) ^ ")") aggregations) in
   let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
   let s =
-    if aggregations = []
+    if aggregations = [] || dimensions = []
     then s
     else s ^ "\nGROUP BY " ^ String.concat " " (List.map sparql_var dimensions) in
   let s =
@@ -230,8 +232,12 @@ and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((term -> string) -> (term -> str
       let t = Var v in
       sparql_join [d2 t; dhead t; d1 t])
 and sparql_of_elt_head state ~prefix : elt_head -> var * (term -> string) = function
-  | Thing -> state#new_var prefix, (fun t -> sparql_empty)
-  | Class c -> state#new_var (prefix_of_uri c), (fun t -> sparql_triple t "a" (URI c))
+  | Thing ->
+    let prefix = if prefix<>"" then prefix else "thing" in
+    state#new_var prefix, (fun t -> sparql_empty)
+  | Class c ->
+    let prefix = if prefix<>"" then prefix else prefix_of_uri c in
+    state#new_var prefix, (fun t -> sparql_triple t "a" (URI c))
 (*
   | Aggreg (g, head2, rel2_opt) ->
     let v2, dhead2 = sparql_of_elt_head state ~prefix head2 in
@@ -325,7 +331,8 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 	  List.fold_right
 	    (fun v (dims,aggregs) ->
 	      match state#modif v with
-		| NumberOf -> dims, (`Count v)::aggregs
+		| Any when t <> Var v -> dims, aggregs
+		| NumberOf when t <> Var v -> dims, (`Count v)::aggregs
 		| _ -> v::dims, aggregs)
 	    lv ([],[]) in
 	let ordering =
@@ -455,10 +462,12 @@ and html_of_elt_s2 = function
   | An (modif, head) -> html_of_modif_s2_noun modif (match head with Thing -> "thing" | Class c -> html_class c)
 and html_of_modif_s2_noun modif noun =
   match modif with
-    | Id -> (if noun <> "" && List.mem noun.[0] ['a';'e';'i';'o';'u'] then "an " else "a ") ^ noun
+    | Id -> "a " ^ noun
+(* (if noun <> "" && List.mem noun.[0] ['a';'e';'i';'o';'u';'A';'E';'I';'O';'U'] then "an " else "a ") ^ noun *)
     | Highest -> "the " ^ html_span ~classe:"modifier" "highest" ^ " " ^ noun
     | Lowest -> "the " ^ html_span ~classe:"modifier" "lowest" ^ " " ^ noun
-    | NumberOf -> "the " ^ html_span ~classe:"modifier" "number" ^ " of " ^ noun
+    | Any -> html_span ~classe:"modifier" "any" ^ " " ^ noun
+    | NumberOf -> "a " ^ html_span ~classe:"modifier" "number" ^ " of " ^ noun
 
 let rec html_of_ctx_p1 dico f html ctx =
   match ctx with
@@ -780,7 +789,7 @@ let delete_focus = function
 
 let focus_modifier_increments = function
   | AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
-  | AtS1 (Det (An _, _), _) -> [IncrModifS2 Highest; IncrModifS2 Lowest; IncrModifS2 NumberOf]
+  | AtS1 (Det (An _, _), _) -> [IncrModifS2 Highest; IncrModifS2 Lowest; IncrModifS2 NumberOf; IncrModifS2 Any]
   | _ -> []
 
 (* HTML of increment lists *)
