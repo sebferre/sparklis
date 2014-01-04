@@ -36,7 +36,7 @@ type term =
 
 type order = Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
-type modif_s2 = Id | Any | Aggreg of aggreg | Order of order
+type modif_s2 = Id | Any | Aggreg of order option * aggreg | Order of order
 
 (* LISQL elts *)
 type elt_p1 =
@@ -177,18 +177,19 @@ let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
 let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
-  let sparql_aggreg prefix_g v suffix_g prefix_v = "(" ^ prefix_g ^ sparql_var v ^ suffix_g ^ " AS " ^ sparql_var (prefix_v ^ v) ^ ")" in
+  let sparql_aggreg prefix_g v suffix_g vg = "(" ^ prefix_g ^ sparql_var v ^ suffix_g ^ " AS " ^ sparql_var vg ^ ")" in
   let sel =
     String.concat " " (List.map sparql_var dimensions) ^ " " ^
       String.concat " "
       (List.map
-	 (function
-	   | `COUNT v -> sparql_aggreg "COUNT(DISTINCT " v ")" "number_of_"
-	   | `SUM v -> sparql_aggreg "SUM(" v ")" "total_"
-	   | `AVG v -> sparql_aggreg "AVG(" v ")" "average_"
-	   | `MAX v -> sparql_aggreg "MAX(" v ")" "maximum_"
-	   | `MIN v -> sparql_aggreg "MIN(" v ")" "minimum_"
-	   | `GROUP_CONCAT (v,sep) -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator='" ^ sep ^ "')") "list_of_")
+	 (fun (g,v,vg) ->
+	   match g with
+	     | NumberOf -> sparql_aggreg "COUNT(DISTINCT " v ")" vg
+	     | Total -> sparql_aggreg "SUM(" v ")" vg
+	     | Average -> sparql_aggreg "AVG(" v ")" vg
+	     | Maximum -> sparql_aggreg "MAX(" v ")" vg
+	     | Minimum -> sparql_aggreg "MIN(" v ")" vg
+	     | ListOf -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator=', ')") vg)
 	 aggregations) in
   let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
   let s =
@@ -343,22 +344,23 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 	    (fun v (dims,aggregs,ordering) ->
 	      match state#modif v with
 		| Any when t <> Var v -> dims, aggregs, ordering
-		| Aggreg g when t <> Var v ->
-		  let aggreg =
+		| Aggreg (order_opt, g) when t <> Var v ->
+		  let vg_prefix =
 		    match g with
-		      | NumberOf -> `COUNT v
-		      | ListOf -> `GROUP_CONCAT (v, ", ")
-		      | Total -> `SUM v
-		      | Average -> `AVG v
-		      | Maximum -> `MAX v
-		      | Minimum -> `MIN v in
-		  dims, aggreg::aggregs, ordering
+		      | NumberOf -> "number_of_"
+		      | ListOf -> "list_of_"
+		      | Total -> "total_"
+		      | Average -> "average_"
+		      | Maximum -> "maximum_"
+		      | Minimum -> "minimum_" in
+		  let vg = vg_prefix ^ v in
+		  dims, (g,v,vg)::aggregs, (match order_opt with None -> ordering | Some Lowest -> (`ASC vg)::ordering | Some Highest -> (`DESC vg)::ordering)
 		| Order o ->
 		  let order =
 		    match o with
 		      | Lowest -> `ASC v
 		      | Highest -> `DESC v in
-		  dims, aggregs, order::ordering
+		  v::dims, aggregs, order::ordering
 		| _ -> v::dims, aggregs, ordering)
 	    lv ([],[],[]) in
 	Some (sparql_select ~dimensions ~aggregations ~ordering ~limit gp) in
@@ -483,14 +485,21 @@ and html_of_modif_s2_noun modif noun =
     | Id -> "a " ^ noun
 (* (if noun <> "" && List.mem noun.[0] ['a';'e';'i';'o';'u';'A';'E';'I';'O';'U'] then "an " else "a ") ^ noun *)
     | Any -> html_span ~classe:"modifier" "any" ^ " " ^ noun
-    | Aggreg NumberOf -> "a " ^ html_span ~classe:"modifier" "number" ^ " of " ^ noun
-    | Aggreg ListOf -> "a " ^ html_span ~classe:"modifier" "list" ^ " of " ^ noun
-    | Aggreg Total -> "a " ^ html_span ~classe:"modifier" "total" ^ " " ^ noun
-    | Aggreg Average -> "an " ^ html_span ~classe:"modifier" "average" ^ " " ^ noun
-    | Aggreg Maximum -> "a " ^ html_span ~classe:"modifier" "maximum" ^ " " ^ noun
-    | Aggreg Minimum -> "a " ^ html_span ~classe:"modifier" "minimum" ^ " " ^ noun
-    | Order Highest -> "the " ^ html_span ~classe:"modifier" "highest" ^ " " ^ noun
-    | Order Lowest -> "the " ^ html_span ~classe:"modifier" "lowest" ^ " " ^ noun
+    | Aggreg (order_opt, g) -> html_order_opt order_opt (html_aggreg g noun)
+    | Order o -> html_order_opt (Some o) noun
+and html_aggreg g noun =
+  match g with
+    | NumberOf -> html_span ~classe:"modifier" "number" ^ " of " ^ noun
+    | ListOf -> html_span ~classe:"modifier" "list" ^ " of " ^ noun
+    | Total -> html_span ~classe:"modifier" "total" ^ " " ^ noun
+    | Average -> html_span ~classe:"modifier" "average" ^ " " ^ noun
+    | Maximum -> html_span ~classe:"modifier" "maximum" ^ " " ^ noun
+    | Minimum -> html_span ~classe:"modifier" "minimum" ^ " " ^ noun
+and html_order_opt order_opt noun =
+  match order_opt with
+    | None -> "a " ^ noun
+    | Some Highest -> "the " ^ html_span ~classe:"modifier" "highest" ^ " " ^ noun
+    | Some Lowest -> "the " ^ html_span ~classe:"modifier" "lowest" ^ " " ^ noun
 
 let rec html_of_ctx_p1 dico f html ctx =
   match ctx with
@@ -1553,21 +1562,25 @@ object (self)
       let modif_list = (*focus_modifier_increments focus in*)
 	match focus with
 	  | AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
-	  | AtS1 (Det (An _, _), _) ->
+	  | AtS1 (Det (An (modif, head), _), _) ->
 	    let modifs =
 	      if List.exists (function
 		| (TypedLiteral (s,_), _) -> (try ignore (float_of_string s); true with _ -> false)
 		| _ -> false)
 		focus_term_index
-	      then List.map (fun g -> IncrModifS2 (Aggreg g)) [Total; Average; Maximum; Minimum]
+	      then List.map (fun g -> IncrModifS2 (Aggreg (None,g))) [Total; Average; Maximum; Minimum]
 	      else [] in
 	    let modifs =
 	      if List.exists (function (PlainLiteral _, _) | (TypedLiteral _, _) -> true | _ -> false) focus_term_index
-	      then IncrModifS2 (Aggreg ListOf) :: modifs
+	      then IncrModifS2 (Aggreg (None,ListOf)) :: modifs
 	      else modifs in
-	    IncrModifS2 (Order Highest) :: IncrModifS2 (Order Lowest) ::
-	      IncrModifS2 Any :: IncrModifS2 (Aggreg NumberOf) ::
-	      modifs
+	    let modifs =
+	      IncrModifS2 Any :: IncrModifS2 (Aggreg (None,NumberOf)) :: modifs in
+	    let modifs =
+	      match modif with
+		| Aggreg (_,g) -> IncrModifS2 (Aggreg (Some Highest, g)) :: IncrModifS2 (Aggreg (Some Lowest, g)) :: modifs
+		| _ -> IncrModifS2 (Order Highest) :: IncrModifS2 (Order Lowest) :: modifs in
+	    modifs
 	  | _ -> [] in
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
