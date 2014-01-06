@@ -82,6 +82,7 @@ and ctx_s1 =
 type focus =
   | AtP1 of elt_p1 * ctx_p1
   | AtS1 of elt_s1 * ctx_s1
+  | AtS of elt_s
 
 (* extraction of LISQL s element from focus *)
 let rec elt_s_of_ctx_p1 (f : elt_p1) = function
@@ -98,6 +99,7 @@ and elt_s_of_ctx_s1 (f : elt_s1) = function
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
   | AtS1 (f,ctx) -> elt_s_of_ctx_s1 f ctx
+  | AtS f -> f
 
 
 (* translation from LISQL elts to SPARQL queries *)
@@ -123,8 +125,8 @@ object
 
   method vars = List.rev vars
 
-  val mutable focus_term : term = Var ""
-  method set_focus_term t = focus_term <- t
+  val mutable focus_term : term option = None
+  method set_focus_term t_opt = focus_term <- t_opt
   method focus_term = focus_term
 
   val h_var_modif : (var, modif_s2) Hashtbl.t = Hashtbl.create 13
@@ -177,31 +179,34 @@ let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
 let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
-  let sparql_aggreg prefix_g v suffix_g vg = "(" ^ prefix_g ^ sparql_var v ^ suffix_g ^ " AS " ^ sparql_var vg ^ ")" in
-  let sel =
-    String.concat " " (List.map sparql_var dimensions) ^ " " ^
-      String.concat " "
-      (List.map
-	 (fun (g,v,vg) ->
-	   match g with
-	     | NumberOf -> sparql_aggreg "COUNT(DISTINCT " v ")" vg
-	     | Total -> sparql_aggreg "SUM(" v ")" vg
-	     | Average -> sparql_aggreg "AVG(" v ")" vg
-	     | Maximum -> sparql_aggreg "MAX(" v ")" vg
-	     | Minimum -> sparql_aggreg "MIN(" v ")" vg
-	     | ListOf -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator=', ')") vg)
-	 aggregations) in
-  let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
-  let s =
-    if aggregations = [] || dimensions = []
-    then s
-    else s ^ "\nGROUP BY " ^ String.concat " " (List.map sparql_var dimensions) in
-  let s =
-    if ordering = []
-    then s
-    else s ^ "\nORDER BY " ^ String.concat " " (List.map (function `ASC v -> sparql_var v | `DESC v -> "DESC(" ^ sparql_var v ^ ")") ordering) in
-  let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
-  s
+  if dimensions = [] && aggregations = []
+  then sparql_ask gp
+  else
+    let sparql_aggreg prefix_g v suffix_g vg = "(" ^ prefix_g ^ sparql_var v ^ suffix_g ^ " AS " ^ sparql_var vg ^ ")" in
+    let sel =
+      String.concat " " (List.map sparql_var dimensions) ^ " " ^
+	String.concat " "
+	(List.map
+	   (fun (g,v,vg) ->
+	     match g with
+	       | NumberOf -> sparql_aggreg "COUNT(DISTINCT " v ")" vg
+	       | Total -> sparql_aggreg "SUM(" v ")" vg
+	       | Average -> sparql_aggreg "AVG(" v ")" vg
+	       | Maximum -> sparql_aggreg "MAX(" v ")" vg
+	       | Minimum -> sparql_aggreg "MIN(" v ")" vg
+	       | ListOf -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator=', ')") vg)
+	   aggregations) in
+    let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
+    let s =
+      if aggregations = [] || dimensions = []
+      then s
+      else s ^ "\nGROUP BY " ^ String.concat " " (List.map sparql_var dimensions) in
+    let s =
+      if ordering = []
+      then s
+      else s ^ "\nORDER BY " ^ String.concat " " (List.map (function `ASC v -> sparql_var v | `DESC v -> "DESC(" ^ sparql_var v ^ ")") ordering) in
+    let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
+    s
 
 let rec sparql_of_elt_p1 state : elt_p1 -> (term -> string) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
@@ -257,12 +262,9 @@ and sparql_of_elt_head state ~prefix : elt_head -> var * (term -> string) = func
     let drel2 = match rel2_opt with None -> (fun t2 -> sparql_empty) | Some rel2 -> sparql_of_elt_p1 state rel2 in
     v, (fun t -> sparql_aggreg g t v2 (fun t2 -> sparql_join [dhead2 t2; drel2 t2]))
 *)
-(*
 and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
-    let gp = sparql_of_elt_s1 state ~prefix:"Result" np (fun t -> "") in
-    sparql_select state#vars gp
-*)
+    sparql_of_elt_s1 state ~prefix:"" np (fun t -> "")
 
 let rec sparql_of_ctx_p1 state ~prefix (d : term -> string) : ctx_p1 -> string = function
   | DetThatX (det,ctx) ->
@@ -304,7 +306,7 @@ and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string =
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term * string option =
+let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term option * string option =
   let state = new sparql_state in
   let gp =
     match focus with
@@ -315,7 +317,7 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 	    | _ -> "" in
 	sparql_of_ctx_p1 state ~prefix
 	  (fun t ->
-	    state#set_focus_term t;
+	    state#set_focus_term (Some t);
 	    sparql_of_elt_p1 state f t)
 	  ctx
       | AtS1 (f,ctx) ->
@@ -326,16 +328,23 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 	sparql_of_ctx_s1 state (fun d ->
 	  sparql_of_elt_s1 state ~prefix f
 	    (fun t ->
-	      state#set_focus_term t;
+	      state#set_focus_term (Some t);
 	      d t))
-	  ctx in
-  let t = state#focus_term in
+	  ctx
+      | AtS f ->
+	state#set_focus_term None;
+	sparql_of_elt_s state f
+  in
+  let t_opt = state#focus_term in
   let query_opt =
     if gp = sparql_empty
     then None
     else
       let lv = state#vars in
-      let gp = sparql_join [gp; sparql_pattern t lpat] in
+      let gp =
+	match t_opt with
+	  | None -> gp
+	  | Some t -> sparql_join [gp; sparql_pattern t lpat] in
       if lv = []
       then Some (sparql_ask gp)
       else
@@ -343,8 +352,8 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 	  List.fold_right
 	    (fun v (dims,aggregs,ordering) ->
 	      match state#modif v with
-		| Any when t <> Var v -> dims, aggregs, ordering
-		| Aggreg (order_opt, g) when t <> Var v ->
+		| Any when t_opt <> Some (Var v) -> dims, aggregs, ordering
+		| Aggreg (order_opt, g) when t_opt <> Some (Var v) ->
 		  let vg_prefix =
 		    match g with
 		      | NumberOf -> "number_of_"
@@ -364,7 +373,7 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
 		| _ -> v::dims, aggregs, ordering)
 	    lv ([],[],[]) in
 	Some (sparql_select ~dimensions ~aggregations ~ordering ~limit gp) in
-  t, query_opt
+  t_opt, query_opt
 
 (* pretty-printing of focus as HTML *)
 
@@ -500,6 +509,8 @@ and html_order_opt order_opt noun =
     | None -> "a " ^ noun
     | Some Highest -> "the " ^ html_span ~classe:"modifier" "highest" ^ " " ^ noun
     | Some Lowest -> "the " ^ html_span ~classe:"modifier" "lowest" ^ " " ^ noun
+and html_of_elt_s dico hl = function
+  | Return np -> html_return (html_of_elt_s1 dico ReturnX hl np)
 
 let rec html_of_ctx_p1 dico f html ctx =
   match ctx with
@@ -557,7 +568,12 @@ and html_of_ctx_s1 dico f html ctx =
 	html_focus dico (AtP1 (f2,ctx2)) false
 	  (html_is_of p html) in
       html_of_ctx_p1 dico f2 html2 ctx2
-    | ReturnX -> html_return html
+    | ReturnX ->
+      let f2 = Return f in
+      let html2 =
+	html_focus dico (AtS f2) false
+	  (html_return html) in
+      html2
 
 let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
@@ -585,6 +601,9 @@ let html_of_focus dico focus =
 	(html_current_focus
 	   (html_of_elt_s1 dico ctx true f))
 	ctx
+    | AtS f ->
+      html_focus dico (AtS f) false
+	(html_of_elt_s dico false f)
 
 (* focus moves *)
 
@@ -604,9 +623,12 @@ let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (An (modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
+let down_s : elt_s -> focus option = function
+  | Return np -> Some (AtS1 (np,ReturnX))
 let down_focus = function
   | AtP1 (f,ctx) -> down_p1 ctx f
   | AtS1 (f,ctx) -> down_s1 ctx f
+  | AtS f -> down_s f
 
 let rec up_p1 f = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
@@ -619,10 +641,11 @@ let up_s1 f = function
   | IsOfX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (IsOf (p,f))), ctx))
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
-  | ReturnX -> None
+  | ReturnX -> Some (AtS (Return f))
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
+  | AtS f -> None
 
 let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
@@ -647,6 +670,7 @@ let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
 let right_focus = function
   | AtP1 (f,ctx) -> right_p1 f ctx
   | AtS1 (f,ctx) -> right_s1 f ctx
+  | AtS f -> None
 
 let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
@@ -671,6 +695,7 @@ let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
 let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
+  | AtS f -> None
 
 (* increments *)
 
@@ -724,6 +749,7 @@ let insert_elt_p1 elt = function
   | AtP1 (f, ctx) -> Some (append_and ctx elt f)
   | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
   | AtS1 (Det (det, Some rel), ctx) -> Some (append_and (DetThatX (det,ctx)) elt rel)
+  | AtS _ -> None
 
 let insert_class c = function
 (*
@@ -756,7 +782,7 @@ let insert_or = function
   | AtP1 (Or ar, ctx) -> Some (append_or ctx IsThere (Or ar))
   | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or ctx2 IsThere (Or ar))
   | AtP1 (f, ctx) -> Some (append_or ctx IsThere f)
-  | AtS1 _ -> None
+  | _ -> None
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
@@ -818,6 +844,7 @@ let rec delete_ctx_p1 = function
 let delete_focus = function
   | AtP1 (_,ctx) -> delete_ctx_p1 ctx
   | AtS1 (Det _, ctx) -> Some (AtS1 (top_s1, ctx))
+  | AtS _ -> Some (AtS (Return top_s1))
 
 
 (* HTML of increment lists *)
@@ -1353,8 +1380,8 @@ object (self)
 
   (* essential state *)
 
-(*  val mutable endpoint = "http://dbpedia.org/sparql"*)
-  val mutable endpoint = "http://localhost:3030/ds/sparql"
+  val mutable endpoint = "http://dbpedia.org/sparql"
+(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
   method endpoint = endpoint
 
   val mutable focus = home_focus
@@ -1374,11 +1401,11 @@ object (self)
 
   val mutable dico_foci = new dico_foci
 
-  val mutable focus_term = Var "thing"
+  val mutable focus_term_opt = None
   val mutable sparql_opt = None
   method private define_sparql =
-    let t, s_opt = sparql_of_focus ~lpat:term_patterns ~limit:max_results focus in
-    focus_term <- t;
+    let t_opt, s_opt = sparql_of_focus ~lpat:term_patterns ~limit:max_results focus in
+    focus_term_opt <- t_opt;
     sparql_opt <- s_opt
 
   val mutable results = empty_results
@@ -1387,15 +1414,16 @@ object (self)
 
   method private define_focus_term_index =
     focus_term_index <-
-      ( match focus_term with
-	| Var v ->
+      ( match focus_term_opt with
+	| None -> []
+	| Some (Var v) ->
 	  List.filter
 	    (function
 	      | (URI uri, _) when String.contains uri ' ' -> false
 		(* URIs with spaces inside are not allowed in SPARQL queries *)
 	      | _ -> true)
 	    (index_of_results_column v results)
-	| t -> [(t, results.length)] )
+	| Some t -> [(t, results.length)] )
 
   method refresh_lisql =
     jquery "#lisql" (fun elt ->
@@ -1419,7 +1447,7 @@ object (self)
 	elt_results##style##display <- string "block";
 	jquery_set_innerHTML "#list-results"
 	  (html_table_of_results
-	     ~focus_var:(match focus_term with Var v -> v | _ -> "")
+	     ~focus_var:(match focus_term_opt with Some (Var v) -> v | _ -> "")
 	     (page_of_results offset limit results));
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
@@ -1597,44 +1625,51 @@ object (self)
     jquery_input "#pattern-classes" (fun input -> input##value <- string (String.concat " " class_patterns));
     jquery_input "#pattern-properties" (fun input -> input##value <- string (String.concat " " property_patterns));
     dico_foci <- new dico_foci;
+    dico_incrs <- new dico_increments;
     self#refresh_lisql;
     self#define_sparql;
-    dico_incrs <- new dico_increments;
-    match sparql_opt with
+    ( match sparql_opt with
       | None ->
 	jquery_set_innerHTML "#sparql" "";
+	jquery "#results" (fun elt -> elt##style##display <- string "none")
+      | Some sparql ->
+	jquery_set_innerHTML "#sparql" (html_pre sparql);
+	jquery "#results" (fun elt -> elt##style##display <- string "block") );
+    ( match focus_term_opt with
+      | None ->
+	jquery "#increments" (fun elt -> elt##style##display <- string "none")
+      | Some _ ->
+	jquery "#increments" (fun elt -> elt##style##display <- string "block") );
+    ( match sparql_opt with
+      | None ->
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
-	( match focus_term with
-	  | Var v ->
-	    jquery "#results" (fun elt -> elt##style##display <- string "none");
-	    jquery_set_innerHTML "#list-results" "";
-	    jquery_set_innerHTML "#count-results" "";
-	    jquery_set_innerHTML "#list-terms" "";
-	    jquery_set_innerHTML "#count-terms" "---";
-	    jquery_set_innerHTML "#list-modifiers" "";
-	    jquery_set_innerHTML "#count-modifiers" "---";
+	jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
+	jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
+	( match focus_term_opt with
+	  | None -> ()
+	  | Some (Var v) ->
 	    self#refresh_class_increments_init;
-	    self#refresh_property_increments_init;
-	  | term ->
-	    results <- { dim=1; vars=[("thing",0)]; length=1; bindings=[ [| Some term |] ]; };
-	    self#refresh_extension;
+	    self#refresh_property_increments_init
+	  | Some term ->
 	    focus_term_index <- [(term,1)];
 	    self#refresh_term_increments;
 	    self#refresh_class_increments;
 	    self#refresh_property_increments;
 	    self#refresh_modifier_increments )
       | Some sparql ->
-	jquery_set_innerHTML "#sparql" (html_pre sparql);
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	ajax_sparql_in [Dom_html.document##documentElement] endpoint sparql (fun res ->
 	  results <- res;
 	  self#refresh_extension;
-	  self#define_focus_term_index;
-	  self#refresh_term_increments;
-	  self#refresh_class_increments;
-	  self#refresh_property_increments;
-	  self#refresh_modifier_increments);
-	()
+	  ( match focus_term_opt with
+	    | None -> ()
+	    | Some t ->
+	      self#define_focus_term_index;
+	      self#refresh_term_increments;
+	      self#refresh_class_increments;
+	      self#refresh_property_increments;
+	      self#refresh_modifier_increments ));
+	() )
 
   method is_home =
     focus = home_focus
