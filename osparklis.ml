@@ -29,8 +29,9 @@ type var = string
 
 type term =
   | URI of uri
-  | PlainLiteral of string * string
+  | Number of float * string * string (* value, string, datatype *)
   | TypedLiteral of string * uri
+  | PlainLiteral of string * string
   | Bnode of string
   | Var of var
 
@@ -144,10 +145,11 @@ let sparql_uri uri =
 
 let sparql_var v = "?" ^ v
 
-let sparql_term = function
+let rec sparql_term = function
   | URI uri -> sparql_uri uri
-  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"" ^ (if lang = "" then "" else "@" ^ lang)
+  | Number (f,s,dt) -> sparql_term (TypedLiteral (s,dt))
   | TypedLiteral (s,dt) -> "\"" ^ s ^ "\"^^" ^ sparql_uri dt
+  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"" ^ (if lang = "" then "" else "@" ^ lang)
   | Bnode name -> "_:" ^ name
   | Var v -> sparql_var v
 
@@ -407,7 +409,7 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
-let html_term ?(link = false) = function
+let rec html_term ?(link = false) = function
   | URI uri ->
     (*if uri_is_image uri (* too heavy loading *)
     then
@@ -419,8 +421,9 @@ let html_term ?(link = false) = function
       if link
       then html_a uri name
       else html_span ~classe:"URI" ~title:uri name
-  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ (if lang="" then "" else "@" ^ lang))
+  | Number (f,s,dt) -> html_term ~link (TypedLiteral (s,dt))
   | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
+  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ (if lang="" then "" else "@" ^ lang))
   | Bnode id -> "_:" ^ id
   | Var v -> "?" ^ v
 let html_class c =
@@ -954,6 +957,7 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
 	    | Some x ->
 	      let count =
 		match binding.(i_count) with
+		  | Some (Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
 		  | Some (TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
 		  | _ -> 0 in
 	      (x, count)::res)
@@ -1048,7 +1052,9 @@ let sparql_results_of_xml (doc_xml : Dom.element Dom.document t) =
 			    (fun () ->
 			      Opt.case (elt_lit##getAttribute(string "datatype"))
 				(fun () -> Some (PlainLiteral (s, "")))
-				(fun dt -> Some (TypedLiteral (s, to_string dt))))
+				(fun dt ->
+				  try Some (Number (float_of_string s, s, to_string dt))
+				  with _ -> Some (TypedLiteral (s, to_string dt))))
 			    (fun lang -> Some (PlainLiteral (s, to_string lang)))
 			with _ ->
 			  try
@@ -1105,14 +1111,20 @@ let sparql_results_of_json s_json =
 		  | "bnode" -> Bnode (to_string v)
 		  | "typed-literal" ->
 		    let odatatype = Unsafe.get ocell (string "datatype") in
-		    TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+		    let s = to_string v in
+		    let dt = to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))) in
+		    (try Number (float_of_string s, s, dt)
+		     with _ -> TypedLiteral (s, dt))
 		  | "plain-literal" ->
 		    let olang = Unsafe.get ocell (string "xml:lang") in
 		    PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
 		  | "literal" ->
 		    ( try
 			let odatatype = Unsafe.get ocell (string "datatype") in
-			TypedLiteral (to_string v, to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))))
+			let s = to_string v in
+			let dt = to_string (decodeURI (Unsafe.get odatatype (string "fullBytes"))) in
+			(try Number (float_of_string s, s, dt)
+			 with _ -> TypedLiteral (s, dt))
 		      with _ ->
 			let olang = Unsafe.get ocell (string "xml:lang") in
 			PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes"))) )
@@ -1592,14 +1604,11 @@ object (self)
 	  | AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
 	  | AtS1 (Det (An (modif, head), _), _) ->
 	    let modifs =
-	      if List.exists (function
-		| (TypedLiteral (s,_), _) -> (try ignore (float_of_string s); true with _ -> false)
-		| _ -> false)
-		focus_term_index
+	      if List.exists (function (Number _, _) -> true | _ -> false) focus_term_index
 	      then List.map (fun g -> IncrModifS2 (Aggreg (None,g))) [Total; Average; Maximum; Minimum]
 	      else [] in
 	    let modifs =
-	      if List.exists (function (PlainLiteral _, _) | (TypedLiteral _, _) -> true | _ -> false) focus_term_index
+	      if List.exists (function (Number _, _) | (PlainLiteral _, _) | (TypedLiteral _, _) -> true | _ -> false) focus_term_index
 	      then IncrModifS2 (Aggreg (None,ListOf)) :: modifs
 	      else modifs in
 	    let modifs =
