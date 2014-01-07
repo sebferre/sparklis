@@ -24,6 +24,67 @@ let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PN
 
 (* ------------------------- *)
 
+type constr =
+  | True
+  | MatchesAll of string list
+  | MatchesAny of string list
+  | HigherThan of string
+  | LowerThan of string
+  | Between of string * string
+(* HasLang, HasDatatype *)
+
+let make_constr op pat =
+  let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
+  if lpat = []
+  then True
+  else
+    match op, lpat with
+      | "matchesAll", _ -> MatchesAll lpat
+      | "matchesAny", _ -> MatchesAny lpat
+      | "higherThan", pat::_ -> HigherThan pat
+      | "lowerThan", pat::_ -> LowerThan pat
+      | "between", pat::[] -> HigherThan pat
+      | "between", pat1::pat2::_ -> Between (pat1, pat2)
+      | _ -> True
+
+let operator_of_constr = function
+  | True -> "matchesAll"
+  | MatchesAll _ -> "matchesAll"
+  | MatchesAny _ -> "matchesAny"
+  | HigherThan _ -> "higherThan"
+  | LowerThan _ -> "lowerThan"
+  | Between _ -> "between"
+
+let pattern_of_constr = function
+  | True -> ""
+  | MatchesAll lpat -> String.concat " " lpat
+  | MatchesAny lpat -> String.concat " " lpat
+  | HigherThan pat -> pat
+  | LowerThan pat -> pat
+  | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
+
+let compile_constr constr : string -> bool =
+  let leq s1 s2 =
+    try float_of_string s1 <= float_of_string s2
+    with _ -> s1 <= s2
+  in
+  match constr with
+    | True -> (fun s -> true)
+    | MatchesAll lpat ->
+      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
+      (fun s -> List.for_all (fun re -> Regexp.search re s 0 <> None) lre)
+    | MatchesAny lpat ->
+      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
+      (fun s -> List.exists (fun re -> Regexp.search re s 0 <> None) lre)
+    | HigherThan pat ->
+      (fun s -> leq pat s)
+    | LowerThan pat ->
+      (fun s -> leq s pat)
+    | Between (pat1,pat2) ->
+      (fun s -> leq pat1 s && leq s pat2)
+
+(* ------------------------- *)
+
 type uri = string
 type var = string
 
@@ -157,15 +218,31 @@ let sparql_empty = ""
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
 
-let sparql_pattern t lpat =
-  if lpat = []
-  then ""
-  else
+let sparql_comp relop t pat =
+  if (try ignore (float_of_string pat); true with _ -> false)
+  then String.concat " " [sparql_term t; relop; pat]
+  else String.concat " " ["str(" ^ sparql_term t ^ ")"; relop; "\"" ^ String.escaped pat ^ "\""]
+
+let sparql_constr t = function
+  | True -> sparql_empty
+  | MatchesAll lpat ->
     let lfilter =
       List.map
 	(fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
 	lpat in
     "FILTER (" ^ String.concat " && " lfilter ^ ")"
+  | MatchesAny lpat ->
+    let lfilter =
+      List.map
+	(fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
+	lpat in
+    "FILTER (" ^ String.concat " || " lfilter ^ ")"
+  | HigherThan pat ->
+    "FILTER (" ^ sparql_comp ">=" t pat ^ ")"
+  | LowerThan pat ->
+    "FILTER (" ^ sparql_comp "<=" t pat ^ ")"
+  | Between (pat1,pat2) ->
+    "FILTER (" ^ sparql_comp ">=" t pat1 ^ " && " ^ sparql_comp "<=" t pat2 ^ ")"
 
 let sparql_join lgp =
   String.concat "\n"
@@ -308,7 +385,7 @@ and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string =
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term option * string option =
+let sparql_of_focus ~(constr : constr) ~(limit : int) (focus : focus) : term option * string option =
   let state = new sparql_state in
   let gp =
     match focus with
@@ -346,7 +423,7 @@ let sparql_of_focus ~(lpat : string list) ~(limit : int) (focus : focus) : term 
       let gp =
 	match t_opt with
 	  | None -> gp
-	  | Some t -> sparql_join [gp; sparql_pattern t lpat] in
+	  | Some t -> sparql_join [gp; sparql_constr t constr] in
       if lv = []
       then Some (sparql_ask gp)
       else
@@ -422,8 +499,8 @@ let rec html_term ?(link = false) = function
       then html_a uri name
       else html_span ~classe:"URI" ~title:uri name
   | Number (f,s,dt) -> html_term ~link (TypedLiteral (s,dt))
-  | TypedLiteral (s,dt) -> html_span ~classe:"Literal" (s ^ " (" ^ name_of_uri dt ^ ")")
-  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" (s ^ (if lang="" then "" else "@" ^ lang))
+  | TypedLiteral (s,dt) -> html_span ~classe:"Literal" s ^ " (" ^ name_of_uri dt ^ ")"
+  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" s ^ (if lang="" then "" else " (" ^ lang ^ ")")
   | Bnode id -> "_:" ^ id
   | Var v -> "?" ^ v
 let html_class c =
@@ -1214,6 +1291,12 @@ let jquery_input_from (root : #Dom_html.nodeSelector Js.t) s k =
       k input))
 let jquery_input s k = jquery_input_from Dom_html.document s k
 
+let jquery_select_from (root : #Dom_html.nodeSelector Js.t) s k =
+  Opt.iter (root##querySelector(string s)) (fun elt ->
+    Opt.iter (Dom_html.CoerceTo.select elt) (fun select ->
+      k select))
+let jquery_select s k = jquery_select_from Dom_html.document s k
+
 let jquery_all_from (root : #Dom_html.nodeSelector Js.t) s k =
   let nodelist = root##querySelectorAll(string s) in
   let n = nodelist##length in
@@ -1392,8 +1475,8 @@ object (self)
 
   (* essential state *)
 
-  val mutable endpoint = "http://dbpedia.org/sparql"
-(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
+(*  val mutable endpoint = "http://dbpedia.org/sparql" *)
+  val mutable endpoint = "http://localhost:3030/ds/sparql"
   method endpoint = endpoint
 
   val mutable focus = home_focus
@@ -1405,9 +1488,9 @@ object (self)
   val mutable offset = 0
   val mutable limit = 10
 
-  val mutable term_patterns = []
-  val mutable class_patterns = []
-  val mutable property_patterns = []
+  val mutable term_constr = True
+  val mutable class_constr = True
+  val mutable property_constr = True
 
   (* derived state *)
 
@@ -1416,7 +1499,7 @@ object (self)
   val mutable focus_term_opt = None
   val mutable sparql_opt = None
   method private define_sparql =
-    let t_opt, s_opt = sparql_of_focus ~lpat:term_patterns ~limit:max_results focus in
+    let t_opt, s_opt = sparql_of_focus ~constr:term_constr ~limit:max_results focus in
     focus_term_opt <- t_opt;
     sparql_opt <- s_opt
 
@@ -1432,12 +1515,12 @@ object (self)
 	  List.filter
 	    (function
 	      | (URI uri, _) when String.contains uri ' ' -> false
-		(* URIs with spaces inside are not allowed in SPARQL queries *)
+	      (* URIs with spaces inside are not allowed in SPARQL queries *)
 	      | _ -> true)
 	    (index_of_results_column v results)
 	| Some t -> [(t, results.length)] )
 
-  method refresh_lisql =
+  method private refresh_lisql =
     jquery "#lisql" (fun elt ->
       elt##innerHTML <- string (html_of_focus dico_foci focus);
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
@@ -1450,6 +1533,18 @@ object (self)
 	(onclick (fun elt_button ev ->
 	  Dom_html.stopPropagation ev;
 	  navigation#update_focus ~push_in_history:true delete_focus)))
+
+  method private refresh_constrs =
+    List.iter
+      (fun (sel_select, sel_input, constr) ->
+	jquery_select sel_select (fun select ->
+	  jquery_input sel_input (fun input ->
+	    select##value <- string (operator_of_constr constr);
+	    input##value <- string (pattern_of_constr constr))))
+      [("#select-terms", "#pattern-terms", term_constr);
+       ("#select-classes", "#pattern-classes", class_constr);
+       ("#select-properties", "#pattern-properties", property_constr);
+       ("#select-modifiers", "#pattern-modifiers", True)]
 
   method private refresh_extension =
     jquery "#results" (fun elt_results ->
@@ -1466,12 +1561,12 @@ object (self)
 	    (if results.length = 0
 	     then "No results"
 	     else
-	       let a, b = offset+1, min results.length (offset+limit) in
-	       if a = 1 && b = results.length && results.length < max_results then
-		 string_of_int b ^ (if b=1 then " result" else " results")
-	       else
-		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+")))
+		let a, b = offset+1, min results.length (offset+limit) in
+		if a = 1 && b = results.length && results.length < max_results then
+		  string_of_int b ^ (if b=1 then " result" else " results")
+		else
+		  "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		    " of " ^ string_of_int results.length ^ (if results.length < max_results then "" else "+")))
       end)
 
   method private refresh_term_increments =
@@ -1502,17 +1597,17 @@ object (self)
 	(html_count_unit (List.length class_list) 1000 "class" "classes")
     in
     jquery "#list-classes" (fun elt ->
-(*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
+      (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
       let sparql =
 	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } UNION { ?class a rdfs:Class } " ^
-	  sparql_pattern (Var "class") class_patterns ^
+	  sparql_constr (Var "class") class_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] endpoint sparql (fun results ->
 	if results.length > 0
 	then process elt results
 	else
-(*	  let sparql = "SELECT DISTINCT ?class WHERE { ?x a ?class } GROUP BY ?class ORDER BY DESC(COUNT(DISTINCT ?x)) LIMIT 1000" in *)
+	  (*	  let sparql = "SELECT DISTINCT ?class WHERE { ?x a ?class } GROUP BY ?class ORDER BY DESC(COUNT(DISTINCT ?x)) LIMIT 1000" in *)
 	  let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class } LIMIT 1000" in
 	  ajax_sparql_in [elt] endpoint sparql (fun results ->
 	    process elt results)))
@@ -1534,12 +1629,11 @@ object (self)
 	(html_count_unit (List.length prop_list) 1000 "property" "properties")
     in
     jquery "#list-properties" (fun elt ->
-(*      let sparql = "SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^ sparql_pattern (Var "prop") property_patterns ^ " } LIMIT 1000" in *)
       let sparql =
 	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^
-	  sparql_pattern (Var "prop") property_patterns ^
+	  sparql_constr (Var "prop") property_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] endpoint sparql (fun results ->
 	if results.length > 0
@@ -1567,7 +1661,7 @@ object (self)
 	    (insert_increment (dico_incrs#get (to_string (elt##id))))));
 	jquery_set_innerHTML "#count-classes"
 	  (html_count_unit (List.length class_index) max_classes "class" "classes")))
- 
+      
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
@@ -1630,9 +1724,7 @@ object (self)
 
   method refresh =
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string endpoint);
-    jquery_input "#pattern-terms" (fun input -> input##value <- string (String.concat " " term_patterns));
-    jquery_input "#pattern-classes" (fun input -> input##value <- string (String.concat " " class_patterns));
-    jquery_input "#pattern-properties" (fun input -> input##value <- string (String.concat " " property_patterns));
+    self#refresh_constrs;
     dico_foci <- new dico_foci;
     dico_incrs <- new dico_increments;
     self#refresh_lisql;
@@ -1683,33 +1775,44 @@ object (self)
   method is_home =
     focus = home_focus
 
-  method set_term_patterns lpat =
+  method set_term_constr constr =
     if not self#is_home
     then begin
-      term_patterns <- lpat;
+      Firebug.console##log(string "set_term_constr!");
+      term_constr <- constr;
       self#refresh
     end
 
-  method set_class_patterns lpat =
+  method set_class_constr constr =
     if self#is_home
     then begin
-      class_patterns <- lpat;
+      class_constr <- constr;
       self#refresh_class_increments_init
     end
 
-  method set_property_patterns lpat =
+  method set_property_constr constr =
     if self#is_home
     then begin
-      property_patterns <- lpat;
+      property_constr <- constr;
       self#refresh_property_increments_init
     end
 
-  method pattern_changed ~(input : Dom_html.inputElement t) ~(elt_list : Dom_html.element t) (k : string list -> unit) =
+  method pattern_changed
+    ~(select : Dom_html.selectElement t)
+    ~(input : Dom_html.inputElement t)
+    ~(elt_list : Dom_html.element t)
+    (k : constr -> unit)
+    =
+    let op = to_string (select##value) in
     let pat = to_string (input##value) in
     Firebug.console##log(string pat);
-    let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-    let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
-    let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
+    let constr = make_constr op pat in
+    let matcher = compile_constr constr in
+    (*
+      let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
+      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
+      let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
+    *)
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
       jquery_from elt_li ".URI, .Literal, .classURI, .propURI, .modifier" (fun elt_incr ->
@@ -1718,7 +1821,10 @@ object (self)
 	else elt_li##style##display <- string "none"));
     let n = String.length pat in
     if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
-    then k lpat
+    then begin
+      Firebug.console##log(string "pattern: no match, call k");
+      k constr
+    end
 
   method set_limit n =
     limit <- n;
@@ -1755,9 +1861,9 @@ object (self)
     {< endpoint = endpoint;
        focus = focus;
        offset = 0;
-       term_patterns = [];
-       class_patterns = [];
-       property_patterns = []; >}
+       term_constr = True;
+       class_constr = True;
+       property_constr = True; >}
 
 end
 
@@ -1828,16 +1934,17 @@ let _ =
 	history#change_endpoint url)));
 
     List.iter
-      (fun (sel_input, sel_list, k) ->
-	jquery_input sel_input (fun input ->
-	  jquery sel_list (fun elt_list ->
-	    (oninput
-	       (fun input ev -> history#present#pattern_changed ~input ~elt_list k)
-	       input))))
-      [("#pattern-terms", "#list-terms", (fun lpat -> history#present#set_term_patterns lpat));
-       ("#pattern-classes", "#list-classes", (fun lpat -> history#present#set_class_patterns lpat));
-       ("#pattern-properties", "#list-properties", (fun lpat -> history#present#set_property_patterns lpat));
-       ("#pattern-modifiers", "#list-modifiers", (fun lpat -> ()))];
+      (fun (sel_select, sel_input, sel_list, k) ->
+	jquery_select sel_select (fun select ->
+	  jquery_input sel_input (fun input ->
+	    jquery sel_list (fun elt_list ->
+	      (oninput
+		 (fun input ev -> history#present#pattern_changed ~select ~input ~elt_list k)
+		 input)))))
+      [("#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
+       ("#select-classes", "#pattern-classes", "#list-classes", (fun constr -> history#present#set_class_constr constr));
+       ("#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
+       ("#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
     
     jquery_all ".previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));

@@ -43,32 +43,59 @@
 
   <div id="increments">
     <div class="incr-box">
-      <input id="pattern-terms" class="pattern-incrs" type="text"
-	     title="Input keywords to filter terms, and trailing spaces to force loading more matches">
+      <div>
+	<select id="select-terms" class="select-incrs">
+	  <option value="matchesAll">matches all</option>
+	  <option value="matchesAny">matches any</option>
+	  <option value="higherThan">higher than</option>
+	  <option value="lowerThan">lower than</option>
+	  <option value="between">between</option>
+	</select>
+	<input id="pattern-terms" class="pattern-incrs" type="text"
+	       title="Input keywords to filter terms, and trailing spaces to force loading more matches">
+      </div>
       <div id="list-terms" class="list-incrs"
 	   title="Click a term to insert in the query at the focus">
       </div>
       <div id="count-terms" class="count-incrs">No terms</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-classes" class="pattern-incrs" type="text"
-	     title="Input keywords to filter classes, and trailing spaces to force loading more matches">
+      <div>
+	<select id="select-classes" class="select-incrs">
+	  <option value="matchesAll">matches all</option>
+	  <option value="matchesAny">matches any</option>
+	</select>
+	<input id="pattern-classes" class="pattern-incrs" type="text"
+	       title="Input keywords to filter classes, and trailing spaces to force loading more matches">
+      </div>
       <div id="list-classes" class="list-incrs"
 	   title="Click a class to insert in the query at the focus">
       </div>
       <div id="count-classes" class="count-incrs">No classes</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-properties" class="pattern-incrs" type="text"
-	     title="Input keywords to filter properties, and trailing spaces to force loading more matches">
+      <div>
+	<select id="select-properties" class="select-incrs">
+	  <option value="matchesAll">matches all</option>
+	  <option value="matchesAny">matches any</option>
+	</select>
+	<input id="pattern-properties" class="pattern-incrs" type="text"
+	       title="Input keywords to filter properties, and trailing spaces to force loading more matches">
+      </div>
       <div id="list-properties" class="list-incrs"
 	   title="Click a property to insert in the query at the focus">
       </div>
       <div id="count-properties" class="count-incrs">No properties</div>
     </div>
     <div class="incr-box">
-      <input id="pattern-modifiers" class="pattern-incrs" type="text"
-	     title="Input keywords to filter modifiers">
+      <div>
+	<select id="select-modifiers" class="select-incrs">
+	  <option value="matchesAll">matches all</option>
+	  <option value="matchesAny">matches any</option>
+	</select>
+	<input id="pattern-modifiers" class="pattern-incrs" type="text"
+	       title="Input keywords to filter modifiers">
+      </div>
       <div id="list-modifiers" class="list-incrs"
 	   title="Click a modifier to insert in the query at the focus">
       </div>
