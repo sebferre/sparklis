@@ -4,6 +4,8 @@ open XmlHttpRequest
 
 (* ------------------------ *)
 
+type uri = string
+
 let prefix_of_uri uri = (* for variable names *)
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) -> Regexp.matched_string res
@@ -24,6 +26,26 @@ let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PN
 
 (* ------------------------- *)
 
+type var = string
+
+type term =
+  | URI of uri
+  | Number of float * string * string (* value, string, datatype *)
+  | TypedLiteral of string * uri
+  | PlainLiteral of string * string
+  | Bnode of string
+  | Var of var
+
+let string_of_term = function
+  | URI uri -> uri
+  | Number (f,s,dt) -> s
+  | TypedLiteral (s,dt) -> s
+  | PlainLiteral (s,lang) -> s
+  | Bnode id -> id
+  | Var v -> v
+
+(* -------------------------- *)
+
 type constr =
   | True
   | MatchesAll of string list
@@ -31,7 +53,8 @@ type constr =
   | HigherThan of string
   | LowerThan of string
   | Between of string * string
-(* HasLang, HasDatatype *)
+  | HasLang of string
+  | HasDatatype of string
 
 let make_constr op pat =
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
@@ -45,6 +68,8 @@ let make_constr op pat =
       | "lowerThan", pat::_ -> LowerThan pat
       | "between", pat::[] -> HigherThan pat
       | "between", pat1::pat2::_ -> Between (pat1, pat2)
+      | "hasLang", pat::_ -> HasLang pat
+      | "hasDatatype", pat::_ -> HasDatatype pat
       | _ -> True
 
 let operator_of_constr = function
@@ -54,6 +79,8 @@ let operator_of_constr = function
   | HigherThan _ -> "higherThan"
   | LowerThan _ -> "lowerThan"
   | Between _ -> "between"
+  | HasLang _ -> "hasLang"
+  | HasDatatype _ -> "hasDatatype"
 
 let pattern_of_constr = function
   | True -> ""
@@ -62,39 +89,57 @@ let pattern_of_constr = function
   | HigherThan pat -> pat
   | LowerThan pat -> pat
   | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
+  | HasLang pat -> pat
+  | HasDatatype pat -> pat
 
-let compile_constr constr : string -> bool =
-  let leq s1 s2 =
-    try float_of_string s1 <= float_of_string s2
-    with _ -> s1 <= s2
+let compile_constr constr : term -> bool =
+  let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i" in
+  let matches s re = Regexp.search re s 0 <> None in
+  let leq t pat =
+    try
+      let f = float_of_string pat in
+      ( match t with
+	| Number (f2,_,_) -> f2 <= f
+	| _ -> (string_of_term t) <= pat )
+    with _ ->
+      (string_of_term t) <= pat
+  in
+  let geq t pat =
+    try
+      let f = float_of_string pat in
+      ( match t with
+	| Number (f2,_,_) -> f2 >= f
+	| _ -> (string_of_term t) >= pat )
+    with _ ->
+      (string_of_term t) >= pat
   in
   match constr with
-    | True -> (fun s -> true)
+    | True -> (fun t -> true)
     | MatchesAll lpat ->
-      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
-      (fun s -> List.for_all (fun re -> Regexp.search re s 0 <> None) lre)
+      let lre = List.map regexp_of_pat lpat in
+      (fun t -> List.for_all (fun re -> matches (string_of_term t) re) lre)
     | MatchesAny lpat ->
-      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
-      (fun s -> List.exists (fun re -> Regexp.search re s 0 <> None) lre)
+      let lre = List.map regexp_of_pat lpat in
+      (fun t -> List.exists (fun re -> matches (string_of_term t) re) lre)
     | HigherThan pat ->
-      (fun s -> leq pat s)
+      (fun t -> geq t pat)
     | LowerThan pat ->
-      (fun s -> leq s pat)
+      (fun t -> leq t pat)
     | Between (pat1,pat2) ->
-      (fun s -> leq pat1 s && leq s pat2)
+      (fun t -> geq t pat1 && leq t pat2)
+    | HasLang pat ->
+      let re = regexp_of_pat pat in
+      (function
+	| PlainLiteral (s,lang) -> matches lang re
+	| _ -> false)
+    | HasDatatype pat ->
+      let re = regexp_of_pat pat in
+      (function
+	| Number (_,s,dt)
+	| TypedLiteral (s,dt) -> matches dt re
+	| _ -> false)
 
 (* ------------------------- *)
-
-type uri = string
-type var = string
-
-type term =
-  | URI of uri
-  | Number of float * string * string (* value, string, datatype *)
-  | TypedLiteral of string * uri
-  | PlainLiteral of string * string
-  | Bnode of string
-  | Var of var
 
 type order = Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
@@ -218,31 +263,33 @@ let sparql_empty = ""
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
 
-let sparql_comp relop t pat =
+let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
+let sparql_expr_regex expr pat =
+  "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
+let sparql_expr_comp relop t pat =
   if (try ignore (float_of_string pat); true with _ -> false)
   then String.concat " " [sparql_term t; relop; pat]
   else String.concat " " ["str(" ^ sparql_term t ^ ")"; relop; "\"" ^ String.escaped pat ^ "\""]
 
+let sparql_filter expr = "FILTER(" ^ expr ^ ")"
 let sparql_constr t = function
   | True -> sparql_empty
   | MatchesAll lpat ->
-    let lfilter =
-      List.map
-	(fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
-	lpat in
-    "FILTER (" ^ String.concat " && " lfilter ^ ")"
+    let lfilter = List.map (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat) lpat in
+    sparql_filter (String.concat " && " lfilter)
   | MatchesAny lpat ->
-    let lfilter =
-      List.map
-	(fun pat -> "REGEX(str(" ^ sparql_term t ^ "), \"" ^ pat ^ "\",'i')")
-	lpat in
-    "FILTER (" ^ String.concat " || " lfilter ^ ")"
+    let lfilter = List.map (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat) lpat in
+    sparql_filter (String.concat " || " lfilter)
   | HigherThan pat ->
-    "FILTER (" ^ sparql_comp ">=" t pat ^ ")"
+    sparql_filter (sparql_expr_comp ">=" t pat)
   | LowerThan pat ->
-    "FILTER (" ^ sparql_comp "<=" t pat ^ ")"
+    sparql_filter (sparql_expr_comp "<=" t pat)
   | Between (pat1,pat2) ->
-    "FILTER (" ^ sparql_comp ">=" t pat1 ^ " && " ^ sparql_comp "<=" t pat2 ^ ")"
+    sparql_filter (sparql_expr_comp ">=" t pat1 ^ " && " ^ sparql_expr_comp "<=" t pat2)
+  | HasLang pat ->
+    sparql_filter (sparql_expr_func "isLiteral" (sparql_term t) ^ " && " ^ sparql_expr_regex (sparql_expr_func "lang" (sparql_term t)) pat)
+  | HasDatatype pat ->
+    sparql_filter (sparql_expr_func "isLiteral" (sparql_term t) ^ " && " ^ sparql_expr_regex (sparql_expr_func "str" (sparql_expr_func "datatype" (sparql_term t))) pat)
 
 let sparql_join lgp =
   String.concat "\n"
@@ -788,6 +835,16 @@ type increment =
   | IncrMaybe
   | IncrNot
   | IncrModifS2 of modif_s2
+
+let term_of_increment : increment -> term option = function
+  | IncrTerm t -> Some t
+  | IncrClass c -> Some (URI c)
+  | IncrProp p -> Some (URI p)
+  | IncrInvProp p -> Some (URI p)
+  | IncrOr -> None
+  | IncrMaybe -> None
+  | IncrNot -> None
+  | IncrModifS2 modif -> None
 
 let insert_term t focus =
   let focus2_opt =
@@ -1808,17 +1865,28 @@ object (self)
     Firebug.console##log(string pat);
     let constr = make_constr op pat in
     let matcher = compile_constr constr in
-    (*
-      let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-      let lre = List.map (fun pat -> Regexp.regexp_with_flag (Regexp.quote pat) "i") lpat in
-      let matcher s = List.for_all (fun re -> Regexp.search re s 0 <> None) lre in
-    *)
     let there_is_match = ref false in
+    jquery_all_from elt_list "li" (fun elt_li ->
+      jquery_from elt_li ".increment" (fun elt_incr ->
+	let incr = dico_incrs#get (to_string (elt_incr##id)) in
+	let t =
+	  match term_of_increment incr with
+	    | Some t -> t
+	    | None ->
+	      let s = Opt.case (elt_incr##querySelector(string ".modifier"))
+		(fun () -> to_string (elt_incr##innerHTML))
+		(fun elt -> to_string (elt##innerHTML)) in
+	      PlainLiteral (s, "") in
+	if matcher t
+	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
+	else elt_li##style##display <- string "none"));
+(*
     jquery_all_from elt_list "li" (fun elt_li ->
       jquery_from elt_li ".URI, .Literal, .classURI, .propURI, .modifier" (fun elt_incr ->
 	if matcher (to_string elt_incr##innerHTML)
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"));
+*)
     let n = String.length pat in
     if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
     then begin
