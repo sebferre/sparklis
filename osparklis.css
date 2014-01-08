@@ -28,9 +28,15 @@ color:darkred;
 text-align:right;
 }
 
+#sparql-endpoint-input
+{
+width:300px;
+}
+
 #lisql
 {
 margin:10px;
+font-weight:bold;
 }
 
 #current-focus
@@ -75,7 +81,12 @@ margin:0px;
 
 .pattern-incrs
 {
-width:inherit;
+width:180px;
+}
+
+#pattern-terms
+{
+width:130px;
 }
 
 .list-incrs

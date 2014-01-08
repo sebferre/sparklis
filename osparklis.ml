@@ -281,7 +281,10 @@ let sparql_uri uri =
 
 let sparql_var v = "?" ^ v
 
-let sparql_string s = "\"" ^ String.escaped s ^ "\""
+let sparql_string s =
+  if String.contains s '\n' || String.contains s '"'
+  then "\"\"\"" ^ s ^ "\"\"\""
+  else "\"" ^ s ^ "\""
 
 let rec sparql_term = function
   | URI uri -> sparql_uri uri
@@ -571,6 +574,12 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
+let html_literal s = html_span ~classe:"Literal" s
+let html_uri uri = html_span ~classe:"URI" ~title:uri (name_of_uri uri)
+let html_class c = html_span ~classe:"classURI" ~title:c (name_of_uri c)
+let html_prop p = html_span ~classe:"propURI" ~title:p (name_of_uri p)
+let html_modifier m = html_span ~classe:"modifier" m
+
 let rec html_term ?(link = false) = function
   | URI uri ->
     (*if uri_is_image uri (* too heavy loading *)
@@ -579,19 +588,14 @@ let rec html_term ?(link = false) = function
       then html_a uri (html_img uri)
       else html_img ~height:60 uri
     else*)
-      let name = name_of_uri uri in
       if link
-      then html_a uri name
-      else html_span ~classe:"URI" ~title:uri name
+      then html_a uri (name_of_uri uri)
+      else html_uri uri
   | Number (f,s,dt) -> html_term ~link (TypedLiteral (s,dt))
-  | TypedLiteral (s,dt) -> html_span ~classe:"Literal" s ^ " (" ^ name_of_uri dt ^ ")"
-  | PlainLiteral (s,lang) -> html_span ~classe:"Literal" s ^ (if lang="" then "" else " (" ^ lang ^ ")")
+  | TypedLiteral (s,dt) -> html_literal s ^ " (" ^ name_of_uri dt ^ ")"
+  | PlainLiteral (s,lang) -> html_literal s ^ (if lang="" then "" else " (" ^ lang ^ ")")
   | Bnode id -> "_:" ^ id
   | Var v -> "?" ^ v
-let html_class c =
-  html_span ~classe:"classURI" ~title:c (name_of_uri c)
-let html_prop p =
-  html_span ~classe:"propURI" ~title:p (name_of_uri p)
 
 let html_is_a c = "is a " ^ html_class c
 let html_has p np = "has " ^ html_prop p ^ " " ^ np
@@ -606,11 +610,11 @@ let html_and ar_html =
 let html_or ar_html =
   let html = ref ("<ul class=\"list-or\"><li>" ^ ar_html.(0) ^ "</li>") in
   for i=1 to Array.length ar_html - 1 do
-    html := !html ^ " <li>" ^ html_span ~classe:"modifier" "or" ^ " " ^ ar_html.(i) ^ "</li>"
+    html := !html ^ " <li>" ^ html_modifier "or" ^ " " ^ ar_html.(i) ^ "</li>"
   done;
   !html ^ "</ul>"
-let html_maybe html = html_span ~classe:"modifier" "optionally" ^ " " ^ html
-let html_not html = html_span ~classe:"modifier" "not" ^ " " ^ html
+let html_maybe html = html_modifier "optionally" ^ " " ^ html
+let html_not html = html_modifier "not" ^ " " ^ html
 let html_is_there = "..."
 
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
@@ -640,16 +644,16 @@ let rec html_of_elt_p1 dico ctx hl f =
   html_focus dico (AtP1 (f,ctx)) hl html
 and html_constr = function
   | True -> html_is_there
-  | MatchesAll lpat -> "matches " ^ String.concat ", " lpat
-  | MatchesAny lpat -> "matches any of " ^ String.concat ", " lpat
-  | After pat -> "is after " ^ pat
-  | Before pat -> "is before " ^ pat
-  | FromTo (pat1,pat2) -> "is from " ^ pat1 ^ " to " ^ pat2
-  | HigherThan pat -> "is higher than " ^ pat
-  | LowerThan pat -> "is lower than " ^ pat
-  | Between (pat1, pat2) -> "is between " ^ pat1 ^ " and " ^ pat2
-  | HasLang pat -> "has a language matching " ^ pat
-  | HasDatatype pat -> "has a datatype matching " ^ pat
+  | MatchesAll lpat -> String.concat " " [html_modifier "matches"; String.concat ", " (List.map html_literal lpat)]
+  | MatchesAny lpat -> String.concat " " [html_modifier "matches any"; "of"; String.concat ", " (List.map html_literal lpat)]
+  | After pat -> String.concat " " ["is"; html_modifier "after"; html_literal pat]
+  | Before pat -> String.concat " " ["is"; html_modifier "before"; html_literal pat]
+  | FromTo (pat1,pat2) -> String.concat " " ["is"; html_modifier "from"; html_literal pat1; html_modifier "to"; html_literal pat2]
+  | HigherThan pat -> String.concat " " ["is"; html_modifier "higher than"; html_literal pat]
+  | LowerThan pat -> String.concat " " ["is"; html_modifier "lower than"; html_literal pat]
+  | Between (pat1, pat2) -> String.concat " " ["is"; html_modifier "between"; html_literal pat1; "and"; html_literal pat2]
+  | HasLang pat -> String.concat " " ["has a"; html_modifier "language matching"; html_literal pat]
+  | HasDatatype pat -> String.concat " " ["has a"; html_modifier "datatype matching"; html_literal pat]
 and html_of_elt_s1 dico ctx hl f =
   let html =
     match f with
@@ -671,22 +675,22 @@ and html_of_modif_s2_noun modif noun =
   match modif with
     | Id -> "a " ^ noun
 (* (if noun <> "" && List.mem noun.[0] ['a';'e';'i';'o';'u';'A';'E';'I';'O';'U'] then "an " else "a ") ^ noun *)
-    | Any -> html_span ~classe:"modifier" "any" ^ " " ^ noun
+    | Any -> html_modifier "any" ^ " " ^ noun
     | Aggreg (order_opt, g) -> html_order_opt order_opt (html_aggreg g noun)
     | Order o -> html_order_opt (Some o) noun
 and html_aggreg g noun =
   match g with
-    | NumberOf -> html_span ~classe:"modifier" "number" ^ " of " ^ noun
-    | ListOf -> html_span ~classe:"modifier" "list" ^ " of " ^ noun
-    | Total -> html_span ~classe:"modifier" "total" ^ " " ^ noun
-    | Average -> html_span ~classe:"modifier" "average" ^ " " ^ noun
-    | Maximum -> html_span ~classe:"modifier" "maximum" ^ " " ^ noun
-    | Minimum -> html_span ~classe:"modifier" "minimum" ^ " " ^ noun
+    | NumberOf -> html_modifier "number" ^ " of " ^ noun
+    | ListOf -> html_modifier "list" ^ " of " ^ noun
+    | Total -> html_modifier "total" ^ " " ^ noun
+    | Average -> html_modifier "average" ^ " " ^ noun
+    | Maximum -> html_modifier "maximum" ^ " " ^ noun
+    | Minimum -> html_modifier "minimum" ^ " " ^ noun
 and html_order_opt order_opt noun =
   match order_opt with
     | None -> "a " ^ noun
-    | Some Highest -> "the " ^ html_span ~classe:"modifier" "highest" ^ " " ^ noun
-    | Some Lowest -> "the " ^ html_span ~classe:"modifier" "lowest" ^ " " ^ noun
+    | Some Highest -> "the " ^ html_modifier "highest" ^ " " ^ noun
+    | Some Lowest -> "the " ^ html_modifier "lowest" ^ " " ^ noun
 and html_of_elt_s dico hl = function
   | Return np -> html_return (html_of_elt_s1 dico ReturnX hl np)
 

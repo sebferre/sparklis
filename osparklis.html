@@ -44,7 +44,8 @@
   <div id="increments">
     <div class="incr-box">
       <div>
-	<select id="select-terms" class="select-incrs">
+	<select id="select-terms" class="select-incrs"
+		title="Select a filtering operator">
 	  <option value="matchesAll">matches all</option>
 	  <option value="matchesAny">matches any</option>
 	  <option value="after">after</option>
@@ -58,7 +59,10 @@
 	</select>
 	<input id="pattern-terms" class="pattern-incrs" type="text"
 	       title="Input keywords to filter terms, and trailing spaces to force loading more matches">
-	<button id="button-terms">OK</button>
+	<button id="button-terms"
+		title="Click this button to insert this filter in the query at the focus">
+	  OK
+	</button>
       </div>
       <div id="list-terms" class="list-incrs"
 	   title="Click a term to insert in the query at the focus">
@@ -145,7 +149,7 @@
   </div>
 
   <footer>
-    <p>Created by Sébastien Ferré © 2013</p>
+    <p>Created by Sébastien Ferré, IRISA/Université Rennes 1 © 2013</p>
     <p>Visit <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
   </footer>
 </body>
