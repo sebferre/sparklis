@@ -48,8 +48,9 @@ let float_of_term = function
   | Number (f,_,_) -> f
   | _ -> invalid_arg "float_of_term"
 
-let string_is_float s =
-  try ignore (float_of_string s); true with _ -> false
+let string_is_float =
+  let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
+  (fun s -> Regexp.string_match re s 0 <> None)
 
 (* -------------------------- *)
 
@@ -78,10 +79,22 @@ let make_constr op pat =
       | "before", pat::_ -> Before pat
       | "fromTo", pat1::[] -> After pat1
       | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
-      | "higherThan", pat::_ when string_is_float pat -> HigherThan pat
-      | "lowerThan", pat::_ when string_is_float pat -> LowerThan pat
-      | "between", pat::[] when string_is_float pat -> HigherThan pat
-      | "between", pat1::pat2::_ when string_is_float pat1 && string_is_float pat2 -> Between (pat1, pat2)
+      | "higherThan", pat::_ ->
+	if string_is_float pat 
+	then HigherThan pat
+	else invalid_arg "a numeric value is expected"
+      | "lowerThan", pat::_ ->
+	if string_is_float pat
+	then LowerThan pat
+	else invalid_arg "a numeric value is expected"
+      | "between", pat::[] ->
+	if string_is_float pat
+	then HigherThan pat
+	else invalid_arg "a numeric value is expected"
+      | "between", pat1::pat2::_ ->
+	if string_is_float pat1 && string_is_float pat2
+	then Between (pat1, pat2)
+	else invalid_arg "two numeric values are expected"
       | "hasLang", pat::_ -> HasLang pat
       | "hasDatatype", pat::_ -> HasDatatype pat
       | _ -> True
@@ -1902,23 +1915,24 @@ object (self)
     let op = to_string (select##value) in
     let pat = to_string (input##value) in
     Firebug.console##log(string pat);
-    let constr = make_constr op pat in
-    let matcher = compile_constr constr in
-    let there_is_match = ref false in
-    jquery_all_from elt_list "li" (fun elt_li ->
-      jquery_from elt_li ".increment" (fun elt_incr ->
-	let incr = dico_incrs#get (to_string (elt_incr##id)) in
-	let t =
-	  match term_of_increment incr with
-	    | Some t -> t
-	    | None ->
-	      let s = Opt.case (elt_incr##querySelector(string ".modifier"))
-		(fun () -> to_string (elt_incr##innerHTML))
-		(fun elt -> to_string (elt##innerHTML)) in
-	      PlainLiteral (s, "") in
-	if matcher t
-	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
-	else elt_li##style##display <- string "none"));
+    try
+      let constr = make_constr op pat in
+      let matcher = compile_constr constr in
+      let there_is_match = ref false in
+      jquery_all_from elt_list "li" (fun elt_li ->
+	jquery_from elt_li ".increment" (fun elt_incr ->
+	  let incr = dico_incrs#get (to_string (elt_incr##id)) in
+	  let t =
+	    match term_of_increment incr with
+	      | Some t -> t
+	      | None ->
+		let s = Opt.case (elt_incr##querySelector(string ".modifier"))
+		  (fun () -> to_string (elt_incr##innerHTML))
+		  (fun elt -> to_string (elt##innerHTML)) in
+		PlainLiteral (s, "") in
+	  if matcher t
+	  then begin elt_li##style##display <- string "list-item"; there_is_match := true end
+	  else elt_li##style##display <- string "none"));
 (*
     jquery_all_from elt_list "li" (fun elt_li ->
       jquery_from elt_li ".URI, .Literal, .classURI, .propURI, .modifier" (fun elt_incr ->
@@ -1926,12 +1940,14 @@ object (self)
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"));
 *)
-    let n = String.length pat in
-    if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
-    then begin
-      Firebug.console##log(string "pattern: no match, call k");
-      k constr
-    end
+      let n = String.length pat in
+      if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
+      then begin
+	Firebug.console##log(string "pattern: no match, call k");
+	k constr
+      end
+    with Invalid_argument msg -> ()
+(*      Dom_html.window##alert(string ("Invalid filter: " ^ msg)) *)
 
   method set_limit n =
     limit <- n;
@@ -2045,9 +2061,16 @@ let _ =
 	jquery_input "#pattern-terms" (fun input ->
 	  let op = to_string (select##value) in
 	  let pat = to_string (input##value) in
-	  let constr = make_constr op pat in
-	  history#update_focus ~push_in_history:true
-	    (insert_elt_p1 (Constr constr))))));
+	  try
+	    let constr = make_constr op pat in
+	    if constr = True
+	    then
+	      Dom_html.window##alert(string "Invalid filter")
+	    else
+	      history#update_focus ~push_in_history:true
+		(insert_elt_p1 (Constr constr))
+	  with Invalid_argument msg ->
+	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
     List.iter
       (fun (sel_select, sel_input, sel_list, k) ->
 	jquery_select sel_select (fun select ->
