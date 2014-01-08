@@ -44,12 +44,22 @@ let string_of_term = function
   | Bnode id -> id
   | Var v -> v
 
+let float_of_term = function
+  | Number (f,_,_) -> f
+  | _ -> invalid_arg "float_of_term"
+
+let string_is_float s =
+  try ignore (float_of_string s); true with _ -> false
+
 (* -------------------------- *)
 
 type constr =
   | True
   | MatchesAll of string list
   | MatchesAny of string list
+  | After of string
+  | Before of string
+  | FromTo of string * string
   | HigherThan of string
   | LowerThan of string
   | Between of string * string
@@ -64,10 +74,14 @@ let make_constr op pat =
     match op, lpat with
       | "matchesAll", _ -> MatchesAll lpat
       | "matchesAny", _ -> MatchesAny lpat
-      | "higherThan", pat::_ -> HigherThan pat
-      | "lowerThan", pat::_ -> LowerThan pat
-      | "between", pat::[] -> HigherThan pat
-      | "between", pat1::pat2::_ -> Between (pat1, pat2)
+      | "after", pat::_ -> After pat
+      | "before", pat::_ -> Before pat
+      | "fromTo", pat1::[] -> After pat1
+      | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
+      | "higherThan", pat::_ when string_is_float pat -> HigherThan pat
+      | "lowerThan", pat::_ when string_is_float pat -> LowerThan pat
+      | "between", pat::[] when string_is_float pat -> HigherThan pat
+      | "between", pat1::pat2::_ when string_is_float pat1 && string_is_float pat2 -> Between (pat1, pat2)
       | "hasLang", pat::_ -> HasLang pat
       | "hasDatatype", pat::_ -> HasDatatype pat
       | _ -> True
@@ -76,6 +90,9 @@ let operator_of_constr = function
   | True -> "matchesAll"
   | MatchesAll _ -> "matchesAll"
   | MatchesAny _ -> "matchesAny"
+  | After _ -> "after"
+  | Before _ -> "before"
+  | FromTo _ -> "fromTo"
   | HigherThan _ -> "higherThan"
   | LowerThan _ -> "lowerThan"
   | Between _ -> "between"
@@ -86,6 +103,9 @@ let pattern_of_constr = function
   | True -> ""
   | MatchesAll lpat -> String.concat " " lpat
   | MatchesAny lpat -> String.concat " " lpat
+  | After pat -> pat
+  | Before pat -> pat
+  | FromTo (pat1,pat2) -> pat1 ^ " " ^ pat2
   | HigherThan pat -> pat
   | LowerThan pat -> pat
   | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
@@ -95,32 +115,28 @@ let pattern_of_constr = function
 let compile_constr constr : term -> bool =
   let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i" in
   let matches s re = Regexp.search re s 0 <> None in
-  let leq t pat =
-    try
-      let f = float_of_string pat in
-      ( match t with
-	| Number (f2,_,_) -> f2 <= f
-	| _ -> (string_of_term t) <= pat )
-    with _ ->
-      (string_of_term t) <= pat
-  in
-  let geq t pat =
-    try
-      let f = float_of_string pat in
-      ( match t with
-	| Number (f2,_,_) -> f2 >= f
-	| _ -> (string_of_term t) >= pat )
-    with _ ->
-      (string_of_term t) >= pat
-  in
+  let leq t pat = try (float_of_term t) <= (float_of_string pat) with _ -> false in
+  let geq t pat = try (float_of_term t) >= (float_of_string pat) with _ -> false in
   match constr with
     | True -> (fun t -> true)
     | MatchesAll lpat ->
       let lre = List.map regexp_of_pat lpat in
-      (fun t -> List.for_all (fun re -> matches (string_of_term t) re) lre)
+      (fun t ->
+	let s = string_of_term t in
+	List.for_all (fun re -> matches s re) lre)
     | MatchesAny lpat ->
       let lre = List.map regexp_of_pat lpat in
-      (fun t -> List.exists (fun re -> matches (string_of_term t) re) lre)
+      (fun t ->
+	let s = string_of_term t in
+	List.exists (fun re -> matches s re) lre)
+    | After pat ->
+      (fun t -> (string_of_term t) >= pat)
+    | Before pat ->
+      (fun t -> (string_of_term t) <= pat)
+    | FromTo (pat1,pat2) ->
+      (fun t ->
+	let s = string_of_term t in
+	pat1 <= s && s <= pat2)
     | HigherThan pat ->
       (fun t -> geq t pat)
     | LowerThan pat ->
@@ -150,6 +166,7 @@ type elt_p1 =
   | Type of uri
   | Has of uri * elt_s1
   | IsOf of uri * elt_s1
+  | Constr of constr
   | And of elt_p1 array
   | Or of elt_p1 array
   | Maybe of elt_p1
@@ -251,11 +268,13 @@ let sparql_uri uri =
 
 let sparql_var v = "?" ^ v
 
+let sparql_string s = "\"" ^ String.escaped s ^ "\""
+
 let rec sparql_term = function
   | URI uri -> sparql_uri uri
   | Number (f,s,dt) -> sparql_term (TypedLiteral (s,dt))
-  | TypedLiteral (s,dt) -> "\"" ^ s ^ "\"^^" ^ sparql_uri dt
-  | PlainLiteral (s,lang) -> "\"" ^ s ^ "\"" ^ (if lang = "" then "" else "@" ^ lang)
+  | TypedLiteral (s,dt) -> sparql_string s ^ "^^" ^ sparql_uri dt
+  | PlainLiteral (s,lang) -> sparql_string s ^ (if lang = "" then "" else "@" ^ lang)
   | Bnode name -> "_:" ^ name
   | Var v -> sparql_var v
 
@@ -264,12 +283,8 @@ let sparql_empty = ""
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
 
 let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
-let sparql_expr_regex expr pat =
-  "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
-let sparql_expr_comp relop t pat =
-  if (try ignore (float_of_string pat); true with _ -> false)
-  then String.concat " " [sparql_term t; relop; pat]
-  else String.concat " " ["str(" ^ sparql_term t ^ ")"; relop; "\"" ^ String.escaped pat ^ "\""]
+let sparql_expr_regex expr pat = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
+let sparql_expr_comp relop expr1 expr2 = expr1 ^ " " ^ relop ^ " " ^ expr2
 
 let sparql_filter expr = "FILTER(" ^ expr ^ ")"
 let sparql_constr t = function
@@ -280,12 +295,21 @@ let sparql_constr t = function
   | MatchesAny lpat ->
     let lfilter = List.map (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat) lpat in
     sparql_filter (String.concat " || " lfilter)
+  | After pat ->
+    sparql_filter (sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat))
+  | Before pat ->
+    sparql_filter (sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat))
+  | FromTo (pat1,pat2) ->
+    sparql_filter
+      ((sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat1)) ^
+	  " && " ^
+	  (sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat2)))
   | HigherThan pat ->
-    sparql_filter (sparql_expr_comp ">=" t pat)
+    sparql_filter (sparql_expr_comp ">=" (sparql_term t) pat)
   | LowerThan pat ->
-    sparql_filter (sparql_expr_comp "<=" t pat)
+    sparql_filter (sparql_expr_comp "<=" (sparql_term t) pat)
   | Between (pat1,pat2) ->
-    sparql_filter (sparql_expr_comp ">=" t pat1 ^ " && " ^ sparql_expr_comp "<=" t pat2)
+    sparql_filter (sparql_expr_comp ">=" (sparql_term t) pat1 ^ " && " ^ sparql_expr_comp "<=" (sparql_term t) pat2)
   | HasLang pat ->
     sparql_filter (sparql_expr_func "isLiteral" (sparql_term t) ^ " && " ^ sparql_expr_regex (sparql_expr_func "lang" (sparql_term t)) pat)
   | HasDatatype pat ->
@@ -338,6 +362,7 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (term -> string) = function
   | Type c -> (fun x -> sparql_triple x "a" (URI c))
   | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y p x))
+  | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
     (fun x ->
       sparql_join
@@ -591,7 +616,8 @@ let rec html_of_elt_p1 dico ctx hl f =
     match f with
       | Type c -> html_is_a c
       | Has (p,np) -> html_has p (html_of_elt_s1 dico (HasX (p,ctx)) hl np)
-      | IsOf (p,np) -> html_is_of p (html_of_elt_s1 dico (IsOfX (p,ctx)) hl np) 
+      | IsOf (p,np) -> html_is_of p (html_of_elt_s1 dico (IsOfX (p,ctx)) hl np)
+      | Constr constr -> html_constr constr
       | And ar -> html_and (Array.mapi (fun i elt -> html_of_elt_p1 dico (AndX (i,ar,ctx)) hl elt) ar)
       | Or ar -> html_or (Array.mapi (fun i elt -> html_of_elt_p1 dico (OrX (i,ar,ctx)) hl elt) ar)
       | Maybe elt -> html_maybe (html_of_elt_p1 dico (MaybeX ctx) hl elt)
@@ -599,6 +625,18 @@ let rec html_of_elt_p1 dico ctx hl f =
       | IsThere -> html_is_there
   in
   html_focus dico (AtP1 (f,ctx)) hl html
+and html_constr = function
+  | True -> html_is_there
+  | MatchesAll lpat -> "matches " ^ String.concat ", " lpat
+  | MatchesAny lpat -> "matches any of " ^ String.concat ", " lpat
+  | After pat -> "is after " ^ pat
+  | Before pat -> "is before " ^ pat
+  | FromTo (pat1,pat2) -> "is from " ^ pat1 ^ " to " ^ pat2
+  | HigherThan pat -> "is higher than " ^ pat
+  | LowerThan pat -> "is lower than " ^ pat
+  | Between (pat1, pat2) -> "is between " ^ pat1 ^ " and " ^ pat2
+  | HasLang pat -> "has a language matching " ^ pat
+  | HasDatatype pat -> "has a datatype matching " ^ pat
 and html_of_elt_s1 dico ctx hl f =
   let html =
     match f with
@@ -740,6 +778,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Type _ -> None
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
   | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
+  | Constr _ -> None
   | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
   | Or ar -> Some (AtP1 (ar.(0), OrX (0,ar,ctx)))
   | Maybe elt -> Some (AtP1 (elt, MaybeX ctx))
@@ -1419,7 +1458,7 @@ let direct_ajax_sparql (endpoint : string) (sparql : string) (k : sparql_results
 		  Firebug.console##log(string "No XML content");
 		  ()
 		| Some results -> k results )
-	    | _ ->
+	    | _ -> (* TODO: call aborting function: k -> success/failure *)
 	      Firebug.console##log(string ("SPARQL request unsuccessful: code " ^ string_of_int code)))
         | _ -> ()));
   let encode_fields l =
@@ -2001,6 +2040,14 @@ let _ =
 	let url = to_string (input##value) in
 	history#change_endpoint url)));
 
+    jquery "#button-terms" (onclick (fun elt ev ->
+      jquery_select "#select-terms" (fun select ->
+	jquery_input "#pattern-terms" (fun input ->
+	  let op = to_string (select##value) in
+	  let pat = to_string (input##value) in
+	  let constr = make_constr op pat in
+	  history#update_focus ~push_in_history:true
+	    (insert_elt_p1 (Constr constr))))));
     List.iter
       (fun (sel_select, sel_input, sel_list, k) ->
 	jquery_select sel_select (fun select ->

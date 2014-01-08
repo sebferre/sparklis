@@ -47,6 +47,9 @@
 	<select id="select-terms" class="select-incrs">
 	  <option value="matchesAll">matches all</option>
 	  <option value="matchesAny">matches any</option>
+	  <option value="after">after</option>
+	  <option value="before">before</option>
+	  <option value="fromTo">from to</option>
 	  <option value="higherThan">higher than</option>
 	  <option value="lowerThan">lower than</option>
 	  <option value="between">between</option>
@@ -55,6 +58,7 @@
 	</select>
 	<input id="pattern-terms" class="pattern-incrs" type="text"
 	       title="Input keywords to filter terms, and trailing spaces to force loading more matches">
+	<button id="button-terms">OK</button>
       </div>
       <div id="list-terms" class="list-incrs"
 	   title="Click a term to insert in the query at the focus">
