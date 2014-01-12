@@ -1533,18 +1533,24 @@ let rec ajax_sparql_list endpoint sparql_list k1 k0 =
 
 let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> (int -> unit) -> unit) (k1 : 'a -> unit) (k0 : int -> unit) : unit =
   List.iter (* setting progress cursor *)
-    (fun elt -> elt##style##cursor <- string "progress")
+    (fun elt ->
+      elt##style##cursor <- string "progress";
+      elt##style##opacity <- def (string "0.5"))
     elts;
   main
     (fun x ->
       k1 x;
       List.iter (* restoring default cursor *)
-	(fun elt -> elt##style##cursor <- string "default")
+	(fun elt ->
+	  elt##style##cursor <- string "default";
+	  elt##style##opacity <- def (string "1"))
 	elts)
     (fun code ->
       k0 code;
       List.iter (* restoring default cursor *)
-	(fun elt -> elt##style##cursor <- string "default")
+	(fun elt ->
+	  elt##style##cursor <- string "default";
+	  elt##style##opacity <- def (string "1"))
 	elts)
 
 let ajax_sparql_in elts endpoint sparql k1 k0 =
@@ -1898,22 +1904,24 @@ object (self)
 	    self#refresh_modifier_increments )
       | Some sparql ->
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	ajax_sparql_in [Dom_html.document##documentElement] endpoint sparql
-	  (fun res ->
-	    results <- res;
-	    self#refresh_extension;
-	    ( match focus_term_opt with
-	      | None -> ()
-	      | Some t ->
-		self#define_focus_term_index;
-		self#refresh_term_increments;
-		self#refresh_class_increments;
-		self#refresh_property_increments;
-		self#refresh_modifier_increments ))
-	  (fun code ->
-	    results <- empty_results;
-	    self#refresh_extension);
-	() )
+	jquery "#increments" (fun elt_incrs ->
+	  jquery "#results" (fun elt_res ->
+	    ajax_sparql_in [elt_incrs; elt_res] (*Dom_html.document##documentElement*) endpoint sparql
+	      (fun res ->
+		results <- res;
+		self#refresh_extension;
+		( match focus_term_opt with
+		  | None -> ()
+		  | Some t ->
+		    self#define_focus_term_index;
+		    self#refresh_term_increments;
+		    self#refresh_class_increments;
+		    self#refresh_property_increments;
+		    self#refresh_modifier_increments ))
+	      (fun code ->
+		results <- empty_results;
+		self#refresh_extension);
+	    () )))
 
   method is_home =
     focus = home_focus
