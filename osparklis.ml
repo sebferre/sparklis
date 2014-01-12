@@ -302,34 +302,49 @@ let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
 let sparql_expr_regex expr pat = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
 let sparql_expr_comp relop expr1 expr2 = expr1 ^ " " ^ relop ^ " " ^ expr2
 
-let sparql_filter expr = "FILTER(" ^ expr ^ ")"
+let sparql_filter lexpr = "FILTER(" ^ String.concat " && " lexpr ^ ")"
 let sparql_constr t = function
   | True -> sparql_empty
   | MatchesAll lpat ->
-    let lfilter = List.map (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat) lpat in
-    sparql_filter (String.concat " && " lfilter)
+    sparql_filter
+      (List.map
+	 (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat)
+	 lpat)
   | MatchesAny lpat ->
-    let lfilter = List.map (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat) lpat in
-    sparql_filter (String.concat " || " lfilter)
+    sparql_filter
+      [String.concat " || "
+	  (List.map
+	     (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat)
+	     lpat) ]
   | After pat ->
-    sparql_filter (sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat))
+    sparql_filter [sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat)]
   | Before pat ->
-    sparql_filter (sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat))
+    sparql_filter [sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat)]
   | FromTo (pat1,pat2) ->
     sparql_filter
-      ((sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat1)) ^
-	  " && " ^
-	  (sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat2)))
+      [sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat1);
+       sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat2)]
   | HigherThan pat ->
-    sparql_filter (sparql_expr_comp ">=" (sparql_term t) pat)
+    sparql_filter
+      [sparql_expr_func "isNumeric" (sparql_term t);
+       sparql_expr_comp ">=" (sparql_term t) pat]
   | LowerThan pat ->
-    sparql_filter (sparql_expr_comp "<=" (sparql_term t) pat)
+    sparql_filter
+      [sparql_expr_func "isNumeric" (sparql_term t);
+       sparql_expr_comp "<=" (sparql_term t) pat]
   | Between (pat1,pat2) ->
-    sparql_filter (sparql_expr_comp ">=" (sparql_term t) pat1 ^ " && " ^ sparql_expr_comp "<=" (sparql_term t) pat2)
+    sparql_filter
+      [sparql_expr_func "isNumeric" (sparql_term t);
+       sparql_expr_comp ">=" (sparql_term t) pat1;
+       sparql_expr_comp "<=" (sparql_term t) pat2]
   | HasLang pat ->
-    sparql_filter (sparql_expr_func "isLiteral" (sparql_term t) ^ " && " ^ sparql_expr_regex (sparql_expr_func "lang" (sparql_term t)) pat)
+    sparql_filter
+      [sparql_expr_func "isLiteral" (sparql_term t);
+       sparql_expr_regex (sparql_expr_func "lang" (sparql_term t)) pat]
   | HasDatatype pat ->
-    sparql_filter (sparql_expr_func "isLiteral" (sparql_term t) ^ " && " ^ sparql_expr_regex (sparql_expr_func "str" (sparql_expr_func "datatype" (sparql_term t))) pat)
+    sparql_filter
+      [sparql_expr_func "isLiteral" (sparql_term t);
+       sparql_expr_regex (sparql_expr_func "str" (sparql_expr_func "datatype" (sparql_term t))) pat]
 
 let sparql_join lgp =
   String.concat "\n"
@@ -1437,11 +1452,13 @@ let onchange k elt =
 
 let ajax_sparql (endpoint : string) (sparql : string)
     (k1 : sparql_results -> unit) (k0 : int -> unit) =
+  (*Firebug.console##log(string sparql);*)
   let fields : (string * Form.form_elt) list =
     [("query", `String (string sparql))] in
   let req = create () in
   req##_open (Js.string "POST", Js.string endpoint, Js._true);
   req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
+(*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
   req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
 (*
   let headers s =
@@ -1462,9 +1479,11 @@ let ajax_sparql (endpoint : string) (sparql : string)
         | DONE ->
 	  do_check_headers ();
 	  let code = req##status in
+	  Firebug.console##log(string ("HTTP code: " ^ string_of_int code));
+	  Firebug.console##log(req##statusText);
 	  ( match code / 100 with
 	    | 2 ->
-	     (*Firebug.console##log(string req##responseText);*)
+	     (*Firebug.console##log(req##responseText);*)
 	     (*	let results = sparql_results_of_json xhr.content in *)
               let results_opt =
                 match Js.Opt.to_option (req##responseXML) with
@@ -1489,7 +1508,7 @@ let ajax_sparql (endpoint : string) (sparql : string)
 	      k0 code
 	    | _ ->
 	      alert ("Error " ^ string_of_int code);
-	      k0 code)
+	      k0 code )
         | _ -> ()));
   let encode_fields l =
     String.concat "&"
@@ -1499,6 +1518,7 @@ let ajax_sparql (endpoint : string) (sparql : string)
            | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
 	 l) in
   req##send(Js.some (string (encode_fields fields)))
+(*  req##send(Js.some (string sparql)) *)
 
 let rec ajax_sparql_list endpoint sparql_list k1 k0 =
   match sparql_list with
