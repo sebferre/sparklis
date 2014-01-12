@@ -1450,12 +1450,27 @@ let oninput k elt =
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
 
-let ajax_sparql (endpoint : string) (sparql : string)
+class ajax_pool =
+object
+  val mutable l : xmlHttpRequest t list = []
+  method add req = l <- req::l
+  method remove req = l <- List.filter ((!=) req) l
+  method abort_all =
+    List.iter
+      (fun req ->
+	req##onreadystatechange <- (Js.wrap_callback (fun _ -> ()));
+	req##abort())
+      l;
+    l <- []
+end
+
+let ajax_sparql (pool : ajax_pool) (endpoint : string) (sparql : string)
     (k1 : sparql_results -> unit) (k0 : int -> unit) =
   (*Firebug.console##log(string sparql);*)
   let fields : (string * Form.form_elt) list =
     [("query", `String (string sparql))] in
   let req = create () in
+  pool#add req;
   req##_open (Js.string "POST", Js.string endpoint, Js._true);
   req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
 (*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
@@ -1477,6 +1492,7 @@ let ajax_sparql (endpoint : string) (sparql : string)
         | HEADERS_RECEIVED when not Dom_html.onIE -> do_check_headers ()
         | LOADING when Dom_html.onIE -> do_check_headers ()
         | DONE ->
+	  pool#remove req;
 	  do_check_headers ();
 	  let code = req##status in
 	  Firebug.console##log(string ("HTTP code: " ^ string_of_int code));
@@ -1520,18 +1536,18 @@ let ajax_sparql (endpoint : string) (sparql : string)
   req##send(Js.some (string (encode_fields fields)))
 (*  req##send(Js.some (string sparql)) *)
 
-let rec ajax_sparql_list endpoint sparql_list k1 k0 =
+let rec ajax_sparql_list pool endpoint sparql_list k1 k0 =
   match sparql_list with
     | [] -> k1 []
     | s::ls ->
-      ajax_sparql endpoint s
+      ajax_sparql pool endpoint s
 	(fun r ->
-	  ajax_sparql_list endpoint ls
+	  ajax_sparql_list pool endpoint ls
 	    (fun rs -> k1 (r::rs))
 	    (fun code -> k0 code))
 	(fun code -> k0 code)
 
-let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> (int -> unit) -> unit) (k1 : 'a -> unit) (k0 : int -> unit) : unit =
+let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> ('b -> unit) -> unit) (k1 : 'a -> unit) (k0 : 'b -> unit) : unit =
   List.iter (* setting progress cursor *)
     (fun elt ->
       elt##style##cursor <- string "progress";
@@ -1545,18 +1561,18 @@ let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> (int -> un
 	  elt##style##cursor <- string "default";
 	  elt##style##opacity <- def (string "1"))
 	elts)
-    (fun code ->
-      k0 code;
+    (fun y ->
+      k0 y;
       List.iter (* restoring default cursor *)
 	(fun elt ->
 	  elt##style##cursor <- string "default";
 	  elt##style##opacity <- def (string "1"))
 	elts)
 
-let ajax_sparql_in elts endpoint sparql k1 k0 =
-  progress elts (ajax_sparql endpoint sparql) k1 k0
-let ajax_sparql_list_in elts endpoint sparql_list k1 k0 =
-  progress elts (ajax_sparql_list endpoint sparql_list) k1 k0
+let ajax_sparql_in elts pool endpoint sparql k1 k0 =
+  progress elts (ajax_sparql pool endpoint sparql) k1 k0
+let ajax_sparql_list_in elts pool endpoint sparql_list k1 k0 =
+  progress elts (ajax_sparql_list pool endpoint sparql_list) k1 k0
 
 (* -------------------- *)
 
@@ -1605,6 +1621,9 @@ object (self)
   val max_properties = 1000
 
   (* essential state *)
+
+  val ajax_pool = new ajax_pool
+  method abort_all_ajax = ajax_pool#abort_all
 
 (*  val mutable endpoint = "http://dbpedia.org/sparql"*)
   val mutable endpoint = "http://localhost:3030/ds/sparql"
@@ -1734,14 +1753,14 @@ object (self)
          SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } UNION { ?class a rdfs:Class } " ^
 	  sparql_constr (Var "class") class_constr ^
 	  " } LIMIT 1000" in
-      ajax_sparql_in [elt] endpoint sparql
+      ajax_sparql_in [elt] ajax_pool endpoint sparql
 	(fun results ->
 	  if results.length > 0
 	  then process elt results
 	  else
 	  (*	  let sparql = "SELECT DISTINCT ?class WHERE { ?x a ?class } GROUP BY ?class ORDER BY DESC(COUNT(DISTINCT ?x)) LIMIT 1000" in *)
 	    let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class } LIMIT 1000" in
-	    ajax_sparql_in [elt] endpoint sparql
+	    ajax_sparql_in [elt] ajax_pool endpoint sparql
 	      (fun results -> process elt results)
 	      (fun code -> process elt empty_results))
 	(fun code -> process elt empty_results))
@@ -1769,13 +1788,13 @@ object (self)
          SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^
 	  sparql_constr (Var "prop") property_constr ^
 	  " } LIMIT 1000" in
-      ajax_sparql_in [elt] endpoint sparql
+      ajax_sparql_in [elt] ajax_pool endpoint sparql
 	(fun results ->
 	  if results.length > 0
 	  then process elt results
 	  else
 	    let sparql = "SELECT DISTINCT ?prop WHERE { [] ?prop [] } LIMIT 1000" in
-	    ajax_sparql_in [elt] endpoint sparql
+	    ajax_sparql_in [elt] ajax_pool endpoint sparql
 	      (fun results -> process elt results)
 	      (fun code -> process elt empty_results))
 	(fun code -> process elt empty_results))
@@ -1799,7 +1818,7 @@ object (self)
     jquery "#list-classes" (fun elt ->
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } GROUP BY ?class ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
-      ajax_sparql_in [elt] endpoint sparql
+      ajax_sparql_in [elt] ajax_pool endpoint sparql
 	(fun results -> process elt results)
 	(fun code -> process elt empty_results))
       
@@ -1830,7 +1849,7 @@ object (self)
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
       let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-      ajax_sparql_list_in [elt] endpoint [sparql_has; sparql_isof]
+      ajax_sparql_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
 	(function
 	  | [results_has; results_isof] -> process elt results_has results_isof
 	  | _ -> assert false)
@@ -1906,7 +1925,7 @@ object (self)
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	jquery "#increments" (fun elt_incrs ->
 	  jquery "#results" (fun elt_res ->
-	    ajax_sparql_in [elt_incrs; elt_res] (*Dom_html.document##documentElement*) endpoint sparql
+	    ajax_sparql_in [elt_incrs; elt_res] ajax_pool endpoint sparql
 	      (fun res ->
 		results <- res;
 		self#refresh_extension;
@@ -2041,6 +2060,7 @@ object (self)
     future <- []
 
   method change_endpoint url =
+    present#abort_all_ajax;
     let p = present#new_place url home_focus in
     p#set_navigation (self :> navigation);
     self#push p;
@@ -2049,7 +2069,8 @@ object (self)
   method update_focus ~push_in_history f =
     match f present#focus with
       | None -> ()
-      | Some foc -> 
+      | Some foc ->
+	present#abort_all_ajax;
 	let p = present#new_place present#endpoint foc in
 	p#set_navigation (self :> navigation);
 	if push_in_history then self#push p else present <- p;
@@ -2063,6 +2084,7 @@ object (self)
     match past with
       | [] -> ()
       | p::lp ->
+	present#abort_all_ajax;
 	future <- present::future;
 	present <- p;
 	past <- lp;
@@ -2072,6 +2094,7 @@ object (self)
     match future with
       | [] -> ()
       | p::lp ->
+	present#abort_all_ajax;
 	past <- present::past;
 	present <- p;
 	future <- lp;
