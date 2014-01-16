@@ -488,10 +488,12 @@ and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string =
   | ReturnX ->
     q (fun t -> "")
 
+type sparql_template = ?constr:constr -> limit:int -> string
+
 let sparql_of_focus
-    ~(term_constr : constr) ~(max_results : int)
-    ~(class_constr : constr) ~(max_classes : int)
-    (focus : focus) : term option * string option * string option =
+(*    ~(term_constr : constr) ~(max_results : int) *)
+(*    ~(class_constr : constr) ~(max_classes : int) *)
+    (focus : focus) : term option * sparql_template option * sparql_template option * sparql_template option * sparql_template option =
   let state = new sparql_state in
   let gp =
     match focus with
@@ -526,51 +528,49 @@ let sparql_of_focus
     then None
     else
       let lv = state#vars in
-      let gp =
-	match t_opt with
-	  | None -> gp
-	  | Some t -> sparql_join [gp; sparql_constr t term_constr] in
-      if lv = []
-      then Some (sparql_ask gp)
-      else
-	let dimensions, aggregations, ordering =
-	  List.fold_right
-	    (fun v (dims,aggregs,ordering) ->
-	      match state#modif v with
-		| Any when t_opt <> Some (Var v) -> dims, aggregs, ordering
-		| Aggreg (order_opt, g) when t_opt <> Some (Var v) ->
-		  let vg_prefix =
-		    match g with
-		      | NumberOf -> "number_of_"
-		      | ListOf -> "list_of_"
-		      | Total -> "total_"
-		      | Average -> "average_"
-		      | Maximum -> "maximum_"
-		      | Minimum -> "minimum_" in
-		  let vg = vg_prefix ^ v in
-		  dims, (g,v,vg)::aggregs, (match order_opt with None -> ordering | Some Lowest -> (`ASC vg)::ordering | Some Highest -> (`DESC vg)::ordering)
-		| Order o ->
-		  let order =
-		    match o with
-		      | Lowest -> `ASC v
-		      | Highest -> `DESC v in
-		  v::dims, aggregs, order::ordering
-		| _ -> v::dims, aggregs, ordering)
-	    lv ([],[],[]) in
-	Some (sparql_select ~distinct:true ~dimensions ~aggregations ~ordering ~limit:max_results gp) in
-  let query_class_opt =
+      let dimensions, aggregations, ordering =
+	List.fold_right
+	  (fun v (dims,aggregs,ordering) ->
+	    match state#modif v with
+	      | Any when t_opt <> Some (Var v) -> dims, aggregs, ordering
+	      | Aggreg (order_opt, g) when t_opt <> Some (Var v) ->
+		let vg_prefix =
+		  match g with
+		    | NumberOf -> "number_of_"
+		    | ListOf -> "list_of_"
+		    | Total -> "total_"
+		    | Average -> "average_"
+		    | Maximum -> "maximum_"
+		    | Minimum -> "minimum_" in
+		let vg = vg_prefix ^ v in
+		dims, (g,v,vg)::aggregs, (match order_opt with None -> ordering | Some Lowest -> (`ASC vg)::ordering | Some Highest -> (`DESC vg)::ordering)
+	      | Order o ->
+		let order =
+		  match o with
+		    | Lowest -> `ASC v
+		    | Highest -> `DESC v in
+		v::dims, aggregs, order::ordering
+	      | _ -> v::dims, aggregs, ordering)
+	  lv ([],[],[]) in
+      Some (fun ?(constr=True) ~limit ->
+	sparql_select ~distinct:true ~dimensions ~aggregations ~ordering ~limit
+	  (match t_opt with None -> gp | Some t -> sparql_join [gp; sparql_constr t constr])) in
+  let query_incr_opt x triple =
     match t_opt with
       | None -> None
       | Some t ->
-	let c = "class" in
-	let f = "freq" in
-	let tc = Var c in
-	let aggregations, ordering, gp =
+	let tx = Var x in
+	let gp_x =
 	  match t with
-	    | Var v -> [(NumberOf,v,f)], [`DESC f], sparql_join [gp; sparql_triple t (URI "a") tc; sparql_constr tc class_constr]
-	    | _ -> [], [], sparql_join [sparql_triple t (URI "a") tc; sparql_constr tc class_constr] in
-	Some (sparql_select ~dimensions:[c] ~aggregations ~ordering ~limit:max_classes gp) in
-  t_opt, query_opt, query_class_opt
+	    | Var v -> sparql_join [gp; triple t tx]
+	    | _ -> triple t tx in
+	Some (fun ?(constr=True) ~limit ->
+	  sparql_select ~dimensions:[x] ~limit
+	    (sparql_join [gp_x; sparql_constr tx constr])) in
+  let query_class_opt = query_incr_opt "class" (fun t tc -> sparql_triple t (URI "a") tc) in
+  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> sparql_triple t tp (Bnode "")) in
+  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> sparql_triple (Bnode "") tp t) in
+  t_opt, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
 
 (* pretty-printing of focus as HTML *)
 
@@ -1573,19 +1573,19 @@ let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> ('b -> uni
     elts;
   main
     (fun x ->
-      k1 x;
       List.iter (* restoring default cursor *)
 	(fun elt ->
 	  elt##style##cursor <- string "default";
 	  elt##style##opacity <- def (string "1"))
-	elts)
+	elts;
+      k1 x)
     (fun y ->
-      k0 y;
       List.iter (* restoring default cursor *)
 	(fun elt ->
 	  elt##style##cursor <- string "default";
 	  elt##style##opacity <- def (string "1"))
-	elts)
+	elts;
+      k0 y)
 
 let ajax_sparql_in elts pool endpoint sparql k1 k0 =
   progress elts (ajax_sparql pool endpoint sparql) k1 k0
@@ -1640,18 +1640,12 @@ object (self)
 
   (* essential state *)
 
-  val ajax_pool = new ajax_pool
-  method abort_all_ajax = ajax_pool#abort_all
-
-  val mutable endpoint = "http://dbpedia.org/sparql"
-(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
+(*  val endpoint = "http://dbpedia.org/sparql"*)
+  val mutable endpoint = "http://localhost:3030/ds/sparql"
   method endpoint = endpoint
 
-  val mutable focus = home_focus
+  val focus = home_focus
   method focus = focus
-
-  val mutable navigation = new navigation
-  method set_navigation (navig : navigation) = navigation <- navig
 
   val mutable offset = 0
   val mutable limit = 10
@@ -1660,28 +1654,40 @@ object (self)
   val mutable class_constr = True
   val mutable property_constr = True
 
+  (* utilities *)
+
+  val ajax_pool = new ajax_pool
+  method abort_all_ajax = ajax_pool#abort_all
+
+  val mutable navigation = new navigation
+  method set_navigation (navig : navigation) = navigation <- navig
+
   (* derived state *)
 
+  val mutable focus_term_opt : term option = None
+  val mutable query_opt : sparql_template option = None
+  val mutable query_class_opt : sparql_template option = None
+  val mutable query_prop_has_opt : sparql_template option = None
+  val mutable query_prop_isof_opt : sparql_template option = None
+
+  method init =
+    begin
+      let t_opt, q_opt, qc_opt, qph_opt, qpi_opt = sparql_of_focus focus in
+      focus_term_opt <- t_opt;
+      query_opt <- q_opt;
+      query_class_opt <- qc_opt;
+      query_prop_has_opt <- qph_opt;
+      query_prop_isof_opt <- qpi_opt
+    end
+
+  initializer self#init
+
   val mutable dico_foci = new dico_foci
-
-  val mutable focus_term_opt = None
-  val mutable sparql_opt = None
-  val mutable sparql_class_opt = None
-  method private define_sparql =
-    let t_opt, query_opt, query_class_opt =
-      sparql_of_focus
-	~term_constr ~max_results
-	~class_constr ~max_classes
-	focus in
-    focus_term_opt <- t_opt;
-    sparql_opt <- query_opt;
-    sparql_class_opt <- query_class_opt
-
   val mutable results = empty_results
   val mutable focus_term_index : (term * int) list = []
   val mutable dico_incrs = new dico_increments
 
-  method private define_focus_term_index =
+  method private define_focus_term_index = (* requires 'results' to be defined *)
     focus_term_index <-
       ( match focus_term_opt with
 	| None -> []
@@ -1771,7 +1777,6 @@ object (self)
 	(html_count_unit (List.length class_list) 1000 "class" "classes")
     in
     jquery "#list-classes" (fun elt ->
-      (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
       let sparql =
 	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^
@@ -1782,8 +1787,7 @@ object (self)
 	  if results.length > 0
 	  then process elt results
 	  else
-	  (*	  let sparql = "SELECT DISTINCT ?class WHERE { ?x a ?class } GROUP BY ?class ORDER BY DESC(COUNT(DISTINCT ?x)) LIMIT 1000" in *)
-	    let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class } LIMIT 1000" in
+	    let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class " ^ sparql_constr (Var "class") class_constr ^ " } LIMIT 200" in
 	    ajax_sparql_in [elt] ajax_pool endpoint sparql
 	      (fun results -> process elt results)
 	      (fun code -> process elt empty_results))
@@ -1817,7 +1821,7 @@ object (self)
 	  if results.length > 0
 	  then process elt results
 	  else
-	    let sparql = "SELECT DISTINCT ?prop WHERE { [] ?prop [] } LIMIT 1000" in
+	    let sparql = "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^ sparql_constr (Var "prop") property_constr ^ " } LIMIT 200" in
 	    ajax_sparql_in [elt] ajax_pool endpoint sparql
 	      (fun results -> process elt results)
 	      (fun code -> process elt empty_results))
@@ -1825,7 +1829,6 @@ object (self)
 
   method private refresh_class_increments =
     let process elt results =
-(*      let class_index = index_of_results_2columns "class" "freq" results in *)
       let class_index = index_of_results_column "class" results in
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
@@ -1841,10 +1844,6 @@ object (self)
 	(html_count_unit (List.length class_index) max_classes "class" "classes")
     in
     jquery "#list-classes" (fun elt ->
-      (*match sparql_class_opt with
-	| None -> process elt empty_results
-	| Some sparql ->
-	  Firebug.console##log(string sparql); *)
 (*
 	  let sparql =
 	    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
@@ -1852,17 +1851,23 @@ object (self)
 *)
       let sparql =
 	let lgp = List.map (fun (t,_) -> sparql_triple t (URI "a") (Var "class")) focus_term_index in
-	sparql_select ~dimensions:["class"] ~limit:max_classes (sparql_union lgp) in
+	sparql_select ~dimensions:["class"] ~limit:max_classes (sparql_join [sparql_union lgp; sparql_constr (Var "class") class_constr]) in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
-	(fun results -> process elt results)
+	(fun results ->
+	  if results.length > 0
+	  then process elt results
+	  else
+	    match query_class_opt with
+	      | None -> process elt empty_results
+	      | Some query ->
+		let sparql = query ~constr:class_constr ~limit:max_classes in
+		ajax_sparql_in [elt] ajax_pool endpoint sparql
+		  (fun results -> process elt results)
+		  (fun code -> process elt empty_results))
 	(fun code -> process elt empty_results))
       
   method private refresh_property_increments =
     let process elt results_has results_isof =
-(*
-      let index_has = index_of_results_2columns "prop" "freq" results_has in (* increasing *)
-      let index_isof = index_of_results_2columns "prop" "freq" results_isof in (* increasing *)
-*)
       let index_has = index_of_results_column "prop" results_has in (* increasing *)
       let index_isof = index_of_results_column "prop" results_isof in (* increasing *)
       let index =
@@ -1892,13 +1897,27 @@ object (self)
 *)
       let sparql_has =
 	let lgp = List.map (fun (t,_) -> sparql_triple t (Var "prop") (Bnode "")) focus_term_index in
-	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_union lgp) in
+	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_join [sparql_union lgp; sparql_constr (Var "prop") property_constr]) in
       let sparql_isof =
 	let lgp = List.map (fun (t,_) -> sparql_triple (Bnode "") (Var "prop") t) focus_term_index in
-	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_union lgp) in
+	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_join [sparql_union lgp; sparql_constr (Var "prop") property_constr]) in
       ajax_sparql_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
 	(function
-	  | [results_has; results_isof] -> process elt results_has results_isof
+	  | [results_has; results_isof] ->
+	    if results_has.length > 0 || results_isof.length > 0
+	    then process elt results_has results_isof
+	    else
+	      ( match query_prop_has_opt, query_prop_isof_opt with
+	      | None, None -> process elt empty_results empty_results
+	      | Some query_has, Some query_isof ->
+		let sparql_has = query_has ~constr:property_constr ~limit:max_properties in
+		let sparql_isof = query_isof ~constr:property_constr ~limit:max_properties in
+		ajax_sparql_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
+		  (function
+		    | [results_has; results_isof] -> process elt results_has results_isof
+		    | _ -> assert false)
+		  (fun code -> process elt empty_results empty_results)
+	      | _ -> assert false )
 	  | _ -> assert false)
 	(fun code -> process elt empty_results empty_results))
 
@@ -1939,21 +1958,13 @@ object (self)
     dico_foci <- new dico_foci;
     dico_incrs <- new dico_increments;
     self#refresh_lisql;
-    self#define_sparql;
-    ( match sparql_opt with
+    ( match focus_term_opt with
+      | None -> jquery "#increments" (fun elt -> elt##style##display <- string "none")
+      | Some _ -> jquery "#increments" (fun elt -> elt##style##display <- string "block") );
+    ( match query_opt with
       | None ->
 	jquery_set_innerHTML "#sparql" "";
-	jquery "#results" (fun elt -> elt##style##display <- string "none")
-      | Some sparql ->
-	jquery_set_innerHTML "#sparql" (html_pre sparql);
-	jquery "#results" (fun elt -> elt##style##display <- string "block") );
-    ( match focus_term_opt with
-      | None ->
-	jquery "#increments" (fun elt -> elt##style##display <- string "none")
-      | Some _ ->
-	jquery "#increments" (fun elt -> elt##style##display <- string "block") );
-    ( match sparql_opt with
-      | None ->
+	jquery "#results" (fun elt -> elt##style##display <- string "none");
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
 	jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
@@ -1968,7 +1979,10 @@ object (self)
 	    self#refresh_class_increments;
 	    self#refresh_property_increments;
 	    self#refresh_modifier_increments )
-      | Some sparql ->
+      | Some query ->
+	let sparql = query ~constr:term_constr ~limit:max_results in
+	jquery_set_innerHTML "#sparql" (html_pre sparql);
+	jquery "#results" (fun elt -> elt##style##display <- string "block");
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	jquery "#increments" (fun elt_incrs ->
 	  jquery "#results" (fun elt_res ->
@@ -2004,14 +2018,20 @@ object (self)
     if self#is_home
     then begin
       class_constr <- constr;
-      self#refresh_class_increments_init 
+      self#refresh_class_increments_init end
+    else begin
+      class_constr <- constr;
+      self#refresh_class_increments
     end
 
   method set_property_constr constr =
     if self#is_home
     then begin
       property_constr <- constr;
-      self#refresh_property_increments_init
+      self#refresh_property_increments_init end
+    else begin
+      property_constr <- constr;
+      self#refresh_property_increments
     end
 
   method pattern_changed
@@ -2042,7 +2062,7 @@ object (self)
 	  then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	  else elt_li##style##display <- string "none"));
       let n = String.length pat in
-      if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 3 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
+      if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 2 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
       then begin
 	Firebug.console##log(string "pattern: no match, call k");
 	k constr
@@ -2081,12 +2101,15 @@ object (self)
     end
 
   method new_place endpoint focus =
-    {< endpoint = endpoint;
-       focus = focus;
-       offset = 0;
-       term_constr = True;
-       class_constr = True;
-       property_constr = True; >}
+    let p =
+      {< endpoint = endpoint;
+	 focus = focus;
+	 offset = 0;
+	 term_constr = True;
+	 class_constr = True;
+	 property_constr = True; >} in
+    p#init;
+    p
 
 end
 
