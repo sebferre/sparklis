@@ -291,12 +291,12 @@ let rec sparql_term = function
   | Number (f,s,dt) -> sparql_term (TypedLiteral (s,dt))
   | TypedLiteral (s,dt) -> sparql_string s ^ "^^" ^ sparql_uri dt
   | PlainLiteral (s,lang) -> sparql_string s ^ (if lang = "" then "" else "@" ^ lang)
-  | Bnode name -> "_:" ^ name
+  | Bnode name -> if name="" then "[]" else "_:" ^ name
   | Var v -> sparql_var v
 
 let sparql_empty = ""
 
-let sparql_triple s p o = sparql_term s ^ " " ^ sparql_uri p ^ " " ^ sparql_term o ^ " . "
+let sparql_triple s p o = sparql_term s ^ " " ^ sparql_term p ^ " " ^ sparql_term o ^ " . "
 
 let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
 let sparql_expr_regex expr pat = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
@@ -350,16 +350,16 @@ let sparql_join lgp =
   String.concat "\n"
     (List.filter ((<>) "") lgp)
 let sparql_union lgp =
-  String.concat " UNION "
-    (List.map
-       (fun gp -> "{ " ^ gp ^ " }")
-       (List.filter ((<>) "") lgp))
+  match List.filter ((<>) "") lgp with
+  | [] -> sparql_empty
+  | [gp] -> gp
+  | lgp -> "{ " ^ String.concat " } UNION { " lgp ^ " }"
 let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
 let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
-let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
+let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]) ?limit gp =
   if dimensions = [] && aggregations = []
   then sparql_ask gp
   else
@@ -377,7 +377,7 @@ let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
 	       | Minimum -> sparql_aggreg "MIN(" v ")" vg
 	       | ListOf -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator=', ')") vg)
 	   aggregations) in
-    let s = "SELECT DISTINCT " ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
+    let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
     let s =
       if aggregations = [] || dimensions = []
       then s
@@ -390,9 +390,9 @@ let sparql_select ~dimensions ~aggregations ~ordering ?limit gp =
     s
 
 let rec sparql_of_elt_p1 state : elt_p1 -> (term -> string) = function
-  | Type c -> (fun x -> sparql_triple x "a" (URI c))
-  | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x p y))
-  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y p x))
+  | Type c -> (fun x -> sparql_triple x (URI "a") (URI c))
+  | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x (URI p) y))
+  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y (URI p) x))
   | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
     (fun x ->
@@ -436,7 +436,7 @@ and sparql_of_elt_head state ~prefix : elt_head -> var * (term -> string) = func
     state#new_var prefix, (fun t -> sparql_empty)
   | Class c ->
     let prefix = if prefix<>"" then prefix else prefix_of_uri c in
-    state#new_var prefix, (fun t -> sparql_triple t "a" (URI c))
+    state#new_var prefix, (fun t -> sparql_triple t (URI "a") (URI c))
 (*
   | Aggreg (g, head2, rel2_opt) ->
     let v2, dhead2 = sparql_of_elt_head state ~prefix head2 in
@@ -479,16 +479,19 @@ let rec sparql_of_ctx_p1 state ~prefix (d : term -> string) : ctx_p1 -> string =
 and sparql_of_ctx_s1 state (q : (term -> string) -> string) : ctx_s1 -> string = function
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:""
-      (fun x -> q (fun y -> sparql_triple x p y))
+      (fun x -> q (fun y -> sparql_triple x (URI p) y))
       ctx
   | IsOfX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:(prefix_of_uri p)
-      (fun x -> q (fun y -> sparql_triple y p x))
+      (fun x -> q (fun y -> sparql_triple y (URI p) x))
       ctx
   | ReturnX ->
     q (fun t -> "")
 
-let sparql_of_focus ~(constr : constr) ~(limit : int) (focus : focus) : term option * string option =
+let sparql_of_focus
+    ~(term_constr : constr) ~(max_results : int)
+    ~(class_constr : constr) ~(max_classes : int)
+    (focus : focus) : term option * string option * string option =
   let state = new sparql_state in
   let gp =
     match focus with
@@ -526,7 +529,7 @@ let sparql_of_focus ~(constr : constr) ~(limit : int) (focus : focus) : term opt
       let gp =
 	match t_opt with
 	  | None -> gp
-	  | Some t -> sparql_join [gp; sparql_constr t constr] in
+	  | Some t -> sparql_join [gp; sparql_constr t term_constr] in
       if lv = []
       then Some (sparql_ask gp)
       else
@@ -554,8 +557,20 @@ let sparql_of_focus ~(constr : constr) ~(limit : int) (focus : focus) : term opt
 		  v::dims, aggregs, order::ordering
 		| _ -> v::dims, aggregs, ordering)
 	    lv ([],[],[]) in
-	Some (sparql_select ~dimensions ~aggregations ~ordering ~limit gp) in
-  t_opt, query_opt
+	Some (sparql_select ~distinct:true ~dimensions ~aggregations ~ordering ~limit:max_results gp) in
+  let query_class_opt =
+    match t_opt with
+      | None -> None
+      | Some t ->
+	let c = "class" in
+	let f = "freq" in
+	let tc = Var c in
+	let aggregations, ordering, gp =
+	  match t with
+	    | Var v -> [(NumberOf,v,f)], [`DESC f], sparql_join [gp; sparql_triple t (URI "a") tc; sparql_constr tc class_constr]
+	    | _ -> [], [], sparql_join [sparql_triple t (URI "a") tc; sparql_constr tc class_constr] in
+	Some (sparql_select ~dimensions:[c] ~aggregations ~ordering ~limit:max_classes gp) in
+  t_opt, query_opt, query_class_opt
 
 (* pretty-printing of focus as HTML *)
 
@@ -1153,7 +1168,7 @@ let index_of_results_column (var : var) results : (term * int) list =
 let index_of_results_2columns (var_x : var) (var_count : var) results : (term * int) list =
   try
     let i_x = List.assoc var_x results.vars in
-    let i_count = List.assoc var_count results.vars in
+    let i_count = try List.assoc var_count results.vars with _ -> -1 in
     let index =
       List.fold_left
 	(fun res binding ->
@@ -1161,10 +1176,13 @@ let index_of_results_2columns (var_x : var) (var_count : var) results : (term * 
 	    | None -> res
 	    | Some x ->
 	      let count =
-		match binding.(i_count) with
-		  | Some (Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
-		  | Some (TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
-		  | _ -> 0 in
+		if i_count < 0
+		then 1
+		else
+		  match binding.(i_count) with
+		    | Some (Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
+		    | Some (TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
+		    | _ -> 0 in
 	      (x, count)::res)
 	[] results.bindings in
     index
@@ -1617,7 +1635,7 @@ object (self)
   (* constants *)
 
   val max_results = 200
-  val max_classes = 1000
+  val max_classes = 200
   val max_properties = 1000
 
   (* essential state *)
@@ -1625,8 +1643,8 @@ object (self)
   val ajax_pool = new ajax_pool
   method abort_all_ajax = ajax_pool#abort_all
 
-(*  val mutable endpoint = "http://dbpedia.org/sparql"*)
-  val mutable endpoint = "http://localhost:3030/ds/sparql"
+  val mutable endpoint = "http://dbpedia.org/sparql"
+(*  val mutable endpoint = "http://localhost:3030/ds/sparql" *)
   method endpoint = endpoint
 
   val mutable focus = home_focus
@@ -1648,10 +1666,16 @@ object (self)
 
   val mutable focus_term_opt = None
   val mutable sparql_opt = None
+  val mutable sparql_class_opt = None
   method private define_sparql =
-    let t_opt, s_opt = sparql_of_focus ~constr:term_constr ~limit:max_results focus in
+    let t_opt, query_opt, query_class_opt =
+      sparql_of_focus
+	~term_constr ~max_results
+	~class_constr ~max_classes
+	focus in
     focus_term_opt <- t_opt;
-    sparql_opt <- s_opt
+    sparql_opt <- query_opt;
+    sparql_class_opt <- query_class_opt
 
   val mutable results = empty_results
   val mutable focus_term_index : (term * int) list = []
@@ -1750,7 +1774,7 @@ object (self)
       (*      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { ?focus a ?class } LIMIT 100" in *)
       let sparql =
 	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT DISTINCT ?class WHERE { { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } UNION { ?class a rdfs:Class } " ^
+         SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^
 	  sparql_constr (Var "class") class_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
@@ -1785,7 +1809,7 @@ object (self)
       let sparql =
 	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT DISTINCT ?prop WHERE { { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } UNION { ?prop a rdf:Property } " ^
+         SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^
 	  sparql_constr (Var "prop") property_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
@@ -1801,7 +1825,8 @@ object (self)
 
   method private refresh_class_increments =
     let process elt results =
-      let class_index = index_of_results_2columns "class" "freq" results in
+(*      let class_index = index_of_results_2columns "class" "freq" results in *)
+      let class_index = index_of_results_column "class" results in
       elt##innerHTML <- string
 	(html_of_increment_frequency_list dico_incrs
 	   (List.fold_left
@@ -1816,17 +1841,31 @@ object (self)
 	(html_count_unit (List.length class_index) max_classes "class" "classes")
     in
     jquery "#list-classes" (fun elt ->
-      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql = "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } GROUP BY ?class ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
+      (*match sparql_class_opt with
+	| None -> process elt empty_results
+	| Some sparql ->
+	  Firebug.console##log(string sparql); *)
+(*
+	  let sparql =
+	    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
+	    "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } GROUP BY ?class ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
+*)
+      let sparql =
+	let lgp = List.map (fun (t,_) -> sparql_triple t (URI "a") (Var "class")) focus_term_index in
+	sparql_select ~dimensions:["class"] ~limit:max_classes (sparql_union lgp) in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
 	(fun results -> process elt results)
 	(fun code -> process elt empty_results))
       
   method private refresh_property_increments =
     let process elt results_has results_isof =
+(*
       let index_has = index_of_results_2columns "prop" "freq" results_has in (* increasing *)
       let index_isof = index_of_results_2columns "prop" "freq" results_isof in (* increasing *)
-      let index = 
+*)
+      let index_has = index_of_results_column "prop" results_has in (* increasing *)
+      let index_isof = index_of_results_column "prop" results_isof in (* increasing *)
+      let index =
 	let rec aux acc l1 l2 =
 	  match l1, l2 with
 	    | (URI c1, freq1)::r1, (_, freq2)::r2 when freq1 <= freq2 -> aux ((IncrProp c1, freq1)::acc) r1 l2
@@ -1846,9 +1885,17 @@ object (self)
 	(html_count_unit (List.length index_has + List.length index_isof) max_properties "property" "properties")
     in	
     jquery "#list-properties" (fun elt ->
+(*
       let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
       let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
       let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
+*)
+      let sparql_has =
+	let lgp = List.map (fun (t,_) -> sparql_triple t (Var "prop") (Bnode "")) focus_term_index in
+	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_union lgp) in
+      let sparql_isof =
+	let lgp = List.map (fun (t,_) -> sparql_triple (Bnode "") (Var "prop") t) focus_term_index in
+	sparql_select ~dimensions:["prop"] ~limit:max_properties (sparql_union lgp) in
       ajax_sparql_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
 	(function
 	  | [results_has; results_isof] -> process elt results_has results_isof
@@ -1957,7 +2004,7 @@ object (self)
     if self#is_home
     then begin
       class_constr <- constr;
-      self#refresh_class_increments_init
+      self#refresh_class_increments_init 
     end
 
   method set_property_constr constr =
