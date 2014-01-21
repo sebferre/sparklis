@@ -646,22 +646,27 @@ let html_or ar_html =
 let html_maybe html = html_modifier "optionally" ^ " " ^ html
 let html_not html = html_modifier "not" ^ " " ^ html
 let html_is_there = "..."
+let html_return np = "Give me " ^ np
+let html_dummy_focus = "<span class=\"in-current-focus\">___</span>"
 
+let html_current_focus html =
+  html_span ~id:"current-focus" ~classe:"in-current-focus"
+      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
+
+(*
 let html_det det rel_opt = det ^ (match rel_opt with None -> "" | Some rel -> " that " ^ rel)
 (*let html_the_of p np = "the " ^ html_prop p ^ " of " ^ np*)
 let html_of modif_p np = modif_p ^ " of " ^ np
-let html_return np = "Give me " ^ np
 
 let html_focus dico foc hl (* highlight *) html =
   let id = dico#add foc in
   "<span id=\"" ^ id ^ "\" class=\"focus" ^ (if hl then " in-current-focus" else "") ^ "\">" ^ html ^ "</span>"
-let html_focus_dummy =
-  "<span class=\"in-current-focus\">___</span>"
 
 let rec html_of_elt_p1 dico ctx hl f =
   let html =
     match f with
       | Type c -> html_is_a c
+      | Has (p, Det (An (modif, Thing), rel_opt)) -> html_of_modif_p_rel_opt dico ctx hl modif p rel_opt
       | Has (p,np) -> html_has p (html_of_elt_s1 dico (HasX (p,ctx)) hl np)
       | IsOf (p,np) -> html_is_of p (html_of_elt_s1 dico (IsOfX (p,ctx)) hl np)
       | Constr constr -> html_constr constr
@@ -672,6 +677,12 @@ let rec html_of_elt_p1 dico ctx hl f =
       | IsThere -> html_is_there
   in
   html_focus dico (AtP1 (f,ctx)) hl html
+and html_of_modif_p_rel_opt dico ctx hl modif p rel_opt =
+  "has " ^ html_focus dico (AtS1 (Det (An (modif,Thing),rel_opt), HasX (p,ctx))) hl
+    (html_of_modif_s2_noun modif (html_prop p) ^
+       match rel_opt with
+	 | None -> ""
+	 | Some rel -> " that " ^ html_of_elt_p1 dico (DetThatX (An (modif,Thing), HasX (p,ctx))) hl rel)
 and html_constr = function
   | True -> html_is_there
   | MatchesAll lpat -> String.concat " " [html_modifier "matches"; String.concat ", " (List.map html_literal lpat)]
@@ -787,12 +798,12 @@ and html_of_ctx_s1 dico f html ctx =
 	  (html_return html) in
       html2
 
-let html_current_focus html =
-  html_span ~id:"current-focus" ~classe:"in-current-focus"
-      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
-
 let html_of_focus dico focus =
   match focus with
+(*
+    | AtP1 (Has (p, Det (An (modif, Thing), rel_opt)), ctx)
+    | AtS1 (Det (An (modif, Thing), rel_opt), HasX (p, ctx)) ->
+*)      
     | AtP1 (IsOf (p,np), DetThatX (An (modif, Thing), ctx))
     | AtS1 (Det (An (modif, Thing), Some (IsOf (p,np))), ctx) ->
       let f = Det (An (modif, Thing), Some (IsOf (p,np))) in
@@ -816,6 +827,225 @@ let html_of_focus dico focus =
     | AtS f ->
       html_focus dico (AtS f) false
 	(html_of_elt_s dico false f)
+*)
+
+(* NL generation from focus *)
+
+type nl_word =
+  [ `Thing
+  | `Class of uri
+  | `Prop of uri
+  | `Op of string
+  | `Term of term
+  | `Literal of string
+  | `DummyFocus ]
+
+type nl_focus =
+  [ `NoFocus
+  | `Focus of focus * [ `In | `At | `Out ] ]
+
+type nl_s =
+  [ `Return of nl_focus * nl_np ]
+and nl_np =
+  [ `PN of nl_focus * nl_word * nl_rel
+  | `Qu of nl_focus * nl_qu * nl_adj * nl_word * nl_rel
+  | `QuOneOf of nl_qu * nl_word list ]
+and nl_qu = [ `A | `Any | `The | `All ]
+and nl_adj =
+  [ `Nil
+  | `Adj of nl_adj * nl_word ]
+and nl_rel =
+  [ `Nil
+  | `That of nl_vp
+  | `Of of nl_np
+  | `Ing of nl_word * nl_np ]
+and nl_vp =
+  [ `IsThere of nl_focus
+  | `IsA of nl_focus * nl_word * nl_rel
+  | `IsPP of nl_focus * nl_pp
+  | `HasProp of nl_focus * nl_word * nl_np
+  | `Has of nl_focus * nl_np
+  | `VT of nl_focus * nl_word * nl_np
+  | `And of nl_focus * nl_vp array
+  | `Or of nl_focus * nl_vp array
+  | `Maybe of nl_focus * nl_vp
+  | `Not of nl_focus * nl_vp
+  | `DummyFocus ]
+and nl_pp =
+  [ `Prep of nl_word * nl_word
+  | `PrepBin of nl_word * nl_word * nl_word * nl_word ]
+
+let top_vp = `IsThere `NoFocus
+let top_rel = `That top_vp
+let top_np = `Qu (`NoFocus, `A, `Nil, `Thing, `Nil)
+let top_s = `Return (`NoFocus, top_np)
+
+let html_word = function
+  | `Thing -> "thing"
+  | `Term t -> html_term t
+  | `Class c -> html_class c
+  | `Prop p -> html_prop p
+  | `Literal l -> html_literal l
+  | `Op op -> html_modifier op
+  | `DummyFocus -> html_dummy_focus
+
+let html_focus dico (foc : nl_focus) (html : string) : string =
+  match foc with
+    | `NoFocus -> html
+    | `Focus (focus, pos) ->
+      let id = dico#add focus in
+      let html = "<span id=\"" ^ id ^ "\" class=\"focus" ^ (if pos <> `Out then " in-current-focus" else "") ^ "\">" ^ html ^ "</span>" in
+      if pos = `At
+      then html_current_focus html
+      else html
+
+let rec html_of_s dico : nl_s -> string = function
+  | `Return (foc, np) -> html_focus dico foc (html_return (html_of_np dico np))
+and html_of_np dico : nl_np -> string = function
+  | `PN (foc, w, rel) -> html_focus dico foc (html_word w ^ html_of_rel dico rel)
+  | `Qu (foc, `A, `Nil, `Thing, `Nil) -> html_focus dico foc "something"
+  | `Qu (foc, qu, adj, `Thing, `That (`IsA (foc2, w, rel2))) ->
+    html_focus dico foc (html_of_qu qu ^ html_of_adj adj ^ html_focus dico foc2 (html_word w ^ html_of_rel dico rel2))
+  | `Qu (foc, qu, adj, w, rel) -> html_focus dico foc (html_of_qu qu ^ html_of_adj adj ^ html_word w ^ html_of_rel dico rel)
+  | `QuOneOf (_, [w]) -> html_word w
+  | `QuOneOf (qu, lw) -> html_of_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw)
+and html_of_qu : nl_qu -> string = function
+  | `A -> "a "
+  | `Any -> "any "
+  | `The -> "the "
+  | `All -> "all "
+and html_of_adj : nl_adj -> string = function
+  | `Nil -> ""
+  | `Adj (a, w) -> html_of_adj a ^ html_word w ^ " "
+and html_of_rel dico : nl_rel -> string = function
+  | `Nil -> ""
+(*  | `That (`HasProp (foc, p, `Qu (foc2, `A, `Nil, `Thing, `That vp))) -> " whose " ^ html_focus dico foc (html_word p ^ " " ^ html_focus dico foc2 (html_of_vp dico vp)) *)
+  | `That vp -> " that " ^ html_of_vp dico vp
+  | `Of np -> " of " ^ html_of_np dico np
+  | `Ing (w, np) -> " " ^ html_word w ^ " " ^ html_of_np dico np
+and html_of_vp dico : nl_vp -> string = function
+  | `IsThere foc -> html_focus dico foc (html_is_there)
+  | `IsA (foc, w, rel) -> html_focus dico foc ("is a " ^ html_word w ^ html_of_rel dico rel)
+  | `IsPP (foc, pp) -> html_focus dico foc ("is " ^ html_of_pp dico pp)
+  | `HasProp (foc, w, `Qu (foc2, qu, adj, `Thing, rel)) -> html_of_vp dico (`Has (foc, `Qu (foc2, qu, adj, w, rel)))
+  | `HasProp (foc, p, np) -> html_focus dico foc ("has " ^ html_word p ^ " " ^ html_of_np dico np)
+  | `Has (foc, np) -> html_focus dico foc ("has " ^ html_of_np dico np)
+  | `VT (foc, w, np) -> html_focus dico foc (html_word w ^ " " ^ html_of_np dico np)
+  | `And (foc, ar) -> html_focus dico foc (html_and (Array.map (html_of_vp dico) ar))
+  | `Or (foc, ar) -> html_focus dico foc (html_or (Array.map (html_of_vp dico) ar))
+  | `Maybe (foc, vp) -> html_focus dico foc (html_maybe (html_of_vp dico vp))
+  | `Not (foc, vp) -> html_focus dico foc (html_not (html_of_vp dico vp))
+  | `DummyFocus -> html_dummy_focus
+and html_of_pp dico : nl_pp -> string = function
+  | `Prep (prep,w) -> html_word prep ^ " " ^ html_word w
+  | `PrepBin (prep1,w1,prep2,w2) -> html_word prep1 ^ " " ^ html_word w1 ^ " " ^ html_word prep2 ^ " " ^ html_word w2
+
+let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out
+
+let rec head_of_modif foc nn rel : modif_s2 -> nl_np = function
+  | Id -> `Qu (foc, `A, `Nil, nn, rel)
+  | Any -> `Qu (foc, `Any, `Nil, nn, rel)
+  | Order o -> `Qu (foc, `The, adj_of_order o, nn, rel)
+  | Aggreg (None, g) -> `Qu (foc, `A, adj_of_aggreg `Nil g, nn, rel)
+  | Aggreg (Some o, g) -> `Qu (foc, `The, adj_of_aggreg (adj_of_order o) g, nn, rel)
+and adj_of_order : order -> nl_adj = function
+  | Highest -> `Adj (`Nil, `Op "highest")
+  | Lowest -> `Adj (`Nil, `Op "lowest")
+and adj_of_aggreg adj : aggreg -> nl_adj = function
+  | NumberOf -> `Adj (adj, `Op "number of")
+  | ListOf -> `Adj (adj, `Op "list of")
+  | Total -> `Adj (adj, `Op "total")
+  | Average -> `Adj (adj, `Op "average")
+  | Maximum -> `Adj (adj, `Op "maximum")
+  | Minimum -> `Adj (adj, `Op "minimum")
+
+let rec vp_of_elt_p1 pos ctx f : nl_vp =
+  let foc = `Focus (AtP1 (f,ctx), pos) in
+  match f with
+    | IsThere -> `IsThere foc
+    | Type c -> `IsA (foc, `Class c, `Nil)
+    | Has (p,np) -> `HasProp (foc, `Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
+    | IsOf (p,np) -> `IsA (foc, `Prop p, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))
+    | Constr c -> vp_of_constr foc c
+    | And ar -> `And (foc, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
+    | Or ar -> `Or (foc, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
+    | Maybe elt -> `Maybe (foc, vp_of_elt_p1 (focus_pos_down pos) (MaybeX ctx) elt)
+    | Not elt -> `Not (foc, vp_of_elt_p1 (focus_pos_down pos) (NotX ctx) elt)
+and vp_of_constr foc : constr -> nl_vp = function
+  | True -> `IsThere foc
+  | MatchesAll lpat -> `VT (foc, `Op "matches", `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat))
+  | MatchesAny lpat -> `VT (foc, `Op "matches", `QuOneOf (`Any, List.map (fun pat -> `Literal pat) lpat))
+  | After pat -> `IsPP (foc, `Prep (`Op "after", `Literal pat))
+  | Before pat -> `IsPP (foc, `Prep (`Op "before", `Literal pat))
+  | FromTo (pat1,pat2) -> `IsPP (foc, `PrepBin (`Op "from", `Literal pat1, `Op "to", `Literal pat2))
+  | HigherThan pat -> `IsPP (foc, `Prep (`Op "higher than", `Literal pat))
+  | LowerThan pat -> `IsPP (foc, `Prep (`Op "lower than", `Literal pat))
+  | Between (pat1,pat2) -> `IsPP (foc, `PrepBin (`Op "between", `Literal pat1, `Op "and", `Literal pat2))
+  | HasLang pat -> `Has (foc, `Qu (`NoFocus, `A, `Nil, `Op "language", `Ing (`Op "matching", `PN (`NoFocus, `Literal pat, `Nil))))
+  | HasDatatype pat -> `Has (foc, `Qu (`NoFocus, `A, `Nil, `Op "datatype", `Ing (`Op "matching", `PN (`NoFocus, `Literal pat, `Nil))))
+and np_of_elt_s1 pos ctx f : nl_np =
+  let foc = `Focus (AtS1 (f,ctx),pos) in
+  match f with
+    | Det (det, None) -> det_of_elt_s2 foc `Nil det
+    | Det (det, Some rel) -> det_of_elt_s2 foc (`That (vp_of_elt_p1 (focus_pos_down pos) (DetThatX (det, ctx)) rel)) det
+and det_of_elt_s2 foc rel : elt_s2 -> nl_np = function
+  | Term t -> `PN (foc, `Term t, rel)
+  | An (modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
+and s_of_elt_s pos : elt_s -> nl_s = function
+  | Return np -> `Return (`Focus (AtS (Return np), pos), np_of_elt_s1 (focus_pos_down pos) ReturnX np)
+
+let rec s_of_ctx_p1 f nl ctx : nl_s =
+  match ctx with
+    | DetThatX (det,ctx2) ->
+      let f2 = Det (det, Some f) in
+      let nl2 = det_of_elt_s2 (`Focus (AtS1 (f2,ctx2), `Out)) (`That nl) det in
+      s_of_ctx_s1 f2 nl2 ctx2
+    | AndX (i,ar,ctx2) ->
+      let f2 = ar.(i) <- f; And ar in
+      let nl2 =
+	`And (`Focus (AtP1 (f2,ctx2), `Out),
+	      Array.mapi
+		(fun j elt -> if j=i then nl else vp_of_elt_p1 `Out (AndX (j,ar,ctx2)) elt)
+		ar) in
+      s_of_ctx_p1 f2 nl2 ctx2
+    | OrX (i,ar,ctx2) ->
+      ar.(i) <- f;
+      let f2 = Or ar in
+      let nl2 =
+	`Or (`Focus (AtP1 (f2,ctx2), `Out),
+	     Array.mapi
+	       (fun j elt -> if j=i then nl else vp_of_elt_p1 `Out (OrX (j,ar,ctx2)) elt)
+	       ar) in
+      s_of_ctx_p1 f2 nl2 ctx2
+   | MaybeX ctx2 ->
+      let f2 = Maybe f in
+      let nl2 = `Maybe (`Focus (AtP1 (f2,ctx2), `Out), nl) in
+      s_of_ctx_p1 f2 nl2 ctx2
+   | NotX ctx2 ->
+      let f2 = Not f in
+      let nl2 = `Not (`Focus (AtP1 (f2,ctx2), `Out), nl) in
+      s_of_ctx_p1 f2 nl2 ctx2
+and s_of_ctx_s1 f nl ctx =
+  match ctx with
+    | HasX (p,ctx2) ->
+      let f2 = Has (p,f) in
+      let nl2 = `HasProp (`Focus (AtP1 (f2,ctx2), `Out), `Prop p, nl) in
+      s_of_ctx_p1 f2 nl2 ctx2
+    | IsOfX (p,ctx2) ->
+      let f2 = IsOf (p,f) in
+      let nl2 = `IsA (`Focus (AtP1 (f2,ctx2), `Out), `Prop p, `Of nl) in
+      s_of_ctx_p1 f2 nl2 ctx2
+    | ReturnX ->
+      let f2 = Return f in
+      let nl2 = `Return (`Focus (AtS f2, `Out), nl) in
+      nl2
+
+let s_of_focus : focus -> nl_s = function
+  | AtP1 (f,ctx) -> s_of_ctx_p1 f (vp_of_elt_p1 `At ctx f) ctx
+  | AtS1 (f,ctx) -> s_of_ctx_s1 f (np_of_elt_s1 `At ctx f) ctx
+  | AtS f -> s_of_elt_s `Out f
+
+let html_of_focus dico focus = html_of_s dico (s_of_focus focus)
 
 (* focus moves *)
 
@@ -1071,19 +1301,59 @@ let delete_focus = function
 
 
 (* HTML of increment lists *)
+(*
+let nl_of_increment_at_vp = function
+  | IncrTerm t -> `Term t (* TODO *)
+  | IncrClass c -> `VP (`IsA (`NoFocus, `Class c, `Nil))
+  | IncrProp p -> `VP (`Has (`NoFocus, `Qu (`NoFocus, `A, `Nil, `Prop p, `Nil)))
+  | IncrInvProp p -> `VP (`IsA (`NoFocus, `Prop p, `Nil))
+  | IncrOr -> `VP (`Or (`NoFocus, [|`DummyFocus; top_vp|]))
+  | IncrMaybe -> `VP (`Maybe (`NoFocus, `DummyFocus))
+  | IncrNot -> `VP (`Not (`NoFocus, `DummyFocus))
+  | IncrModifS2 modif -> assert false
 
-let html_of_increment_frequency dico_incrs (incr,freq) =
+let nl_of_increment_at_np = function
+  | IncrTerm t -> `Term t
+  | IncrClass c -> `NP (`Qu (`NoFocus, `A, `Nil, `Class c, `Nil))
+  | IncrProp p -> `Rel (`That (`Has (`NoFocus, `Qu (`NoFocus, `A, `Nil, `Prop p, `Nil))))
+  | IncrInvProp p -> `Rel (`That (`IsA (`NoFocus, `Prop p, `Nil)))
+  | IncrOr -> assert false
+  | IncrMaybe -> assert false
+  | IncrNot -> assert false
+  | IncrModifS2 modif -> `NP (head_of_modif `NoFocus `DummyFocus `Nil modif)
+*)
+
+let html_of_increment_frequency focus dico_incrs (incr,freq) =
   let key = dico_incrs#add incr in
+(*
+  let nl =
+    match focus with
+      | AtP1 _ -> nl_of_increment_at_vp incr
+      | AtS1 _ -> nl_of_increment_at_np incr
+      | AtS _ -> assert false in
+  let text =
+    let dico_foci = dico_incrs#dico_foci in
+    match nl with
+      | `Term t -> html_term t
+      | `VP vp -> html_of_vp dico_foci vp
+      | `NP np -> html_of_np dico_foci np
+      | `Rel rel -> html_of_rel dico_foci rel in
+*)
+  let at_s1, at_s1_top =
+    match focus with
+      | AtP1 _ -> false, false
+      | AtS1 (f,ctx) -> true, f = top_s1
+      | AtS _ -> false, false in
   let text =
     match incr with
       | IncrTerm t -> html_term t
-      | IncrClass c -> "a " ^ html_class c
-      | IncrProp p -> "has " ^ html_prop p
-      | IncrInvProp p -> "is the " ^ html_prop p ^ " of"
-      | IncrOr -> html_or [|html_focus_dummy; html_is_there|]
-      | IncrMaybe -> html_maybe html_focus_dummy
-      | IncrNot -> html_not html_focus_dummy
-      | IncrModifS2 modif -> html_of_modif_s2_noun modif html_focus_dummy
+      | IncrClass c -> (if at_s1_top then "" else if at_s1 then "that is " else "and is ") ^ "a " ^ html_class c
+      | IncrProp p -> (if at_s1 then "that " else "and ") ^ "has a " ^ html_prop p
+      | IncrInvProp p -> (if at_s1_top then "" else if at_s1 then "that is " else "and is ") ^ "a " ^ html_prop p ^ " of"
+      | IncrOr -> html_modifier "or " ^ html_is_there (*html_or [|html_dummy_focus; html_is_there|]*)
+      | IncrMaybe -> html_maybe html_dummy_focus
+      | IncrNot -> html_not html_dummy_focus
+      | IncrModifS2 modif -> html_of_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus `Nil modif)
   in
   let text_freq =
     if freq = 1
@@ -1091,13 +1361,13 @@ let html_of_increment_frequency dico_incrs (incr,freq) =
     else " [" ^ string_of_int freq ^ "]" in
   "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
-let html_of_increment_frequency_list dico_incrs lif =
+let html_of_increment_frequency_list focus dico_incrs lif =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
     (fun incr_freq ->
       Buffer.add_string buf "<li>";
-      Buffer.add_string buf (html_of_increment_frequency dico_incrs incr_freq);
+      Buffer.add_string buf (html_of_increment_frequency focus dico_incrs incr_freq);
       Buffer.add_string buf "</li>")
     lif;
   Buffer.add_string buf "</ul>";
@@ -1620,6 +1890,8 @@ end
 class dico_increments =
 object
   inherit [increment] dico "incr"
+  val dico_foci = new dico_foci
+  method dico_foci = dico_foci
 end
 
 (* navigation place and history *)
@@ -1752,7 +2024,7 @@ object (self)
   method private refresh_term_increments =
     jquery "#list-terms" (fun elt ->
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   (List.rev_map (fun (t, freq) -> (IncrTerm t, freq)) focus_term_index));
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
@@ -1764,7 +2036,7 @@ object (self)
     let process elt results =
       let class_list = list_of_results_column "class" results in
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   (List.fold_left
 	      (fun res -> function
 		| URI c -> (IncrClass c, 1) :: res
@@ -1797,7 +2069,7 @@ object (self)
     let process elt results =
       let prop_list = list_of_results_column "prop" results in
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   (List.fold_left
 	      (fun res -> function
 		| URI c -> (IncrProp c, 1) :: (IncrInvProp c, 1) :: res
@@ -1831,7 +2103,7 @@ object (self)
     let process elt results =
       let class_index = index_of_results_column "class" results in
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   (List.fold_left
 	      (fun res -> function
 		| (URI c, freq) -> (IncrClass c, freq) :: res
@@ -1881,7 +2153,7 @@ object (self)
 	    | _ -> acc (* assert false *) in
 	aux [] index_has index_isof in
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   index);
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
@@ -1944,7 +2216,7 @@ object (self)
 	    modifs
 	  | _ -> [] in
       elt##innerHTML <- string
-	(html_of_increment_frequency_list dico_incrs
+	(html_of_increment_frequency_list focus dico_incrs
 	   (List.map (fun incr -> (incr,1)) modif_list));
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
