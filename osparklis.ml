@@ -899,8 +899,10 @@ let rec up_p1 f = function
   | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
   | NotX ctx -> Some (AtP1 (Not f, ctx))
 let up_s1 f = function
+(*
   | HasX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (Has (p,f))), ctx))
   | IsOfX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (IsOf (p,f))), ctx))
+*)
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | ReturnX -> Some (AtS (Return f))
@@ -1072,7 +1074,10 @@ let insert_modif_s2 modif = function
       if modif = modif0
       then Id
       else modif in
-    Some (AtS1 (Det (An (modif2, head), rel_opt), ctx))
+    let foc2 = AtS1 (Det (An (modif2, head), rel_opt), ctx) in
+    ( match modif2 with
+      | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
+      | _ -> Some foc2 )
   | _ -> None
 
 let insert_increment incr focus =
@@ -1112,10 +1117,17 @@ let rec delete_ctx_p1 = function
       | `Array (ar2, i2) -> Some (AtP1 (ar2.(i2), OrX (i2, ar2, ctx))) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
+and delete_ctx_s1 = function
+  | HasX (p,ctx) -> delete_ctx_p1 ctx
+  | IsOfX (p,ctx) -> delete_ctx_p1 ctx
+  | ReturnX -> None
 
 let delete_focus = function
   | AtP1 (_,ctx) -> delete_ctx_p1 ctx
-  | AtS1 (Det _, ctx) -> Some (AtS1 (top_s1, ctx))
+  | AtS1 (f, ctx) ->
+    if f = top_s1
+    then delete_ctx_s1 ctx
+    else Some (AtS1 (top_s1, ctx))
   | AtS _ -> Some (AtS (Return top_s1))
 
 
