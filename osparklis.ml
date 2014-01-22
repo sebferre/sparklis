@@ -4,6 +4,12 @@ open XmlHttpRequest
 
 (* ------------------------ *)
 
+(* prepare a string for safe insertion in HTML code *)
+let escapeHTML (str : string) : string =
+  let div = Dom_html.createDiv Dom_html.document in
+  ignore (div##appendChild((Dom_html.document##createTextNode(string str) :> Dom.node t)));
+  to_string (div##innerHTML)
+
 type uri = string
 
 let prefix_of_uri uri = (* for variable names *)
@@ -13,10 +19,12 @@ let prefix_of_uri uri = (* for variable names *)
 
 let name_of_uri uri =
   let uri = to_string (decodeURI (string uri)) in
-  match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
-    | Some (_,res) ->
-      ( match Regexp.matched_string res with "" -> uri | name -> name )
-    | None -> uri
+  let s =
+    match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
+      | Some (_,res) ->
+	( match Regexp.matched_string res with "" -> uri | name -> name )
+      | None -> uri in
+  escapeHTML s
 
 let uri_has_ext uri exts =
   List.exists
@@ -758,7 +766,7 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
-let html_literal s = html_span ~classe:"Literal" s
+let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri uri = html_span ~classe:"URI" ~title:uri (name_of_uri uri)
 let html_class c = html_span ~classe:"classURI" ~title:c (name_of_uri c)
 let html_prop p = html_span ~classe:"propURI" ~title:p (name_of_uri p)
@@ -1195,12 +1203,14 @@ let page_of_results (offset : int) (limit : int) results : sparql_results =
 let list_of_results_column (var : var) results : term list =
   try
     let i = List.assoc var results.vars in
-    List.fold_left
-      (fun res binding ->
-	match binding.(i) with
-	  | None -> res
-	  | Some t -> t::res)
-      [] results.bindings
+    List.sort
+      (fun t1 t2 -> Pervasives.compare t2 t1)
+      (List.fold_left
+	 (fun res binding ->
+	   match binding.(i) with
+	     | None -> res
+	     | Some t -> t::res)
+	 [] results.bindings)
   with Not_found ->
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
@@ -1708,8 +1718,8 @@ object (self)
 
   (* essential state *)
 
-(*  val endpoint = "http://dbpedia.org/sparql"*)
-  val mutable endpoint = "http://localhost:3030/ds/sparql"
+  val endpoint = "http://dbpedia.org/sparql"
+(*  val endpoint = "http://localhost:3030/ds/sparql" *)
   method endpoint = endpoint
 
   val focus = home_focus
