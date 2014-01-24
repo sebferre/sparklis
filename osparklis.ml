@@ -1470,9 +1470,9 @@ let html_cell t =
       else html_term ~link:true t
     | _ -> html_term ~link:true t
 
-let html_table_of_results ~focus_var results =
+let html_table_of_results ~first_rank ~focus_var results =
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf "<table id=\"extension\"><tr>";
+  Buffer.add_string buf "<table id=\"extension\"><tr><th></th>";
   List.iter
     (fun (var,i) ->
       Buffer.add_string buf
@@ -1484,9 +1484,13 @@ let html_table_of_results ~focus_var results =
     results.vars;
   Buffer.add_string buf "</tr>";
   let li = List.map snd results.vars in
+  let rank = ref first_rank in
   List.iter
     (fun binding ->
       Buffer.add_string buf "<tr>";
+      Buffer.add_string buf "<td>";
+      Buffer.add_string buf (string_of_int !rank);
+      Buffer.add_string buf "</td>";
       List.iter
 	(fun i ->
 	  Buffer.add_string buf "<td>";
@@ -1495,7 +1499,8 @@ let html_table_of_results ~focus_var results =
 	    | Some t -> Buffer.add_string buf (html_cell t) );
 	  Buffer.add_string buf "</td>")
 	li;
-      Buffer.add_string buf "</tr>")
+      Buffer.add_string buf "</tr>";
+      incr rank)
     results.bindings;
   Buffer.add_string buf "</table>";
   Buffer.contents buf
@@ -1812,6 +1817,7 @@ object (self)
 	elt_results##style##display <- string "block";
 	jquery_set_innerHTML "#list-results"
 	  (html_table_of_results
+	     ~first_rank:(offset+1)
 	     ~focus_var:(match focus_term_opt with Some (Var v) -> v | _ -> "")
 	     (page_of_results offset limit results));
 	jquery_all ".count-results" (fun elt ->
