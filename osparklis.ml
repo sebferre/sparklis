@@ -1856,8 +1856,9 @@ object (self)
     in
     jquery "#list-classes" (fun elt ->
       let sparql =
-	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { [] rdfs:domain ?class } UNION { [] rdfs:range ?class } " ^
+	"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+	  "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
+	  "SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	  sparql_constr (Var "class") class_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
@@ -1889,9 +1890,10 @@ object (self)
     in
     jquery "#list-properties" (fun elt ->
       let sparql =
-	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \
-         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop rdfs:domain [] } UNION { ?prop rdfs:range [] } " ^
+	"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
+          "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+          "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
+          "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	  sparql_constr (Var "prop") property_constr ^
 	  " } LIMIT 1000" in
       ajax_sparql_in [elt] ajax_pool endpoint sparql
