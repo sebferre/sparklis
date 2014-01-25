@@ -593,50 +593,52 @@ type nl_focus =
   [ `NoFocus
   | `Focus of focus * [ `In | `At | `Out ] ]
 
-type nl_s =
-  [ `Return of nl_focus * nl_np ]
-and nl_np =
-  [ `PN of nl_focus * nl_word * nl_rel
-  | `Qu of nl_focus * nl_qu * nl_adj * nl_word * nl_rel
+type nl_s = nl_focus *
+  [ `Return of nl_np ]
+and nl_np = nl_focus *
+  [ `PN of nl_word * nl_rel
+  | `Qu of nl_qu * nl_adj * nl_word * nl_rel
   | `QuOneOf of nl_qu * nl_word list ]
 and nl_qu = [ `A | `Any | `The | `All ]
 and nl_adj =
   [ `Nil
   | `Adj of nl_adj * nl_word ]
-and nl_rel =
+and nl_rel = nl_focus *
   [ `Nil
   | `That of nl_vp
   | `Of of nl_np
-  | `Ing of nl_word * nl_np ]
-and nl_vp =
-  [ `IsThere of nl_focus
-  | `IsA of nl_focus * nl_word * nl_rel
-  | `IsPP of nl_focus * nl_pp
-  | `HasProp of nl_focus * nl_word * nl_np
-  | `Has of nl_focus * nl_np
-  | `VT of nl_focus * nl_word * nl_np
-  | `And of nl_focus * nl_vp array
-  | `Or of nl_focus * nl_vp array
-  | `Maybe of nl_focus * nl_vp
-  | `Not of nl_focus * nl_vp
+  | `Ing of nl_word * nl_np
+  | `And of nl_rel array
+  | `Or of nl_rel array ]
+and nl_vp = nl_focus *
+  [ `IsThere
+  | `IsA of nl_word * nl_rel
+  | `IsPP of nl_pp
+  | `HasProp of nl_word * nl_np
+  | `Has of nl_np
+  | `VT of nl_word * nl_np
+  | `And of nl_vp array
+  | `Or of nl_vp array
+  | `Maybe of nl_vp
+  | `Not of nl_vp
   | `DummyFocus ]
 and nl_pp =
   [ `Prep of nl_word * nl_word
   | `PrepBin of nl_word * nl_word * nl_word * nl_word ]
 
-let top_vp = `IsThere `NoFocus
-let top_rel = `That top_vp
-let top_np = `Qu (`NoFocus, `A, `Nil, `Thing, `Nil)
-let top_s = `Return (`NoFocus, top_np)
+let top_vp = `Nofocus, `IsThere
+let top_rel = `NoFocus, `Nil
+let top_np = `NoFocus, `Qu (`A, `Nil, `Thing, top_rel)
+let top_s = `NoFocus, `Return top_np
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out
 
 let rec head_of_modif foc nn rel : modif_s2 -> nl_np = function
-  | Id -> `Qu (foc, `A, `Nil, nn, rel)
-  | Any -> `Qu (foc, `Any, `Nil, nn, rel)
-  | Order o -> `Qu (foc, `The, adj_of_order o, nn, rel)
-  | Aggreg (None, g) -> `Qu (foc, `A, adj_of_aggreg `Nil g, nn, rel)
-  | Aggreg (Some o, g) -> `Qu (foc, `The, adj_of_aggreg (adj_of_order o) g, nn, rel)
+  | Id -> foc, `Qu (`A, `Nil, nn, rel)
+  | Any -> foc, `Qu (`Any, `Nil, nn, rel)
+  | Order o -> foc, `Qu (`The, adj_of_order o, nn, rel)
+  | Aggreg (None, g) -> foc, `Qu (`A, adj_of_aggreg `Nil g, nn, rel)
+  | Aggreg (Some o, g) -> foc, `Qu (`The, adj_of_aggreg (adj_of_order o) g, nn, rel)
 and adj_of_order : order -> nl_adj = function
   | Highest -> `Adj (`Nil, `Op "highest")
   | Lowest -> `Adj (`Nil, `Op "lowest")
@@ -649,85 +651,93 @@ and adj_of_aggreg adj : aggreg -> nl_adj = function
   | Minimum -> `Adj (adj, `Op "minimum")
 
 let rec vp_of_elt_p1 pos ctx f : nl_vp =
-  let foc = `Focus (AtP1 (f,ctx), pos) in
-  match f with
-    | IsThere -> `IsThere foc
-    | Type c -> `IsA (foc, `Class c, `Nil)
-    | Has (p,np) -> `HasProp (foc, `Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
-    | IsOf (p,np) -> `IsA (foc, `Prop p, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))
-    | Constr c -> vp_of_constr foc c
-    | And ar -> `And (foc, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
-    | Or ar -> `Or (foc, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
-    | Maybe elt -> `Maybe (foc, vp_of_elt_p1 (focus_pos_down pos) (MaybeX ctx) elt)
-    | Not elt -> `Not (foc, vp_of_elt_p1 (focus_pos_down pos) (NotX ctx) elt)
-and vp_of_constr foc : constr -> nl_vp = function
-  | True -> `IsThere foc
-  | MatchesAll lpat -> `VT (foc, `Op "matches", `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat))
-  | MatchesAny lpat -> `VT (foc, `Op "matches", `QuOneOf (`Any, List.map (fun pat -> `Literal pat) lpat))
-  | After pat -> `IsPP (foc, `Prep (`Op "after", `Literal pat))
-  | Before pat -> `IsPP (foc, `Prep (`Op "before", `Literal pat))
-  | FromTo (pat1,pat2) -> `IsPP (foc, `PrepBin (`Op "from", `Literal pat1, `Op "to", `Literal pat2))
-  | HigherThan pat -> `IsPP (foc, `Prep (`Op "higher than", `Literal pat))
-  | LowerThan pat -> `IsPP (foc, `Prep (`Op "lower than", `Literal pat))
-  | Between (pat1,pat2) -> `IsPP (foc, `PrepBin (`Op "between", `Literal pat1, `Op "and", `Literal pat2))
-  | HasLang pat -> `Has (foc, `Qu (`NoFocus, `A, `Nil, `Op "language", `Ing (`Op "matching", `PN (`NoFocus, `Literal pat, `Nil))))
-  | HasDatatype pat -> `Has (foc, `Qu (`NoFocus, `A, `Nil, `Op "datatype", `Ing (`Op "matching", `PN (`NoFocus, `Literal pat, `Nil))))
+  let nl =
+    match f with
+      | IsThere -> `IsThere
+      | Type c -> `IsA (`Class c, top_rel)
+      | Has (p,np) -> `HasProp (`Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
+      | IsOf (p,np) -> `IsA (`Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np)))
+      | Constr c -> vp_of_constr c
+      | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
+      | Or ar -> `Or (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
+      | Maybe elt -> `Maybe (vp_of_elt_p1 (focus_pos_down pos) (MaybeX ctx) elt)
+      | Not elt -> `Not (vp_of_elt_p1 (focus_pos_down pos) (NotX ctx) elt) in
+  `Focus (AtP1 (f,ctx), pos), nl
+and vp_of_constr = function
+  | True -> `IsThere
+  | MatchesAll lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)))
+  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`Any, List.map (fun pat -> `Literal pat) lpat)))
+  | After pat -> `IsPP (`Prep (`Op "after", `Literal pat))
+  | Before pat -> `IsPP (`Prep (`Op "before", `Literal pat))
+  | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", `Literal pat1, `Op "to", `Literal pat2))
+  | HigherThan pat -> `IsPP (`Prep (`Op "higher than", `Literal pat))
+  | LowerThan pat -> `IsPP (`Prep (`Op "lower than", `Literal pat))
+  | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", `Literal pat1, `Op "and", `Literal pat2))
+  | HasLang pat -> `Has (`NoFocus, `Qu (`A, `Nil, `Op "language", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel))))))
+  | HasDatatype pat -> `Has (`NoFocus, `Qu (`A, `Nil, `Op "datatype", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel))))))
 and np_of_elt_s1 pos ctx f : nl_np =
   let foc = `Focus (AtS1 (f,ctx),pos) in
   match f with
-    | Det (det, None) -> det_of_elt_s2 foc `Nil det
-    | Det (det, Some rel) -> det_of_elt_s2 foc (`That (vp_of_elt_p1 (focus_pos_down pos) (DetThatX (det, ctx)) rel)) det
+    | Det (det, None) -> det_of_elt_s2 foc top_rel det
+    | Det (det, Some rel) ->
+      let foc_rel, nl_rel = vp_of_elt_p1 (focus_pos_down pos) (DetThatX (det,ctx)) rel in
+      det_of_elt_s2 foc (foc_rel, `That (`NoFocus, nl_rel)) det
 and det_of_elt_s2 foc rel : elt_s2 -> nl_np = function
-  | Term t -> `PN (foc, `Term t, rel)
+  | Term t -> foc, `PN (`Term t, rel)
   | An (modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
 and s_of_elt_s pos : elt_s -> nl_s = function
-  | Return np -> `Return (`Focus (AtS (Return np), pos), np_of_elt_s1 (focus_pos_down pos) ReturnX np)
+  | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 (focus_pos_down pos) ReturnX np)
 
-let rec s_of_ctx_p1 f nl ctx : nl_s =
+let rec s_of_ctx_p1 f (foc,nl as foc_nl) ctx : nl_s =
   match ctx with
     | DetThatX (det,ctx2) ->
       let f2 = Det (det, Some f) in
-      let nl2 = det_of_elt_s2 (`Focus (AtS1 (f2,ctx2), `Out)) (`That nl) det in
+      let nl2 = det_of_elt_s2 (`Focus (AtS1 (f2,ctx2), `Out)) (foc, `That (`NoFocus, nl)) det in
       s_of_ctx_s1 f2 nl2 ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 =
-	`And (`Focus (AtP1 (f2,ctx2), `Out),
-	      Array.mapi
-		(fun j elt -> if j=i then nl else vp_of_elt_p1 `Out (AndX (j,ar,ctx2)) elt)
+	`And (Array.mapi
+		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 `Out (AndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_p1 f2 nl2 ctx2
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 =
-	`Or (`Focus (AtP1 (f2,ctx2), `Out),
-	     Array.mapi
-	       (fun j elt -> if j=i then nl else vp_of_elt_p1 `Out (OrX (j,ar,ctx2)) elt)
+	`Or (Array.mapi
+	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 `Out (OrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_p1 f2 nl2 ctx2
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
-      let nl2 = `Maybe (`Focus (AtP1 (f2,ctx2), `Out), nl) in
-      s_of_ctx_p1 f2 nl2 ctx2
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = `Maybe foc_nl in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
-      let nl2 = `Not (`Focus (AtP1 (f2,ctx2), `Out), nl) in
-      s_of_ctx_p1 f2 nl2 ctx2
-and s_of_ctx_s1 f nl ctx =
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = `Not foc_nl in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
+and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
   match ctx with
     | HasX (p,ctx2) ->
       let f2 = Has (p,f) in
-      let nl2 = `HasProp (`Focus (AtP1 (f2,ctx2), `Out), `Prop p, nl) in
-      s_of_ctx_p1 f2 nl2 ctx2
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = `HasProp (`Prop p, foc_nl) in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | IsOfX (p,ctx2) ->
       let f2 = IsOf (p,f) in
-      let nl2 = `IsA (`Focus (AtP1 (f2,ctx2), `Out), `Prop p, `Of nl) in
-      s_of_ctx_p1 f2 nl2 ctx2
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = `IsA (`Prop p, (`NoFocus, `Of foc_nl)) in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | ReturnX ->
       let f2 = Return f in
-      let nl2 = `Return (`Focus (AtS f2, `Out), nl) in
-      nl2
+      let foc2 = `Focus (AtS f2, `Out) in
+      let nl2 = `Return foc_nl in
+      (foc2,nl2)
 
 let s_of_focus : focus -> nl_s = function
   | AtP1 (f,ctx) -> s_of_ctx_p1 f (vp_of_elt_p1 `At ctx f) ctx
@@ -825,21 +835,32 @@ let html_focus dico (foc : nl_focus) (html : string) : string =
     | `NoFocus -> html
     | `Focus (focus, pos) ->
       let id = dico#add focus in
-      let html = "<span id=\"" ^ id ^ "\" class=\"focus" ^ (if pos <> `Out then " in-current-focus" else "") ^ "\">" ^ html ^ "</span>" in
+      let class_pos =
+	match pos with
+	  | `In -> "in-current-focus"
+	  | `At -> "in-current-focus"
+	  | `Out -> "out-current-focus" in
+      let html = "<span id=\"" ^ id ^ "\" class=\"focus " ^ class_pos ^ "\">" ^ html ^ "</span>" in
       if pos = `At
       then html_current_focus html
       else html
 
-let rec html_of_s dico : nl_s -> string = function
-  | `Return (foc, np) -> html_focus dico foc (html_return (html_of_np dico np))
-and html_of_np dico : nl_np -> string = function
-  | `PN (foc, w, rel) -> html_focus dico foc (html_word w ^ html_of_rel dico rel)
-  | `Qu (foc, `A, `Nil, `Thing, `Nil) -> html_focus dico foc "something"
-  | `Qu (foc, qu, adj, `Thing, `That (`IsA (foc2, w, rel2))) ->
-    html_focus dico foc (html_of_qu qu ^ html_of_adj adj ^ html_focus dico foc2 (html_word w ^ html_of_rel dico rel2))
-  | `Qu (foc, qu, adj, w, rel) -> html_focus dico foc (html_of_qu qu ^ html_of_adj adj ^ html_word w ^ html_of_rel dico rel)
-  | `QuOneOf (_, [w]) -> html_word w
-  | `QuOneOf (qu, lw) -> html_of_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw)
+let rec html_of_s dico (foc, nl : nl_s) : string =
+  let html =
+    match nl with
+      | `Return np -> html_return (html_of_np dico np) in
+  html_focus dico foc html			  
+and html_of_np dico (foc, nl : nl_np) : string =
+  let html =
+    match nl with
+      | `PN (w, rel) -> html_word w ^ html_of_rel_opt dico rel
+      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsA (w, rel2)))) ->
+	html_of_qu qu ^ html_of_adj adj ^ html_focus dico foc2 (html_word w ^ html_of_rel_opt dico rel2)
+      | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_of_rel_opt dico rel
+      | `Qu (qu, adj, w, rel) -> html_of_qu qu ^ html_of_adj adj ^ html_word w ^ html_of_rel_opt dico rel
+      | `QuOneOf (_, [w]) -> html_word w
+      | `QuOneOf (qu, lw) -> html_of_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw) in
+  html_focus dico foc html
 and html_of_qu : nl_qu -> string = function
   | `A -> "a "
   | `Any -> "any "
@@ -848,25 +869,41 @@ and html_of_qu : nl_qu -> string = function
 and html_of_adj : nl_adj -> string = function
   | `Nil -> ""
   | `Adj (a, w) -> html_of_adj a ^ html_word w ^ " "
-and html_of_rel dico : nl_rel -> string = function
-  | `Nil -> ""
-(*  | `That (`HasProp (foc, p, `Qu (foc2, `A, `Nil, `Thing, `That vp))) -> " whose " ^ html_focus dico foc (html_word p ^ " " ^ html_focus dico foc2 (html_of_vp dico vp)) *)
-  | `That vp -> " that " ^ html_of_vp dico vp
-  | `Of np -> " of " ^ html_of_np dico np
-  | `Ing (w, np) -> " " ^ html_word w ^ " " ^ html_of_np dico np
-and html_of_vp dico : nl_vp -> string = function
-  | `IsThere foc -> html_focus dico foc (html_is_there)
-  | `IsA (foc, w, rel) -> html_focus dico foc ("is a " ^ html_word w ^ html_of_rel dico rel)
-  | `IsPP (foc, pp) -> html_focus dico foc ("is " ^ html_of_pp dico pp)
-  | `HasProp (foc, w, `Qu (foc2, qu, adj, `Thing, rel)) -> html_of_vp dico (`Has (foc, `Qu (foc2, qu, adj, w, rel)))
-  | `HasProp (foc, p, np) -> html_focus dico foc ("has " ^ html_word p ^ " " ^ html_of_np dico np)
-  | `Has (foc, np) -> html_focus dico foc ("has " ^ html_of_np dico np)
-  | `VT (foc, w, np) -> html_focus dico foc (html_word w ^ " " ^ html_of_np dico np)
-  | `And (foc, ar) -> html_focus dico foc (html_and (Array.map (html_of_vp dico) ar))
-  | `Or (foc, ar) -> html_focus dico foc (html_or (Array.map (html_of_vp dico) ar))
-  | `Maybe (foc, vp) -> html_focus dico foc (html_maybe (html_of_vp dico vp))
-  | `Not (foc, vp) -> html_focus dico foc (html_not (html_of_vp dico vp))
-  | `DummyFocus -> html_dummy_focus
+and html_of_rel_opt dico foc_nl =
+  if foc_nl = top_rel
+  then ""
+  else " " ^ html_of_rel dico foc_nl
+and html_of_rel dico (foc, nl : nl_rel) : string =
+  let html =
+    match nl with
+      | `Nil -> ""
+      | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))))) ->
+	"whose " ^ html_focus dico foc2 (html_word p ^ " " ^ html_of_vp dico (foc3,nl_vp))
+      | `That (_, `IsPP pp) -> html_of_pp dico pp
+      | `That (_, `And ar) -> html_of_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+      | `That (_, `Or ar) -> html_of_rel dico (foc, `Or (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+      | `That vp -> "that " ^ html_of_vp dico vp
+      | `Of np -> "of " ^ html_of_np dico np
+      | `Ing (w, np) -> html_word w ^ " " ^ html_of_np dico np
+      | `And ar -> html_and (Array.map (html_of_rel dico) ar)
+      | `Or ar -> html_or (Array.map (html_of_rel dico) ar) in
+  html_focus dico foc html
+and html_of_vp dico (foc, nl : nl_vp) : string =
+  let html =
+    match nl with
+      | `IsThere -> html_is_there
+      | `IsA (w, rel) -> "is a " ^ html_word w ^ html_of_rel_opt dico rel
+      | `IsPP pp -> "is " ^ html_of_pp dico pp
+      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel))) -> html_of_vp dico (foc, `Has (foc2, `Qu (qu, adj, w, rel)))
+      | `HasProp (p, np) -> "has " ^ html_word p ^ " " ^ html_of_np dico np
+      | `Has np -> "has " ^ html_of_np dico np
+      | `VT (w, np) -> html_word w ^ " " ^ html_of_np dico np
+      | `And ar -> html_and (Array.map (html_of_vp dico) ar)
+      | `Or ar -> html_or (Array.map (html_of_vp dico) ar)
+      | `Maybe vp -> html_maybe (html_of_vp dico vp)
+      | `Not vp -> html_not (html_of_vp dico vp)
+      | `DummyFocus -> html_dummy_focus in
+  html_focus dico foc html
 and html_of_pp dico : nl_pp -> string = function
   | `Prep (prep,w) -> html_word prep ^ " " ^ html_word w
   | `PrepBin (prep1,w1,prep2,w2) -> html_word prep1 ^ " " ^ html_word w1 ^ " " ^ html_word prep2 ^ " " ^ html_word w2
@@ -1157,7 +1194,7 @@ let html_of_increment_frequency focus dico_incrs (incr,freq) =
       | IncrOr -> html_modifier "or " ^ html_is_there (*html_or [|html_dummy_focus; html_is_there|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
-      | IncrModifS2 modif -> html_of_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus `Nil modif)
+      | IncrModifS2 modif -> html_of_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel modif)
   in
   let text_freq =
     if freq = 1
@@ -1723,8 +1760,8 @@ object (self)
 
   (* essential state *)
 
-  val endpoint = "http://dbpedia.org/sparql"
-(*  val endpoint = "http://localhost:3030/ds/sparql" *)
+(*  val endpoint = "http://dbpedia.org/sparql" *)
+  val endpoint = "http://localhost:3030/ds/sparql"
   method endpoint = endpoint
 
   val focus = home_focus

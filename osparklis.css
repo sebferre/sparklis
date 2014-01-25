@@ -52,6 +52,11 @@ font-weight:bold;
 background-color:#aaffaa;
 }
 
+.out-current-focus
+{
+background-color:white;
+}
+
 .list-and
 {
 list-style-type:none;
