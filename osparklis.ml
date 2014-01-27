@@ -1674,13 +1674,13 @@ let ajax_sparql (pool : ajax_pool) (endpoint : string) (sparql : string)
 		  ()
 		| Some results -> k1 results )
 	    | 0 ->
-	      alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running.";
+	      alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
 	      k0 code
 	    | 4 ->
-	      alert "The query was not understood by the SPARQL endpoint. Check that the endpoint accepts SPARQL 1.1 queries, and if this is the case, report the error at <ferre@irisa.fr>.";
+	      alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
 	      k0 code
 	    | 5 ->
-	      alert "There was an error at the SPARQL endpoint.";
+	      alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
 	      k0 code
 	    | _ ->
 	      alert ("Error " ^ string_of_int code);
