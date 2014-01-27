@@ -612,7 +612,7 @@ and nl_rel = nl_focus *
   | `Or of nl_rel array ]
 and nl_vp = nl_focus *
   [ `IsThere
-  | `IsA of nl_word * nl_rel
+  | `IsNP of nl_np
   | `IsPP of nl_pp
   | `HasProp of nl_word * nl_np
   | `Has of nl_np
@@ -654,9 +654,9 @@ let rec vp_of_elt_p1 pos ctx f : nl_vp =
   let nl =
     match f with
       | IsThere -> `IsThere
-      | Type c -> `IsA (`Class c, top_rel)
+      | Type c -> `IsNP (`NoFocus, `Qu (`A, `Nil, `Class c, top_rel))
       | Has (p,np) -> `HasProp (`Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
-      | IsOf (p,np) -> `IsA (`Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np)))
+      | IsOf (p,np) -> `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))))
       | Constr c -> vp_of_constr c
       | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
       | Or ar -> `Or (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
@@ -731,7 +731,7 @@ and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
     | IsOfX (p,ctx2) ->
       let f2 = IsOf (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
-      let nl2 = `IsA (`Prop p, (`NoFocus, `Of foc_nl)) in
+      let nl2 = `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of foc_nl))) in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | ReturnX ->
       let f2 = Return f in
@@ -813,9 +813,9 @@ let html_or ar_html =
   !html ^ "</ul>"
 let html_maybe html = html_modifier "optionally" ^ " " ^ html
 let html_not html = html_modifier "not" ^ " " ^ html
-let html_is_there = "..."
 let html_return np = "Give me " ^ np
 let html_dummy_focus = "<span class=\"in-current-focus\">___</span>"
+let html_ellipsis = "..."
 
 let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
@@ -854,7 +854,7 @@ and html_of_np dico (foc, nl : nl_np) : string =
   let html =
     match nl with
       | `PN (w, rel) -> html_word w ^ html_of_rel_opt dico rel
-      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsA (w, rel2)))) ->
+      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP (_, `Qu ((`A | `The), `Nil, w, rel2))))) ->
 	html_of_qu qu ^ html_of_adj adj ^ html_focus dico foc2 (html_word w ^ html_of_rel_opt dico rel2)
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_of_rel_opt dico rel
       | `Qu (qu, adj, w, rel) -> html_of_qu qu ^ html_of_adj adj ^ html_word w ^ html_of_rel_opt dico rel
@@ -877,6 +877,7 @@ and html_of_rel dico (foc, nl : nl_rel) : string =
   let html =
     match nl with
       | `Nil -> ""
+      | `That (_, `IsThere) -> html_ellipsis
       | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))))) ->
 	"whose " ^ html_focus dico foc2 (html_word p ^ " " ^ html_of_vp dico (foc3,nl_vp))
       | `That (_, `IsPP pp) -> html_of_pp dico pp
@@ -891,8 +892,8 @@ and html_of_rel dico (foc, nl : nl_rel) : string =
 and html_of_vp dico (foc, nl : nl_vp) : string =
   let html =
     match nl with
-      | `IsThere -> html_is_there
-      | `IsA (w, rel) -> "is a " ^ html_word w ^ html_of_rel_opt dico rel
+      | `IsThere -> html_ellipsis
+      | `IsNP np -> "is " ^ html_of_np dico np
       | `IsPP pp -> "is " ^ html_of_pp dico pp
       | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel))) -> html_of_vp dico (foc, `Has (foc2, `Qu (qu, adj, w, rel)))
       | `HasProp (p, np) -> "has " ^ html_word p ^ " " ^ html_of_np dico np
@@ -1081,10 +1082,17 @@ let insert_class c = function
     ( match det with
       | Term _ ->
 	Some (AtS1 (Det (An (Id, Class c), rel_opt), ctx))
+      | An (modif, Thing) ->
+	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx))
       | An (modif, Class c2) when c2 = c ->
 	Some (AtS1 (Det (An (modif, Thing), rel_opt), ctx))
+      | _ ->
+	let rel = match rel_opt with None -> IsThere | Some rel -> rel in
+	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
+(*
       | An (modif, _) ->
 	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx)) )
+*)
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
@@ -1180,18 +1188,34 @@ let delete_focus = function
 
 let html_of_increment_frequency focus dico_incrs (incr,freq) =
   let key = dico_incrs#add incr in
-  let at_s1, at_s1_top =
-    match focus with
-      | AtP1 _ -> false, false
-      | AtS1 (f,ctx) -> true, f = top_s1
-      | AtS _ -> false, false in
   let text =
     match incr with
       | IncrTerm t -> html_term t
-      | IncrClass c -> (if at_s1_top then "" else if at_s1 then "that is " else "and is ") ^ "a " ^ html_class c
-      | IncrProp p -> (if at_s1 then "that " else "and ") ^ "has a " ^ html_prop p
-      | IncrInvProp p -> (if at_s1_top then "" else if at_s1 then "that is " else "and is ") ^ "a " ^ html_prop p ^ " of"
-      | IncrOr -> html_modifier "or " ^ html_is_there (*html_or [|html_dummy_focus; html_is_there|]*)
+      | IncrClass c ->
+	( match focus with
+	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
+	  | AtS1 (Det (An (_, Thing), _), _) -> "a " ^ html_class c
+	  | AtS1 (Det (An (_, Class c0), _), _) when c0 = c ->
+	    (*"<del>a " ^ html_class c ^ "</del>"*)
+	    "a " ^ html_class c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
+	  | AtS1 _ -> "that is a " ^ html_class c
+	  | AtP1 (IsThere, _) -> "that is a " ^ html_class c
+	  | _ -> "and that is a " ^ html_class c )
+      | IncrProp p ->
+	let prefix =
+	  match focus with
+	    | AtS1 _ -> "that has a "
+	    | AtP1 (IsThere, _) -> "that has a "
+	    | _ -> "and that has a " in
+	prefix ^ html_prop p
+      | IncrInvProp p ->
+	let prefix =
+	  match focus with
+	    | AtS1 _ -> "that is the "
+	    | AtP1 (IsThere, _) -> "that is the "
+	    | _ -> "and that is the " in
+	prefix ^ html_prop p ^ " of"
+      | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
       | IncrModifS2 modif -> html_of_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel modif)
@@ -2242,7 +2266,6 @@ object (self)
   val mutable present : place = new place
   val mutable future : place list = []
 
-(*  initializer present#set_update_focus self#update_focus *)
   initializer present#set_navigation (self :> navigation)
 
   method present : place = present
