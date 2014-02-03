@@ -599,9 +599,11 @@ and nl_np = nl_focus *
   [ `PN of nl_word * nl_rel
   | `Qu of nl_qu * nl_adj * nl_word * nl_rel
   | `QuOneOf of nl_qu * nl_word list ]
-and nl_qu = [ `A | `Any | `The | `All ]
+and nl_qu = [ `A | `Any of bool | `The | `All | `One ]
 and nl_adj =
   [ `Nil
+  | `Order of nl_word
+  | `Aggreg of bool * nl_adj * nl_word (* the bool is for 'suspended' *)
   | `Adj of nl_adj * nl_word ]
 and nl_rel = nl_focus *
   [ `Nil
@@ -609,7 +611,7 @@ and nl_rel = nl_focus *
   | `Of of nl_np
   | `Ing of nl_word * nl_np
   | `And of nl_rel array
-  | `Or of nl_rel array ]
+  | `Or of int option * nl_rel array ]
 and nl_vp = nl_focus *
   [ `IsThere
   | `IsNP of nl_np
@@ -618,9 +620,9 @@ and nl_vp = nl_focus *
   | `Has of nl_np
   | `VT of nl_word * nl_np
   | `And of nl_vp array
-  | `Or of nl_vp array
-  | `Maybe of nl_vp
-  | `Not of nl_vp
+  | `Or of int option * nl_vp array (* the optional int indicates that the disjunction is in the context of the i-th element *)
+  | `Maybe of bool * nl_vp (* the bool indicates whether negation is suspended *)
+  | `Not of bool * nl_vp (* the bool indicates whether negation is suspended *)
   | `DummyFocus ]
 and nl_pp =
   [ `Prep of nl_word * nl_word
@@ -633,22 +635,24 @@ let top_s = `NoFocus, `Return top_np
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
-let rec head_of_modif foc nn rel : modif_s2 -> nl_np = function
-  | Id -> foc, `Qu (`A, `Nil, nn, rel)
-  | Any -> foc, `Qu (`Any, `Nil, nn, rel)
-  | Order o -> foc, `Qu (`The, adj_of_order o, nn, rel)
-  | Aggreg (None, g) -> foc, `Qu (`A, adj_of_aggreg `Nil g, nn, rel)
-  | Aggreg (Some o, g) -> foc, `Qu (`The, adj_of_aggreg (adj_of_order o) g, nn, rel)
+let rec head_of_modif foc nn rel (modif : modif_s2) : nl_np =
+  let susp = match foc with `Focus (_, `At) -> true | _ -> false in
+  match modif with
+    | Id -> foc, `Qu (`A, `Nil, nn, rel)
+    | Any -> foc, `Qu (`Any susp, `Nil, nn, rel)
+    | Order o -> foc, `Qu (`The, adj_of_order o, nn, rel)
+    | Aggreg (None, g) -> foc, `Qu (`A, adj_of_aggreg ~suspended:susp `Nil g, nn, rel)
+    | Aggreg (Some o, g) -> foc, `Qu (`The, adj_of_aggreg ~suspended:susp (adj_of_order o) g, nn, rel)
 and adj_of_order : order -> nl_adj = function
-  | Highest -> `Adj (`Nil, `Op "highest")
-  | Lowest -> `Adj (`Nil, `Op "lowest")
-and adj_of_aggreg adj : aggreg -> nl_adj = function
-  | NumberOf -> `Adj (adj, `Op "number of")
-  | ListOf -> `Adj (adj, `Op "list of")
-  | Total -> `Adj (adj, `Op "total")
-  | Average -> `Adj (adj, `Op "average")
-  | Maximum -> `Adj (adj, `Op "maximum")
-  | Minimum -> `Adj (adj, `Op "minimum")
+  | Highest -> `Order (`Op "highest")
+  | Lowest -> `Order (`Op "lowest")
+and adj_of_aggreg ~suspended adj : aggreg -> nl_adj = function
+  | NumberOf -> `Aggreg (suspended, adj, `Op "number of")
+  | ListOf -> `Aggreg (suspended, adj, `Op "list of")
+  | Total -> `Aggreg (suspended, adj, `Op "total")
+  | Average -> `Aggreg (suspended, adj, `Op "average")
+  | Maximum -> `Aggreg (suspended, adj, `Op "maximum")
+  | Minimum -> `Aggreg (suspended, adj, `Op "minimum")
 
 let rec vp_of_elt_p1 pos ctx f : nl_vp =
   let nl =
@@ -659,14 +663,14 @@ let rec vp_of_elt_p1 pos ctx f : nl_vp =
       | IsOf (p,np) -> `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))))
       | Constr c -> vp_of_constr c
       | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
-      | Or ar -> `Or (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
-      | Maybe elt -> `Maybe (vp_of_elt_p1 (focus_pos_down pos) (MaybeX ctx) elt)
-      | Not elt -> `Not (vp_of_elt_p1 (focus_pos_down pos) (NotX ctx) elt) in
+      | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
+      | Maybe elt -> `Maybe (false, vp_of_elt_p1 (focus_pos_down pos) (MaybeX ctx) elt)
+      | Not elt -> `Not (false, vp_of_elt_p1 (focus_pos_down pos) (NotX ctx) elt) in
   `Focus (AtP1 (f,ctx), pos), nl
 and vp_of_constr = function
   | True -> `IsThere
   | MatchesAll lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)))
-  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`Any, List.map (fun pat -> `Literal pat) lpat)))
+  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)))
   | After pat -> `IsPP (`Prep (`Op "after", `Literal pat))
   | Before pat -> `IsPP (`Prep (`Op "before", `Literal pat))
   | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", `Literal pat1, `Op "to", `Literal pat2))
@@ -707,19 +711,20 @@ let rec s_of_ctx_p1 f (foc,nl as foc_nl) ctx : nl_s =
       let f2 = Or ar in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 =
-	`Or (Array.mapi
+	`Or (Some i,
+	     Array.mapi
 	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
-      let nl2 = `Maybe foc_nl in
+      let nl2 = `Maybe (true, foc_nl) in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
-      let nl2 = `Not foc_nl in
+      let nl2 = `Not (true, foc_nl) in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
 and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
   match ctx with
@@ -764,6 +769,11 @@ let html_div ?classe ?title text =
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</div>"
 
+let html_suspended ~suspended html =
+  if suspended
+  then html_span ~classe:"suspended" html
+  else html
+
 let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
@@ -805,14 +815,19 @@ let html_and ar_html =
     html := !html ^ " <li>and " ^ ar_html.(i) ^ "</li>"
   done;
   !html ^ "</ul>"
-let html_or ar_html =
-  let html = ref ("<ul class=\"list-or\"><li>" ^ ar_html.(0) ^ "</li>") in
+let html_or ?(suspended=None) ar_html =
+  let susp_or = suspended <> None in
+  let susp_elt i = suspended <> None && suspended <> Some i in
+  let html = ref ("<ul class=\"list-or\"><li>" ^ html_suspended ~suspended:(susp_elt 0) ar_html.(0) ^ "</li>") in
   for i=1 to Array.length ar_html - 1 do
-    html := !html ^ " <li>" ^ html_modifier "or" ^ " " ^ ar_html.(i) ^ "</li>"
+    html :=
+      !html ^
+      " <li>" ^ html_suspended ~suspended:susp_or (html_modifier "or") ^ " " ^
+      html_suspended ~suspended:(susp_elt i) ar_html.(i) ^ "</li>"
   done;
   !html ^ "</ul>"
-let html_maybe html = html_modifier "optionally" ^ " " ^ html
-let html_not html = html_modifier "not" ^ " " ^ html
+let html_maybe ?(suspended=false) html = html_suspended ~suspended (html_modifier "optionally") ^ " " ^ html
+let html_not ?(suspended=false) html = html_suspended ~suspended (html_modifier "not") ^ " " ^ html
 let html_return np = "Give me " ^ np
 let html_dummy_focus = "<span class=\"in-current-focus\">___</span>"
 let html_ellipsis = "..."
@@ -864,11 +879,14 @@ and html_of_np dico (foc, nl : nl_np) : string =
   html_focus dico foc html
 and html_of_qu : nl_qu -> string = function
   | `A -> "a "
-  | `Any -> "any "
+  | `Any susp -> html_suspended ~suspended:susp (html_modifier "any ")
   | `The -> "the "
   | `All -> "all "
+  | `One -> "one "
 and html_of_adj : nl_adj -> string = function
   | `Nil -> ""
+  | `Order w -> html_word w ^ " "
+  | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_of_adj a ^ html_word w) ^ " "
   | `Adj (a, w) -> html_of_adj a ^ html_word w ^ " "
 and html_of_rel_opt dico foc_nl =
   if foc_nl = top_rel
@@ -883,12 +901,12 @@ and html_of_rel dico (foc, nl : nl_rel) : string =
 	"whose " ^ html_focus dico foc2 (html_word p ^ " " ^ html_of_vp dico (foc3,nl_vp))
       | `That (_, `IsPP pp) -> html_of_pp dico pp
       | `That (_, `And ar) -> html_of_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
-      | `That (_, `Or ar) -> html_of_rel dico (foc, `Or (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+      | `That (_, `Or (susp,ar)) -> html_of_rel dico (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
       | `That vp -> "that " ^ html_of_vp dico vp
       | `Of np -> "of " ^ html_of_np dico np
       | `Ing (w, np) -> html_word w ^ " " ^ html_of_np dico np
       | `And ar -> html_and (Array.map (html_of_rel dico) ar)
-      | `Or ar -> html_or (Array.map (html_of_rel dico) ar) in
+      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_of_rel dico) ar) in
   html_focus dico foc html
 and html_of_vp dico (foc, nl : nl_vp) : string =
   let html =
@@ -901,9 +919,9 @@ and html_of_vp dico (foc, nl : nl_vp) : string =
       | `Has np -> "has " ^ html_of_np dico np
       | `VT (w, np) -> html_word w ^ " " ^ html_of_np dico np
       | `And ar -> html_and (Array.map (html_of_vp dico) ar)
-      | `Or ar -> html_or (Array.map (html_of_vp dico) ar)
-      | `Maybe vp -> html_maybe (html_of_vp dico vp)
-      | `Not vp -> html_not (html_of_vp dico vp)
+      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_of_vp dico) ar)
+      | `Maybe (suspended, vp) -> html_maybe ~suspended (html_of_vp dico vp)
+      | `Not (suspended, vp) -> html_not ~suspended (html_of_vp dico vp)
       | `DummyFocus -> html_dummy_focus in
   html_focus dico foc html
 and html_of_pp dico : nl_pp -> string = function
