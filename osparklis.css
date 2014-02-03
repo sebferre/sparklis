@@ -36,7 +36,7 @@ width:300px;
 #lisql
 {
 margin:10px;
-font-weight:bold;
+font-weight:900;
 }
 
 #current-focus
@@ -50,11 +50,22 @@ font-weight:bold;
 .in-current-focus
 {
 background-color:#aaffaa;
+font-style:normal;
+font-weight:900;
 }
 
 .out-current-focus
 {
 background-color:white;
+font-style:normal;
+font-weight:900;
+}
+
+.ex-current-focus
+{
+background-color:white;
+font-style:italic;
+font-weight:100;
 }
 
 .list-and

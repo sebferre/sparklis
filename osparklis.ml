@@ -591,7 +591,7 @@ type nl_word =
 
 type nl_focus =
   [ `NoFocus
-  | `Focus of focus * [ `In | `At | `Out ] ]
+  | `Focus of focus * [ `In | `At | `Out | `Ex ] ]
 
 type nl_s = nl_focus *
   [ `Return of nl_np ]
@@ -631,7 +631,7 @@ let top_rel = `NoFocus, `Nil
 let top_np = `NoFocus, `Qu (`A, `Nil, `Thing, top_rel)
 let top_s = `NoFocus, `Return top_np
 
-let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out
+let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
 let rec head_of_modif foc nn rel : modif_s2 -> nl_np = function
   | Id -> foc, `Qu (`A, `Nil, nn, rel)
@@ -705,20 +705,20 @@ let rec s_of_ctx_p1 f (foc,nl as foc_nl) ctx : nl_s =
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 =
 	`Or (Array.mapi
-	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 `Out (OrX (j,ar,ctx2)) elt)
+	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe foc_nl in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Not foc_nl in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
 and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
@@ -839,7 +839,8 @@ let html_focus dico (foc : nl_focus) (html : string) : string =
 	match pos with
 	  | `In -> "in-current-focus"
 	  | `At -> "in-current-focus"
-	  | `Out -> "out-current-focus" in
+	  | `Out -> "out-current-focus"
+	  | `Ex -> "ex-current-focus" in
       let html = "<span id=\"" ^ id ^ "\" class=\"focus " ^ class_pos ^ "\">" ^ html ^ "</span>" in
       if pos = `At
       then html_current_focus html
