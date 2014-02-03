@@ -893,21 +893,23 @@ and html_of_rel_opt dico foc_nl =
   then ""
   else " " ^ html_of_rel dico foc_nl
 and html_of_rel dico (foc, nl : nl_rel) : string =
-  let html =
-    match nl with
-      | `Nil -> ""
-      | `That (_, `IsThere) -> html_ellipsis
-      | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))))) ->
-	"whose " ^ html_focus dico foc2 (html_word p ^ " " ^ html_of_vp dico (foc3,nl_vp))
-      | `That (_, `IsPP pp) -> html_of_pp dico pp
-      | `That (_, `And ar) -> html_of_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
-      | `That (_, `Or (susp,ar)) -> html_of_rel dico (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
-      | `That vp -> "that " ^ html_of_vp dico vp
-      | `Of np -> "of " ^ html_of_np dico np
-      | `Ing (w, np) -> html_word w ^ " " ^ html_of_np dico np
-      | `And ar -> html_and (Array.map (html_of_rel dico) ar)
-      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_of_rel dico) ar) in
-  html_focus dico foc html
+  match nl with (* transformations *)
+    | `That (_, `And ar) -> html_of_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+    | `That (_, `Or (susp,ar)) -> html_of_rel dico (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+    | _ ->
+      let html =
+	match nl with
+	  | `Nil -> ""
+	  | `That (_, `IsThere) -> html_ellipsis
+	  | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))))) ->
+	    "whose " ^ html_focus dico foc2 (html_word p ^ " " ^ html_of_vp dico (foc3,nl_vp))
+	  | `That (_, `IsPP pp) -> html_of_pp dico pp
+	  | `That vp -> "that " ^ html_of_vp dico vp
+	  | `Of np -> "of " ^ html_of_np dico np
+	  | `Ing (w, np) -> html_word w ^ " " ^ html_of_np dico np
+	  | `And ar -> html_and (Array.map (html_of_rel dico) ar)
+	  | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_of_rel dico) ar) in
+      html_focus dico foc html
 and html_of_vp dico (foc, nl : nl_vp) : string =
   let html =
     match nl with
