@@ -383,7 +383,7 @@ let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]
 	       | Average -> sparql_aggreg "AVG(" v ")" vg
 	       | Maximum -> sparql_aggreg "MAX(" v ")" vg
 	       | Minimum -> sparql_aggreg "MIN(" v ")" vg
-	       | ListOf -> sparql_aggreg "GROUP_CONCAT(" v (" ; separator=', ')") vg)
+	       | ListOf -> sparql_aggreg "GROUP_CONCAT(DISTINCT " v (" ; separator=', ')") vg)
 	   aggregations) in
     let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
     let s =
@@ -644,8 +644,8 @@ let rec head_of_modif foc nn rel (modif : modif_s2) : nl_np =
     | Aggreg (None, g) -> foc, `Qu (`A, adj_of_aggreg ~suspended:susp `Nil g, nn, rel)
     | Aggreg (Some o, g) -> foc, `Qu (`The, adj_of_aggreg ~suspended:susp (adj_of_order o) g, nn, rel)
 and adj_of_order : order -> nl_adj = function
-  | Highest -> `Order (`Op "highest")
-  | Lowest -> `Order (`Op "lowest")
+  | Highest -> `Order (`Op "highest-to-lowest")
+  | Lowest -> `Order (`Op "lowest-to-highest")
 and adj_of_aggreg ~suspended adj : aggreg -> nl_adj = function
   | NumberOf -> `Aggreg (suspended, adj, `Op "number of")
   | ListOf -> `Aggreg (suspended, adj, `Op "list of")
@@ -2131,7 +2131,7 @@ object (self)
       | Some _ -> jquery "#increments" (fun elt -> elt##style##display <- string "block") );
     ( match query_opt with
       | None ->
-	jquery_set_innerHTML "#sparql" "";
+	jquery "#sparql" (fun elt -> elt##style##display <- string "none");
 	jquery "#results" (fun elt -> elt##style##display <- string "none");
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
 	jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
@@ -2149,7 +2149,8 @@ object (self)
 	    self#refresh_modifier_increments )
       | Some query ->
 	let sparql = query ~constr:term_constr ~limit:max_results in
-	jquery_set_innerHTML "#sparql" (html_pre sparql);
+	jquery_set_innerHTML "#sparql-query" (html_pre sparql);
+	jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	jquery "#results" (fun elt -> elt##style##display <- string "block");
 	jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	jquery "#increments" (fun elt_incrs ->

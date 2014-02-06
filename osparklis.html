@@ -37,11 +37,13 @@
 -->
   </div>
 
+  <div class="heading">Your query</div>
   <div id="lisql"
        title="Click on a query element to change focus">
   </div>
 
   <div id="increments">
+    <div class="heading">Sparklis suggestions to refine your query</div>
     <div class="incr-box">
       <div>
 	<select id="select-terms" class="select-incrs"
@@ -114,6 +116,7 @@
   </div>
 
   <div id="results">
+    <div class="heading">Results of your query</div>
     <div id="control-results-top">
       <img class="previous-results" src="icon-previous.png" height="25" alt="Previous"
 	   title="Click to show the previous page of results">
@@ -142,14 +145,21 @@
 	<option value="100">Show 100 results</option>
       </select>
     </div>
- </div>
+  </div>
 
-  <div id="sparql"
-       title="This is the SPARQL version of your query">
+  <div id="sparql">
+    <div class="heading">Your query in SPARQL</div>
+    <div id="sparql-query"
+	 title="This is the SPARQL version of your query">
+    </div>
   </div>
 
   <footer>
-    <p>Created by Sébastien Ferré, IRISA/Université Rennes 1 © 2013</p>
+    <p>Created by <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> @ 2013
+      <a target="_blank" href="http://www.irisa.fr/LIS/"><img src="lis.png" alt="LIS team" height="40"></a>
+      <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="40"></a>
+      <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
+    </p>
     <p>Visit <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
   </footer>
 </body>

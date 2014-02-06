@@ -1,3 +1,24 @@
+header
+{
+margin:5px 0px;
+padding:5px 10px;
+height:50px;
+color:white;
+background-image:url('stars_background.png');
+background-repeat:repeat-x;
+}
+
+.heading
+{
+width:100%;
+padding: 5px 5px;
+margin: 5px 0px;
+color:white;
+background-color:#c8a0c8;
+font-style:italic;
+font-weight:bold;
+}
+
 .classURI
 {
 color:darkorange;
@@ -49,7 +70,7 @@ font-weight:bold;
 
 .in-current-focus
 {
-background-color:#aaffaa;
+background-color:#a0f0a0;
 //font-style:normal;
 //font-weight:900;
 }
@@ -91,7 +112,7 @@ margin:0px;
 
 .incr-box
 {
-    border:4px groove #aaffaa;
+    border:4px groove #a0f0a0;
     margin:5px;
 }
 @media screen
