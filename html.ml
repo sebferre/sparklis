@@ -235,7 +235,8 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
     else " [" ^ string_of_int freq ^ "]" in
   "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
-let html_increment_frequency_list focus dico_incrs lif =
+(* TODO: avoid to pass focus as argument, use NL generation on increments *)
+let html_index focus dico_incrs (index : Lis.index) =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
@@ -243,7 +244,7 @@ let html_increment_frequency_list focus dico_incrs lif =
       Buffer.add_string buf "<li>";
       Buffer.add_string buf (html_increment_frequency focus dico_incrs incr_freq);
       Buffer.add_string buf "</li>")
-    lif;
+    index;
   Buffer.add_string buf "</ul>";
   Buffer.contents buf
 
