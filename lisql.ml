@@ -842,7 +842,7 @@ let insert_modif_s2 modif = function
       else modif in
     let foc2 = AtS1 (Det (An (modif2, head), rel_opt), ctx) in
     ( match modif2 with
-      | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
+      | Any | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
       | _ -> Some foc2 )
   | _ -> None
 
