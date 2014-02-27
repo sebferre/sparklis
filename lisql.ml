@@ -301,7 +301,7 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
 	      (fun elt -> sparql_of_elt_p1 state elt x)
 	      ar)))
   | Maybe f -> (fun x -> sparql_optional (sparql_of_elt_p1 state f x))
-  | Not f -> (fun x -> sparql_not_exists (sparql_of_elt_p1 state f x))
+  | Not f -> (fun x -> sparql_not_exists (sparql_of_elt_p1 (Oo.copy state) f x))
   | IsThere -> (fun x -> sparql_empty)
 and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) = function
   | Det (det,rel_opt) ->
