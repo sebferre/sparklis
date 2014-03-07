@@ -122,7 +122,6 @@ object (self)
   val mutable limit = 10
 
   val mutable term_constr = Lisql.True
-  val mutable class_constr = Lisql.True
   val mutable property_constr = Lisql.True
 
   val mutable navigation = new navigation
@@ -153,7 +152,6 @@ object (self)
 	    select##value <- string (operator_of_constr constr);
 	    input##value <- string (pattern_of_constr constr))))
       [("#select-terms", "#pattern-terms", term_constr);
-       ("#select-classes", "#pattern-classes", class_constr);
        ("#select-properties", "#pattern-properties", property_constr);
        ("#select-modifiers", "#pattern-modifiers", Lisql.True)]
 
@@ -194,17 +192,6 @@ object (self)
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length index) Lis.max_results "term" "terms")
 
-  method private refresh_class_increments_init =
-    jquery "#list-classes" (fun elt ->
-      lis#ajax_index_classes_init class_constr elt
-	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
-	  jquery_set_innerHTML "#count-classes"
-	    (html_count_unit (List.length index) 1000 "class" "classes")))
-
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
       lis#ajax_index_properties_init property_constr elt
@@ -216,17 +203,6 @@ object (self)
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index) 1000 "property" "properties")))
 
-  method private refresh_class_increments =
-    jquery "#list-classes" (fun elt ->
-      lis#ajax_index_classes class_constr elt
-	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
-	  jquery_set_innerHTML "#count-classes"
-	    (html_count_unit (List.length index) Lis.max_classes "class" "classes")))
-      
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
       lis#ajax_index_properties property_constr elt
@@ -271,11 +247,9 @@ object (self)
 	      ( match lis#focus_term_opt with
 		| None -> ()
 		| Some (Rdf.Var v) ->
-		  self#refresh_class_increments_init;
 		  self#refresh_property_increments_init
 		| Some term ->
 		  self#refresh_term_increments;
-		  self#refresh_class_increments;
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments )
 	    | Some sparql ->
@@ -288,7 +262,6 @@ object (self)
 		| None -> ()
 		| Some t ->
 		  self#refresh_term_increments;
-		  self#refresh_class_increments;
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments ))))
 
@@ -301,16 +274,6 @@ object (self)
       Firebug.console##log(string "set_term_constr!");
       term_constr <- constr;
       self#refresh
-    end
-
-  method set_class_constr constr =
-    if self#is_home
-    then begin
-      class_constr <- constr;
-      self#refresh_class_increments_init end
-    else begin
-      class_constr <- constr;
-      self#refresh_class_increments
     end
 
   method set_property_constr constr =
@@ -393,7 +356,6 @@ object (self)
     {< lis = new Lis.place endpoint focus;
        offset = 0;
        term_constr = Lisql.True;
-       class_constr = Lisql.True;
        property_constr = Lisql.True; >}
 
 end
@@ -493,7 +455,6 @@ let _ =
 		 (fun input ev -> history#present#pattern_changed ~select ~input ~elt_list k)
 		 input)))))
       [("#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
-       ("#select-classes", "#pattern-classes", "#list-classes", (fun constr -> history#present#set_class_constr constr));
        ("#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
        ("#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
     

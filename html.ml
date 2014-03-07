@@ -236,7 +236,7 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
   "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus dico_incrs (index : Lis.index) =
+let html_index focus dico_incrs (index : Lisql.increment Lis.index) =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter

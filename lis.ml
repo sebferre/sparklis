@@ -2,7 +2,7 @@
 open Js
 open Jsutils
 
-type index = (Lisql.increment * int) list
+type 'a index = ('a * int) list
 
 (* extraction of the extension and indexes *)
 
@@ -21,19 +21,20 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   let open Sparql_endpoint in
   try
     let i = List.assoc var results.vars in
-    List.sort
-      (fun t1 t2 -> Pervasives.compare t2 t1)
-      (List.fold_left
-	 (fun res binding ->
-	   match binding.(i) with
-	     | None -> res
-	     | Some t -> t::res)
-	 [] results.bindings)
+    List.fold_left
+      (fun res binding ->
+	match binding.(i) with
+	  | None -> res
+	  | Some t -> t::res)
+      [] results.bindings
   with Not_found ->
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
 
-let index_of_results_column (var : Rdf.var) results : (Rdf.term * int) list =
+let cmp_index_elt = fun (x1,f1) (x2,f2) -> Pervasives.compare (f2,x1) (f1,x2)
+let cmp_index_elt_rev = fun (x1,f1) (x2,f2) -> Pervasives.compare (f1,x2) (f2,x1)
+
+let index_of_results_column (var : Rdf.var) results : Rdf.term index =
   let open Sparql_endpoint in
   try
     let i = List.assoc var results.vars in
@@ -53,14 +54,12 @@ let index_of_results_column (var : Rdf.var) results : (Rdf.term * int) list =
       Hashtbl.fold
 	(fun term cpt res -> (term,!cpt)::res)
 	ht [] in
-    List.sort
-      (fun (i1,f1) (i2,f2) -> Pervasives.compare (f1,i2) (f2,i1))
-      index
+    List.sort cmp_index_elt_rev index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
     []
 
-let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : (Rdf.term * int) list =
+let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : Rdf.term index =
   let open Sparql_endpoint in
   try
     let i_x = List.assoc var_x results.vars in
@@ -90,6 +89,13 @@ let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : 
   with Not_found ->
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     []
+
+let index_incr_of_index_term_uri (f : Rdf.uri -> Lisql.increment) (l : Rdf.term index) : Lisql.increment index =
+  List.fold_left
+    (fun res -> function
+      | (Rdf.URI uri, freq) -> (f uri, freq)::res
+      | _ -> res)
+    [] l
 
 (* LIS navigation places *)
 
@@ -183,145 +189,98 @@ object (self)
       (fun (t,freq) -> (Lisql.IncrTerm t, freq))
       focus_term_index
 
-  method ajax_index_classes_init class_constr elt (k : index -> unit) =
-    let process results =
-      let class_list = list_of_results_column "class" results in
+  method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
+    let process results_class results_prop =
+      let list_class = list_of_results_column "class" results_class in
+      let list_prop = list_of_results_column "prop" results_prop in
       let index =
 	List.fold_left
 	  (fun res -> function
 	    | Rdf.URI c -> (Lisql.IncrClass c, 1) :: res
 	    | _ -> res)
-	  [] class_list in
-      k index
-    in
-    let sparql =
-      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
-	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
-	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
-	Lisql.sparql_constr (Rdf.Var "class") class_constr ^
-	" } LIMIT 1000" in
-    Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-      (fun results ->
-	if results.Sparql_endpoint.length > 0
-	then process results
-	else
-	  let sparql = "SELECT DISTINCT ?class WHERE { [] a ?class " ^ Lisql.sparql_constr (Rdf.Var "class") class_constr ^ " } LIMIT 200" in
-	  Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-	    (fun results -> process results)
-	    (fun code -> process Sparql_endpoint.empty_results))
-      (fun code -> process Sparql_endpoint.empty_results)
-
-  method ajax_index_properties_init property_constr elt (k : index -> unit) =
-    let process results =
-      let prop_list = list_of_results_column "prop" results in
+	  [] list_class in
       let index =
 	List.fold_left
 	  (fun res -> function
 	    | Rdf.URI c -> (Lisql.IncrProp c, 1) :: (Lisql.IncrInvProp c, 1) :: res
 	    | _ -> res)
-	  [] prop_list in
+	  index list_prop in
+      let index = List.sort cmp_index_elt index in
       k index
     in
-    let sparql =
+    let sparql_class =
+      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
+	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
+	Lisql.sparql_constr (Rdf.Var "class") constr ^
+	" } LIMIT 1000" in
+    let sparql_prop =
       "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
         "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
-	Lisql.sparql_constr (Rdf.Var "prop") property_constr ^
+	Lisql.sparql_constr (Rdf.Var "prop") constr ^
 	" } LIMIT 1000" in
-    Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-      (fun results ->
-	if results.Sparql_endpoint.length > 0
-	then process results
-	else
-	  let sparql = "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^ Lisql.sparql_constr (Rdf.Var "prop") property_constr ^ " } LIMIT 200" in
-	  Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-	    (fun results -> process results)
-	    (fun code -> process Sparql_endpoint.empty_results))
-      (fun code -> process Sparql_endpoint.empty_results)
+    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+      (function
+	| [results_class; results_prop] ->
+	  if results_class.Sparql_endpoint.length > 0 || results_prop.Sparql_endpoint.length > 0
+	  then process results_class results_prop
+	  else
+	    let sparql_class = "SELECT DISTINCT ?class WHERE { [] a ?class " ^ Lisql.sparql_constr (Rdf.Var "class") constr ^ " } LIMIT 200" in
+	    let sparql_prop = "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^ Lisql.sparql_constr (Rdf.Var "prop") constr ^ " } LIMIT 200" in
 
-  method ajax_index_classes class_constr elt (k : index -> unit) =
-    let process results =
-      let class_index = index_of_results_column "class" results in
-      let index =
-	List.fold_left
-	  (fun res -> function
-	    | (Rdf.URI c, freq) -> (Lisql.IncrClass c, freq) :: res
-	    | _ -> res)
-	  [] class_index in
-      k index
-    in
-(*
-	  let sparql =
-	    let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-	    "SELECT DISTINCT ?class (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus a ?class } GROUP BY ?class ORDER BY DESC(?freq) ?class LIMIT " ^ string_of_int max_classes in
-*)
-    let sparql =
-      let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.URI "a") (Rdf.Var "class")) focus_term_index in
-      Lisql.sparql_select ~dimensions:["class"] ~limit:max_classes
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "class") class_constr]) in
-    Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-      (fun results ->
-	if results.Sparql_endpoint.length > 0
-	then process results
-	else
-	  match query_class_opt with
-	    | None -> process Sparql_endpoint.empty_results
-	    | Some query ->
-	      let sparql = query ~constr:class_constr ~limit:max_classes in
-	      Sparql_endpoint.ajax_in [elt] ajax_pool endpoint sparql
-		(fun results -> process results)
-		(fun code -> process Sparql_endpoint.empty_results))
-      (fun code -> process Sparql_endpoint.empty_results)
+	    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+	      (function
+		| [results_class; results_prop] -> process results_class results_prop
+		| _ -> assert false)
+	      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results))
+      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
-  method ajax_index_properties property_constr elt (k : index -> unit) =
-    let process results_has results_isof =
-      let index_has = index_of_results_column "prop" results_has in (* increasing *)
-      let index_isof = index_of_results_column "prop" results_isof in (* increasing *)
-      let index =
-	let rec aux acc l1 l2 =
-	  match l1, l2 with
-	    | (Rdf.URI c1, freq1)::r1, (_, freq2)::r2 when freq1 <= freq2 -> aux ((Lisql.IncrProp c1, freq1)::acc) r1 l2
-	    | (_, freq1)::r1, (Rdf.URI c2, freq2)::r2 when freq1 > freq2 -> aux ((Lisql.IncrInvProp c2, freq2)::acc) l1 r2
-	    | (Rdf.URI c1, freq1)::r1, [] -> aux ((Lisql.IncrProp c1, freq1)::acc) r1 []
-	    | [], (Rdf.URI c2, freq2)::r2 -> aux ((Lisql.IncrInvProp c2, freq2)::acc) [] r2
-	    | [], [] -> acc
-	    | _ -> acc (* assert false *) in
-	aux [] index_has index_isof in
+
+  method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
+    let process results_a results_has results_isof =
+      let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
+	(index_of_results_column "class" results_a) in (* increasing *)
+      let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrProp p)
+	(index_of_results_column "prop" results_has) in (* increasing *)
+      let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrInvProp p)
+	(index_of_results_column "prop" results_isof) in (* increasing *)
+      let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
       k index
     in	
-(*
-      let vals = String.concat " " (List.map (fun (t,_) -> sparql_term t) focus_term_index) in
-      let sparql_has = "SELECT DISTINCT ?prop (COUNT (DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } ?focus ?prop [] } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-      let sparql_isof = "SELECT DISTINCT ?prop (COUNT(DISTINCT ?focus) AS ?freq) WHERE { VALUES ?focus { " ^ vals ^ " } [] ?prop ?focus } GROUP BY ?prop ORDER BY DESC(?freq) ?prop LIMIT " ^ string_of_int max_properties in
-*)
+    let sparql_a =
+      let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.URI "a") (Rdf.Var "class")) focus_term_index in
+      Lisql.sparql_select ~dimensions:["class"] ~limit:max_classes
+	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "class") constr]) in
     let sparql_has =
       let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index in
       Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") property_constr]) in
+	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
     let sparql_isof =
       let lgp = List.map (fun (t,_) -> Lisql.sparql_triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index in
       Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") property_constr]) in
-    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
+	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
+    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
       (function
-	| [results_has; results_isof] ->
-	  if results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
-	  then process results_has results_isof
+	| [results_a; results_has; results_isof] ->
+	  if results_a.Sparql_endpoint.length > 0 || results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
+	  then process results_a results_has results_isof
 	  else
-	    ( match query_prop_has_opt, query_prop_isof_opt with
-	      | None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results
-	      | Some query_has, Some query_isof ->
-		let sparql_has = query_has ~constr:property_constr ~limit:max_properties in
-		let sparql_isof = query_isof ~constr:property_constr ~limit:max_properties in
-		Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_has; sparql_isof]
+	    ( match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
+	      | None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
+	      | Some query_a, Some query_has, Some query_isof ->
+		let sparql_a = query_a ~constr ~limit:max_classes in
+		let sparql_has = query_has ~constr ~limit:max_properties in
+		let sparql_isof = query_isof ~constr ~limit:max_properties in
+		Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 		  (function
-		    | [results_has; results_isof] -> process results_has results_isof
+		    | [results_a; results_has; results_isof] -> process results_a results_has results_isof
 		    | _ -> assert false)
-		  (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+		  (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 	      | _ -> assert false )
 	| _ -> assert false)
-      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method index_modifiers =
     let modif_list =
@@ -348,4 +307,3 @@ object (self)
     List.map (fun incr -> (incr,1)) modif_list
 
 end
-
