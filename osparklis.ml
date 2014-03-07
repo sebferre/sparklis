@@ -190,7 +190,7 @@ object (self)
 	navigation#update_focus ~push_in_history:true
 	  (Lisql.insert_increment (dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
-      (html_count_unit (List.length index) Lis.max_results "term" "terms")
+      (html_count_unit (List.length index) Lis.max_results "entity" "entities")
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -201,7 +201,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) 1000 "property" "properties")))
+	    (html_count_unit (List.length index) 1000 "concept" "concepts")))
 
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
@@ -212,7 +212,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) Lis.max_properties "property" "properties")))
+	    (html_count_unit (List.length index) Lis.max_properties "concept" "concepts")))
 
   method private refresh_modifier_increments =
     jquery "#list-modifiers" (fun elt ->
