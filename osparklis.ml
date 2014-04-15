@@ -114,8 +114,8 @@ end
 
 class place =
 object (self)
-(*  val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.home_focus *)
-  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.home_focus
+  val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.home_focus
+(*  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.home_focus *)
   method lis = lis
 
   val mutable offset = 0
