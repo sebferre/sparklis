@@ -186,6 +186,8 @@ let rec sparql_term = function
   | Rdf.Bnode name -> if name="" then "[]" else "_:" ^ name
   | Rdf.Var v -> sparql_var v
 
+let sparql_term_numeric t = "STRDT(str(" ^ sparql_term t ^ "),xsd:double)"
+
 let sparql_empty = ""
 
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_term p ^ " " ^ sparql_term o ^ " . "
@@ -217,18 +219,13 @@ let sparql_constr t = function
       [sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat1);
        sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat2)]
   | HigherThan pat ->
-    sparql_filter
-      [sparql_expr_func "isNumeric" (sparql_term t);
-       sparql_expr_comp ">=" (sparql_term t) pat]
+    sparql_filter [sparql_expr_comp ">=" (sparql_term_numeric t) pat]
   | LowerThan pat ->
-    sparql_filter
-      [sparql_expr_func "isNumeric" (sparql_term t);
-       sparql_expr_comp "<=" (sparql_term t) pat]
+    sparql_filter [sparql_expr_comp "<=" (sparql_term_numeric t) pat]
   | Between (pat1,pat2) ->
     sparql_filter
-      [sparql_expr_func "isNumeric" (sparql_term t);
-       sparql_expr_comp ">=" (sparql_term t) pat1;
-       sparql_expr_comp "<=" (sparql_term t) pat2]
+      [sparql_expr_comp ">=" (sparql_term_numeric t) pat1;
+       sparql_expr_comp "<=" (sparql_term_numeric t) pat2]
   | HasLang pat ->
     sparql_filter
       [sparql_expr_func "isLiteral" (sparql_term t);

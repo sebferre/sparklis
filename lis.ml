@@ -229,12 +229,12 @@ object (self)
 	  else
 	    let sparql_class = "SELECT DISTINCT ?class WHERE { [] a ?class " ^ Lisql.sparql_constr (Rdf.Var "class") constr ^ " } LIMIT 200" in
 	    let sparql_prop = "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^ Lisql.sparql_constr (Rdf.Var "prop") constr ^ " } LIMIT 200" in
-
 	    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	      (function
 		| [results_class; results_prop] -> process results_class results_prop
 		| _ -> assert false)
-	      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results))
+	      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	| _ -> assert false)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
 
