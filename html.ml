@@ -203,8 +203,8 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
       | IncrClass c ->
 	( match focus with
 	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
-	  | AtS1 (Det (An (_, Thing), _), _) -> "a " ^ html_class c
-	  | AtS1 (Det (An (_, Class c0), _), _) when c0 = c ->
+	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_class c
+	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
 	    (*"<del>a " ^ html_class c ^ "</del>"*)
 	    "a " ^ html_class c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
 	  | AtS1 _ -> "that is a " ^ html_class c
@@ -227,7 +227,8 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
-      | IncrModifS2 modif -> html_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel modif)
+      | IncrModifS2 modif -> html_np dico_incrs#dico_foci (head_of_modif_order `NoFocus `DummyFocus top_rel modif Unordered)
+      | IncrOrder order -> html_np dico_incrs#dico_foci (head_of_modif_order `NoFocus `DummyFocus top_rel Select order)
   in
   let text_freq =
     if freq = 1

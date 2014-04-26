@@ -287,21 +287,19 @@ object (self)
       let open Lisql in
       match focus with
 	| AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
-	| AtS1 (Det (An (modif, head), _), _) ->
+	| AtS1 (Det (An (modif, order, head), _), _) ->
 	  let modifs =
 	    if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-	    then List.map (fun g -> IncrModifS2 (Aggreg (None,g))) [Total; Average; Maximum; Minimum]
+	    then List.map (fun g -> IncrModifS2 (Aggreg g)) [Total; Average; Maximum; Minimum]
 	    else [] in
 	  let modifs =
 	    if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-	    then IncrModifS2 (Aggreg (None,ListOf)) :: modifs
+	    then IncrModifS2 (Aggreg ListOf) :: modifs
 	    else modifs in
 	  let modifs =
-	    IncrModifS2 Any :: IncrModifS2 (Aggreg (None,NumberOf)) :: modifs in
+	    IncrModifS2 Unselect :: IncrModifS2 (Aggreg NumberOf) :: modifs in
 	  let modifs =
-	    match modif with
-	      | Aggreg (_,g) -> IncrModifS2 (Aggreg (Some Highest, g)) :: IncrModifS2 (Aggreg (Some Lowest, g)) :: modifs
-	      | _ -> IncrModifS2 (Order Highest) :: IncrModifS2 (Order Lowest) :: modifs in
+	    IncrOrder Highest :: IncrOrder Lowest :: modifs in
 	  modifs
 	| _ -> [] in
     List.map (fun incr -> (incr,1)) modif_list
