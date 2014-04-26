@@ -61,7 +61,8 @@ let compile_constr constr : Rdf.term -> bool =
 (* LISQL modifiers *)
 type order = Unordered | Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
-type modif_s2 = Unselect | Select | Aggreg of aggreg
+type project = Unselect | Select | Aggreg of aggreg * order
+type modif_s2 = project * order
 
 (* LISQL elts *)
 type elt_p1 =
@@ -78,7 +79,7 @@ and elt_s1 =
   | Det of elt_s2 * elt_p1 option
 and elt_s2 =
   | Term of Rdf.term
-  | An of modif_s2 * order * elt_head
+  | An of modif_s2 * elt_head
 and elt_head =
   | Thing
   | Class of Rdf.uri
@@ -86,7 +87,7 @@ and elt_s =
   | Return of elt_s1
 
 let top_p1 = IsThere
-let top_s2 = An (Select, Unordered, Thing)
+let top_s2 = An ((Select, Unordered), Thing)
 let top_s1 = Det (top_s2,None)
 
 (* LISQL contexts *)
@@ -158,12 +159,12 @@ object
   method set_focus_term t_opt = focus_term <- t_opt
   method focus_term = focus_term
 
-  val h_var_modif_order : (Rdf.var, modif_s2 * order) Hashtbl.t = Hashtbl.create 13
-  method set_modif_order (v : Rdf.var) (modif : modif_s2) (order : order) : unit =
-    Hashtbl.add h_var_modif_order v (modif,order)
-  method modif_order (v : Rdf.var) =
-    try Hashtbl.find h_var_modif_order v
-    with _ -> Select, Unordered
+  val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
+  method set_modif (v : Rdf.var) (modif : modif_s2) : unit =
+    Hashtbl.add h_var_modif v modif
+  method modif (v : Rdf.var) =
+    try Hashtbl.find h_var_modif v
+    with _ -> (Select, Unordered)
 end
 
 let sparql_uri uri = 
@@ -313,10 +314,10 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) 
     (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> string) -> (Rdf.term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
-  | An (modif, order, head) ->
+  | An (modif, head) ->
     (fun d1 d2 ->
       let v, dhead = sparql_of_elt_head state ~prefix head in
-      state#set_modif_order v modif order;
+      state#set_modif v modif;
       let t = Rdf.Var v in
       sparql_join [d2 t; dhead t; d1 t])
 and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string) = function
@@ -410,12 +411,12 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
       let dimensions, aggregations, ordering =
 	List.fold_right
 	  (fun v (dims,aggregs,ordering) ->
-	    let modif, order = state#modif_order v in
-	    let v2, dims, aggregs = (* v2 is to be used in ordering *)
+	    let modif = state#modif v in
+	    let dims, aggregs, order, v_order = (* v_order is to be used in ordering *)
 	      match modif with
-		| Unselect when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
-		  v, dims, aggregs
-		| Aggreg g when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
+		| (Unselect,order) when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
+		  dims, aggregs, order, v
+		| (Aggreg (g,gorder),order) when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
 		  let vg_prefix =
 		    match g with
 		      | NumberOf -> "number_of_"
@@ -425,13 +426,13 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 		      | Maximum -> "maximum_"
 		      | Minimum -> "minimum_" in
 		  let vg = vg_prefix ^ v in
-		  vg, dims, (g,v,vg)::aggregs
-		| _ -> v, v::dims, aggregs in
+		  dims, (g,v,vg)::aggregs, gorder, vg
+		| (_, order) -> v::dims, aggregs, order, v in
 	    let ordering =
 	      match order with
 		| Unordered -> ordering
-		| Lowest -> `ASC v2 :: ordering
-		| Highest -> `DESC v2 :: ordering in
+		| Lowest -> `ASC v_order :: ordering
+		| Highest -> `DESC v_order :: ordering in
 	    dims, aggregs, ordering)
 	  lv ([],[],[]) in
       Some (fun ?(constr=True) ~limit ->
@@ -511,14 +512,15 @@ let top_s = `NoFocus, `Return top_np
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
-let rec head_of_modif_order foc nn rel (modif : modif_s2) (order : order) : nl_np =
+let rec head_of_modif foc nn rel (modif : modif_s2) : nl_np =
   let susp = match foc with `Focus (_, `At) -> true | _ -> false in
-  let qu_order, adj_order = qu_adj_of_order order in
   let qu, adj =
     match modif with
-      | Select -> qu_order, adj_order
-      | Unselect -> `Any susp, adj_order
-      | Aggreg g -> qu_order, adj_of_aggreg ~suspended:susp adj_order g in
+      | Select, order -> qu_adj_of_order order
+      | Unselect, order -> `Any susp, snd (qu_adj_of_order order)
+      | Aggreg (g,gorder), _ ->
+	let qu_order, adj_order = qu_adj_of_order gorder in
+	qu_order, adj_of_aggreg ~suspended:susp adj_order g in
   foc, `Qu (qu, adj, nn, rel)
 and qu_adj_of_order : order -> nl_qu * nl_adj = function
   | Unordered -> `A, `Nil
@@ -566,7 +568,7 @@ and np_of_elt_s1 pos ctx f : nl_np =
       det_of_elt_s2 foc (foc_rel, `That (`NoFocus, nl_rel)) det
 and det_of_elt_s2 foc rel : elt_s2 -> nl_np = function
   | Term t -> foc, `PN (`Term t, rel)
-  | An (modif, order, head) -> head_of_modif_order foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif order
+  | An (modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
 and s_of_elt_s pos : elt_s -> nl_s = function
   | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 (focus_pos_down pos) ReturnX np)
 
@@ -643,7 +645,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
-  | Det (An (modif, order, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, order, Thing), ctx))))
+  | Det (An (modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
 let down_s : elt_s -> focus option = function
@@ -732,7 +734,9 @@ type increment =
   | IncrOr
   | IncrMaybe
   | IncrNot
-  | IncrModifS2 of modif_s2
+(*  | IncrModifS2 of modif_s2*)
+  | IncrUnselect
+  | IncrAggreg of aggreg
   | IncrOrder of order
 
 let term_of_increment : increment -> Rdf.term option = function
@@ -743,7 +747,8 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrOr -> None
   | IncrMaybe -> None
   | IncrNot -> None
-  | IncrModifS2 modif -> None
+  | IncrUnselect -> None
+  | IncrAggreg _ -> None
   | IncrOrder order -> None
 
 let insert_term t focus =
@@ -798,11 +803,11 @@ let insert_class c = function
   | AtS1 (Det (det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
-	Some (AtS1 (Det (An (Select, Unordered, Class c), rel_opt), ctx))
-      | An (modif, order, Thing) ->
-	Some (AtS1 (Det (An (modif, order, Class c), rel_opt), ctx))
-      | An (modif, order, Class c2) when c2 = c ->
-	Some (AtS1 (Det (An (modif, order, Thing), rel_opt), ctx))
+	Some (AtS1 (Det (An ((Select, Unordered), Class c), rel_opt), ctx))
+      | An (modif, Thing) ->
+	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx))
+      | An (modif, Class c2) when c2 = c ->
+	Some (AtS1 (Det (An (modif, Thing), rel_opt), ctx))
       | _ ->
 	let rel = match rel_opt with None -> IsThere | Some rel -> rel in
 	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
@@ -838,31 +843,11 @@ let insert_not = function
   | AtP1 (f, ctx) -> Some (AtP1 (Not f, ctx))
   | _ -> None
 
-let insert_modif_s2 modif = function
-  | AtS1 (Det (An (modif0, order, head), rel_opt), ctx) ->
-    let modif2 =
-      if modif = modif0
-      then Select
-      else modif in
-    let order2 =
-      match modif0, modif2 with
-	| Aggreg _, _
-	| _, Aggreg _ -> Unordered (* order is lost when switching ordering *)
-	| _, _ -> order in
-    let foc2 = AtS1 (Det (An (modif2, order2, head), rel_opt), ctx) in
-    ( match modif2 with
-      | Unselect | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
-      | _ -> Some foc2 )
-  | _ -> None
-
-let insert_order order = function
-  | AtS1 (Det (An (modif, order0, head), rel_opt), ctx) ->
-    let order2 =
-      if order = order0
-      then Unordered
-      else order in
-    let foc2 = AtS1 (Det (An (modif, order2, head), rel_opt), ctx) in
-    ( match modif with
+let insert_modif_transf f = function
+  | AtS1 (Det (An (modif, head), rel_opt), ctx) ->
+    let modif2 = f modif in
+    let foc2 = AtS1 (Det (An (modif2, head), rel_opt), ctx) in
+    ( match fst modif2 with
       | Unselect | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
       | _ -> Some foc2 )
   | _ -> None
@@ -876,8 +861,30 @@ let insert_increment incr focus =
     | IncrOr -> insert_or focus
     | IncrMaybe -> insert_maybe focus
     | IncrNot -> insert_not focus
-    | IncrModifS2 modif -> insert_modif_s2 modif focus
-    | IncrOrder order -> insert_order order focus
+    | IncrUnselect ->
+      insert_modif_transf
+	(function
+	  | (Unselect,order) -> Select, order
+	  | (_,order) ->  Unselect, order)
+	focus
+    | IncrAggreg g ->
+      insert_modif_transf
+	(function
+	  | (Aggreg (g0, gorder), order) when g = g0 -> Select, order
+	  | (_, order) -> Aggreg (g, Unordered), order)
+	focus
+    | IncrOrder order ->
+      insert_modif_transf
+	(function
+	  | (Aggreg (g,gorder), order0) -> 
+	    if gorder = order
+	    then Aggreg (g, Unordered), order0
+	    else Aggreg (g, order), order0
+	  | ((Select | Unselect) as proj, order0) ->
+	    if order0 = order
+	    then proj, Unordered
+	    else proj, order)
+	focus
 
 let delete_array ar i =
   let n = Array.length ar in
