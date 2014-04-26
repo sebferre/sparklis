@@ -256,7 +256,6 @@ object (self)
 	      jquery_set_innerHTML "#sparql-query" (html_pre sparql);
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	      self#refresh_extension;
-	      jquery "#results" (fun elt -> elt##style##display <- string "block");
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      ( match lis#focus_term_opt with
 		| None -> ()
