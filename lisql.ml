@@ -77,6 +77,10 @@ type elt_p1 =
   | IsThere
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
+  | NAnd of elt_s1 array
+  | NOr of elt_s1 array
+  | NMaybe of elt_s1
+  | NNot of elt_s1
 and elt_s2 =
   | Term of Rdf.term
   | An of modif_s2 * elt_head
@@ -101,6 +105,10 @@ and ctx_s1 =
   | HasX of Rdf.uri * ctx_p1
   | IsOfX of Rdf.uri * ctx_p1
   | ReturnX
+  | NAndX of int * elt_s1 array * ctx_s1
+  | NOrX of int * elt_s1 array * ctx_s1
+  | NMaybeX of ctx_s1
+  | NNotX of ctx_s1
 
 (* LISQL focus *)
 type focus =
@@ -120,6 +128,10 @@ and elt_s_of_ctx_s1 (f : elt_s1) = function
   | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
   | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
   | ReturnX -> Return f
+  | NAndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NAnd ar) ctx
+  | NOrX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NOr ar) ctx
+  | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe f) ctx
+  | NNotX ctx -> elt_s_of_ctx_s1 (NNot f) ctx
 
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
@@ -155,9 +167,9 @@ object
 
   method vars = List.rev vars
 
-  val mutable focus_term : Rdf.term option = None
-  method set_focus_term t_opt = focus_term <- t_opt
-  method focus_term = focus_term
+  val mutable focus_terms : Rdf.term list = []
+  method add_focus_term t = focus_terms <- t::focus_terms
+  method focus_terms = focus_terms
 
   val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
   method set_modif (v : Rdf.var) (modif : modif_s2) : unit =
@@ -312,6 +324,22 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) 
       else prefix in
     let d1 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
     (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
+  | NAnd ar ->
+    (fun d ->
+      sparql_join
+	(Array.to_list
+	   (Array.map
+	      (fun elt -> sparql_of_elt_s1 state ~prefix elt d)
+	      ar)))
+  | NOr ar ->
+    (fun d ->
+      sparql_union
+	(Array.to_list
+	   (Array.map
+	      (fun elt -> sparql_of_elt_s1 state ~prefix elt d)
+	      ar)))
+  | NMaybe f -> (fun d -> sparql_optional (sparql_of_elt_s1 state ~prefix f d))
+  | NNot f -> (fun d -> sparql_not_exists (sparql_of_elt_s1 (Oo.copy state) ~prefix f d))
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> string) -> (Rdf.term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
   | An (modif, head) ->
@@ -370,10 +398,26 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) : ctx_s1 -> stri
       ctx
   | ReturnX ->
     q (fun t -> "")
+  | NAndX (i,ar,ctx) ->
+    sparql_of_ctx_s1 state
+      (fun d ->
+	sparql_join
+	  (Array.to_list
+	     (Array.mapi
+		(fun j elt ->
+		  if j=i
+		  then q d
+		  else sparql_of_elt_s1 state ~prefix:"" elt d)
+		ar)))
+      ctx
+  (* ignoring algebra in ctx *)
+  | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q ctx
+  | NMaybeX ctx -> sparql_of_ctx_s1 state q ctx
+  | NNotX ctx -> sparql_of_ctx_s1 state q ctx
 
 type sparql_template = ?constr:constr -> limit:int -> string
 
-let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option * sparql_template option * sparql_template option * sparql_template option =
+let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * sparql_template option * sparql_template option * sparql_template option =
   let state = new sparql_state in
   let gp =
     match focus with
@@ -384,7 +428,7 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 	    | _ -> "" in
 	sparql_of_ctx_p1 state ~prefix
 	  (fun t ->
-	    state#set_focus_term (Some t);
+	    state#add_focus_term t;
 	    sparql_of_elt_p1 state f t)
 	  ctx
       | AtS1 (f,ctx) ->
@@ -395,14 +439,14 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 	sparql_of_ctx_s1 state (fun d ->
 	  sparql_of_elt_s1 state ~prefix f
 	    (fun t ->
-	      state#set_focus_term (Some t);
+	      state#add_focus_term t;
 	      d t))
 	  ctx
       | AtS f ->
-	state#set_focus_term None;
+	(*state#set_focus_term None;*)
 	sparql_of_elt_s state f
   in
-  let t_opt = state#focus_term in
+  let t_list = state#focus_terms in
   let query_opt =
     if gp = sparql_empty
     then None
@@ -414,9 +458,9 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 	    let modif = state#modif v in
 	    let dims, aggregs, order, v_order = (* v_order is to be used in ordering *)
 	      match modif with
-		| (Unselect,order) when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
+		| (Unselect,order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
 		  dims, aggregs, order, v
-		| (Aggreg (g,gorder),order) when t_opt <> Some (Rdf.Var v) -> (* when not on focus *)
+		| (Aggreg (g,gorder),order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
 		  let vg_prefix =
 		    match g with
 		      | NumberOf -> "number_of_"
@@ -437,11 +481,10 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 	  lv ([],[],[]) in
       Some (fun ?(constr=True) ~limit ->
 	sparql_select ~distinct:true ~dimensions ~aggregations ~ordering ~limit
-	  (match t_opt with None -> gp | Some t -> sparql_join [gp; sparql_constr t constr])) in
+	  (match t_list with [t] -> sparql_join [gp; sparql_constr t constr] | _ -> gp)) in
   let query_incr_opt x triple =
-    match t_opt with
-      | None -> None
-      | Some t ->
+    match t_list with
+      | [t] ->
 	let tx = Rdf.Var x in
 	let gp_x =
 	  match t with
@@ -449,11 +492,12 @@ let sparql_of_focus (focus : focus) : Rdf.term option * sparql_template option *
 	    | _ -> triple t tx in
 	Some (fun ?(constr=True) ~limit ->
 	  sparql_select ~dimensions:[x] ~limit
-	    (sparql_join [gp_x; sparql_constr tx constr])) in
+	    (sparql_join [gp_x; sparql_constr tx constr]))
+      | _ -> None in
   let query_class_opt = query_incr_opt "class" (fun t tc -> sparql_triple t (Rdf.URI "a") tc) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> sparql_triple t tp (Rdf.Bnode "")) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> sparql_triple (Rdf.Bnode "") tp t) in
-  t_opt, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
+  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
 
 (* NL generation from focus *)
 
@@ -475,7 +519,11 @@ type nl_s = nl_focus *
 and nl_np = nl_focus *
   [ `PN of nl_word * nl_rel
   | `Qu of nl_qu * nl_adj * nl_word * nl_rel
-  | `QuOneOf of nl_qu * nl_word list ]
+  | `QuOneOf of nl_qu * nl_word list
+  | `And of nl_np array
+  | `Or of int option * nl_np array (* the optional int indicates that the disjunction is in the context of the i-th element *)
+  | `Maybe of bool * nl_np (* the bool indicates whether negation is suspended *)
+  | `Not of bool * nl_np ] (* the bool indicates whether negation is suspended *)
 and nl_qu = [ `A | `Any of bool | `The | `All | `One ]
 and nl_adj =
   [ `Nil
@@ -566,6 +614,10 @@ and np_of_elt_s1 pos ctx f : nl_np =
     | Det (det, Some rel) ->
       let foc_rel, nl_rel = vp_of_elt_p1 (focus_pos_down pos) (DetThatX (det,ctx)) rel in
       det_of_elt_s2 foc (foc_rel, `That (`NoFocus, nl_rel)) det
+    | NAnd ar -> foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar)
+    | NOr ar -> foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar)
+    | NMaybe elt -> foc, `Maybe (false, np_of_elt_s1 (focus_pos_down pos) (NMaybeX ctx) elt)
+    | NNot elt -> foc, `Not (false, np_of_elt_s1 (focus_pos_down pos) (NNotX ctx) elt)
 and det_of_elt_s2 foc rel : elt_s2 -> nl_np = function
   | Term t -> foc, `PN (`Term t, rel)
   | An (modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
@@ -623,6 +675,34 @@ and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
       let foc2 = `Focus (AtS f2, `Out) in
       let nl2 = `Return foc_nl in
       (foc2,nl2)
+    | NAndX (i,ar,ctx2) ->
+      let f2 = ar.(i) <- f; NAnd ar in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let nl2 =
+	`And (Array.mapi
+		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 `Out (NAndX (j,ar,ctx2)) elt)
+		ar) in
+      s_of_ctx_s1 f2 (foc2,nl2) ctx2
+    | NOrX (i,ar,ctx2) ->
+      ar.(i) <- f;
+      let f2 = NOr ar in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let nl2 =
+	`Or (Some i,
+	     Array.mapi
+	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 `Ex (NOrX (j,ar,ctx2)) elt)
+	       ar) in
+      s_of_ctx_s1 f2 (foc2,nl2) ctx2
+   | NMaybeX ctx2 ->
+      let f2 = NMaybe f in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let nl2 = `Maybe (true, foc_nl) in
+      s_of_ctx_s1 f2 (foc2,nl2) ctx2
+   | NNotX ctx2 ->
+      let f2 = NNot f in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let nl2 = `Not (true, foc_nl) in
+      s_of_ctx_s1 f2 (foc2,nl2) ctx2
 
 let s_of_focus : focus -> nl_s = function
   | AtP1 (f,ctx) -> s_of_ctx_p1 f (vp_of_elt_p1 `At ctx f) ctx
@@ -648,6 +728,10 @@ let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (An (modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
+  | NAnd ar -> Some (AtS1 (ar.(0), NAndX (0,ar,ctx)))
+  | NOr ar -> Some (AtS1 (ar.(0), NOrX (0,ar,ctx)))
+  | NMaybe elt -> Some (AtS1 (elt, NMaybeX ctx))
+  | NNot elt -> Some (AtS1 (elt, NNotX ctx))
 let down_s : elt_s -> focus option = function
   | Return np -> Some (AtS1 (np,ReturnX))
 let down_focus = function
@@ -661,7 +745,7 @@ let rec up_p1 f = function
   | OrX (i,ar,ctx) -> ar.(i) <- f; Some (AtP1 (Or ar, ctx))
   | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
   | NotX ctx -> Some (AtP1 (Not f, ctx))
-let up_s1 f = function
+let rec up_s1 f = function
 (*
   | HasX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (Has (p,f))), ctx))
   | IsOfX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (IsOf (p,f))), ctx))
@@ -669,6 +753,10 @@ let up_s1 f = function
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | ReturnX -> Some (AtS (Return f))
+  | NAndX (i,ar,ctx) -> ar.(i) <- f; up_s1 (NAnd ar) ctx
+  | NOrX (i,ar,ctx) -> ar.(i) <- f; Some (AtS1 (NOr ar, ctx))
+  | NMaybeX ctx -> Some (AtS1 (NMaybe f, ctx))
+  | NNotX ctx -> Some (AtS1 (NNot f, ctx))
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
@@ -694,6 +782,20 @@ let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
   | ReturnX -> None
+  | NAndX (i,ar,ctx) ->
+    if i < Array.length ar - 1
+    then begin
+      ar.(i) <- f;
+      Some (AtS1 (ar.(i+1), NAndX (i+1, ar, ctx))) end
+    else None
+  | NOrX (i,ar,ctx) ->
+    if i < Array.length ar - 1
+    then begin
+      ar.(i) <- f;
+      Some (AtS1 (ar.(i+1), NOrX (i+1, ar, ctx))) end
+    else None
+  | NMaybeX ctx -> None
+  | NNotX ctx -> None
 let right_focus = function
   | AtP1 (f,ctx) -> right_p1 f ctx
   | AtS1 (f,ctx) -> right_s1 f ctx
@@ -719,6 +821,20 @@ let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
   | ReturnX -> None
+  | NAndX (i,ar,ctx) ->
+    if i > 0
+    then begin
+      ar.(i) <- f;
+      Some (AtS1 (ar.(i-1), NAndX (i-1, ar, ctx))) end
+    else None
+  | NOrX (i,ar,ctx) ->
+    if i > 0
+    then begin
+      ar.(i) <- f;
+      Some (AtS1 (ar.(i-1), NOrX (i-1, ar, ctx))) end
+    else None
+  | NMaybeX ctx -> None
+  | NNotX ctx -> None
 let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
@@ -731,10 +847,10 @@ type increment =
   | IncrClass of Rdf.uri
   | IncrProp of Rdf.uri
   | IncrInvProp of Rdf.uri
+  | IncrAnd
   | IncrOr
   | IncrMaybe
   | IncrNot
-(*  | IncrModifS2 of modif_s2*)
   | IncrUnselect
   | IncrAggreg of aggreg
   | IncrOrder of order
@@ -744,6 +860,7 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrClass c -> Some (Rdf.URI c)
   | IncrProp p -> Some (Rdf.URI p)
   | IncrInvProp p -> Some (Rdf.URI p)
+  | IncrAnd -> None
   | IncrOr -> None
   | IncrMaybe -> None
   | IncrNot -> None
@@ -768,7 +885,7 @@ let insert_term t focus =
     | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
     | other -> other
 
-let append_and ctx elt_p1 = function
+let append_and_p1 ctx elt_p1 = function
   | And ar ->
     let n = Array.length ar in
     let ar2 = Array.make (n+1) elt_p1 in
@@ -776,7 +893,7 @@ let append_and ctx elt_p1 = function
     AtP1 (elt_p1, AndX (n, ar2, ctx))
   | p1 ->
     AtP1 (elt_p1, AndX (1, [|p1; elt_p1|], ctx))
-let append_or ctx elt_p1 = function
+let append_or_p1 ctx elt_p1 = function
   | Or ar ->
     let n = Array.length ar in
     let ar2 = Array.make (n+1) elt_p1 in
@@ -785,12 +902,30 @@ let append_or ctx elt_p1 = function
   | p1 ->
     AtP1 (elt_p1, OrX (1, [|p1; elt_p1|], ctx))
 
+let append_and_s1 ctx elt_s1 = function
+  | NAnd ar ->
+    let n = Array.length ar in
+    let ar2 = Array.make (n+1) elt_s1 in
+    Array.blit ar 0 ar2 0 n;
+    AtS1 (elt_s1, NAndX (n, ar2, ctx))
+  | s1 ->
+    AtS1 (elt_s1, NAndX (1, [|s1; elt_s1|], ctx))
+let append_or_s1 ctx elt_s1 = function
+  | NOr ar ->
+    let n = Array.length ar in
+    let ar2 = Array.make (n+1) elt_s1 in
+    Array.blit ar 0 ar2 0 n;
+    AtS1 (elt_s1, NOrX (n, ar2, ctx))
+  | s1 ->
+    AtS1 (elt_s1, NOrX (1, [|s1; elt_s1|], ctx))
+
 let insert_elt_p1 elt = function
   | AtP1 (IsThere, ctx) -> Some (AtP1 (elt, ctx))
-  | AtP1 (f, AndX (i,ar,ctx)) -> ar.(i) <- f; Some (append_and ctx elt (And ar))
-  | AtP1 (f, ctx) -> Some (append_and ctx elt f)
+  | AtP1 (f, AndX (i,ar,ctx)) -> ar.(i) <- f; Some (append_and_p1 ctx elt (And ar))
+  | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
-  | AtS1 (Det (det, Some rel), ctx) -> Some (append_and (DetThatX (det,ctx)) elt rel)
+  | AtS1 (Det (det, Some rel), ctx) -> Some (append_and_p1 (DetThatX (det,ctx)) elt rel)
+  | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtS _ -> None
 
 let insert_class c = function
@@ -827,20 +962,36 @@ let insert_inverse_property p focus =
     | Some foc -> down_focus foc
     | None -> None
 
+let insert_and = function
+  | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
+  | AtP1 (f, AndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_p1 ctx2 IsThere (And ar))
+  | AtP1 (f, ctx) -> Some (append_and_p1 ctx IsThere f)
+  | AtS1 (NAnd ar, ctx) -> Some (append_and_s1 ctx top_s1 (NAnd ar))
+  | AtS1 (f, NAndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_s1 ctx2 top_s1 (NAnd ar))
+  | AtS1 (f, ctx) -> Some (append_and_s1 ctx top_s1 f)
+  | _ -> None
+
 let insert_or = function
-  | AtP1 (Or ar, ctx) -> Some (append_or ctx IsThere (Or ar))
-  | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or ctx2 IsThere (Or ar))
-  | AtP1 (f, ctx) -> Some (append_or ctx IsThere f)
+  | AtP1 (Or ar, ctx) -> Some (append_or_p1 ctx IsThere (Or ar))
+  | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_p1 ctx2 IsThere (Or ar))
+  | AtP1 (f, ctx) -> Some (append_or_p1 ctx IsThere f)
+  | AtS1 (NOr ar, ctx) -> Some (append_or_s1 ctx top_s1 (NOr ar))
+  | AtS1 (f, NOrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_s1 ctx2 top_s1 (NOr ar))
+  | AtS1 (f, ctx) -> Some (append_or_s1 ctx top_s1 f)
   | _ -> None
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
   | AtP1 (f, ctx) -> Some (AtP1 (Maybe f, ctx))
+  | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (f, ctx) -> Some (AtS1 (NMaybe f, ctx))
   | _ -> None
 
 let insert_not = function
   | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
   | AtP1 (f, ctx) -> Some (AtP1 (Not f, ctx))
+  | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (f, ctx) -> Some (AtS1 (NNot f, ctx))
   | _ -> None
 
 let insert_modif_transf f = function
@@ -858,6 +1009,7 @@ let insert_increment incr focus =
     | IncrClass c -> insert_class c focus
     | IncrProp p -> insert_property p focus
     | IncrInvProp p -> insert_inverse_property p focus
+    | IncrAnd -> insert_and focus
     | IncrOr -> insert_or focus
     | IncrMaybe -> insert_maybe focus
     | IncrNot -> insert_not focus
@@ -891,7 +1043,7 @@ let delete_array ar i =
   if n = 1 then `Empty
   else if n = 2 then `Single ar.(1-i)
   else
-    let ar2 = Array.make (n-1) (Type "") in
+    let ar2 = Array.make (n-1) ar.(0) in
     Array.blit ar 0 ar2 0 i;
     Array.blit ar (i+1) ar2 i (n-i-1);
     if i = n-1 && i > 0 (* last elt is deleted *)
@@ -912,15 +1064,25 @@ let rec delete_ctx_p1 = function
       | `Array (ar2, i2) -> Some (AtP1 (ar2.(i2), OrX (i2, ar2, ctx))) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
-and delete_ctx_s1 = function
-  | HasX (p,ctx) -> delete_ctx_p1 ctx
-  | IsOfX (p,ctx) -> delete_ctx_p1 ctx
-  | ReturnX -> None
+and delete_ctx_s1 f ctx =
+  match ctx with
+    | HasX _ -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
+    | IsOfX _ -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
+    | ReturnX -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
+    | NAndX (i,ar,ctx2) ->
+      ( match delete_array ar i with
+	| `Empty -> delete_ctx_s1 top_s1 ctx2
+	| `Single elt -> Some (AtS1 (elt, ctx2))
+	| `Array (ar2,i2) -> Some (AtS1 (ar2.(i2), NAndX (i2,ar2,ctx2))) )
+    | NOrX (i,ar,ctx2) ->
+      ( match delete_array ar i with
+	| `Empty -> delete_ctx_s1 top_s1 ctx2
+	| `Single elt -> Some (AtS1 (elt, ctx2))
+	| `Array (ar2, i2) -> Some (AtS1 (ar2.(i2), NOrX (i2, ar2, ctx2))) )
+    | NMaybeX ctx2 -> delete_ctx_s1 top_s1 ctx2
+    | NNotX ctx2 -> delete_ctx_s1 top_s1 ctx2
 
 let delete_focus = function
-  | AtP1 (_,ctx) -> delete_ctx_p1 ctx
-  | AtS1 (f, ctx) ->
-    if f = top_s1
-    then delete_ctx_s1 ctx
-    else Some (AtS1 (top_s1, ctx))
+  | AtP1 (_, ctx) -> delete_ctx_p1 ctx
+  | AtS1 (f, ctx) -> delete_ctx_s1 f ctx
   | AtS _ -> Some (AtS (Return top_s1))

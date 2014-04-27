@@ -129,7 +129,11 @@ and html_np dico (foc, nl : nl_np) : string =
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt dico rel
       | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj adj ^ html_word w ^ html_rel_opt dico rel
       | `QuOneOf (_, [w]) -> html_word w
-      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw) in
+      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw)
+      | `And ar -> html_and (Array.map (html_np dico) ar)
+      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_np dico) ar)
+      | `Maybe (suspended, np) -> html_maybe ~suspended (html_np dico np)
+      | `Not (suspended, np) -> html_not ~suspended (html_np dico np) in
   html_nl_focus dico foc html
 and html_qu : nl_qu -> string = function
   | `A -> "a "
@@ -224,6 +228,7 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
 	    | AtP1 (IsThere, _) -> "that is the "
 	    | _ -> "and that is the " in
 	prefix ^ html_prop p ^ " of"
+      | IncrAnd -> "and " ^ html_ellipsis
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus

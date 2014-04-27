@@ -165,7 +165,7 @@ object (self)
 	jquery_set_innerHTML "#list-results"
 	  (html_table_of_results
 	     ~first_rank:(offset+1)
-	     ~focus_var:(match lis#focus_term_opt with Some (Rdf.Var v) -> v | _ -> "")
+	     ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> v | _ -> "")
 	     (lis#results_page offset limit));
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
@@ -232,9 +232,9 @@ object (self)
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#results" (fun elt_res ->
-	( match lis#focus_term_opt with
-	  | None -> elt_incrs##style##display <- string "none"
-	  | Some _ -> elt_incrs##style##display <- string "block" );
+	( match lis#focus_term_list with
+	  | [] -> elt_incrs##style##display <- string "none"
+	  | _::_ -> elt_incrs##style##display <- string "block" );
 	lis#ajax_sparql_results term_constr [elt_incrs; elt_res]
 	  (function
 	    | None ->
@@ -244,11 +244,11 @@ object (self)
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
-	      ( match lis#focus_term_opt with
-		| None -> ()
-		| Some (Rdf.Var v) ->
+	      ( match lis#focus_term_list with
+		| [] -> ()
+		| [Rdf.Var v] ->
 		  self#refresh_property_increments_init
-		| Some term ->
+		| _ ->
 		  self#refresh_term_increments;
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments )
@@ -257,9 +257,9 @@ object (self)
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	      ( match lis#focus_term_opt with
-		| None -> ()
-		| Some t ->
+	      ( match lis#focus_term_list with
+		| [] -> ()
+		| _ ->
 		  self#refresh_term_increments;
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments ))))

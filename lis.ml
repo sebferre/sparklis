@@ -115,8 +115,8 @@ object (self)
 
   (* derived state *)
 
-  val mutable focus_term_opt : Rdf.term option = None
-  method focus_term_opt = focus_term_opt
+  val mutable focus_term_list : Rdf.term list = []
+  method focus_term_list = focus_term_list
 
   val mutable query_opt : Lisql.sparql_template option = None
   val mutable query_class_opt : Lisql.sparql_template option = None
@@ -125,8 +125,8 @@ object (self)
 
   method private init =
     begin
-      let t_opt, q_opt, qc_opt, qph_opt, qpi_opt = Lisql.sparql_of_focus focus in
-      focus_term_opt <- t_opt;
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql.sparql_of_focus focus in
+      focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
       query_prop_has_opt <- qph_opt;
@@ -151,10 +151,10 @@ object (self)
       | None ->
 	results <- Sparql_endpoint.empty_results;
 	focus_term_index <-
-	  ( match focus_term_opt with
-	    | None -> []
-	    | Some (Rdf.Var _) -> []
-	    | Some term -> [(term,1)] );
+	  ( match focus_term_list with
+	    | [Rdf.Var _] -> []
+	    | [term] -> [(term,1)]
+	    | _ -> [] );
 	k None
       | Some query ->
 	let sparql = query ~constr:term_constr ~limit:max_results in
@@ -162,16 +162,16 @@ object (self)
 	  (fun res ->
 	    results <- res;
 	    focus_term_index <-
-	      ( match focus_term_opt with
-		| None -> []
-		| Some (Rdf.Var v) ->
+	      ( match focus_term_list with
+		| [Rdf.Var v] ->
 		  List.filter
 		    (function
 		      | (Rdf.URI uri, _) when String.contains uri ' ' -> false
 	                (* URIs with spaces inside are not allowed in SPARQL queries *)
 		      | _ -> true)
 		    (index_of_results_column v results)
-		| Some t -> [(t, 1)] );
+		| [t] -> [(t, 1)]
+		| _ -> [] );
 	    k (Some sparql))
 	  (fun code ->
 	    results <- Sparql_endpoint.empty_results;
@@ -185,9 +185,12 @@ object (self)
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
   method index_terms =
-    List.rev_map
-      (fun (t,freq) -> (Lisql.IncrTerm t, freq))
-      focus_term_index
+    if focus_term_index = []
+    then []
+    else
+      List.rev_map
+	(fun (t,freq) -> (Lisql.IncrTerm t, freq))
+	focus_term_index
 
   method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
     let process results_class results_prop =
@@ -239,67 +242,79 @@ object (self)
 
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
-    let process results_a results_has results_isof =
-      let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
-	(index_of_results_column "class" results_a) in (* increasing *)
-      let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrProp p)
-	(index_of_results_column "prop" results_has) in (* increasing *)
-      let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrInvProp p)
-	(index_of_results_column "prop" results_isof) in (* increasing *)
-      let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
-      k index
-    in	
-    let sparql_a =
-      let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.URI "a") (Rdf.Var "class")) focus_term_index in
-      Lisql.sparql_select ~dimensions:["class"] ~limit:max_classes
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "class") constr]) in
-    let sparql_has =
-      let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index in
-      Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
-    let sparql_isof =
-      let lgp = List.map (fun (t,_) -> Lisql.sparql_triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index in
-      Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
-	(Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
-    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
-      (function
-	| [results_a; results_has; results_isof] ->
-	  if results_a.Sparql_endpoint.length > 0 || results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
-	  then process results_a results_has results_isof
-	  else
-	    ( match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
-	      | None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
-	      | Some query_a, Some query_has, Some query_isof ->
-		let sparql_a = query_a ~constr ~limit:max_classes in
-		let sparql_has = query_has ~constr ~limit:max_properties in
-		let sparql_isof = query_isof ~constr ~limit:max_properties in
-		Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
-		  (function
-		    | [results_a; results_has; results_isof] -> process results_a results_has results_isof
-		    | _ -> assert false)
-		  (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
-	      | _ -> assert false )
-	| _ -> assert false)
-      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+    if focus_term_index = []
+    then k []
+    else
+      let process results_a results_has results_isof =
+	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
+	  (index_of_results_column "class" results_a) in (* increasing *)
+	let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrProp p)
+	  (index_of_results_column "prop" results_has) in (* increasing *)
+	let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrInvProp p)
+	  (index_of_results_column "prop" results_isof) in (* increasing *)
+	let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
+	k index
+      in	
+      let sparql_a =
+	let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.URI "a") (Rdf.Var "class")) focus_term_index in
+	Lisql.sparql_select ~dimensions:["class"] ~limit:max_classes
+	  (Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "class") constr]) in
+      let sparql_has =
+	let lgp = List.map (fun (t,_) -> Lisql.sparql_triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index in
+	Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
+	  (Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
+      let sparql_isof =
+	let lgp = List.map (fun (t,_) -> Lisql.sparql_triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index in
+	Lisql.sparql_select ~dimensions:["prop"] ~limit:max_properties
+	  (Lisql.sparql_join [Lisql.sparql_union lgp; Lisql.sparql_constr (Rdf.Var "prop") constr]) in
+      Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
+	(function
+	  | [results_a; results_has; results_isof] ->
+	    if results_a.Sparql_endpoint.length > 0 || results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
+	    then process results_a results_has results_isof
+	    else
+	      ( match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
+		| None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
+		| Some query_a, Some query_has, Some query_isof ->
+		  let sparql_a = query_a ~constr ~limit:max_classes in
+		  let sparql_has = query_has ~constr ~limit:max_properties in
+		  let sparql_isof = query_isof ~constr ~limit:max_properties in
+		  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
+		    (function
+		      | [results_a; results_has; results_isof] -> process results_a results_has results_isof
+		      | _ -> assert false)
+		    (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+		| _ -> assert false )
+	  | _ -> assert false)
+	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method index_modifiers =
     let modif_list =
       let open Lisql in
       match focus with
 	| AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
-	| AtS1 (Det (An (modif, head), _), _) ->
+	| AtS1 (f,ctx) ->
 	  let modifs =
-	    if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-	    then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
-	    else [] in
+	    match f with
+	      | Det (An (modif, head), _) ->
+		let modifs =
+		  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
+		  then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
+		  else [] in
+		let modifs =
+		  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
+		  then IncrAggreg ListOf :: modifs
+		  else modifs in
+		let modifs =
+		  IncrUnselect :: IncrAggreg NumberOf :: modifs in
+		let modifs =
+		  IncrOrder Highest :: IncrOrder Lowest :: modifs in
+		modifs
+	      | _ -> [] in
 	  let modifs =
-	    if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-	    then IncrAggreg ListOf :: modifs
-	    else modifs in
-	  let modifs =
-	    IncrUnselect :: IncrAggreg NumberOf :: modifs in
-	  let modifs =
-	    IncrOrder Highest :: IncrOrder Lowest :: modifs in
+	    if ctx = ReturnX
+	    then modifs (* no coordination yet on root NP to avoid disconnected graph patterns *)
+	    else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
 	  modifs
 	| _ -> [] in
     List.map (fun incr -> (incr,1)) modif_list
