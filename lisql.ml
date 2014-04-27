@@ -982,16 +982,16 @@ let insert_or = function
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> Some (AtP1 (Maybe f, ctx))
+  | AtP1 (f, ctx) -> if f = top_p1 then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))
   | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> Some (AtS1 (NMaybe f, ctx))
+  | AtS1 (f, ctx) -> if f = top_s1 then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))
   | _ -> None
 
 let insert_not = function
   | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> Some (AtP1 (Not f, ctx))
+  | AtP1 (f, ctx) -> if f = top_p1 then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
   | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> Some (AtS1 (NNot f, ctx))
+  | AtS1 (f, ctx) -> if f = top_s1 then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
   | _ -> None
 
 let insert_modif_transf f = function

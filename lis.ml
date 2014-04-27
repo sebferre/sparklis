@@ -292,7 +292,7 @@ object (self)
     let modif_list =
       let open Lisql in
       match focus with
-	| AtP1 _ -> [IncrOr; IncrMaybe; IncrNot]
+	| AtP1 _ -> [IncrAnd; IncrOr; IncrMaybe; IncrNot]
 	| AtS1 (f,ctx) ->
 	  let modifs =
 	    match f with
