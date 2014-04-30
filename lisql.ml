@@ -261,7 +261,7 @@ let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
 let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
 let sparql_search_label (t : Rdf.term) (l : Rdf.term) : string =
-  sparql_term t ^ " rdfs:label " ^ sparql_term l ^ " . "
+  sparql_term t ^ " rdfs:label " ^ sparql_term l ^ " . " ^ sparql_constr l (HasLang "en")
 let sparql_search_contains (l : Rdf.term) (w : string) : string =
   sparql_term l ^ " bif:contains " ^ sparql_string w ^ " . "
 
