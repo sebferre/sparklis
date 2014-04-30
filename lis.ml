@@ -211,7 +211,7 @@ object (self)
     let sparql_term =
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
-	Lisql.sparql_search_constr "term" constr ^
+	Lisql.sparql_search_constr (Rdf.Var "term") constr ^
 	" } LIMIT 200" in
     Firebug.console##log(string sparql_term);
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
@@ -242,14 +242,14 @@ object (self)
 	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	Lisql.sparql_constr (Rdf.Var "class") constr ^
-	" } LIMIT 1000" in
+	" } LIMIT 500" in
     let sparql_prop =
       "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
         "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	Lisql.sparql_constr (Rdf.Var "prop") constr ^
-	" } LIMIT 1000" in
+	" } LIMIT 500" in
     Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
       (function
 	| [results_class; results_prop] ->
@@ -339,7 +339,10 @@ object (self)
 	      | _ -> [] in
 	  let modifs =
 	    if ctx = ReturnX
-	    then modifs (* no coordination yet on root NP to avoid disconnected graph patterns *)
+	    then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
+	      if f = top_s1
+	      then modifs
+	      else IncrOr :: modifs
 	    else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
 	  modifs
 	| _ -> [] in

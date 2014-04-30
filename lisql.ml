@@ -69,6 +69,7 @@ type elt_p1 =
   | Type of Rdf.uri
   | Has of Rdf.uri * elt_s1
   | IsOf of Rdf.uri * elt_s1
+  | Search of constr
   | Constr of constr
   | And of elt_p1 array
   | Or of elt_p1 array
@@ -259,29 +260,29 @@ let sparql_union lgp =
 let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
 let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
-let sparql_search_label (x : Rdf.var) (l : Rdf.var) : string =
-  sparql_var x ^ " rdfs:label " ^ sparql_var l ^ " . "
-let sparql_search_contains (label : Rdf.var) (w : string) : string =
-  sparql_var label ^ " bif:contains " ^ sparql_string w ^ " . "
+let sparql_search_label (t : Rdf.term) (l : Rdf.term) : string =
+  sparql_term t ^ " rdfs:label " ^ sparql_term l ^ " . "
+let sparql_search_contains (l : Rdf.term) (w : string) : string =
+  sparql_term l ^ " bif:contains " ^ sparql_string w ^ " . "
 
-let sparql_search_constr (x : Rdf.var) (constr : constr) : string =
-  let l = "label_of_" ^ x in
+let sparql_search_constr (t : Rdf.term) (constr : constr) : string =
+  let l = Rdf.Var "search_label" in
   match constr with
     | MatchesAll (w::lw) ->
       sparql_join
-	[sparql_search_label x l;
+	[sparql_search_label t l;
 	 sparql_search_contains l w;
-	 sparql_constr (Rdf.Var l) (MatchesAll lw)]
+	 sparql_constr l (MatchesAll lw)]
     | MatchesAny lw ->
       sparql_union
 	(List.map
 	   (fun w ->
 	     sparql_join
-	       [sparql_search_label x l;
+	       [sparql_search_label t l;
 		sparql_search_contains l w])
 	   lw)
     | _ ->
-      sparql_search_label x l
+      sparql_search_label t l
 
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
@@ -319,6 +320,7 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
   | Type c -> (fun x -> sparql_type x (Rdf.URI c))
   | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x (Rdf.URI p) y))
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y (Rdf.URI p) x))
+  | Search constr -> (fun x -> sparql_search_constr x constr)
   | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
     (fun x ->
@@ -613,6 +615,7 @@ let rec vp_of_elt_p1 pos ctx f : nl_vp =
       | Type c -> `IsNP (`NoFocus, `Qu (`A, `Nil, `Class c, top_rel))
       | Has (p,np) -> `HasProp (`Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
       | IsOf (p,np) -> `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))))
+      | Search c -> vp_of_constr c
       | Constr c -> vp_of_constr c
       | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
       | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
@@ -741,6 +744,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Type _ -> None
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
   | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
+  | Search _ -> None
   | Constr _ -> None
   | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
   | Or ar -> Some (AtP1 (ar.(0), OrX (0,ar,ctx)))
@@ -952,8 +956,10 @@ let insert_elt_p1 elt = function
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtS _ -> None
 
-let insert_constr constr = function
-  | focus -> insert_elt_p1 (Constr constr) focus
+let insert_constr constr focus =
+  match focus with
+    | AtS1 (f, ReturnX) when f = top_s1 -> insert_elt_p1 (Search constr) focus
+    | _ -> insert_elt_p1 (Constr constr) focus
 
 let insert_class c = function
 (*
