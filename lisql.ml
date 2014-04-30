@@ -179,10 +179,7 @@ object
     with _ -> (Select, Unordered)
 end
 
-let sparql_uri uri = 
-  if uri = "a"
-  then uri
-  else "<" ^ uri ^ ">"
+let sparql_uri uri = "<" ^ uri ^ ">"
 
 let sparql_var v = "?" ^ v
 
@@ -203,6 +200,7 @@ let sparql_term_numeric t = "STRDT(str(" ^ sparql_term t ^ "),xsd:double)"
 
 let sparql_empty = ""
 
+let sparql_type s c = sparql_term s ^ " a " ^ sparql_term c ^ " . "
 let sparql_triple s p o = sparql_term s ^ " " ^ sparql_term p ^ " " ^ sparql_term o ^ " . "
 
 let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
@@ -261,6 +259,30 @@ let sparql_union lgp =
 let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
 let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
 
+let sparql_search_label (x : Rdf.var) (l : Rdf.var) : string =
+  sparql_var x ^ " rdfs:label " ^ sparql_var l ^ " . "
+let sparql_search_contains (label : Rdf.var) (w : string) : string =
+  sparql_var label ^ " bif:contains " ^ sparql_string w ^ " . "
+
+let sparql_search_constr (x : Rdf.var) (constr : constr) : string =
+  let l = "label_of_" ^ x in
+  match constr with
+    | MatchesAll (w::lw) ->
+      sparql_join
+	[sparql_search_label x l;
+	 sparql_search_contains l w;
+	 sparql_constr (Rdf.Var l) (MatchesAll lw)]
+    | MatchesAny lw ->
+      sparql_union
+	(List.map
+	   (fun w ->
+	     sparql_join
+	       [sparql_search_label x l;
+		sparql_search_contains l w])
+	   lw)
+    | _ ->
+      sparql_search_label x l
+
 let sparql_ask gp =
   "ASK WHERE {\n" ^ gp ^ "\n}"
 let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]) ?limit gp =
@@ -294,7 +316,7 @@ let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]
     s
 
 let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
-  | Type c -> (fun x -> sparql_triple x (Rdf.URI "a") (Rdf.URI c))
+  | Type c -> (fun x -> sparql_type x (Rdf.URI c))
   | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x (Rdf.URI p) y))
   | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y (Rdf.URI p) x))
   | Constr constr -> (fun x -> sparql_constr x constr)
@@ -356,7 +378,7 @@ and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string
     state#new_var prefix, (fun t -> sparql_empty)
   | Class c ->
     let prefix = if prefix<>"" then prefix else prefix_of_uri c in
-    state#new_var prefix, (fun t -> sparql_triple t (Rdf.URI "a") (Rdf.URI c))
+    state#new_var prefix, (fun t -> sparql_type t (Rdf.URI c))
 and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
     sparql_of_elt_s1 state ~prefix:"" np (fun t -> "")
@@ -496,7 +518,7 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	  sparql_select ~dimensions:[x] ~limit
 	    (sparql_join [gp_x; sparql_constr tx constr]))
       | _ -> None in
-  let query_class_opt = query_incr_opt "class" (fun t tc -> sparql_triple t (Rdf.URI "a") tc) in
+  let query_class_opt = query_incr_opt "class" (fun t tc -> sparql_type t tc) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> sparql_triple t tp (Rdf.Bnode "")) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> sparql_triple (Rdf.Bnode "") tp t) in
   t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
