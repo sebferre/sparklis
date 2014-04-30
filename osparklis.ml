@@ -181,6 +181,17 @@ object (self)
 		    " of " ^ string_of_int nb ^ (if nb < Lis.max_results then "" else "+")))
       end)
 
+  method private refresh_term_increments_init =
+    jquery "#list-terms" (fun elt ->
+      lis#ajax_index_terms_init term_constr [elt]
+	(fun index ->
+	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
+	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	    navigation#update_focus ~push_in_history:true
+	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  jquery_set_innerHTML "#count-terms"
+	    (html_count_unit (List.length index) 100 "entity" "entities")))
+
   method private refresh_term_increments =
     let index = lis#index_terms in
     jquery "#list-terms" (fun elt ->
@@ -241,12 +252,13 @@ object (self)
 	      jquery_set_innerHTML "#sparql-query" "";
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "none");
 	      jquery "#results" (fun elt -> elt##style##display <- string "none");
-	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);
+	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      ( match lis#focus_term_list with
 		| [] -> ()
 		| [Rdf.Var v] ->
+		  self#refresh_term_increments_init;
 		  self#refresh_property_increments_init
 		| _ ->
 		  self#refresh_term_increments;
@@ -268,22 +280,29 @@ object (self)
     lis#focus = Lisql.home_focus
 
   method set_term_constr constr =
-    if not self#is_home
-    then begin
-      Firebug.console##log(string "set_term_constr!");
-      term_constr <- constr;
-      self#refresh
-    end
+    if constr <> term_constr
+    then
+      if self#is_home
+      then begin
+	term_constr <- constr;
+	self#refresh_term_increments_init end      
+      else begin
+	Firebug.console##log(string "set_term_constr!");
+	term_constr <- constr;
+	self#refresh
+      end
 
   method set_property_constr constr =
-    if self#is_home
-    then begin
-      property_constr <- constr;
-      self#refresh_property_increments_init end
-    else begin
-      property_constr <- constr;
-      self#refresh_property_increments
-    end
+    if constr <> property_constr
+    then
+      if self#is_home
+      then begin
+	property_constr <- constr;
+	self#refresh_property_increments_init end
+      else begin
+	property_constr <- constr;
+	self#refresh_property_increments
+      end
 
   method pattern_changed
     ~(select : Dom_html.selectElement t)
@@ -294,6 +313,9 @@ object (self)
     let op = to_string (select##value) in
     let pat = to_string (input##value) in
     Firebug.console##log(string pat);
+    if pat = ""
+    then k Lisql.True
+    else
     try
       let constr = make_constr op pat in
       let matcher = Lisql.compile_constr constr in
@@ -442,7 +464,7 @@ let _ =
 	      Dom_html.window##alert(string "Invalid filter")
 	    else
 	      history#update_focus ~push_in_history:true
-		(Lisql.insert_elt_p1 (Lisql.Constr constr))
+		(Lisql.insert_constr constr)
 	  with Invalid_argument msg ->
 	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
     List.iter

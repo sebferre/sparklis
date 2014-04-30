@@ -192,6 +192,35 @@ object (self)
 	(fun (t,freq) -> (Lisql.IncrTerm t, freq))
 	focus_term_index
 
+  method ajax_index_terms_init constr elt (k : Lisql.increment index -> unit) =
+    match constr with
+      | Lisql.MatchesAll (w::lw) ->
+	let process results_term =
+	  let list_term = list_of_results_column "term" results_term in
+	  let list_term =
+	    List.sort
+	      (fun t1 t2 ->
+		Pervasives.compare (* TODO: more efficient and correct way? *)
+		  (String.length (Rdf.string_of_term t2), t2)
+		  (String.length (Rdf.string_of_term t1), t1))
+	      list_term in
+	  let index =
+	    List.fold_left
+	      (fun res t -> (Lisql.IncrTerm t, 1) :: res)
+	      [] list_term in
+	  k index
+	in
+	let sparql_term =
+	  "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+	  "SELECT DISTINCT ?term WHERE { ?term rdfs:label ?l . ?l bif:contains \"" ^ w ^ "\"" ^
+	    Lisql.sparql_constr (Rdf.Var "l") (Lisql.MatchesAll lw) ^
+	    " } LIMIT 200" in
+	Firebug.console##log(string sparql_term);
+	Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
+	  (fun results_term -> process results_term)
+	  (fun code -> process Sparql_endpoint.empty_results)
+      | _ -> k []
+
   method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
     let process results_class results_prop =
       let list_class = list_of_results_column "class" results_class in

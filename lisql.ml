@@ -212,11 +212,13 @@ let sparql_expr_comp relop expr1 expr2 = expr1 ^ " " ^ relop ^ " " ^ expr2
 let sparql_filter lexpr = "FILTER(" ^ String.concat " && " lexpr ^ ")"
 let sparql_constr t = function
   | True -> sparql_empty
+  | MatchesAll [] -> sparql_empty
   | MatchesAll lpat ->
     sparql_filter
       (List.map
 	 (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat)
 	 lpat)
+  | MatchesAny [] -> sparql_empty
   | MatchesAny lpat ->
     sparql_filter
       [String.concat " || "
@@ -927,6 +929,9 @@ let insert_elt_p1 elt = function
   | AtS1 (Det (det, Some rel), ctx) -> Some (append_and_p1 (DetThatX (det,ctx)) elt rel)
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtS _ -> None
+
+let insert_constr constr = function
+  | focus -> insert_elt_p1 (Constr constr) focus
 
 let insert_class c = function
 (*
