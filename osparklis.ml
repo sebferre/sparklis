@@ -130,6 +130,21 @@ object (self)
   val mutable dico_foci = new dico_foci
   val mutable dico_incrs = new dico_increments
 
+  method show_permalink : unit =
+    let args = [("endpoint", lis#endpoint); ("query", Permalink.of_query lis#query)] in
+    try
+      let permalink_url =
+	match Url.Current.get () with
+	  | None -> raise Not_found
+	  | Some (Url.Http url) -> Url.Http { url with Url.hu_arguments = args }
+	  | Some (Url.Https url) -> Url.Http { url with Url.hu_arguments = args }
+	  | Some (Url.File url) -> Url.File { url with Url.fu_arguments = args } in
+      ignore
+	(prompt
+	   "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
+	   (Url.string_of_url permalink_url))
+    with _ -> ()
+
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
       elt##innerHTML <- string (html_focus dico_foci lis#focus);
@@ -451,6 +466,7 @@ let _ =
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
 	history#change_endpoint url)));
+    jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
@@ -487,5 +503,21 @@ let _ =
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit)));
 
-    history#present#refresh;
+(*    let _ = to_string Dom_html.window##location##search in *)
+    let _ =
+      let args = Url.Current.arguments in
+      let args =
+	match args with
+	  | [] -> []
+	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
+      Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
+      try
+	let url = List.assoc "endpoint" args in
+	history#change_endpoint url;
+	try
+	  let query = Permalink.to_query (List.assoc "query" args) in
+	  history#update_focus ~push_in_history:true (fun _ -> Some (Lisql.AtS query))
+	with _ -> ()
+      with _ ->
+	history#present#refresh in
     bool true)

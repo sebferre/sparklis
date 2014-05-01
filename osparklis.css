@@ -54,6 +54,15 @@ text-align:right;
 width:300px;
 }
 
+#permalink
+{
+margin-left:10px;
+//font-style:normal;
+//font-weight:normal;
+//color:blue;
+//text-decoration:underline;
+}
+
 #lisql
 {
 margin:10px;

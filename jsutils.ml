@@ -4,6 +4,8 @@ open XmlHttpRequest
 
 let alert msg = Dom_html.window##alert(string msg)
 
+let prompt msg text = Dom_html.window##prompt(string msg, string text)
+
 let jquery_from (root : #Dom_html.nodeSelector Js.t) s k =
   Opt.iter (root##querySelector(string s)) (fun elt ->
     k elt)

@@ -112,6 +112,7 @@ object (self)
 
   val focus = focus
   method focus = focus
+  method query = Lisql.elt_s_of_focus focus
 
   (* derived state *)
 
