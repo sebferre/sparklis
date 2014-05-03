@@ -319,7 +319,16 @@ object (self)
     let modif_list =
       let open Lisql in
       match focus with
-	| AtP1 _ -> [IncrAnd; IncrOr; IncrMaybe; IncrNot]
+	| AtP1 (f,ctx) ->
+	  let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
+	  let modifs =
+	    match f with
+	      | Has _
+	      | IsOf _
+	      | Triple (S, Det (Term (Rdf.URI _), _), _)
+	      | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
+	      | _ -> modifs in
+	  modifs
 	| AtS1 (f,ctx) ->
 	  let modifs =
 	    match f with

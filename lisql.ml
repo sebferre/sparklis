@@ -59,6 +59,7 @@ let compile_constr constr : Rdf.term -> bool =
 	| _ -> false)
 
 (* LISQL modifiers *)
+type arg = S | P | O
 type order = Unordered | Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
 type project = Unselect | Select | Aggreg of aggreg * order
@@ -69,6 +70,7 @@ type elt_p1 =
   | Type of Rdf.uri
   | Has of Rdf.uri * elt_s1
   | IsOf of Rdf.uri * elt_s1
+  | Triple of arg * elt_s1 * elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | Search of constr
   | Constr of constr
   | And of elt_p1 array
@@ -105,6 +107,8 @@ type ctx_p1 =
 and ctx_s1 =
   | HasX of Rdf.uri * ctx_p1
   | IsOfX of Rdf.uri * ctx_p1
+  | TripleX1 of arg * elt_s1 * ctx_p1 (* context on first S1 arg *)
+  | TripleX2 of arg * elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX
   | NAndX of int * elt_s1 array * ctx_s1
   | NOrX of int * elt_s1 array * ctx_s1
@@ -128,6 +132,8 @@ let rec elt_s_of_ctx_p1 (f : elt_p1) = function
 and elt_s_of_ctx_s1 (f : elt_s1) = function
   | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
   | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
+  | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,f,np)) ctx
+  | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,np,f)) ctx
   | ReturnX -> Return f
   | NAndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NAnd ar) ctx
   | NOrX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NOr ar) ctx
@@ -316,10 +322,28 @@ let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]
     let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
     s
 
+let sparql_arg arg x y z =
+  match arg with
+    | S -> sparql_triple x y z
+    | P -> sparql_triple y x z
+    | O -> sparql_triple y z x
+
+let prefix_of_arg0 = function P -> "relation" | S | O -> ""
+let prefix_of_arg1 = function S -> "relation" | P | O -> ""
+let prefix_of_arg2 = function O -> "relation" | S | P -> ""
+
 let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
   | Type c -> (fun x -> sparql_type x (Rdf.URI c))
-  | Has (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np (fun y -> sparql_triple x (Rdf.URI p) y))
-  | IsOf (p,np) -> (fun x -> sparql_of_elt_s1 state ~prefix:"" np (fun y -> sparql_triple y (Rdf.URI p) x))
+  | Has (p,np) ->
+    (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np
+      (fun y -> sparql_triple x (Rdf.URI p) y))
+  | IsOf (p,np) ->
+    (fun x -> sparql_of_elt_s1 state ~prefix:"" np
+      (fun y -> sparql_triple y (Rdf.URI p) x))
+  | Triple (arg,np1,np2) ->
+    (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np1
+      (fun y -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np2
+	(fun z -> sparql_arg arg x y z)))
   | Search constr -> (fun x -> sparql_search_constr x constr)
   | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
@@ -346,6 +370,7 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) 
       then
 	match rel_opt with
 	  | Some (IsOf (p,_)) -> prefix_of_uri p
+	  | Some (Triple (arg,_,_)) -> prefix_of_arg0 arg
 	  | _ -> prefix
       else prefix in
     let d1 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
@@ -392,6 +417,8 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> stri
       then
 	match ctx with
 	  | HasX (p,_) -> prefix_of_uri p
+	  | TripleX1 (arg,_,_) -> prefix_of_arg1 arg
+	  | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	  | _ -> prefix
       else prefix in
     sparql_of_ctx_s1 state 
@@ -422,6 +449,18 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) : ctx_s1 -> stri
     sparql_of_ctx_p1 state ~prefix:(prefix_of_uri p)
       (fun x -> q (fun y -> sparql_triple y (Rdf.URI p) x))
       ctx
+  | TripleX1 (arg,np,ctx) ->
+    sparql_of_ctx_p1 state ~prefix:""
+      (fun x -> q
+	(fun y -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np
+	  (fun z -> sparql_arg arg x y z)))
+      ctx
+  | TripleX2 (arg,np,ctx) ->
+    sparql_of_ctx_p1 state ~prefix:""
+      (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np
+	(fun y -> q
+	  (fun z -> sparql_arg arg x y z)))
+      ctx
   | ReturnX ->
     q (fun t -> "")
   | NAndX (i,ar,ctx) ->
@@ -451,6 +490,7 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	let prefix =
 	  match f with
 	    | IsOf (p, _) -> prefix_of_uri p
+	    | Triple (arg,_,_) -> prefix_of_arg0 arg
 	    | _ -> "" in
 	sparql_of_ctx_p1 state ~prefix
 	  (fun t ->
@@ -461,6 +501,8 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	let prefix =
 	  match ctx with
 	    | HasX (p,_) -> prefix_of_uri p
+	    | TripleX1 (arg,_,_) -> prefix_of_arg1 arg
+	    | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	    | _ -> "" in
 	sparql_of_ctx_s1 state (fun d ->
 	  sparql_of_elt_s1 state ~prefix f
@@ -531,6 +573,7 @@ type nl_word =
   [ `Thing
   | `Class of Rdf.uri
   | `Prop of Rdf.uri
+  | `Relation
   | `Op of string
   | `Term of Rdf.term
   | `Literal of string
@@ -565,24 +608,27 @@ and nl_rel = nl_focus *
   | `Or of int option * nl_rel array ]
 and nl_vp = nl_focus *
   [ `IsThere
-  | `IsNP of nl_np
+  | `IsNP of nl_np * nl_pp list
   | `IsPP of nl_pp
-  | `HasProp of nl_word * nl_np
-  | `Has of nl_np
-  | `VT of nl_word * nl_np
+  | `HasProp of nl_word * nl_np * nl_pp list
+  | `Has of nl_np * nl_pp list
+  | `VT of nl_word * nl_np * nl_pp list
   | `And of nl_vp array
   | `Or of int option * nl_vp array (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of bool * nl_vp (* the bool indicates whether negation is suspended *)
   | `Not of bool * nl_vp (* the bool indicates whether negation is suspended *)
   | `DummyFocus ]
 and nl_pp =
-  [ `Prep of nl_word * nl_word
-  | `PrepBin of nl_word * nl_word * nl_word * nl_word ]
+  [ `Prep of nl_word * nl_np
+  | `PrepBin of nl_word * nl_np * nl_word * nl_np ]
 
 let top_vp = `Nofocus, `IsThere
 let top_rel = `NoFocus, `Nil
 let top_np = `NoFocus, `Qu (`A, `Nil, `Thing, top_rel)
 let top_s = `NoFocus, `Return top_np
+
+let np_of_word w = `NoFocus, `PN (w, top_rel)
+let np_of_literal l = np_of_word (`Literal l)
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
@@ -608,13 +654,29 @@ and adj_of_aggreg ~suspended adj : aggreg -> nl_adj = function
   | Maximum -> `Aggreg (suspended, adj, `Op "maximum")
   | Minimum -> `Aggreg (suspended, adj, `Op "minimum")
 
+let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP ((`NoFocus, `Qu (`A, `Nil, `Class c, top_rel)), [])
+let vp_of_elt_p1_Has (p : Rdf.uri) (np : nl_np) = `HasProp (`Prop p, np, [])
+let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : nl_np) = `IsNP ((`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of np))), [])
+let vp_of_elt_p1_Triple (arg : arg) (np1 : nl_np) (np2 : nl_np) =
+  match arg with
+    | S -> (* has relation npp to npo / has property npp with value npo / has p npo *)
+      `HasProp (`Relation, np1, [`Prep (`Op "to", np2)])
+    | O -> (* has relation npp from nps / is the value of npp of nps / is the p of nps *)
+      `HasProp (`Relation, np2, [`Prep (`Op "from", np1)])
+    | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
+      `IsNP ((`NoFocus, `Qu (`A, `Nil, `Relation, top_rel)), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
+
 let rec vp_of_elt_p1 pos ctx f : nl_vp =
   let nl =
     match f with
       | IsThere -> `IsThere
-      | Type c -> `IsNP (`NoFocus, `Qu (`A, `Nil, `Class c, top_rel))
-      | Has (p,np) -> `HasProp (`Prop p, np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
-      | IsOf (p,np) -> `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np))))
+      | Type c -> vp_of_elt_p1_Type c
+      | Has (p,np) -> vp_of_elt_p1_Has p (np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
+      | IsOf (p,np) -> vp_of_elt_p1_IsOf p (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np)
+      | Triple (arg,np1,np2) ->
+	vp_of_elt_p1_Triple arg
+	  (np_of_elt_s1 (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
+	  (np_of_elt_s1 (focus_pos_down pos) (TripleX2 (arg,np1,ctx)) np2)
       | Search c -> vp_of_constr c
       | Constr c -> vp_of_constr c
       | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
@@ -624,16 +686,16 @@ let rec vp_of_elt_p1 pos ctx f : nl_vp =
   `Focus (AtP1 (f,ctx), pos), nl
 and vp_of_constr = function
   | True -> `IsThere
-  | MatchesAll lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)))
-  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)))
-  | After pat -> `IsPP (`Prep (`Op "after", `Literal pat))
-  | Before pat -> `IsPP (`Prep (`Op "before", `Literal pat))
-  | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", `Literal pat1, `Op "to", `Literal pat2))
-  | HigherThan pat -> `IsPP (`Prep (`Op "higher than", `Literal pat))
-  | LowerThan pat -> `IsPP (`Prep (`Op "lower than", `Literal pat))
-  | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", `Literal pat1, `Op "and", `Literal pat2))
-  | HasLang pat -> `Has (`NoFocus, `Qu (`A, `Nil, `Op "language", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel))))))
-  | HasDatatype pat -> `Has (`NoFocus, `Qu (`A, `Nil, `Op "datatype", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel))))))
+  | MatchesAll lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), [])
+  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)), [])
+  | After pat -> `IsPP (`Prep (`Op "after", np_of_literal pat))
+  | Before pat -> `IsPP (`Prep (`Op "before", np_of_literal pat))
+  | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", np_of_literal pat1, `Op "to", np_of_literal pat2))
+  | HigherThan pat -> `IsPP (`Prep (`Op "higher than", np_of_literal pat))
+  | LowerThan pat -> `IsPP (`Prep (`Op "lower than", np_of_literal pat))
+  | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", np_of_literal pat1, `Op "and", np_of_literal pat2))
+  | HasLang pat -> `Has ((`NoFocus, `Qu (`A, `Nil, `Op "language", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))), [])
+  | HasDatatype pat -> `Has ((`NoFocus, `Qu (`A, `Nil, `Op "datatype", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))), [])
 and np_of_elt_s1 pos ctx f : nl_np =
   let foc = `Focus (AtS1 (f,ctx),pos) in
   match f with
@@ -690,12 +752,22 @@ and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
     | HasX (p,ctx2) ->
       let f2 = Has (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
-      let nl2 = `HasProp (`Prop p, foc_nl) in
+      let nl2 = vp_of_elt_p1_Has p foc_nl in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | IsOfX (p,ctx2) ->
       let f2 = IsOf (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
-      let nl2 = `IsNP (`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of foc_nl))) in
+      let nl2 = vp_of_elt_p1_IsOf p foc_nl in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
+    | TripleX1 (arg,np2,ctx2) ->
+      let f2 = Triple (arg,f,np2) in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 `Out (TripleX2 (arg,f,ctx2)) np2) in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
+    | TripleX2 (arg,np1,ctx2) ->
+      let f2 = Triple (arg,np1,f) in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | ReturnX ->
       let f2 = Return f in
@@ -744,6 +816,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Type _ -> None
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
   | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
+  | Triple (arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | Search _ -> None
   | Constr _ -> None
   | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
@@ -780,6 +853,8 @@ let rec up_s1 f = function
 *)
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
+  | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple (arg,f,np), ctx))
+  | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple (arg,np,f), ctx))
   | ReturnX -> Some (AtS (Return f))
   | NAndX (i,ar,ctx) -> ar.(i) <- f; up_s1 (NAnd ar) ctx
   | NOrX (i,ar,ctx) -> ar.(i) <- f; Some (AtS1 (NOr ar, ctx))
@@ -809,6 +884,8 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
+  | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
+  | TripleX2 _ -> None
   | ReturnX -> None
   | NAndX (i,ar,ctx) ->
     if i < Array.length ar - 1
@@ -848,6 +925,8 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | HasX _ -> None
   | IsOfX _ -> None
+  | TripleX1 _ -> None
+  | TripleX2 (arg,np,ctx) -> Some (AtS1 (np, TripleX1 (arg,f,ctx)))
   | ReturnX -> None
   | NAndX (i,ar,ctx) ->
     if i > 0
@@ -868,6 +947,15 @@ let left_focus = function
   | AtS1 (f,ctx) -> left_s1 f ctx
   | AtS f -> None
 
+let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
+  match steps, foc_opt with
+    | _, None -> None
+    | [], _ -> foc_opt
+    | step::others, Some foc ->
+      ( match step foc with
+	| None -> Some foc
+	| Some foc' -> focus_moves others (Some foc') )
+
 (* increments *)
 
 type increment =
@@ -875,6 +963,8 @@ type increment =
   | IncrClass of Rdf.uri
   | IncrProp of Rdf.uri
   | IncrInvProp of Rdf.uri
+  | IncrTriple of arg
+  | IncrTriplify
   | IncrAnd
   | IncrOr
   | IncrMaybe
@@ -888,6 +978,8 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrClass c -> Some (Rdf.URI c)
   | IncrProp p -> Some (Rdf.URI p)
   | IncrInvProp p -> Some (Rdf.URI p)
+  | IncrTriple arg -> None
+  | IncrTriplify -> None
   | IncrAnd -> None
   | IncrOr -> None
   | IncrMaybe -> None
@@ -911,6 +1003,8 @@ let insert_term t focus =
   match focus2_opt with
     | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
     | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
+    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
+    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
     | other -> other
 
 let append_and_p1 ctx elt_p1 = function
@@ -986,14 +1080,24 @@ let insert_class c = function
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
-  match insert_elt_p1 (Has (p, top_s1)) focus with
-    | Some foc -> down_focus foc
-    | None -> None
+  let foc_opt = insert_elt_p1 (Has (p, top_s1)) focus in
+  focus_moves [down_focus] foc_opt
 
 let insert_inverse_property p focus =
-  match insert_elt_p1 (IsOf (p, top_s1)) focus with
-    | Some foc -> down_focus foc
-    | None -> None
+  let foc_opt = insert_elt_p1 (IsOf (p, top_s1)) focus in
+  focus_moves [down_focus] foc_opt
+
+let insert_triple arg focus =
+  let foc_opt = insert_elt_p1 (Triple (arg, top_s1, top_s1)) focus in
+  let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
+  focus_moves steps foc_opt
+
+let insert_triplify = function
+  | AtP1 (Has (p,np), ctx) -> Some (AtP1 (Triple (S, Det (Term (Rdf.URI p), None), np), ctx))
+  | AtP1 (IsOf (p,np), ctx) -> Some (AtP1 (Triple (O, np, Det (Term (Rdf.URI p), None)), ctx))
+  | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Has (p,np), ctx))
+  | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (IsOf (p,np), ctx))
+  | _ -> None
 
 let insert_and = function
   | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
@@ -1042,6 +1146,8 @@ let insert_increment incr focus =
     | IncrClass c -> insert_class c focus
     | IncrProp p -> insert_property p focus
     | IncrInvProp p -> insert_inverse_property p focus
+    | IncrTriple arg -> insert_triple arg focus
+    | IncrTriplify -> insert_triplify focus
     | IncrAnd -> insert_and focus
     | IncrOr -> insert_or focus
     | IncrMaybe -> insert_maybe focus
@@ -1099,8 +1205,10 @@ let rec delete_ctx_p1 = function
   | NotX ctx -> delete_ctx_p1 ctx
 and delete_ctx_s1 f ctx =
   match ctx with
-    | HasX _ -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
-    | IsOfX _ -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
+    | HasX _
+    | IsOfX _
+    | TripleX1 _
+    | TripleX2 _ 
     | ReturnX -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
     | NAndX (i,ar,ctx2) ->
       ( match delete_array ar i with

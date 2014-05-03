@@ -95,6 +95,7 @@ let html_word = function
   | `Term t -> html_term t
   | `Class c -> html_class c
   | `Prop p -> html_prop p
+  | `Relation -> "relation"
   | `Literal l -> html_literal l
   | `Op op -> html_modifier op
   | `DummyFocus -> html_dummy_focus
@@ -124,7 +125,7 @@ and html_np dico (foc, nl : nl_np) : string =
   let html =
     match nl with
       | `PN (w, rel) -> html_word w ^ html_rel_opt dico rel
-      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP (_, `Qu ((`A | `The), `Nil, w, rel2))))) ->
+      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP ((_, `Qu ((`A | `The), `Nil, w, rel2)), [])))) ->
 	html_qu qu ^ html_adj adj ^ html_nl_focus dico foc2 (html_word w ^ html_rel_opt dico rel2)
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt dico rel
       | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj adj ^ html_word w ^ html_rel_opt dico rel
@@ -159,8 +160,8 @@ and html_rel dico (foc, nl : nl_rel) : string =
 	match nl with
 	  | `Nil -> ""
 	  | `That (_, `IsThere) -> html_ellipsis
-	  | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))))) ->
-	    "whose " ^ html_nl_focus dico foc2 (html_word p ^ " " ^ html_vp dico (foc3,nl_vp))
+	  | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))), lpp)) ->
+	    "whose " ^ html_nl_focus dico foc2 (html_word p ^ html_pp_list dico lpp ^ " " ^ html_vp dico (foc3,nl_vp))
 	  | `That (_, `IsPP pp) -> html_pp dico pp
 	  | `That vp -> "that " ^ html_vp dico vp
 	  | `Of np -> "of " ^ html_np dico np
@@ -172,21 +173,24 @@ and html_vp dico (foc, nl : nl_vp) : string =
   let html =
     match nl with
       | `IsThere -> html_ellipsis
-      | `IsNP np -> "is " ^ html_np dico np
+      | `IsNP (np,lpp) -> "is " ^ html_np dico np ^ html_pp_list dico lpp
       | `IsPP pp -> "is " ^ html_pp dico pp
-      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel))) -> html_vp dico (foc, `Has (foc2, `Qu (qu, adj, w, rel)))
-      | `HasProp (p, np) -> "has " ^ html_word p ^ " " ^ html_np dico np
-      | `Has np -> "has " ^ html_np dico np
-      | `VT (w, np) -> html_word w ^ " " ^ html_np dico np
+      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp dico (foc, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
+      | `HasProp (p, np, lpp) -> "has " ^ html_word p ^ " " ^ html_np dico np ^ html_pp_list dico lpp
+      | `Has (np, lpp) -> "has " ^ html_np dico np ^ html_pp_list dico lpp
+      | `VT (w, np, lpp) -> html_word w ^ " " ^ html_np dico np ^ html_pp_list dico lpp
       | `And ar -> html_and (Array.map (html_vp dico) ar)
       | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_vp dico) ar)
       | `Maybe (suspended, vp) -> html_maybe ~suspended (html_vp dico vp)
       | `Not (suspended, vp) -> html_not ~suspended (html_vp dico vp)
       | `DummyFocus -> html_dummy_focus in
   html_nl_focus dico foc html
+and html_pp_list dico : nl_pp list -> string = function
+  | [] -> ""
+  | pp::lpp -> " " ^ html_pp dico pp ^ html_pp_list dico lpp
 and html_pp dico : nl_pp -> string = function
-  | `Prep (prep,w) -> html_word prep ^ " " ^ html_word w
-  | `PrepBin (prep1,w1,prep2,w2) -> html_word prep1 ^ " " ^ html_word w1 ^ " " ^ html_word prep2 ^ " " ^ html_word w2
+  | `Prep (prep,np) -> html_word prep ^ " " ^ html_np dico np
+  | `PrepBin (prep1,np1,prep2,np2) -> html_word prep1 ^ " " ^ html_np dico np1 ^ " " ^ html_word prep2 ^ " " ^ html_np dico np2
 
 let html_focus dico focus = html_s dico (s_of_focus focus)
 
@@ -227,7 +231,22 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
 	    | AtS1 _ -> "that is the "
 	    | AtP1 (IsThere, _) -> "that is the "
 	    | _ -> "and that is the " in
-	prefix ^ html_prop p ^ " of"
+	prefix ^ html_prop p ^ " of ..."
+      | IncrTriple (S | O as arg) ->
+	let prefix =
+	  match focus with
+	    | AtS1 _ -> "that has a "
+	    | AtP1 (IsThere, _) -> "that has a "
+	    | _ -> "and that has a " in
+	prefix ^ "relation " ^ (if arg = S then "to ..." else "from ...")
+      | IncrTriple P ->
+	let prefix =
+	  match focus with
+	    | AtS1 _ -> "that is a "
+	    | AtP1 (IsThere, _) -> "that is a "
+	    | _ -> "and that is a " in
+	prefix ^ "relation from ... to ..."
+      | IncrTriplify -> "has a relation from/to"
       | IncrAnd -> "and " ^ html_ellipsis
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
