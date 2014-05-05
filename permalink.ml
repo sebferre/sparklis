@@ -24,7 +24,7 @@ and print_p1 = function
   | Type c -> print_un "Type" (print_uri c)
   | Has (p,np) -> print_bin "Has" (print_uri p) (print_s1 np)
   | IsOf (p,np) -> print_bin "IsOf" (print_uri p) (print_s1 np)
-(*  | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2) *)
+  | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | Search c -> print_un "Search" (print_constr c)
   | Constr c -> print_un "Constr" (print_constr c)
   | And ar -> print_ar print_p1 "And" ar
@@ -44,12 +44,10 @@ and print_s2 = function
 and print_head = function
   | Thing -> print_atom "Thing"
   | Class c -> print_un "Class" (print_uri c)
-(*
 and print_arg = function
   | S -> print_atom "S"
   | P -> print_atom "P"
   | O -> print_atom "O"
-*)
 and print_modif = function
   | p, o -> print_bin "Modif" (print_project p) (print_order o)
 and print_project = function
@@ -124,7 +122,7 @@ and parse_p1 = parser
   | [< c = parse_un "Type" parse_uri >] -> Type c
   | [< p, np = parse_bin "Has" parse_uri parse_s1 >] -> Has (p,np)
   | [< p, np = parse_bin "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
-(*  | [< arg, np1, np2 = parse_ter "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2) *)
+  | [< arg, np1, np2 = parse_ter "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
   | [< c = parse_un "Search" parse_constr >] -> Search c
   | [< c = parse_un "Constr" parse_constr >] -> Constr c
   | [< ar = parse_ar parse_p1 "And" >] -> And ar
@@ -144,12 +142,10 @@ and parse_s2 = parser
 and parse_head = parser
   | [< _ = parse_atom "Thing" >] -> Thing
   | [< c = parse_un "Class" parse_uri >] -> Class c
-(*
 and parse_arg = parser
   | [< _ = parse_atom "S" >] -> S
   | [< _ = parse_atom "P" >] -> P
   | [< _ = parse_atom "O" >] -> O
-*)
 and parse_modif = parser
   | [< p, o = parse_bin "Modif" parse_project parse_order >] -> (p,o)
 and parse_project = parser
