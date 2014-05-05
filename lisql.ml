@@ -175,7 +175,7 @@ object
   method vars = List.rev vars
 
   val mutable focus_terms : Rdf.term list = []
-  method add_focus_term t = focus_terms <- t::focus_terms
+  method add_focus_term t = if not (List.mem t focus_terms) then focus_terms <- t::focus_terms
   method focus_terms = focus_terms
 
   val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
@@ -335,33 +335,29 @@ let prefix_of_arg2 = function O -> "relation" | S | P -> ""
 let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
   | Type c -> (fun x -> sparql_type x (Rdf.URI c))
   | Has (p,np) ->
-    (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np
-      (fun y -> sparql_triple x (Rdf.URI p) y))
+    let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np in
+    (fun x -> q_np (fun y -> sparql_triple x (Rdf.URI p) y))
   | IsOf (p,np) ->
-    (fun x -> sparql_of_elt_s1 state ~prefix:"" np
-      (fun y -> sparql_triple y (Rdf.URI p) x))
+    let q_np = sparql_of_elt_s1 state ~prefix:"" np in
+    (fun x -> q_np (fun y -> sparql_triple y (Rdf.URI p) x))
   | Triple (arg,np1,np2) ->
-    (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np1
-      (fun y -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np2
-	(fun z -> sparql_arg arg x y z)))
+    let q_np1 = sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np1 in
+    let q_np2 = sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np2 in
+    (fun x -> q_np1 (fun y -> q_np2 (fun z -> sparql_arg arg x y z)))
   | Search constr -> (fun x -> sparql_search_constr x constr)
   | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
-    (fun x ->
-      sparql_join
-	(Array.to_list
-	   (Array.map
-	      (fun elt -> sparql_of_elt_p1 state elt x)
-	      ar)))
+    let ar_d = Array.map (fun elt -> sparql_of_elt_p1 state elt) ar in
+    (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
   | Or ar ->
-    (fun x ->
-      sparql_union
-	(Array.to_list
-	   (Array.map
-	      (fun elt -> sparql_of_elt_p1 state elt x)
-	      ar)))
-  | Maybe f -> (fun x -> sparql_optional (sparql_of_elt_p1 state f x))
-  | Not f -> (fun x -> sparql_not_exists (sparql_of_elt_p1 (Oo.copy state) f x))
+    let ar_d = Array.map (fun elt -> sparql_of_elt_p1 state elt) ar in
+    (fun x -> sparql_union (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | Maybe f ->
+    let d = sparql_of_elt_p1 state f in
+    (fun x -> sparql_optional (d x))
+  | Not f ->
+    let d = sparql_of_elt_p1 (Oo.copy state) f in
+    (fun x -> sparql_not_exists (d x))
   | IsThere -> (fun x -> sparql_empty)
 and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) = function
   | Det (det,rel_opt) ->
@@ -373,32 +369,28 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) 
 	  | Some (Triple (arg,_,_)) -> prefix_of_arg0 arg
 	  | _ -> prefix
       else prefix in
+    let qu = sparql_of_elt_s2 state ~prefix det in
     let d1 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
-    (fun d -> sparql_of_elt_s2 state ~prefix det d1 d)
+    (fun d -> qu d1 d)
   | NAnd ar ->
-    (fun d ->
-      sparql_join
-	(Array.to_list
-	   (Array.map
-	      (fun elt -> sparql_of_elt_s1 state ~prefix elt d)
-	      ar)))
+    let ar_q = Array.map (fun elt -> sparql_of_elt_s1 state ~prefix elt) ar in
+    (fun d -> sparql_join (Array.to_list (Array.map (fun q -> q d) ar_q)))
   | NOr ar ->
-    (fun d ->
-      sparql_union
-	(Array.to_list
-	   (Array.map
-	      (fun elt -> sparql_of_elt_s1 state ~prefix elt d)
-	      ar)))
-  | NMaybe f -> (fun d -> sparql_optional (sparql_of_elt_s1 state ~prefix f d))
-  | NNot f -> (fun d -> sparql_not_exists (sparql_of_elt_s1 (Oo.copy state) ~prefix f d))
+    let ar_q = Array.map (fun elt -> sparql_of_elt_s1 state ~prefix elt) ar in
+    (fun d -> sparql_union (Array.to_list (Array.map (fun q -> q d) ar_q)))
+  | NMaybe f ->
+    let q = sparql_of_elt_s1 state ~prefix f in
+    (fun d -> sparql_optional (q d))
+  | NNot f ->
+    let q = sparql_of_elt_s1 (Oo.copy state) ~prefix f in
+    (fun d -> sparql_not_exists (q d))
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> string) -> (Rdf.term -> string) -> string) = function
   | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
   | An (modif, head) ->
-    (fun d1 d2 ->
-      let v, dhead = sparql_of_elt_head state ~prefix head in
-      state#set_modif v modif;
-      let t = Rdf.Var v in
-      sparql_join [d2 t; dhead t; d1 t])
+    let v, dhead = sparql_of_elt_head state ~prefix head in
+    state#set_modif v modif;
+    let t = Rdf.Var v in
+    (fun d1 d2 -> sparql_join [d2 t; dhead t; d1 t])
 and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string) = function
   | Thing ->
     let prefix = if prefix<>"" then prefix else "thing" in
@@ -408,7 +400,8 @@ and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string
     state#new_var prefix, (fun t -> sparql_type t (Rdf.URI c))
 and sparql_of_elt_s state : elt_s -> string = function
   | Return np ->
-    sparql_of_elt_s1 state ~prefix:"" np (fun t -> "")
+    let q = sparql_of_elt_s1 state ~prefix:"" np in
+    q (fun t -> "")
 
 let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> string = function
   | DetThatX (det,ctx) ->
@@ -421,20 +414,14 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> stri
 	  | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	  | _ -> prefix
       else prefix in
-    sparql_of_ctx_s1 state 
-      (fun d2 -> sparql_of_elt_s2 state ~prefix det d d2) 
+    let qu = sparql_of_elt_s2 state ~prefix det in
+    sparql_of_ctx_s1 state
+      (fun d2 -> qu d d2)
       ctx
   | AndX (i,ar,ctx) ->
+    let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_p1 state elt) ar in
     sparql_of_ctx_p1 state ~prefix
-      (fun x ->
-	sparql_join
-	  (Array.to_list
-	     (Array.mapi
-		(fun j elt ->
-		  if j=i
-		  then d x
-		  else sparql_of_elt_p1 state elt x)
-		ar)))
+      (fun x ->	sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
   | OrX (i,ar,ctx) -> sparql_of_ctx_p1 state ~prefix d ctx
@@ -450,30 +437,21 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) : ctx_s1 -> stri
       (fun x -> q (fun y -> sparql_triple y (Rdf.URI p) x))
       ctx
   | TripleX1 (arg,np,ctx) ->
+    let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np in
     sparql_of_ctx_p1 state ~prefix:""
-      (fun x -> q
-	(fun y -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np
-	  (fun z -> sparql_arg arg x y z)))
+      (fun x -> q (fun y -> q_np (fun z -> sparql_arg arg x y z)))
       ctx
   | TripleX2 (arg,np,ctx) ->
+    let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np in
     sparql_of_ctx_p1 state ~prefix:""
-      (fun x -> sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np
-	(fun y -> q
-	  (fun z -> sparql_arg arg x y z)))
+      (fun x -> q_np (fun y -> q (fun z -> sparql_arg arg x y z)))
       ctx
   | ReturnX ->
     q (fun t -> "")
   | NAndX (i,ar,ctx) ->
+    let ar_q = Array.mapi (fun j elt -> if j=i then q else sparql_of_elt_s1 state ~prefix:"" elt) ar in
     sparql_of_ctx_s1 state
-      (fun d ->
-	sparql_join
-	  (Array.to_list
-	     (Array.mapi
-		(fun j elt ->
-		  if j=i
-		  then q d
-		  else sparql_of_elt_s1 state ~prefix:"" elt d)
-		ar)))
+      (fun d ->	sparql_join (Array.to_list (Array.map (fun q -> q d) ar_q)))
       ctx
   (* ignoring algebra in ctx *)
   | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q ctx
@@ -492,10 +470,9 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	    | IsOf (p, _) -> prefix_of_uri p
 	    | Triple (arg,_,_) -> prefix_of_arg0 arg
 	    | _ -> "" in
+	let d = sparql_of_elt_p1 state f in
 	sparql_of_ctx_p1 state ~prefix
-	  (fun t ->
-	    state#add_focus_term t;
-	    sparql_of_elt_p1 state f t)
+	  (fun t -> state#add_focus_term t; d t)
 	  ctx
       | AtS1 (f,ctx) ->
 	let prefix =
@@ -504,11 +481,9 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	    | TripleX1 (arg,_,_) -> prefix_of_arg1 arg
 	    | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	    | _ -> "" in
-	sparql_of_ctx_s1 state (fun d ->
-	  sparql_of_elt_s1 state ~prefix f
-	    (fun t ->
-	      state#add_focus_term t;
-	      d t))
+	let q = sparql_of_elt_s1 state ~prefix f in
+	sparql_of_ctx_s1 state
+	  (fun d -> q (fun t -> state#add_focus_term t; d t))
 	  ctx
       | AtS f ->
 	(*state#set_focus_term None;*)
