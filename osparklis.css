@@ -57,10 +57,12 @@ width:300px;
 #permalink
 {
 margin-left:10px;
-//font-style:normal;
-//font-weight:normal;
-//color:blue;
-//text-decoration:underline;
+/*
+font-style:normal;
+font-weight:normal;
+color:blue;
+text-decoration:underline;
+*/
 }
 
 #lisql
@@ -80,22 +82,28 @@ font-weight:bold;
 .in-current-focus
 {
 background-color:#a0f0a0;
-//font-style:normal;
-//font-weight:900;
+/*
+font-style:normal;
+font-weight:900;
+*/
 }
 
 .out-current-focus
 {
 background-color:white;
-//font-style:normal;
-//font-weight:900;
+/*
+font-style:normal;
+font-weight:900;
+*/
 }
 
 .ex-current-focus
 {
 background-color:white;
-//font-style:italic;
-//font-weight:100;
+/*
+font-style:italic;
+font-weight:100;
+*/
 }
 
 .suspended
@@ -197,4 +205,15 @@ clear:both;
 footer
 {
 clear:both;
+}
+
+/* examples */
+
+.sparklis-query
+{
+padding:5px;
+}
+
+.sparklis-permalink
+{
 }

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Example queries for Sparklis</title>
+<meta name="author" content="Sébastien Ferré"/>
+<meta name="description" content="Sparklis lets you explore a RDF dataset through a SPARQL endpoint without the need to read or write SPARQL queries. Queries are displayed in natural language syntax, and are incrementally built by clicking suggested query elements, and by inserting them at the current focus. Only relevant suggestions are made, so that empty results are avoided."/>
+<meta name="keywords" content="SPARQL, faceted search, semantic search, exploratory search, complex queries, natural language interface, logical information systems"/>
+<meta charset="UTF-8">
+<link rel="stylesheet" type="text/css" href="osparklis.css">
+</head>
+
+<body>
+  <header>
+    <h2>Example queries for Sparklis</h1>
+  </header>
+
+  <p>
+    This page lists a number of queries over different endpoints
+    (mostly DBpedia) that can be built in <a target="_blank"
+    href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html">Sparklis</a>. For
+    each example query, a link enables to directly jump to it in
+    Sparklis, and to navigate further.
+  </p>
+
+  <h2 class="heading" id="youtube">Example queries demonstrated in the <a target="_blank" href="http://youtu.be/O999FVXn8Qc">YouTube video</a></h2>
+  <ol>
+    <li><em>List of films directed by Tim Burton and starring somebody born after 1980, ordered by increasing birth date.</em>
+      <a class="sparklis-permalink" target="_blank" href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?endpoint=http%3A//dbpedia.org/sparql&query=Return%28Det%28An%28Modif%28Select%2CUnordered%29%2CClass%28%22http%3A//dbpedia.org/ontology/Film%22%29%29%2CSome%28And%28Has%28%22http%3A//dbpedia.org/ontology/director%22%2CDet%28Term%28URI%28%22http%3A//dbpedia.org/resource/Tim_Burton%22%29%29%2CNone%29%29%2CHas%28%22http%3A//dbpedia.org/ontology/starring%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CSome%28Has%28%22http%3A//dbpedia.org/ontology/birthDate%22%2CDet%28An%28Modif%28Select%2CLowest%29%2CThing%29%2CSome%28Constr%28After%28%221980%22%29%29%29%29%29%29%29%29%29%29%29%29">Open in Sparklis</a>
+      <div class="sparklis-query"><span id="focus11" class="focus out-current-focus">Give me <span id="focus10" class="focus out-current-focus">a <span class="classURI" title="http://dbpedia.org/ontology/Film">Film</span> <span id="focus9" class="focus out-current-focus"><ul class="list-and"><li><span id="focus2" class="focus out-current-focus">that has <span class="propURI" title="http://dbpedia.org/ontology/director">director</span> <span id="focus1" class="focus out-current-focus"><span class="URI" title="http://dbpedia.org/resource/Tim_Burton">Tim_Burton</span></span></span></li> <li>and <span id="focus8" class="focus out-current-focus">whose <span id="focus7" class="focus out-current-focus"><span class="propURI" title="http://dbpedia.org/ontology/starring">starring</span> <span id="focus6" class="focus out-current-focus"><span id="focus5" class="focus out-current-focus">has <span id="focus4" class="focus out-current-focus">the <span class="modifier">lowest-to-highest</span> <span class="propURI" title="http://dbpedia.org/ontology/birthDate">birthDate</span> <span id="focus3" class="focus out-current-focus"><span class="modifier">after</span> <span class="Literal">1980</span></span></span></span></span></span></span></li></ul></span></span></span></div>
+    </li>
+
+    <li><em>List of film writers born in France with their English name, an optional depiction, an optional list of birth dates, and their number of films (in decreasing order).</em>
+      <a class="sparklis-permalink" target="_blank" href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?endpoint=http%3A//dbpedia.org/sparql&query=Return%28Det%28An%28Modif%28Select%2CUnordered%29%2CClass%28%22http%3A//dbpedia.org/ontology/Writer%22%29%29%2CSome%28And%28IsOf%28%22http%3A//dbpedia.org/ontology/writer%22%2CDet%28An%28Modif%28Aggreg%28NumberOf%2CHighest%29%2CUnordered%29%2CClass%28%22http%3A//dbpedia.org/ontology/Film%22%29%29%2CNone%29%29%2CHas%28%22http%3A//www.w3.org/2000/01/rdf-schema%23label%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CSome%28Constr%28HasLang%28%22en%22%29%29%29%29%29%2CMaybe%28Has%28%22http%3A//xmlns.com/foaf/0.1/depiction%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CNone%29%29%29%2CMaybe%28Has%28%22http%3A//dbpedia.org/ontology/birthDate%22%2CDet%28An%28Modif%28Aggreg%28ListOf%2CUnordered%29%2CUnordered%29%2CThing%29%2CNone%29%29%29%2CHas%28%22http%3A//dbpedia.org/ontology/birthPlace%22%2CDet%28An%28Modif%28Unselect%2CUnordered%29%2CThing%29%2CSome%28Has%28%22http%3A//dbpedia.org/ontology/country%22%2CDet%28Term%28URI%28%22http%3A//dbpedia.org/resource/France%22%29%29%2CNone%29%29%29%29%29%29%29%29%29">Open in Sparklis</a>
+      <div class="sparklis-query"><span id="focus20" class="focus out-current-focus">Give me <span id="focus19" class="focus out-current-focus">a <span class="classURI" title="http://dbpedia.org/ontology/Writer">Writer</span> <span id="focus18" class="focus out-current-focus"><ul class="list-and"><li><span id="focus2" class="focus out-current-focus">that is the <span class="propURI" title="http://dbpedia.org/ontology/writer">writer</span> of <span id="focus1" class="focus out-current-focus">the <span class="modifier">highest-to-lowest</span> <span class="modifier">number of</span> <span class="classURI" title="http://dbpedia.org/ontology/Film">Film</span></span></span></li> <li>and <span id="focus5" class="focus out-current-focus">whose <span id="focus4" class="focus out-current-focus"><span class="propURI" title="http://www.w3.org/2000/01/rdf-schema#label">label</span> <span id="focus3" class="focus out-current-focus">has a <span class="modifier">language</span> <span class="modifier">matching</span> <span class="Literal">en</span></span></span></span></li> <li>and <span id="focus9" class="focus out-current-focus">that <span class="modifier">optionally</span> <span id="focus8" class="focus out-current-focus"><span id="focus7" class="focus out-current-focus">has <span id="focus6" class="focus out-current-focus">a <span class="propURI" title="http://xmlns.com/foaf/0.1/depiction">depiction</span></span></span></span></span></li> <li>and <span id="focus13" class="focus out-current-focus">that <span class="modifier">optionally</span> <span id="focus12" class="focus out-current-focus"><span id="focus11" class="focus out-current-focus">has <span id="focus10" class="focus out-current-focus">a <span class="modifier">list of</span> <span class="propURI" title="http://dbpedia.org/ontology/birthDate">birthDate</span></span></span></span></span></li> <li>and <span id="focus17" class="focus out-current-focus">that has <span id="focus16" class="focus out-current-focus"><span class="modifier">any </span><span class="propURI" title="http://dbpedia.org/ontology/birthPlace">birthPlace</span> <span id="focus15" class="focus out-current-focus">that has <span class="propURI" title="http://dbpedia.org/ontology/country">country</span> <span id="focus14" class="focus out-current-focus"><span class="URI" title="http://dbpedia.org/resource/France">France</span></span></span></span></span></li></ul></span></span></span></div>
+    </li>
+  </ol>
+
+  <h2 class="heading" id="nobel">Example queries about <a target="_blank" href="http://data.nobelprize.org/">Nobel Prizes</a></h2>
+  <ol>
+    <li><em>List of Peace Nobel prize laureates, in decreasing year.</em>
+      <a class="sparklis-permalink" target="_blank" href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?endpoint=http%3A//data.nobelprize.org/sparql&query=Return%28Det%28An%28Modif%28Unselect%2CUnordered%29%2CClass%28%22http%3A//data.nobelprize.org/terms/Laureate%22%29%29%2CSome%28And%28Has%28%22http%3A//data.nobelprize.org/terms/nobelPrize%22%2CDet%28An%28Modif%28Unselect%2CUnordered%29%2CThing%29%2CSome%28And%28Has%28%22http%3A//data.nobelprize.org/terms/category%22%2CDet%28Term%28URI%28%22http%3A//data.nobelprize.org/resource/category/Peace%22%29%29%2CNone%29%29%2CHas%28%22http%3A//data.nobelprize.org/terms/year%22%2CDet%28An%28Modif%28Select%2CHighest%29%2CThing%29%2CNone%29%29%29%29%29%29%2CHas%28%22http%3A//xmlns.com/foaf/0.1/name%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CNone%29%29%29%29%29%29">Open in Sparklis</a>
+      <div class="sparklis-query">Give me <span class="modifier">any </span><span class="classURI" title="http://data.nobelprize.org/terms/Laureate">Laureate</span> <ul class="list-and"><li>that has <span class="modifier">any </span><span class="propURI" title="http://data.nobelprize.org/terms/nobelPrize">nobelPrize</span> <ul class="list-and"><li>that has <span class="propURI" title="http://data.nobelprize.org/terms/category">category</span> <span class="URI" title="http://data.nobelprize.org/resource/category/Peace">Peace</span></li> <li>and that has the <span class="modifier">highest-to-lowest</span> <span class="propURI" title="http://data.nobelprize.org/terms/year">year</span></li></ul></li> <li>and that has a <span class="propURI" title="http://xmlns.com/foaf/0.1/name">name</span></li></ul></div>
+    </li>
+
+    <li><em>List of Nobel prize laureates, by decreasing number of Nobel prizes.</em>
+      <a class="sparklis-permalink" target="_blank" href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?endpoint=http%3A//data.nobelprize.org/sparql&query=Return%28Det%28An%28Modif%28Unselect%2CUnordered%29%2CClass%28%22http%3A//data.nobelprize.org/terms/Laureate%22%29%29%2CSome%28And%28Has%28%22http%3A//xmlns.com/foaf/0.1/name%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CNone%29%29%2CHas%28%22http%3A//data.nobelprize.org/terms/nobelPrize%22%2CDet%28An%28Modif%28Aggreg%28NumberOf%2CHighest%29%2CUnordered%29%2CThing%29%2CNone%29%29%29%29%29%29">Open in Sparklis</a>
+      <div class="sparklis-query">Give me <span class="modifier">any </span><span class="classURI" title="http://data.nobelprize.org/terms/Laureate">Laureate</span> <ul class="list-and"><li>that has a <span class="propURI" title="http://xmlns.com/foaf/0.1/name">name</span></li> <li>and that has the <span class="modifier">highest-to-lowest</span> <span class="modifier">number of</span> <span class="propURI" title="http://data.nobelprize.org/terms/nobelPrize">nobelPrize</span></li></ul></div>
+    </li>
+
+    <li><em>Number of Nobel prize laureates by gender.</em>
+      <a class="sparklis-permalink" target="_blank" href="http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?endpoint=http%3A//data.nobelprize.org/sparql&query=Return%28Det%28An%28Modif%28Aggreg%28NumberOf%2CUnordered%29%2CUnordered%29%2CClass%28%22http%3A//data.nobelprize.org/terms/Laureate%22%29%29%2CSome%28Has%28%22http%3A//xmlns.com/foaf/0.1/gender%22%2CDet%28An%28Modif%28Select%2CUnordered%29%2CThing%29%2CNone%29%29%29%29%29">Open in Sparklis</a>
+      <div class="sparklis-query">Give me <span id="focus3" class="focus out-current-focus">a <span class="modifier">number of</span> <span class="classURI" title="http://data.nobelprize.org/terms/Laureate">Laureate</span> <span id="focus2" class="focus out-current-focus">that has <span id="focus1" class="focus out-current-focus">a <span class="propURI" title="http://xmlns.com/foaf/0.1/gender">gender</span></span></span></span></div>
+    </li>
+  </ol>
+
+  <footer>
+    <p>Created by <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> @ 2013
+      <a target="_blank" href="http://www.irisa.fr/LIS/"><img src="lis.png" alt="LIS team" height="40"></a>
+      <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="40"></a>
+      <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
+    </p>
+    <p>Visit <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
+  </footer>
+</body>
+</html>
