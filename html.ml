@@ -203,11 +203,20 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
+let html_increment_coordinate focus html =
+  match focus with
+    | AtS1 _ -> html
+    | AtP1 (IsThere, _) -> html
+    | _ -> "and " ^ html
+
 let html_increment_frequency focus dico_incrs (incr,freq) =
   let key = dico_incrs#add incr in
   let text =
     match incr with
-      | IncrTerm t -> html_term t
+      | IncrTerm t ->
+	( match focus with
+	  | AtS1 _ -> html_term t
+	  | _ -> html_increment_coordinate focus ("that is " ^ html_term t) )
       | IncrClass c ->
 	( match focus with
 	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
@@ -215,38 +224,13 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
 	  | AtS1 (Det (An (_, Class c0), _), _) when c0 = c ->
 	    (*"<del>a " ^ html_class c ^ "</del>"*)
 	    "a " ^ html_class c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
-	  | AtS1 _ -> "that is a " ^ html_class c
-	  | AtP1 (IsThere, _) -> "that is a " ^ html_class c
-	  | _ -> "and that is a " ^ html_class c )
-      | IncrProp p ->
-	let prefix =
-	  match focus with
-	    | AtS1 _ -> "that has a "
-	    | AtP1 (IsThere, _) -> "that has a "
-	    | _ -> "and that has a " in
-	prefix ^ html_prop p
-      | IncrInvProp p ->
-	let prefix =
-	  match focus with
-	    | AtS1 _ -> "that is the "
-	    | AtP1 (IsThere, _) -> "that is the "
-	    | _ -> "and that is the " in
-	prefix ^ html_prop p ^ " of ..."
-      | IncrTriple (S | O as arg) ->
-	let prefix =
-	  match focus with
-	    | AtS1 _ -> "that has a "
-	    | AtP1 (IsThere, _) -> "that has a "
-	    | _ -> "and that has a " in
-	prefix ^ "relation " ^ (if arg = S then "to ..." else "from ...")
-      | IncrTriple P ->
-	let prefix =
-	  match focus with
-	    | AtS1 _ -> "that is a "
-	    | AtP1 (IsThere, _) -> "that is a "
-	    | _ -> "and that is a " in
-	prefix ^ "relation from ... to ..."
+	  | _ -> html_increment_coordinate focus ("that is a " ^ html_class c) )
+      | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_prop p)
+      | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_prop p ^ " of ...")
+      | IncrTriple (S | O as arg) -> html_increment_coordinate focus ("that has a relation " ^ (if arg = S then "to ..." else "from ..."))
+      | IncrTriple P -> html_increment_coordinate focus "that is a relation from ... to ..."
       | IncrTriplify -> "has a relation from/to"
+      | IncrIs -> html_increment_coordinate focus "that is ..."
       | IncrAnd -> "and " ^ html_ellipsis
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus

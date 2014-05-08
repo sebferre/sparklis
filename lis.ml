@@ -354,6 +354,10 @@ object (self)
 	      then modifs
 	      else IncrOr :: modifs
 	    else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
+	  let modifs =
+	    match f with
+	      | Det (An _, _) -> IncrIs :: modifs
+	      | _ -> modifs in
 	  modifs
 	| _ -> [] in
     List.map (fun incr -> (incr,1)) modif_list

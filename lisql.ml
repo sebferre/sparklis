@@ -67,6 +67,7 @@ type modif_s2 = project * order
 
 (* LISQL elts *)
 type elt_p1 =
+  | Is of elt_s1
   | Type of Rdf.uri
   | Has of Rdf.uri * elt_s1
   | IsOf of Rdf.uri * elt_s1
@@ -97,6 +98,10 @@ let top_p1 = IsThere
 let top_s2 = An ((Select, Unordered), Thing)
 let top_s1 = Det (top_s2,None)
 
+let s2_of_term t = Term t
+let s1_of_term t = Det (s2_of_term t, None)
+let p1_of_term t = Is (s1_of_term t)
+
 (* LISQL contexts *)
 type ctx_p1 =
   | DetThatX of elt_s2 * ctx_s1
@@ -105,6 +110,7 @@ type ctx_p1 =
   | MaybeX of ctx_p1
   | NotX of ctx_p1
 and ctx_s1 =
+  | IsX of ctx_p1
   | HasX of Rdf.uri * ctx_p1
   | IsOfX of Rdf.uri * ctx_p1
   | TripleX1 of arg * elt_s1 * ctx_p1 (* context on first S1 arg *)
@@ -130,6 +136,7 @@ let rec elt_s_of_ctx_p1 (f : elt_p1) = function
   | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe f) ctx
   | NotX ctx -> elt_s_of_ctx_p1 (Not f) ctx
 and elt_s_of_ctx_s1 (f : elt_s1) = function
+  | IsX ctx -> elt_s_of_ctx_p1 (Is f) ctx
   | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
   | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
   | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,f,np)) ctx
@@ -157,8 +164,6 @@ let prefix_of_uri uri = (* for variable names *)
 class sparql_state =
 object
   val mutable prefix_cpt = []
-  val mutable vars = []
-
   method new_var prefix =
     let k =
       try
@@ -169,9 +174,10 @@ object
 	prefix_cpt <- (prefix,1)::prefix_cpt;
 	1 in
     let v = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
-    vars <- v::vars;
     v
 
+  val mutable vars : Rdf.var list = []
+  method add_var v = if not (List.mem v vars) then vars <- v::vars
   method vars = List.rev vars
 
   val mutable focus_terms : Rdf.term list = []
@@ -333,6 +339,7 @@ let prefix_of_arg1 = function S -> "relation" | P | O -> ""
 let prefix_of_arg2 = function O -> "relation" | S | P -> ""
 
 let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
+  | Is np -> sparql_of_elt_s1_as_p1 state np
   | Type c -> (fun x -> sparql_type x (Rdf.URI c))
   | Has (p,np) ->
     let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np in
@@ -359,6 +366,33 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
     let d = sparql_of_elt_p1 (Oo.copy state) f in
     (fun x -> sparql_not_exists (d x))
   | IsThere -> (fun x -> sparql_empty)
+and sparql_of_elt_s1_as_p1 state : elt_s1 -> (Rdf.term -> string) = function
+  | Det (det,rel_opt) ->
+    let d1 = sparql_of_elt_s2_as_p1 state det in
+    let d2 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
+    (fun x -> sparql_join [d1 x; d2 x])
+  | NAnd ar ->
+    let ar_d = Array.map (fun elt -> sparql_of_elt_s1_as_p1 state elt) ar in
+    (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | NOr ar ->
+    let ar_d = Array.map (fun elt -> sparql_of_elt_s1_as_p1 state elt) ar in
+    (fun x -> sparql_union (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | NMaybe f ->
+    let d = sparql_of_elt_s1_as_p1 state f in
+    (fun x -> sparql_optional (d x))
+  | NNot f ->
+    let d = sparql_of_elt_s1_as_p1 (Oo.copy state) f in
+    (fun x -> sparql_not_exists (d x))
+and sparql_of_elt_s2_as_p1 state : elt_s2 -> (Rdf.term -> string) = function
+  | Term t ->
+    (fun x -> sparql_filter [sparql_expr_comp "=" (sparql_term x) (sparql_term t)])
+(*    (fun x -> "BIND (" ^ sparql_term t ^ " AS " ^ sparql_term x ^ ")") *)
+  | An (_modif,head) ->
+    let d_head =
+      match head with
+	| Thing -> (fun x -> sparql_empty)
+	| Class c -> (fun x -> sparql_type x (Rdf.URI c)) in
+    d_head
 and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) = function
   | Det (det,rel_opt) ->
     let prefix =
@@ -390,7 +424,7 @@ and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> string) -> (Rdf.ter
     let v, dhead = sparql_of_elt_head state ~prefix head in
     state#set_modif v modif;
     let t = Rdf.Var v in
-    (fun d1 d2 -> sparql_join [d2 t; dhead t; d1 t])
+    (fun d1 d2 -> state#add_var v; sparql_join [d2 t; dhead t; d1 t])
 and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string) = function
   | Thing ->
     let prefix = if prefix<>"" then prefix else "thing" in
@@ -414,9 +448,11 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> stri
 	  | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	  | _ -> prefix
       else prefix in
-    let qu = sparql_of_elt_s2 state ~prefix det in
+    let q_det = sparql_of_elt_s2 state ~prefix det in
+    let d_det = sparql_of_elt_s2_as_p1 state det in
     sparql_of_ctx_s1 state
-      (fun d2 -> qu d d2)
+      (fun d2 -> q_det d d2)
+      (fun x -> sparql_join [d x; d_det x])
       ctx
   | AndX (i,ar,ctx) ->
     let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_p1 state elt) ar in
@@ -427,7 +463,8 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> stri
   | OrX (i,ar,ctx) -> sparql_of_ctx_p1 state ~prefix d ctx
   | MaybeX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
   | NotX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
-and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) : ctx_s1 -> string = function
+and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) (d : Rdf.term -> string) : ctx_s1 -> string = function
+  | IsX ctx -> sparql_of_ctx_p1 state ~prefix:"" d ctx
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:""
       (fun x -> q (fun y -> sparql_triple x (Rdf.URI p) y))
@@ -450,13 +487,15 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) : ctx_s1 -> stri
     q (fun t -> "")
   | NAndX (i,ar,ctx) ->
     let ar_q = Array.mapi (fun j elt -> if j=i then q else sparql_of_elt_s1 state ~prefix:"" elt) ar in
+    let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_s1_as_p1 state elt) ar in
     sparql_of_ctx_s1 state
       (fun d ->	sparql_join (Array.to_list (Array.map (fun q -> q d) ar_q)))
+      (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
-  | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q ctx
-  | NMaybeX ctx -> sparql_of_ctx_s1 state q ctx
-  | NNotX ctx -> sparql_of_ctx_s1 state q ctx
+  | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q d ctx
+  | NMaybeX ctx -> sparql_of_ctx_s1 state q d ctx
+  | NNotX ctx -> sparql_of_ctx_s1 state q d ctx
 
 type sparql_template = ?constr:constr -> limit:int -> string
 
@@ -482,8 +521,10 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	    | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
 	    | _ -> "" in
 	let q = sparql_of_elt_s1 state ~prefix f in
+	let d = sparql_of_elt_s1_as_p1 state f in
 	sparql_of_ctx_s1 state
 	  (fun d -> q (fun t -> state#add_focus_term t; d t))
+	  (fun x -> state#add_focus_term x; d x)
 	  ctx
       | AtS f ->
 	(*state#set_focus_term None;*)
@@ -629,6 +670,7 @@ and adj_of_aggreg ~suspended adj : aggreg -> nl_adj = function
   | Maximum -> `Aggreg (suspended, adj, `Op "maximum")
   | Minimum -> `Aggreg (suspended, adj, `Op "minimum")
 
+let vp_of_elt_p1_Is (np : nl_np) = `IsNP (np, [])
 let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP ((`NoFocus, `Qu (`A, `Nil, `Class c, top_rel)), [])
 let vp_of_elt_p1_Has (p : Rdf.uri) (np : nl_np) = `HasProp (`Prop p, np, [])
 let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : nl_np) = `IsNP ((`NoFocus, `Qu (`The, `Nil, `Prop p, (`NoFocus, `Of np))), [])
@@ -645,6 +687,7 @@ let rec vp_of_elt_p1 pos ctx f : nl_vp =
   let nl =
     match f with
       | IsThere -> `IsThere
+      | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 (focus_pos_down pos) (IsX ctx) np)
       | Type c -> vp_of_elt_p1_Type c
       | Has (p,np) -> vp_of_elt_p1_Has p (np_of_elt_s1 (focus_pos_down pos) (HasX (p,ctx)) np)
       | IsOf (p,np) -> vp_of_elt_p1_IsOf p (np_of_elt_s1 (focus_pos_down pos) (IsOfX (p,ctx)) np)
@@ -724,6 +767,11 @@ let rec s_of_ctx_p1 f (foc,nl as foc_nl) ctx : nl_s =
       s_of_ctx_p1 f2 (foc2,nl2) ctx2
 and s_of_ctx_s1 f (foc,nl as foc_nl) ctx =
   match ctx with
+    | IsX ctx2 ->
+      let f2 = Is f in
+      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let nl2 = vp_of_elt_p1_Is foc_nl in
+      s_of_ctx_p1 f2 (foc2,nl2) ctx2
     | HasX (p,ctx2) ->
       let f2 = Has (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
@@ -788,6 +836,7 @@ let s_of_focus : focus -> nl_s = function
 let home_focus = AtS1 (top_s1, ReturnX)
 
 let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
+  | Is np -> Some (AtS1 (np, IsX ctx))
   | Type _ -> None
   | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
   | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
@@ -826,6 +875,7 @@ let rec up_s1 f = function
   | HasX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (Has (p,f))), ctx))
   | IsOfX (p, DetThatX (An (modif, Thing), ctx)) -> Some (AtS1 (Det (An (modif, Thing), Some (IsOf (p,f))), ctx))
 *)
+  | IsX ctx -> Some (AtP1 (Is f, ctx))
   | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
   | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
   | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple (arg,f,np), ctx))
@@ -857,6 +907,7 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | MaybeX ctx -> None
   | NotX ctx -> None
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
+  | IsX _ -> None
   | HasX _ -> None
   | IsOfX _ -> None
   | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
@@ -898,6 +949,7 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | MaybeX ctx -> None
   | NotX ctx -> None
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
+  | IsX _ -> None
   | HasX _ -> None
   | IsOfX _ -> None
   | TripleX1 _ -> None
@@ -935,6 +987,7 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 
 type increment =
   | IncrTerm of Rdf.term
+  | IncrIs
   | IncrClass of Rdf.uri
   | IncrProp of Rdf.uri
   | IncrInvProp of Rdf.uri
@@ -955,6 +1008,7 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrInvProp p -> Some (Rdf.URI p)
   | IncrTriple arg -> None
   | IncrTriplify -> None
+  | IncrIs -> None
   | IncrAnd -> None
   | IncrOr -> None
   | IncrMaybe -> None
@@ -962,25 +1016,6 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrUnselect -> None
   | IncrAggreg _ -> None
   | IncrOrder order -> None
-
-let insert_term t focus =
-  let focus2_opt =
-    match focus with
-      | AtP1 (f, DetThatX (det,ctx)) ->
-	if det = Term t
-	then Some (AtP1 (f, DetThatX (top_s2, ctx)))
-	else Some (AtP1 (f, DetThatX (Term t, ctx)))
-      | AtS1 (Det (det,rel_opt), ctx) ->
-	if det = Term t
-	then Some (AtS1 (Det (top_s2, rel_opt), ctx))
-	else Some (AtS1 (Det (Term t, rel_opt), ctx))
-      | _ -> None in
-  match focus2_opt with
-    | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
-    | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
-    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
-    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
-    | other -> other
 
 let append_and_p1 ctx elt_p1 = function
   | And ar ->
@@ -1025,18 +1060,30 @@ let insert_elt_p1 elt = function
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtS _ -> None
 
-let insert_constr constr focus =
-  match focus with
-    | AtS1 (f, ReturnX) when f = top_s1 -> insert_elt_p1 (Search constr) focus
-    | _ -> insert_elt_p1 (Constr constr) focus
+let insert_term t focus =
+  let focus2_opt =
+    match focus with
+(*
+      | AtP1 (f, DetThatX (det,ctx)) ->
+	if det = Term t
+	then Some (AtP1 (f, DetThatX (top_s2, ctx)))
+	else Some (AtP1 (f, DetThatX (Term t, ctx)))
+*)
+      | AtP1 _ -> insert_elt_p1 (p1_of_term t) focus
+      | AtS1 (Det (det,rel_opt), ctx) ->
+	if det = Term t
+	then Some (AtS1 (Det (top_s2, rel_opt), ctx))
+	else Some (AtS1 (Det (Term t, rel_opt), ctx))
+      | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+      | _ -> None in
+  match focus2_opt with
+    | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
+    | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
+    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
+    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
+    | other -> other
 
 let insert_class c = function
-(*
-  | AtP1 (f, DetThatX (det,ctx)) ->
-    if det = Class c
-    then Some (AtP1 (f, DetThatX (Something, ctx)))
-    else Some (AtP1 (f, DetThatX (Class c, ctx)))
-*)
   | AtS1 (Det (det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
@@ -1048,10 +1095,6 @@ let insert_class c = function
       | _ ->
 	let rel = match rel_opt with None -> IsThere | Some rel -> rel in
 	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
-(*
-      | An (modif, _) ->
-	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx)) )
-*)
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
@@ -1073,6 +1116,15 @@ let insert_triplify = function
   | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Has (p,np), ctx))
   | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (IsOf (p,np), ctx))
   | _ -> None
+
+let insert_constr constr focus =
+  match focus with
+    | AtS1 (f, ReturnX) when f = top_s1 -> insert_elt_p1 (Search constr) focus
+    | _ -> insert_elt_p1 (Constr constr) focus
+
+let insert_is focus =
+  let foc_opt = insert_elt_p1 (Is top_s1) focus in
+  focus_moves [down_focus] foc_opt
 
 let insert_and = function
   | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
@@ -1123,6 +1175,7 @@ let insert_increment incr focus =
     | IncrInvProp p -> insert_inverse_property p focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
+    | IncrIs -> insert_is focus
     | IncrAnd -> insert_and focus
     | IncrOr -> insert_or focus
     | IncrMaybe -> insert_maybe focus
@@ -1180,6 +1233,7 @@ let rec delete_ctx_p1 = function
   | NotX ctx -> delete_ctx_p1 ctx
 and delete_ctx_s1 f ctx =
   match ctx with
+    | IsX _
     | HasX _
     | IsOfX _
     | TripleX1 _

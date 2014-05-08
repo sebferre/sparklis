@@ -21,6 +21,7 @@ let print_opt pr = function None -> print_atom "None" | Some x -> print_un "Some
 let rec print_s = function
   | Return np -> print_un "Return" (print_s1 np)
 and print_p1 = function
+  | Is np -> print_un "Is" (print_s1 np)
   | Type c -> print_un "Type" (print_uri c)
   | Has (p,np) -> print_bin "Has" (print_uri p) (print_s1 np)
   | IsOf (p,np) -> print_bin "IsOf" (print_uri p) (print_s1 np)
@@ -119,6 +120,7 @@ let parse_ar ps f = parser
 let rec parse_s = parser
   | [< np = parse_un "Return" parse_s1 >] -> Return np
 and parse_p1 = parser
+  | [< np = parse_un "Is" parse_s1 >] -> Is np
   | [< c = parse_un "Type" parse_uri >] -> Type c
   | [< p, np = parse_bin "Has" parse_uri parse_s1 >] -> Has (p,np)
   | [< p, np = parse_bin "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
