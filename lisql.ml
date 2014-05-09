@@ -192,161 +192,90 @@ object
     with _ -> (Select, Unordered)
 end
 
-let sparql_uri uri = "<" ^ uri ^ ">"
-
-let sparql_var v = "?" ^ v
-
-let sparql_string s =
-  if String.contains s '\n' || String.contains s '"'
-  then "\"\"\"" ^ s ^ "\"\"\""
-  else "\"" ^ s ^ "\""
-
-let rec sparql_term = function
-  | Rdf.URI uri -> sparql_uri uri
-  | Rdf.Number (f,s,dt) -> sparql_term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> sparql_string s ^ "^^" ^ sparql_uri dt
-  | Rdf.PlainLiteral (s,lang) -> sparql_string s ^ (if lang = "" then "" else "@" ^ lang)
-  | Rdf.Bnode name -> if name="" then "[]" else "_:" ^ name
-  | Rdf.Var v -> sparql_var v
-
-let sparql_term_numeric t = "STRDT(str(" ^ sparql_term t ^ "),xsd:double)"
-
-let sparql_empty = ""
-
-let sparql_type s c = sparql_term s ^ " a " ^ sparql_term c ^ " . "
-let sparql_triple s p o = sparql_term s ^ " " ^ sparql_term p ^ " " ^ sparql_term o ^ " . "
-
-let sparql_expr_func f expr = f ^ "(" ^ expr ^ ")"
-let sparql_expr_regex expr pat = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
-let sparql_expr_comp relop expr1 expr2 = expr1 ^ " " ^ relop ^ " " ^ expr2
-
-let sparql_filter lexpr = "FILTER(" ^ String.concat " && " lexpr ^ ")"
-let sparql_constr t = function
-  | True -> sparql_empty
-  | MatchesAll [] -> sparql_empty
+let sparql_constr (t : Rdf.term) : constr -> Sparql.formula = function
+  | True -> Sparql.True
+  | MatchesAll [] -> Sparql.True
   | MatchesAll lpat ->
-    sparql_filter
-      (List.map
-	 (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat)
-	 lpat)
-  | MatchesAny [] -> sparql_empty
+    Sparql.Filter
+      (Sparql.log_and
+	 (List.map
+	    (fun pat -> Sparql.expr_regex (Sparql.expr_func "str" (Sparql.term t)) pat)
+	    lpat))
+  | MatchesAny [] -> Sparql.True
   | MatchesAny lpat ->
-    sparql_filter
-      [String.concat " || "
-	  (List.map
-	     (fun pat -> sparql_expr_regex (sparql_expr_func "str" (sparql_term t)) pat)
-	     lpat) ]
+    Sparql.Filter
+      (Sparql.log_or
+	 (List.map
+	    (fun pat -> Sparql.expr_regex (Sparql.expr_func "str" (Sparql.term t)) pat)
+	    lpat))
   | After pat ->
-    sparql_filter [sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat)]
+    Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" (Sparql.term t)) (Sparql.string pat))
   | Before pat ->
-    sparql_filter [sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat)]
+    Sparql.Filter (Sparql.expr_comp "<=" (Sparql.expr_func "str" (Sparql.term t)) (Sparql.string pat))
   | FromTo (pat1,pat2) ->
-    sparql_filter
-      [sparql_expr_comp ">=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat1);
-       sparql_expr_comp "<=" (sparql_expr_func "str" (sparql_term t)) (sparql_string pat2)]
+    Sparql.Filter
+      (Sparql.log_and
+	 [Sparql.expr_comp ">=" (Sparql.expr_func "str" (Sparql.term t)) (Sparql.string pat1);
+	  Sparql.expr_comp "<=" (Sparql.expr_func "str" (Sparql.term t)) (Sparql.string pat2)])
   | HigherThan pat ->
-    sparql_filter [sparql_expr_comp ">=" (sparql_term_numeric t) pat]
+    Sparql.Filter (Sparql.expr_comp ">=" (Sparql.term_numeric t) pat)
   | LowerThan pat ->
-    sparql_filter [sparql_expr_comp "<=" (sparql_term_numeric t) pat]
+    Sparql.Filter (Sparql.expr_comp "<=" (Sparql.term_numeric t) pat)
   | Between (pat1,pat2) ->
-    sparql_filter
-      [sparql_expr_comp ">=" (sparql_term_numeric t) pat1;
-       sparql_expr_comp "<=" (sparql_term_numeric t) pat2]
+    Sparql.Filter
+      (Sparql.log_and
+	 [Sparql.expr_comp ">=" (Sparql.term_numeric t) pat1;
+	  Sparql.expr_comp "<=" (Sparql.term_numeric t) pat2])
   | HasLang pat ->
-    sparql_filter
-      [sparql_expr_func "isLiteral" (sparql_term t);
-       sparql_expr_regex (sparql_expr_func "lang" (sparql_term t)) pat]
+    Sparql.Filter
+      (Sparql.log_and
+	 [Sparql.expr_func "isLiteral" (Sparql.term t);
+	  Sparql.expr_regex (Sparql.expr_func "lang" (Sparql.term t)) pat])
   | HasDatatype pat ->
-    sparql_filter
-      [sparql_expr_func "isLiteral" (sparql_term t);
-       sparql_expr_regex (sparql_expr_func "str" (sparql_expr_func "datatype" (sparql_term t))) pat]
+    Sparql.Filter
+      (Sparql.log_and
+	 [Sparql.expr_func "isLiteral" (Sparql.term t);
+	  Sparql.expr_regex (Sparql.expr_func "str" (Sparql.expr_func "datatype" (Sparql.term t))) pat])
 
-let sparql_join lgp =
-  String.concat "\n"
-    (List.filter ((<>) "") lgp)
-let sparql_union lgp =
-  match List.filter ((<>) "") lgp with
-  | [] -> sparql_empty
-  | [gp] -> gp
-  | lgp -> "{ " ^ String.concat " } UNION { " lgp ^ " }"
-let sparql_optional gp = "OPTIONAL { " ^ gp ^ " }"
-let sparql_not_exists gp = "FILTER NOT EXISTS { " ^ gp ^ " }"
-
-let sparql_search_label (t : Rdf.term) (l : Rdf.term) : string =
-  sparql_term t ^ " rdfs:label " ^ sparql_term l ^ " . " (* ^ sparql_constr l (HasLang "en") *)
-let sparql_search_contains (l : Rdf.term) (w : string) : string =
-  sparql_term l ^ " bif:contains " ^ sparql_string w ^ " . "
-
-let sparql_search_constr (t : Rdf.term) (constr : constr) : string =
+let sparql_search_constr (t : Rdf.term) (constr : constr) : Sparql.formula =
   let l = Rdf.Var "search_label" in
   match constr with
     | MatchesAll (w::lw) ->
-      sparql_join
-	[sparql_search_label t l;
-	 sparql_search_contains l w;
+      Sparql.formula_and_list
+	[Sparql.Pattern (Sparql.search_label t l);
+	 Sparql.Pattern (Sparql.search_contains l w);
 	 sparql_constr l (MatchesAll lw)]
     | MatchesAny lw ->
-      sparql_union
+      Sparql.formula_or_list
 	(List.map
 	   (fun w ->
-	     sparql_join
-	       [sparql_search_label t l;
-		sparql_search_contains l w])
+	     Sparql.formula_and_list
+	       [Sparql.Pattern (Sparql.search_label t l);
+		Sparql.Pattern (Sparql.search_contains l w)])
 	   lw)
     | _ ->
-      sparql_search_label t l
-
-let sparql_ask gp =
-  "ASK WHERE {\n" ^ gp ^ "\n}"
-let sparql_select ?(distinct=false) ~dimensions ?(aggregations=[]) ?(ordering=[]) ?limit gp =
-  if dimensions = [] && aggregations = []
-  then sparql_ask gp
-  else
-    let sparql_aggreg prefix_g v suffix_g vg = "(" ^ prefix_g ^ sparql_var v ^ suffix_g ^ " AS " ^ sparql_var vg ^ ")" in
-    let sel =
-      String.concat " " (List.map sparql_var dimensions) ^ " " ^
-	String.concat " "
-	(List.map
-	   (fun (g,v,vg) ->
-	     match g with
-	       | NumberOf -> sparql_aggreg "COUNT(DISTINCT " v ")" vg
-	       | Total -> sparql_aggreg "SUM(" v ")" vg
-	       | Average -> sparql_aggreg "AVG(" v ")" vg
-	       | Maximum -> sparql_aggreg "MAX(" v ")" vg
-	       | Minimum -> sparql_aggreg "MIN(" v ")" vg
-	       | ListOf -> sparql_aggreg "GROUP_CONCAT(DISTINCT " v (" ; separator=', ')") vg)
-	   aggregations) in
-    let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ " WHERE {\n" ^ gp ^ "\n}" in
-    let s =
-      if aggregations = [] || dimensions = []
-      then s
-      else s ^ "\nGROUP BY " ^ String.concat " " (List.map sparql_var dimensions) in
-    let s =
-      if ordering = []
-      then s
-      else s ^ "\nORDER BY " ^ String.concat " " (List.map (function `ASC v -> sparql_var v | `DESC v -> "DESC(" ^ sparql_var v ^ ")") ordering) in
-    let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
-    s
+      Sparql.Pattern (Sparql.search_label t l)
 
 let sparql_arg arg x y z =
-  match arg with
-    | S -> sparql_triple x y z
-    | P -> sparql_triple y x z
-    | O -> sparql_triple y z x
+  Sparql.Pattern
+    ( match arg with
+      | S -> Sparql.triple x y z
+      | P -> Sparql.triple y x z
+      | O -> Sparql.triple y z x )
 
 let prefix_of_arg0 = function P -> "relation" | S | O -> ""
 let prefix_of_arg1 = function S -> "relation" | P | O -> ""
 let prefix_of_arg2 = function O -> "relation" | S | P -> ""
 
-let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
+let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> Sparql.formula) = function
   | Is np -> sparql_of_elt_s1_as_p1 state np
-  | Type c -> (fun x -> sparql_type x (Rdf.URI c))
+  | Type c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
   | Has (p,np) ->
     let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_uri p) np in
-    (fun x -> q_np (fun y -> sparql_triple x (Rdf.URI p) y))
+    (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
   | IsOf (p,np) ->
     let q_np = sparql_of_elt_s1 state ~prefix:"" np in
-    (fun x -> q_np (fun y -> sparql_triple y (Rdf.URI p) x))
+    (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
   | Triple (arg,np1,np2) ->
     let q_np1 = sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np1 in
     let q_np2 = sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np2 in
@@ -355,45 +284,45 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> string) = function
   | Constr constr -> (fun x -> sparql_constr x constr)
   | And ar ->
     let ar_d = Array.map (fun elt -> sparql_of_elt_p1 state elt) ar in
-    (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
+    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
   | Or ar ->
     let ar_d = Array.map (fun elt -> sparql_of_elt_p1 state elt) ar in
-    (fun x -> sparql_union (Array.to_list (Array.map (fun d -> d x) ar_d)))
+    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
   | Maybe f ->
     let d = sparql_of_elt_p1 state f in
-    (fun x -> sparql_optional (d x))
+    (fun x -> Sparql.formula_optional (d x))
   | Not f ->
     let d = sparql_of_elt_p1 (Oo.copy state) f in
-    (fun x -> sparql_not_exists (d x))
-  | IsThere -> (fun x -> sparql_empty)
-and sparql_of_elt_s1_as_p1 state : elt_s1 -> (Rdf.term -> string) = function
+    (fun x -> Sparql.formula_not (d x))
+  | IsThere -> (fun x -> Sparql.True)
+and sparql_of_elt_s1_as_p1 state : elt_s1 -> (Rdf.term -> Sparql.formula) = function
   | Det (det,rel_opt) ->
     let d1 = sparql_of_elt_s2_as_p1 state det in
-    let d2 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
-    (fun x -> sparql_join [d1 x; d2 x])
+    let d2 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> sparql_of_elt_p1 state rel in
+    (fun x -> Sparql.formula_and (d1 x) (d2 x))
   | NAnd ar ->
     let ar_d = Array.map (fun elt -> sparql_of_elt_s1_as_p1 state elt) ar in
-    (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
+    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
   | NOr ar ->
     let ar_d = Array.map (fun elt -> sparql_of_elt_s1_as_p1 state elt) ar in
-    (fun x -> sparql_union (Array.to_list (Array.map (fun d -> d x) ar_d)))
+    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
   | NMaybe f ->
     let d = sparql_of_elt_s1_as_p1 state f in
-    (fun x -> sparql_optional (d x))
+    (fun x -> Sparql.formula_optional (d x))
   | NNot f ->
     let d = sparql_of_elt_s1_as_p1 (Oo.copy state) f in
-    (fun x -> sparql_not_exists (d x))
-and sparql_of_elt_s2_as_p1 state : elt_s2 -> (Rdf.term -> string) = function
+    (fun x -> Sparql.formula_not (d x))
+and sparql_of_elt_s2_as_p1 state : elt_s2 -> (Rdf.term -> Sparql.formula) = function
   | Term t ->
-    (fun x -> sparql_filter [sparql_expr_comp "=" (sparql_term x) (sparql_term t)])
+    (fun x -> Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))
 (*    (fun x -> "BIND (" ^ sparql_term t ^ " AS " ^ sparql_term x ^ ")") *)
   | An (_modif,head) ->
     let d_head =
       match head with
-	| Thing -> (fun x -> sparql_empty)
-	| Class c -> (fun x -> sparql_type x (Rdf.URI c)) in
+	| Thing -> (fun x -> Sparql.True)
+	| Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) in
     d_head
-and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) = function
+and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> Sparql.formula) -> Sparql.formula) = function
   | Det (det,rel_opt) ->
     let prefix =
       if prefix = ""
@@ -404,40 +333,40 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> string) -> string) 
 	  | _ -> prefix
       else prefix in
     let qu = sparql_of_elt_s2 state ~prefix det in
-    let d1 = match rel_opt with None -> (fun x -> sparql_empty) | Some rel -> sparql_of_elt_p1 state rel in
+    let d1 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> sparql_of_elt_p1 state rel in
     (fun d -> qu d1 d)
   | NAnd ar ->
     let ar_q = Array.map (fun elt -> sparql_of_elt_s1 state ~prefix elt) ar in
-    (fun d -> sparql_join (Array.to_list (Array.map (fun q -> q d) ar_q)))
+    (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
   | NOr ar ->
     let ar_q = Array.map (fun elt -> sparql_of_elt_s1 state ~prefix elt) ar in
-    (fun d -> sparql_union (Array.to_list (Array.map (fun q -> q d) ar_q)))
+    (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
   | NMaybe f ->
     let q = sparql_of_elt_s1 state ~prefix f in
-    (fun d -> sparql_optional (q d))
+    (fun d -> Sparql.formula_optional (q d))
   | NNot f ->
     let q = sparql_of_elt_s1 (Oo.copy state) ~prefix f in
-    (fun d -> sparql_not_exists (q d))
-and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> string) -> (Rdf.term -> string) -> string) = function
-  | Term t -> (fun d1 d2 -> sparql_join [d1 t; d2 t])
+    (fun d -> Sparql.formula_not (q d))
+and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> Sparql.formula) -> (Rdf.term -> Sparql.formula) -> Sparql.formula) = function
+  | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (modif, head) ->
     let v, dhead = sparql_of_elt_head state ~prefix head in
     state#set_modif v modif;
     let t = Rdf.Var v in
-    (fun d1 d2 -> state#add_var v; sparql_join [d2 t; dhead t; d1 t])
-and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> string) = function
+    (fun d1 d2 -> state#add_var v; Sparql.formula_and_list [d2 t; dhead t; d1 t])
+and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> Sparql.formula) = function
   | Thing ->
     let prefix = if prefix<>"" then prefix else "thing" in
-    state#new_var prefix, (fun t -> sparql_empty)
+    state#new_var prefix, (fun t -> Sparql.True)
   | Class c ->
     let prefix = if prefix<>"" then prefix else prefix_of_uri c in
-    state#new_var prefix, (fun t -> sparql_type t (Rdf.URI c))
-and sparql_of_elt_s state : elt_s -> string = function
+    state#new_var prefix, (fun t -> Sparql.Pattern (Sparql.rdf_type t (Rdf.URI c)))
+and sparql_of_elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = sparql_of_elt_s1 state ~prefix:"" np in
-    q (fun t -> "")
+    q (fun t -> Sparql.True)
 
-let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> string = function
+let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> Sparql.formula) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
     let prefix =
       if prefix = ""
@@ -452,26 +381,26 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> string) : ctx_p1 -> stri
     let d_det = sparql_of_elt_s2_as_p1 state det in
     sparql_of_ctx_s1 state
       (fun d2 -> q_det d d2)
-      (fun x -> sparql_join [d x; d_det x])
+      (fun x -> Sparql.formula_and (d x) (d_det x))
       ctx
   | AndX (i,ar,ctx) ->
     let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_p1 state elt) ar in
     sparql_of_ctx_p1 state ~prefix
-      (fun x ->	sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun x ->	Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
   | OrX (i,ar,ctx) -> sparql_of_ctx_p1 state ~prefix d ctx
   | MaybeX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
   | NotX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
-and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) (d : Rdf.term -> string) : ctx_s1 -> string = function
+and sparql_of_ctx_s1 state (q : (Rdf.term -> Sparql.formula) -> Sparql.formula) (d : Rdf.term -> Sparql.formula) : ctx_s1 -> Sparql.formula = function
   | IsX ctx -> sparql_of_ctx_p1 state ~prefix:"" d ctx
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:""
-      (fun x -> q (fun y -> sparql_triple x (Rdf.URI p) y))
+      (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
       ctx
   | IsOfX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:(prefix_of_uri p)
-      (fun x -> q (fun y -> sparql_triple y (Rdf.URI p) x))
+      (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
       ctx
   | TripleX1 (arg,np,ctx) ->
     let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_arg2 arg) np in
@@ -484,13 +413,13 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> string) -> string) (d : Rdf.term ->
       (fun x -> q_np (fun y -> q (fun z -> sparql_arg arg x y z)))
       ctx
   | ReturnX ->
-    q (fun t -> "")
+    q (fun t -> Sparql.True)
   | NAndX (i,ar,ctx) ->
     let ar_q = Array.mapi (fun j elt -> if j=i then q else sparql_of_elt_s1 state ~prefix:"" elt) ar in
     let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_s1_as_p1 state elt) ar in
     sparql_of_ctx_s1 state
-      (fun d ->	sparql_join (Array.to_list (Array.map (fun q -> q d) ar_q)))
-      (fun x -> sparql_join (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun d ->	Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
+      (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
   | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q d ctx
@@ -501,7 +430,7 @@ type sparql_template = ?constr:constr -> limit:int -> string
 
 let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * sparql_template option * sparql_template option * sparql_template option =
   let state = new sparql_state in
-  let gp =
+  let form =
     match focus with
       | AtP1 (f,ctx) ->
 	let prefix =
@@ -532,7 +461,7 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
   in
   let t_list = state#focus_terms in
   let query_opt =
-    if gp = sparql_empty
+    if form = Sparql.True
     then None
     else
       let lv = state#vars in
@@ -545,42 +474,44 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 		| (Unselect,order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
 		  dims, aggregs, order, v
 		| (Aggreg (g,gorder),order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
-		  let vg_prefix =
+		  let g_sparql, vg_prefix =
 		    match g with
-		      | NumberOf -> "number_of_"
-		      | ListOf -> "list_of_"
-		      | Total -> "total_"
-		      | Average -> "average_"
-		      | Maximum -> "maximum_"
-		      | Minimum -> "minimum_" in
+		      | NumberOf -> Sparql.DistinctCOUNT, "number_of_"
+		      | ListOf -> Sparql.DistinctCONCAT, "list_of_"
+		      | Total -> Sparql.SUM, "total_"
+		      | Average -> Sparql.AVG, "average_"
+		      | Maximum -> Sparql.MAX, "maximum_"
+		      | Minimum -> Sparql.MIN, "minimum_" in
 		  let vg = vg_prefix ^ v in
-		  dims, (g,v,vg)::aggregs, gorder, vg
+		  dims, (g_sparql,v,vg)::aggregs, gorder, vg
 		| (_, order) -> v::dims, aggregs, order, v in
 	    let ordering =
 	      match order with
 		| Unordered -> ordering
-		| Lowest -> `ASC v_order :: ordering
-		| Highest -> `DESC v_order :: ordering in
+		| Lowest -> (Sparql.ASC, v_order) :: ordering
+		| Highest -> (Sparql.DESC, v_order) :: ordering in
 	    dims, aggregs, ordering)
 	  lv ([],[],[]) in
       Some (fun ?(constr=True) ~limit ->
-	sparql_select ~distinct:true ~dimensions ~aggregations ~ordering ~limit
-	  (match t_list with [t] -> sparql_join [gp; sparql_constr t constr] | _ -> gp)) in
+	Sparql.select ~distinct:true ~dimensions ~aggregations ~ordering ~limit
+	  (Sparql.pattern_of_formula
+	     (match t_list with [t] -> Sparql.formula_and form (sparql_constr t constr) | _ -> form))) in
   let query_incr_opt x triple =
     match t_list with
       | [t] ->
 	let tx = Rdf.Var x in
-	let gp_x =
+	let form_x =
 	  match t with
-	    | Rdf.Var v -> sparql_join [gp; triple t tx]
+	    | Rdf.Var v -> Sparql.formula_and form (triple t tx)
 	    | _ -> triple t tx in
 	Some (fun ?(constr=True) ~limit ->
-	  sparql_select ~dimensions:[x] ~limit
-	    (sparql_join [gp_x; sparql_constr tx constr]))
+	  Sparql.select ~dimensions:[x] ~limit
+	    (Sparql.pattern_of_formula
+	       (Sparql.formula_and form_x (sparql_constr tx constr))))
       | _ -> None in
-  let query_class_opt = query_incr_opt "class" (fun t tc -> sparql_type t tc) in
-  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> sparql_triple t tp (Rdf.Bnode "")) in
-  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> sparql_triple (Rdf.Bnode "") tp t) in
+  let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
+  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Rdf.Bnode ""))) in
+  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Rdf.Bnode "") tp t)) in
   t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
 
 (* NL generation from focus *)
@@ -1249,8 +1180,8 @@ and delete_ctx_s1 f ctx =
 	| `Empty -> delete_ctx_s1 top_s1 ctx2
 	| `Single elt -> Some (AtS1 (elt, ctx2))
 	| `Array (ar2, i2) -> Some (AtS1 (ar2.(i2), NOrX (i2, ar2, ctx2))) )
-    | NMaybeX ctx2 -> delete_ctx_s1 top_s1 ctx2
-    | NNotX ctx2 -> delete_ctx_s1 top_s1 ctx2
+    | NMaybeX ctx2 -> delete_ctx_s1 f ctx2
+    | NNotX ctx2 -> delete_ctx_s1 f ctx2
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
