@@ -41,6 +41,7 @@ let log_or (le : expr list) : expr =
   else "(" ^ String.concat "\n || " (List.filter ((<>) log_false) le) ^ ")"
 
 let empty : pattern = ""
+let something s = term s ^ " a [] ."
 let rdf_type s c = term s ^ " a " ^ term c ^ " ."
 let triple s p o = term s ^ " " ^ term p ^ " " ^ term o ^ " ."
 let filter (e : expr) : pattern =
@@ -197,6 +198,13 @@ let formula_not : formula -> formula = function
   | True -> False
   | False -> True
   | Or (p,e) -> Filter (log_and [not_exists p; log_not e])
+
+let formula_bind (x : Rdf.term) : formula -> formula = function
+  | Pattern p -> Pattern p
+  | Filter e -> Pattern (join [something x; filter e])
+  | True -> True (*Pattern (something x)*)
+  | False -> False
+  | Or (p,e) -> Pattern (union [p; join [something x; filter e]])
 
 let pattern_of_formula : formula -> pattern = function
   | Pattern p -> p

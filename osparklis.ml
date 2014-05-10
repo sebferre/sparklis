@@ -240,9 +240,9 @@ object (self)
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index) Lis.max_properties "concept" "concepts")))
 
-  method private refresh_modifier_increments =
+  method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
-      let index = lis#index_modifiers in
+      let index = lis#index_modifiers ~init in
       elt##innerHTML <- string (html_index lis#focus dico_incrs index);
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
@@ -274,11 +274,12 @@ object (self)
 		| [] -> ()
 		| [Rdf.Var v] ->
 		  self#refresh_term_increments_init;
-		  self#refresh_property_increments_init
+		  self#refresh_property_increments_init;
+		  self#refresh_modifier_increments ~init:true
 		| _ ->
 		  self#refresh_term_increments;
 		  self#refresh_property_increments;
-		  self#refresh_modifier_increments )
+		  self#refresh_modifier_increments ~init:false)
 	    | Some sparql ->
 	      jquery_set_innerHTML "#sparql-query" (html_pre sparql);
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
@@ -289,7 +290,7 @@ object (self)
 		| _ ->
 		  self#refresh_term_increments;
 		  self#refresh_property_increments;
-		  self#refresh_modifier_increments ))))
+		  self#refresh_modifier_increments ~init:false ))))
 
   method is_home =
     lis#focus = Lisql.home_focus

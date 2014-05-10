@@ -273,7 +273,6 @@ object (self)
 	| _ -> assert false)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
-
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
     if focus_term_index = []
     then k []
@@ -324,51 +323,54 @@ object (self)
 	  | _ -> assert false)
 	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
-  method index_modifiers =
-    let modif_list =
-      let open Lisql in
-      match focus with
-	| AtP1 (f,ctx) ->
-	  let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
-	  let modifs =
-	    match f with
-	      | Has _
-	      | IsOf _
-	      | Triple (S, Det (Term (Rdf.URI _), _), _)
-	      | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
-	      | _ -> modifs in
-	  modifs
-	| AtS1 (f,ctx) ->
-	  let modifs =
-	    match f with
-	      | Det (An (modif, head), _) ->
+  method index_modifiers ~init =
+    if init
+    then [(Lisql.IncrIs,1)]
+    else
+      let modif_list =
+	let open Lisql in
+	    match focus with
+	      | AtP1 (f,ctx) ->
+		let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
 		let modifs =
-		  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-		  then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
-		  else [] in
+		  match f with
+		    | Has _
+		    | IsOf _
+		    | Triple (S, Det (Term (Rdf.URI _), _), _)
+		    | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
+		    | _ -> modifs in
+		modifs
+	      | AtS1 (f,ctx) ->
 		let modifs =
-		  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-		  then IncrAggreg ListOf :: modifs
-		  else modifs in
+		  match f with
+		    | Det (An (modif, head), _) ->
+		      let modifs =
+			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
+			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
+			else [] in
+		      let modifs =
+			if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
+			then IncrAggreg ListOf :: modifs
+			else modifs in
+		      let modifs =
+			IncrUnselect :: IncrAggreg NumberOf :: modifs in
+		      let modifs =
+			IncrOrder Highest :: IncrOrder Lowest :: modifs in
+		      modifs
+		    | _ -> [] in
 		let modifs =
-		  IncrUnselect :: IncrAggreg NumberOf :: modifs in
+		  if ctx = ReturnX
+		  then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
+		    if f = top_s1
+		    then modifs
+		    else IncrOr :: modifs
+		  else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
 		let modifs =
-		  IncrOrder Highest :: IncrOrder Lowest :: modifs in
+		  match f with
+		    | Det (An _, _) -> IncrIs :: modifs
+		    | _ -> modifs in
 		modifs
 	      | _ -> [] in
-	  let modifs =
-	    if ctx = ReturnX
-	    then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
-	      if f = top_s1
-	      then modifs
-	      else IncrOr :: modifs
-	    else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
-	  let modifs =
-	    match f with
-	      | Det (An _, _) -> IncrIs :: modifs
-	      | _ -> modifs in
-	  modifs
-	| _ -> [] in
-    List.map (fun incr -> (incr,1)) modif_list
+	List.map (fun incr -> (incr,1)) modif_list
 
 end

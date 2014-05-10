@@ -125,7 +125,7 @@ and html_np dico (foc, nl : nl_np) : string =
   let html =
     match nl with
       | `PN (w, rel) -> html_word w ^ html_rel_opt dico rel
-      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP ((_, `Qu ((`A | `The), `Nil, w, rel2)), [])))) ->
+      | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, w, rel2)), [])))) ->
 	html_qu qu ^ html_adj adj ^ html_nl_focus dico foc2 (html_word w ^ html_rel_opt dico rel2)
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt dico rel
       | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj adj ^ html_word w ^ html_rel_opt dico rel

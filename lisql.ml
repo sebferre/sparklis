@@ -192,6 +192,7 @@ object
     with _ -> (Select, Unordered)
 end
 
+
 let sparql_constr (t : Rdf.term) : constr -> Sparql.formula = function
   | True -> Sparql.True
   | MatchesAll [] -> Sparql.True
@@ -350,17 +351,18 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> Sparql.formula) -> 
 and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> Sparql.formula) -> (Rdf.term -> Sparql.formula) -> Sparql.formula) = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (modif, head) ->
-    let v, dhead = sparql_of_elt_head state ~prefix head in
+    let prefix, qhead = sparql_of_elt_head state ~prefix head in
+    let v = state#new_var prefix in
     state#set_modif v modif;
     let t = Rdf.Var v in
-    (fun d1 d2 -> state#add_var v; Sparql.formula_and_list [d2 t; dhead t; d1 t])
-and sparql_of_elt_head state ~prefix : elt_head -> Rdf.var * (Rdf.term -> Sparql.formula) = function
+    (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d1 t) (d2 t)))
+and sparql_of_elt_head state ~prefix : elt_head -> string * (Rdf.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
     let prefix = if prefix<>"" then prefix else "thing" in
-    state#new_var prefix, (fun t -> Sparql.True)
+    prefix, (fun x form -> Sparql.formula_bind x form)
   | Class c ->
     let prefix = if prefix<>"" then prefix else prefix_of_uri c in
-    state#new_var prefix, (fun t -> Sparql.Pattern (Sparql.rdf_type t (Rdf.URI c)))
+    prefix, (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
 and sparql_of_elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = sparql_of_elt_s1 state ~prefix:"" np in
