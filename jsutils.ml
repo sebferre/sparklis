@@ -46,41 +46,6 @@ let oninput k elt =
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
 
-class ajax_pool =
-object
-  val mutable l : xmlHttpRequest t list = []
-  method add req = l <- req::l
-  method remove req = l <- List.filter ((!=) req) l
-  method abort_all =
-    List.iter
-      (fun req ->
-	req##onreadystatechange <- (Js.wrap_callback (fun _ -> ()));
-	req##abort())
-      l;
-    l <- []
-end
-
-let progress (elts : Dom_html.element t list) (main : ('a -> unit) -> ('b -> unit) -> unit) (k1 : 'a -> unit) (k0 : 'b -> unit) : unit =
-  List.iter (* setting progress cursor *)
-    (fun elt ->
-      elt##style##cursor <- string "progress";
-      elt##style##opacity <- def (string "0.5"))
-    elts;
-  main
-    (fun x ->
-      List.iter (* restoring default cursor *)
-	(fun elt ->
-	  elt##style##cursor <- string "default";
-	  elt##style##opacity <- def (string "1"))
-	elts;
-      k1 x)
-    (fun y ->
-      List.iter (* restoring default cursor *)
-	(fun elt ->
-	  elt##style##cursor <- string "default";
-	  elt##style##opacity <- def (string "1"))
-	elts;
-      k0 y)
 
 (* prepare a string for safe insertion in HTML code *)
 let escapeHTML (str : string) : string =

@@ -142,7 +142,7 @@ object (self)
 
   (* utilities *)
 
-  val ajax_pool = new ajax_pool
+  val ajax_pool = new Sparql_endpoint.ajax_pool
   method abort_all_ajax = ajax_pool#abort_all
 
   (* SPARQL query and results *)

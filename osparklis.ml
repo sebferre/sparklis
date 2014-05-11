@@ -131,7 +131,10 @@ object (self)
   val mutable dico_incrs = new dico_increments
 
   method show_permalink : unit =
-    let args = [("endpoint", lis#endpoint); ("query", Permalink.of_query lis#query)] in
+    let args =
+      if self#is_home
+      then [("endpoint", lis#endpoint)]
+      else [("endpoint", lis#endpoint); ("query", Permalink.of_query lis#query)] in
     try
       let permalink_url =
 	match Url.Current.get () with

@@ -189,13 +189,43 @@ let results_of_json s_json =
 
 (* HTTP Requests to SPARQL endpoints *)
 
-let ajax (pool : ajax_pool) (endpoint : string) (sparql : string)
+let start_progress elt =  (* setting progress cursor on 'elt' *)
+  elt##style##cursor <- string "progress";
+  elt##style##opacity <- def (string "0.5")
+let end_progress elt = (* removing progress cursor on 'elt' *)
+  elt##style##cursor <- string "default";
+  elt##style##opacity <- def (string "1")
+
+class ajax_pool =
+object
+  val mutable reqs : xmlHttpRequest t list = []
+  method add_req req = reqs <- req::reqs
+  method remove_req req = reqs <- List.filter ((!=) req) reqs
+
+  val mutable elts : Dom_html.element t list = []
+  method add_elt elt = elts <- elt::elts
+  method remove_elt elt = elts <- List.filter ((!=) elt) elts
+
+  method abort_all =
+    List.iter
+      (fun req ->
+	req##onreadystatechange <- (Js.wrap_callback (fun _ -> ()));
+	req##abort())
+      reqs;
+    reqs <- [];
+    List.iter end_progress elts;
+    elts <- []
+end
+
+let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
+    (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
   (*Firebug.console##log(string sparql);*)
   let fields : (string * Form.form_elt) list =
     [("query", `String (string sparql))] in
   let req = create () in
-  pool#add req;
+  pool#add_req req;
+  List.iter pool#add_elt elts;
   req##_open (Js.string "POST", Js.string endpoint, Js._true);
   req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
 (*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
@@ -217,7 +247,9 @@ let ajax (pool : ajax_pool) (endpoint : string) (sparql : string)
         | HEADERS_RECEIVED when not Dom_html.onIE -> do_check_headers ()
         | LOADING when Dom_html.onIE -> do_check_headers ()
         | DONE ->
-	  pool#remove req;
+	  List.iter end_progress elts;
+	  pool#remove_req req;
+	  List.iter pool#remove_elt elts;
 	  do_check_headers ();
 	  let code = req##status in
 	  Firebug.console##log(string ("HTTP code: " ^ string_of_int code));
@@ -258,21 +290,17 @@ let ajax (pool : ajax_pool) (endpoint : string) (sparql : string)
            | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
            | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
 	 l) in
+  List.iter start_progress elts;
   req##send(Js.some (string (encode_fields fields)))
 (*  req##send(Js.some (string sparql)) *)
 
-let rec ajax_list pool endpoint sparql_list k1 k0 =
+let rec ajax_list_in elts pool endpoint sparql_list k1 k0 =
   match sparql_list with
     | [] -> k1 []
     | s::ls ->
-      ajax pool endpoint s
+      ajax_in elts pool endpoint s
 	(fun r ->
-	  ajax_list pool endpoint ls
+	  ajax_list_in elts pool endpoint ls
 	    (fun rs -> k1 (r::rs))
 	    (fun code -> k0 code))
 	(fun code -> k0 code)
-
-let ajax_in elts pool endpoint sparql k1 k0 =
-  progress elts (ajax pool endpoint sparql) k1 k0
-let ajax_list_in elts pool endpoint sparql_list k1 k0 =
-  progress elts (ajax_list pool endpoint sparql_list) k1 k0
