@@ -268,7 +268,13 @@ let prefix_of_arg0 = function P -> "relation" | S | O -> ""
 let prefix_of_arg1 = function S -> "relation" | P | O -> ""
 let prefix_of_arg2 = function O -> "relation" | S | P -> ""
 
-let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> Sparql.formula) = function
+type sparql_p1 = Rdf.term -> Sparql.formula
+type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
+type sparql_s1 = sparql_p1 -> Sparql.formula
+type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
+type sparql_b1 = sparql_p2 -> Sparql.formula
+
+let rec sparql_of_elt_p1 state : elt_p1 -> sparql_p1 = function
   | Is np -> sparql_of_elt_s1_as_p1 state np
   | Type c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
   | Has (p,np) ->
@@ -296,7 +302,7 @@ let rec sparql_of_elt_p1 state : elt_p1 -> (Rdf.term -> Sparql.formula) = functi
     let d = sparql_of_elt_p1 (Oo.copy state) f in
     (fun x -> Sparql.formula_not (d x))
   | IsThere -> (fun x -> Sparql.True)
-and sparql_of_elt_s1_as_p1 state : elt_s1 -> (Rdf.term -> Sparql.formula) = function
+and sparql_of_elt_s1_as_p1 state : elt_s1 -> sparql_p1 = function
   | Det (det,rel_opt) ->
     let d1 = sparql_of_elt_s2_as_p1 state det in
     let d2 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> sparql_of_elt_p1 state rel in
@@ -313,7 +319,7 @@ and sparql_of_elt_s1_as_p1 state : elt_s1 -> (Rdf.term -> Sparql.formula) = func
   | NNot f ->
     let d = sparql_of_elt_s1_as_p1 (Oo.copy state) f in
     (fun x -> Sparql.formula_not (d x))
-and sparql_of_elt_s2_as_p1 state : elt_s2 -> (Rdf.term -> Sparql.formula) = function
+and sparql_of_elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
     (fun x -> Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))
 (*    (fun x -> "BIND (" ^ sparql_term t ^ " AS " ^ sparql_term x ^ ")") *)
@@ -323,7 +329,7 @@ and sparql_of_elt_s2_as_p1 state : elt_s2 -> (Rdf.term -> Sparql.formula) = func
 	| Thing -> (fun x -> Sparql.True)
 	| Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) in
     d_head
-and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> Sparql.formula) -> Sparql.formula) = function
+and sparql_of_elt_s1 state ~prefix : elt_s1 -> sparql_s1 = function
   | Det (det,rel_opt) ->
     let prefix =
       if prefix = ""
@@ -348,7 +354,7 @@ and sparql_of_elt_s1 state ~prefix : elt_s1 -> ((Rdf.term -> Sparql.formula) -> 
   | NNot f ->
     let q = sparql_of_elt_s1 (Oo.copy state) ~prefix f in
     (fun d -> Sparql.formula_not (q d))
-and sparql_of_elt_s2 state ~prefix : elt_s2 -> ((Rdf.term -> Sparql.formula) -> (Rdf.term -> Sparql.formula) -> Sparql.formula) = function
+and sparql_of_elt_s2 state ~prefix : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (modif, head) ->
     let prefix, qhead = sparql_of_elt_head state ~prefix head in
@@ -368,7 +374,30 @@ and sparql_of_elt_s state : elt_s -> Sparql.formula = function
     let q = sparql_of_elt_s1 state ~prefix:"" np in
     q (fun t -> Sparql.True)
 
-let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> Sparql.formula) : ctx_p1 -> Sparql.formula = function
+let rec sparql_of_elt_s1_bis state ~prefix (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
+  | (Det _ as np1) -> (* q_alt is not used in this case *)
+    let q1 = sparql_of_elt_s1 state ~prefix np1 in
+    (fun r -> q1 (fun x -> q (fun y -> r x y)))
+  | NAnd ar -> sparql_of_elt_s1_bis_and state ~prefix q q_alt (Array.to_list ar)
+  | NOr ar ->
+    let ar_b = Array.map (fun elt -> sparql_of_elt_s1_bis state ~prefix q q_alt elt) ar in
+    (fun r -> Sparql.formula_or_list (Array.to_list (Array.map (fun b -> b r) ar_b)))
+  | NMaybe np1 -> sparql_of_elt_s1_bis state ~prefix q q_alt np1
+  | NNot np1 -> sparql_of_elt_s1_bis state ~prefix q q_alt np1
+and sparql_of_elt_s1_bis_and state ~prefix q q_alt = function
+  | [] -> (fun r -> Sparql.True)
+  | [np1] -> sparql_of_elt_s1_bis state ~prefix q q_alt np1
+  | np1::nps ->
+    let b1 = sparql_of_elt_s1_bis state ~prefix q q_alt np1 in
+    let b1_alt = sparql_of_elt_s1_bis state ~prefix q_alt (fun d -> Sparql.False) np1 in
+    let bs = sparql_of_elt_s1_bis_and state ~prefix q q_alt nps in
+    let bs_alt = sparql_of_elt_s1_bis_and state ~prefix q_alt (fun d -> Sparql.False) nps in
+    (fun r -> Sparql.formula_or_list [Sparql.formula_and (b1 r) (bs r);
+				      Sparql.formula_and (b1 r) (bs_alt r);
+				      Sparql.formula_and (b1_alt r) (bs r)])
+
+
+let rec sparql_of_ctx_p1 state ~prefix (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
     let prefix =
       if prefix = ""
@@ -383,6 +412,7 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> Sparql.formula) : ctx_p1
     let d_det = sparql_of_elt_s2_as_p1 state det in
     sparql_of_ctx_s1 state
       (fun d2 -> q_det d d2)
+      (fun d2 -> Sparql.False)
       (fun x -> Sparql.formula_and (d x) (d_det x))
       ctx
   | AndX (i,ar,ctx) ->
@@ -394,7 +424,7 @@ let rec sparql_of_ctx_p1 state ~prefix (d : Rdf.term -> Sparql.formula) : ctx_p1
   | OrX (i,ar,ctx) -> sparql_of_ctx_p1 state ~prefix d ctx
   | MaybeX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
   | NotX ctx -> sparql_of_ctx_p1 state ~prefix d ctx
-and sparql_of_ctx_s1 state (q : (Rdf.term -> Sparql.formula) -> Sparql.formula) (d : Rdf.term -> Sparql.formula) : ctx_s1 -> Sparql.formula = function
+and sparql_of_ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
   | IsX ctx -> sparql_of_ctx_p1 state ~prefix:"" d ctx
   | HasX (p,ctx) ->
     sparql_of_ctx_p1 state ~prefix:""
@@ -410,23 +440,37 @@ and sparql_of_ctx_s1 state (q : (Rdf.term -> Sparql.formula) -> Sparql.formula) 
       (fun x -> q (fun y -> q_np (fun z -> sparql_arg arg x y z)))
       ctx
   | TripleX2 (arg,np,ctx) ->
+    let b_np = sparql_of_elt_s1_bis state ~prefix:(prefix_of_arg1 arg) q q_alt np in
+    sparql_of_ctx_p1 state ~prefix:""
+      (fun x -> b_np (fun y z -> sparql_arg arg x y z))
+      ctx
+(*
     let q_np = sparql_of_elt_s1 state ~prefix:(prefix_of_arg1 arg) np in
     sparql_of_ctx_p1 state ~prefix:""
       (fun x -> q_np (fun y -> q (fun z -> sparql_arg arg x y z)))
       ctx
+*)
   | ReturnX ->
     q (fun t -> Sparql.True)
   | NAndX (i,ar,ctx) ->
     let ar_q = Array.mapi (fun j elt -> if j=i then q else sparql_of_elt_s1 state ~prefix:"" elt) ar in
+    let ar_q_alt = let ar = Array.copy ar_q in ar.(i) <- q_alt; ar in
     let ar_d = Array.mapi (fun j elt -> if j=i then d else sparql_of_elt_s1_as_p1 state elt) ar in
     sparql_of_ctx_s1 state
       (fun d ->	Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
+      (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
       (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
-  | NOrX (i,ar,ctx) -> sparql_of_ctx_s1 state q d ctx
-  | NMaybeX ctx -> sparql_of_ctx_s1 state q d ctx
-  | NNotX ctx -> sparql_of_ctx_s1 state q d ctx
+  | NOrX (i,ar,ctx) ->
+    let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else sparql_of_elt_s1 state ~prefix:"" elt) ar in
+    sparql_of_ctx_s1 state
+      q
+      (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
+      d
+      ctx
+  | NMaybeX ctx -> sparql_of_ctx_s1 state q q_alt d ctx
+  | NNotX ctx -> sparql_of_ctx_s1 state q q_alt d ctx
 
 type sparql_template = ?constr:constr -> limit:int -> string
 
@@ -455,6 +499,7 @@ let sparql_of_focus (focus : focus) : Rdf.term list * sparql_template option * s
 	let d = sparql_of_elt_s1_as_p1 state f in
 	sparql_of_ctx_s1 state
 	  (fun d -> q (fun t -> state#add_focus_term t; d t))
+	  (fun d -> Sparql.False)
 	  (fun x -> state#add_focus_term x; d x)
 	  ctx
       | AtS f ->
