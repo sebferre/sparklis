@@ -27,7 +27,7 @@ and print_p1 = function
   | IsOf (p,np) -> print_bin "IsOf" (print_uri p) (print_s1 np)
   | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | Search c -> print_un "Search" (print_constr c)
-  | Constr c -> print_un "Constr" (print_constr c)
+  | Filter c -> print_un "Filter" (print_constr c)
   | And ar -> print_ar print_p1 "And" ar
   | Or ar -> print_ar print_p1 "Or" ar
   | Maybe f -> print_un "Maybe" (print_p1 f)
@@ -126,7 +126,8 @@ and parse_p1 = parser
   | [< p, np = parse_bin "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
   | [< arg, np1, np2 = parse_ter "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
   | [< c = parse_un "Search" parse_constr >] -> Search c
-  | [< c = parse_un "Constr" parse_constr >] -> Constr c
+  | [< c = parse_un "Filter" parse_constr >] -> Filter c
+  | [< c = parse_un "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
   | [< ar = parse_ar parse_p1 "And" >] -> And ar
   | [< ar = parse_ar parse_p1 "Or" >] -> Or ar
   | [< f = parse_un "Maybe" parse_p1 >] -> Maybe f

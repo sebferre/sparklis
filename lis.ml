@@ -119,14 +119,14 @@ object (self)
   val mutable focus_term_list : Rdf.term list = []
   method focus_term_list = focus_term_list
 
-  val mutable query_opt : Lisql.sparql_template option = None
-  val mutable query_class_opt : Lisql.sparql_template option = None
-  val mutable query_prop_has_opt : Lisql.sparql_template option = None
-  val mutable query_prop_isof_opt : Lisql.sparql_template option = None
+  val mutable query_opt : Lisql2sparql.template option = None
+  val mutable query_class_opt : Lisql2sparql.template option = None
+  val mutable query_prop_has_opt : Lisql2sparql.template option = None
+  val mutable query_prop_isof_opt : Lisql2sparql.template option = None
 
   method private init =
     begin
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql.sparql_of_focus focus in
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus focus in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
@@ -212,7 +212,7 @@ object (self)
     let sparql_term =
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
-	Sparql.pattern_of_formula (Lisql.sparql_search_constr (Rdf.Var "term") constr) ^
+	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
 	" } LIMIT 200" in
     Firebug.console##log(string sparql_term);
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
@@ -242,14 +242,14 @@ object (self)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
-	Sparql.pattern_of_formula (Lisql.sparql_constr (Rdf.Var "class") constr) ^
+	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "class") constr) ^
 	" } LIMIT 500" in
     let sparql_prop =
       "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
         "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
-	Sparql.pattern_of_formula (Lisql.sparql_constr (Rdf.Var "prop") constr) ^
+	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "prop") constr) ^
 	" } LIMIT 500" in
     Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
       (function
@@ -259,11 +259,11 @@ object (self)
 	  else
 	    let sparql_class =
 	      "SELECT DISTINCT ?class WHERE { [] a ?class " ^
-		Sparql.pattern_of_formula (Lisql.sparql_constr (Rdf.Var "class") constr) ^
+		Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "class") constr) ^
 		" } LIMIT 200" in
 	    let sparql_prop =
 	      "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
-		Sparql.pattern_of_formula (Lisql.sparql_constr (Rdf.Var "prop") constr) ^
+		Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "prop") constr) ^
 		" } LIMIT 200" in
 	    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	      (function
@@ -291,17 +291,17 @@ object (self)
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
 	Sparql.select ~dimensions:["class"] ~limit:max_classes
 	  (Sparql.pattern_of_formula
-	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql.sparql_constr (Rdf.Var "class") constr))) in
+	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "class") constr))) in
       let sparql_has =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index) in
 	Sparql.select ~dimensions:["prop"] ~limit:max_properties
 	  (Sparql.pattern_of_formula
-	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql.sparql_constr (Rdf.Var "prop") constr))) in
+	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "prop") constr))) in
       let sparql_isof =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index) in
 	Sparql.select ~dimensions:["prop"] ~limit:max_properties
 	  (Sparql.pattern_of_formula
-	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql.sparql_constr (Rdf.Var "prop") constr))) in
+	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "prop") constr))) in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	(function
 	  | [results_a; results_has; results_isof] ->

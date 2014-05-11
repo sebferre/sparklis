@@ -100,7 +100,7 @@ let html_word = function
   | `Op op -> html_modifier op
   | `DummyFocus -> html_dummy_focus
 
-let html_nl_focus dico (foc : nl_focus) (html : string) : string =
+let html_nl_focus dico (foc : Lisql2nl.nl_focus) (html : string) : string =
   match foc with
     | `NoFocus -> html
     | `Focus (focus, pos) ->
@@ -116,12 +116,12 @@ let html_nl_focus dico (foc : nl_focus) (html : string) : string =
       then html_current_focus html
       else html
 
-let rec html_s dico (foc, nl : nl_s) : string =
+let rec html_s dico (foc, nl : Lisql2nl.s) : string =
   let html =
     match nl with
       | `Return np -> html_return (html_np dico np) in
   html_nl_focus dico foc html			  
-and html_np dico (foc, nl : nl_np) : string =
+and html_np dico (foc, nl : Lisql2nl.np) : string =
   let html =
     match nl with
       | `PN (w, rel) -> html_word w ^ html_rel_opt dico rel
@@ -136,22 +136,22 @@ and html_np dico (foc, nl : nl_np) : string =
       | `Maybe (suspended, np) -> html_maybe ~suspended (html_np dico np)
       | `Not (suspended, np) -> html_not ~suspended (html_np dico np) in
   html_nl_focus dico foc html
-and html_qu : nl_qu -> string = function
+and html_qu : Lisql2nl.qu -> string = function
   | `A -> "a "
   | `Any susp -> html_suspended ~suspended:susp (html_modifier "any ")
   | `The -> "the "
   | `All -> "all "
   | `One -> "one "
-and html_adj : nl_adj -> string = function
+and html_adj : Lisql2nl.adj -> string = function
   | `Nil -> ""
   | `Order w -> html_word w ^ " "
   | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj a ^ html_word w) ^ " "
   | `Adj (a, w) -> html_adj a ^ html_word w ^ " "
 and html_rel_opt dico foc_nl =
-  if foc_nl = top_rel
+  if foc_nl = Lisql2nl.top_rel
   then ""
   else " " ^ html_rel dico foc_nl
-and html_rel dico (foc, nl : nl_rel) : string =
+and html_rel dico (foc, nl : Lisql2nl.rel) : string =
   match nl with (* transformations *)
     | `That (_, `And ar) -> html_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
     | `That (_, `Or (susp,ar)) -> html_rel dico (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
@@ -169,7 +169,7 @@ and html_rel dico (foc, nl : nl_rel) : string =
 	  | `And ar -> html_and (Array.map (html_rel dico) ar)
 	  | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_rel dico) ar) in
       html_nl_focus dico foc html
-and html_vp dico (foc, nl : nl_vp) : string =
+and html_vp dico (foc, nl : Lisql2nl.vp) : string =
   let html =
     match nl with
       | `IsThere -> html_ellipsis
@@ -185,14 +185,14 @@ and html_vp dico (foc, nl : nl_vp) : string =
       | `Not (suspended, vp) -> html_not ~suspended (html_vp dico vp)
       | `DummyFocus -> html_dummy_focus in
   html_nl_focus dico foc html
-and html_pp_list dico : nl_pp list -> string = function
+and html_pp_list dico : Lisql2nl.pp list -> string = function
   | [] -> ""
   | pp::lpp -> " " ^ html_pp dico pp ^ html_pp_list dico lpp
-and html_pp dico : nl_pp -> string = function
+and html_pp dico : Lisql2nl.pp -> string = function
   | `Prep (prep,np) -> html_word prep ^ " " ^ html_np dico np
   | `PrepBin (prep1,np1,prep2,np2) -> html_word prep1 ^ " " ^ html_np dico np1 ^ " " ^ html_word prep2 ^ " " ^ html_np dico np2
 
-let html_focus dico focus = html_s dico (s_of_focus focus)
+let html_focus dico focus = html_s dico (Lisql2nl.s_of_focus focus)
 
 
 (* HTML of increment lists *)
@@ -235,9 +235,15 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
-      | IncrUnselect -> html_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel (Unselect,Unordered))
-      | IncrAggreg g -> html_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel (Aggreg (g,Unordered),Unordered))
-      | IncrOrder order -> html_np dico_incrs#dico_foci (head_of_modif `NoFocus `DummyFocus top_rel (Select,order))
+      | IncrUnselect ->
+	html_np dico_incrs#dico_foci
+	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
+      | IncrAggreg g ->
+	html_np dico_incrs#dico_foci
+	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
+      | IncrOrder order ->
+	html_np dico_incrs#dico_foci
+	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
   in
   let text_freq =
     if freq = 1
