@@ -45,6 +45,7 @@ let html_uri uri = html_span ~classe:"URI" ~title:uri (name_of_uri uri)
 let html_class c = html_span ~classe:"classURI" ~title:c (name_of_uri c)
 let html_prop p = html_span ~classe:"propURI" ~title:p (name_of_uri p)
 let html_modifier m = html_span ~classe:"modifier" m
+let html_id id = html_span ~classe:"lisqlID" (string_of_int id) (* TODO: verbalize ids *)
 
 let rec html_term ?(link = false) = function
   | Rdf.URI uri ->
@@ -98,6 +99,7 @@ let html_word = function
   | `Relation -> "relation"
   | `Literal l -> html_literal l
   | `Op op -> html_modifier op
+  | `Id id -> html_id id
   | `DummyFocus -> html_dummy_focus
 
 let html_nl_focus dico (foc : Lisql2nl.nl_focus) (html : string) : string =
@@ -217,11 +219,15 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
 	( match focus with
 	  | AtS1 _ -> html_term t
 	  | _ -> html_increment_coordinate focus ("that is " ^ html_term t) )
+      | IncrId id ->
+	( match focus with
+	  | AtS1 _ -> "the " ^ html_id id
+	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id id) )
       | IncrClass c ->
 	( match focus with
 	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
-	  | AtS1 (Det (An (_, Thing), _), _) -> "a " ^ html_class c
-	  | AtS1 (Det (An (_, Class c0), _), _) when c0 = c ->
+	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_class c
+	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
 	    (*"<del>a " ^ html_class c ^ "</del>"*)
 	    "a " ^ html_class c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
 	  | _ -> html_increment_coordinate focus ("that is a " ^ html_class c) )

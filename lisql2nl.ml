@@ -11,6 +11,7 @@ type word =
   | `Op of string
   | `Term of Rdf.term
   | `Literal of string
+  | `Id of id
   | `DummyFocus ]
 
 type nl_focus =
@@ -145,7 +146,8 @@ and np_of_elt_s1 pos ctx f : np =
     | NNot elt -> foc, `Not (false, np_of_elt_s1 (focus_pos_down pos) (NNotX ctx) elt)
 and det_of_elt_s2 foc rel : elt_s2 -> np = function
   | Term t -> foc, `PN (`Term t, rel)
-  | An (modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
+  | An (id, modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> `Class c) rel modif
+  | The id -> foc, `Qu (`The, `Nil, `Id id, top_rel)
 and s_of_elt_s pos : elt_s -> s = function
   | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 (focus_pos_down pos) ReturnX np)
 

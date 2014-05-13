@@ -116,6 +116,8 @@ object (self)
 
   (* derived state *)
 
+  val mutable var_id_list : (Rdf.var * Lisql.id) list = []
+
   val mutable focus_term_list : Rdf.term list = []
   method focus_term_list = focus_term_list
 
@@ -126,7 +128,8 @@ object (self)
 
   method private init =
     begin
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus focus in
+      let vi_list, t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus focus in
+      var_id_list <- vi_list;
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
@@ -184,6 +187,38 @@ object (self)
   method results_page offset limit = page_of_results offset limit results
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
+
+  method index_ids =
+    match focus_term_list with
+      | [focus_term] ->
+	let dim = results.Sparql_endpoint.dim in
+	let vars = results.Sparql_endpoint.vars in
+	let freqs = Array.make dim 0 in
+	List.iter
+	  (fun binding ->
+	    let t_focus_opt =
+	      match focus_term with
+		| Rdf.Var v -> binding.(List.assoc v vars)
+		| t -> Some t in
+	    Array.iteri
+	      (fun i t_opt ->
+		match t_opt, t_focus_opt with
+		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		  | _ -> ())
+	      binding)
+	  results.Sparql_endpoint.bindings;
+	let ref_index = ref [] in
+	for i = dim-1 downto 0 do
+	  if freqs.(i) <> 0 then begin
+	    let v = try list_rev_assoc i vars with _ -> assert false in
+	    if focus_term <> (Rdf.Var v) then begin
+	      let id = try List.assoc v var_id_list with _ -> 0 (* TODO *) in
+	      ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
+	    end
+	  end
+	done;
+	!ref_index
+      | _ -> []
 
   method index_terms =
     if focus_term_index = []
@@ -343,7 +378,7 @@ object (self)
 	      | AtS1 (f,ctx) ->
 		let modifs =
 		  match f with
-		    | Det (An (modif, head), _) ->
+		    | Det (An (id, modif, head), _) ->
 		      let modifs =
 			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
 			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
@@ -361,7 +396,7 @@ object (self)
 		let modifs =
 		  if ctx = ReturnX
 		  then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
-		    if f = top_s1
+		    if is_top_s1 f
 		    then modifs
 		    else IncrOr :: modifs
 		  else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in

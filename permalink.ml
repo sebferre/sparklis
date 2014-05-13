@@ -4,6 +4,7 @@ open Lisql
 
 (* printing *)
 
+let print_int i = Printf.sprintf "%d" i
 let print_float f = Printf.sprintf "%F" f
 let print_string s = Printf.sprintf "%S" s
 let print_atom f = f
@@ -41,7 +42,8 @@ and print_s1 = function
   | NNot f -> print_un "NNot" (print_s1 f)
 and print_s2 = function
   | Term t -> print_un "Term" (print_term t)
-  | An (modif,head) -> print_bin "An" (print_modif modif) (print_head head)
+  | An (id,modif,head) -> print_ter "An" (print_id id) (print_modif modif) (print_head head)
+  | The id -> print_un "The" (print_id id)
 and print_head = function
   | Thing -> print_atom "Thing"
   | Class c -> print_un "Class" (print_uri c)
@@ -87,6 +89,7 @@ and print_term = function
   | Var v -> print_un "Var" (print_var v)
 and print_uri uri = print_string uri
 and print_var v = print_string v
+and print_id id = print_int id
 
 let of_query (q : elt_s) : string = print_s q
 
@@ -96,6 +99,7 @@ open Genlex
 
 let lexer = make_lexer ["("; ")"; ","]
 
+let parse_int = parser [< 'Int i >] -> i
 let parse_float = parser [< 'Float f >] -> f
 let parse_string = parser [< 'String s >] -> s
 let parse_atom f = parser [< 'Ident id when id = f >] -> ()
@@ -141,7 +145,8 @@ and parse_s1 = parser
   | [< f = parse_un "NNot" parse_s1 >] -> NNot f
 and parse_s2 = parser
   | [< t = parse_un "Term" parse_term >] -> Term t
-  | [< modif, head = parse_bin "An" parse_modif parse_head >] -> An (modif, head)
+  | [< id, modif, head = parse_ter "An" parse_id parse_modif parse_head >] -> An (id, modif, head)
+  | [< id = parse_un "The" parse_id >] -> The id
 and parse_head = parser
   | [< _ = parse_atom "Thing" >] -> Thing
   | [< c = parse_un "Class" parse_uri >] -> Class c
@@ -187,5 +192,6 @@ and parse_term = parser
   | [< v = parse_un "Var" parse_var >] -> Var v
 and parse_uri = parser [< s = parse_string >] -> s
 and parse_var = parser [< s = parse_string >] -> s
+and parse_id = parser [< i = parse_int >] -> i
 
 let to_query (str : string) : elt_s = parse_s (lexer (Stream.of_string str))

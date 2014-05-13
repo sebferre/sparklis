@@ -114,7 +114,7 @@ end
 
 class place =
 object (self)
-  val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.home_focus
+  val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.factory#home_focus
 (*  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.home_focus *)
   method lis = lis
 
@@ -211,7 +211,7 @@ object (self)
 	    (html_count_unit (List.length index) 100 "entity" "entities")))
 
   method private refresh_term_increments =
-    let index = lis#index_terms in
+    let index = lis#index_ids @ lis#index_terms in
     jquery "#list-terms" (fun elt ->
       elt##innerHTML <- string
 	(html_index lis#focus dico_incrs index);
@@ -296,7 +296,7 @@ object (self)
 		  self#refresh_modifier_increments ~init:false ))))
 
   method is_home =
-    lis#focus = Lisql.home_focus
+    Lisql.is_home_focus lis#focus
 
   method set_term_constr constr =
     if constr <> term_constr
@@ -417,7 +417,8 @@ object (self)
 
   method change_endpoint url =
     present#lis#abort_all_ajax;
-    let p = present#new_place url Lisql.home_focus in
+    let focus = Lisql.factory#reset; Lisql.factory#home_focus in
+    let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
     p#refresh
@@ -434,7 +435,7 @@ object (self)
 
   method home =
     self#update_focus ~push_in_history:true
-      (fun _ -> Some Lisql.home_focus)
+      (fun _ -> Lisql.factory#reset; Some Lisql.factory#home_focus)
 
   method back : unit =
     match past with

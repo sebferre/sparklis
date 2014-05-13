@@ -1,4 +1,5 @@
 
+open Jsutils
 open Lisql
 
 (* translation from LISQL elts to SPARQL queries *)
@@ -32,6 +33,12 @@ object
   val mutable focus_terms : Rdf.term list = []
   method add_focus_term t = if not (List.mem t focus_terms) then focus_terms <- t::focus_terms
   method focus_terms = focus_terms
+
+  val mutable var_id_list : (Rdf.var * id) list = []
+  method set_id v id = var_id_list <- (v,id)::var_id_list
+  method id_of_var v = try List.assoc v var_id_list with _ -> failwith "Lisql2sparql.state#id_of_var"
+  method var_of_id id = try list_rev_assoc id var_id_list with _ -> failwith "Lisql2sparql.state#var_of_id"
+  method var_id_list = var_id_list
 
   val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
   method set_modif (v : Rdf.var) (modif : modif_s2) : unit =
@@ -172,12 +179,17 @@ and elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
     (fun x -> Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))
 (*    (fun x -> "BIND (" ^ Sparql.term t ^ " AS " ^ Sparql.term x ^ ")") *)
-  | An (_modif,head) ->
+  | An (_id, _modif,head) ->
     let d_head =
       match head with
 	| Thing -> (fun x -> Sparql.True)
 	| Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) in
     d_head
+  | The id ->
+    (fun x ->
+      let v = state#var_of_id id in
+      let t = Rdf.Var v in
+      Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))    
 and elt_s1 state ~prefix : elt_s1 -> sparql_s1 = function
   | Det (det,rel_opt) ->
     let prefix =
@@ -205,12 +217,18 @@ and elt_s1 state ~prefix : elt_s1 -> sparql_s1 = function
     (fun d -> Sparql.formula_not (q d))
 and elt_s2 state ~prefix : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
-  | An (modif, head) ->
+  | An (id, modif, head) ->
     let prefix, qhead = elt_head state ~prefix head in
     let v = state#new_var prefix in
+    state#set_id v id;
     state#set_modif v modif;
     let t = Rdf.Var v in
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d1 t) (d2 t)))
+  | The id ->
+    (fun d1 d2 ->
+      let v = state#var_of_id id in
+      let t = Rdf.Var v in
+      Sparql.formula_and (d1 t) (d2 t))
 and elt_head state ~prefix : elt_head -> string * (Rdf.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
     let prefix = if prefix<>"" then prefix else "thing" in
@@ -323,7 +341,7 @@ and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 ->
 
 type template = ?constr:constr -> limit:int -> string
 
-let focus (focus : focus) : Rdf.term list * template option * template option * template option * template option =
+let focus (focus : focus) : (Rdf.var * id) list * Rdf.term list * template option * template option * template option * template option =
   let state = new state in
   let form =
     match focus with
@@ -355,6 +373,7 @@ let focus (focus : focus) : Rdf.term list * template option * template option * 
 	(*state#set_focus_term None;*)
 	elt_s state f
   in
+  let vi_list = state#var_id_list in
   let t_list = state#focus_terms in
   let query_opt =
     if form = Sparql.True
@@ -408,4 +427,4 @@ let focus (focus : focus) : Rdf.term list * template option * template option * 
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Rdf.Bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Rdf.Bnode "") tp t)) in
-  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
+  vi_list, t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt

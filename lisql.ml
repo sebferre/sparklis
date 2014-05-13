@@ -59,6 +59,7 @@ let compile_constr constr : Rdf.term -> bool =
 	| _ -> false)
 
 (* LISQL modifiers *)
+type id = int
 type arg = S | P | O
 type order = Unordered | Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
@@ -87,20 +88,13 @@ and elt_s1 =
   | NNot of elt_s1
 and elt_s2 =
   | Term of Rdf.term
-  | An of modif_s2 * elt_head
+  | An of id * modif_s2 * elt_head (* existential quantifier *)
+  | The of id (* co-reference *)
 and elt_head =
   | Thing
   | Class of Rdf.uri
 and elt_s =
   | Return of elt_s1
-
-let top_p1 = IsThere
-let top_s2 = An ((Select, Unordered), Thing)
-let top_s1 = Det (top_s2,None)
-
-let s2_of_term t = Term t
-let s1_of_term t = Det (s2_of_term t, None)
-let p1_of_term t = Is (s1_of_term t)
 
 (* LISQL contexts *)
 type ctx_p1 =
@@ -126,6 +120,23 @@ type focus =
   | AtP1 of elt_p1 * ctx_p1
   | AtS1 of elt_s1 * ctx_s1
   | AtS of elt_s
+
+let factory =
+object (self)
+  val mutable cpt_id = 0
+  method new_id = cpt_id <- cpt_id + 1; cpt_id
+  method reset = cpt_id <- 0
+
+  method top_p1 = IsThere
+  method top_s2 = An (self#new_id, (Select, Unordered), Thing)
+  method top_s1 = Det (self#top_s2, None)
+  method home_focus = AtS1 (self#top_s1, ReturnX)
+end
+
+let is_top_p1 = function IsThere -> true | _ -> false
+let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
+let is_top_s1 = function Det (det, None) -> is_top_s2 det | _ -> false
+let is_home_focus = function AtS1 (f, ReturnX) -> is_top_s1 f | _ -> false
 
 (* extraction of LISQL s element from focus *)
 
@@ -154,8 +165,6 @@ let elt_s_of_focus = function
 
 (* focus moves *)
 
-let home_focus = AtS1 (top_s1, ReturnX)
-
 let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Is np -> Some (AtS1 (np, IsX ctx))
   | Type _ -> None
@@ -171,7 +180,7 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
-  | Det (An (modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (modif, Thing), ctx))))
+  | Det (An (id, modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (id, modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
   | NAnd ar -> Some (AtS1 (ar.(0), NAndX (0,ar,ctx)))
@@ -308,6 +317,7 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 
 type increment =
   | IncrTerm of Rdf.term
+  | IncrId of id
   | IncrIs
   | IncrClass of Rdf.uri
   | IncrProp of Rdf.uri
@@ -324,6 +334,7 @@ type increment =
 
 let term_of_increment : increment -> Rdf.term option = function
   | IncrTerm t -> Some t
+  | IncrId id -> None
   | IncrClass c -> Some (Rdf.URI c)
   | IncrProp p -> Some (Rdf.URI p)
   | IncrInvProp p -> Some (Rdf.URI p)
@@ -381,6 +392,27 @@ let insert_elt_p1 elt = function
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtS _ -> None
 
+let insert_elt_s2 det focus =
+  let focus2_opt =
+    match focus with
+      | AtP1 _ -> insert_elt_p1 (Is (Det (det, None))) focus
+      | AtS1 (Det (det2, rel_opt), ctx) ->
+	if det2 = det
+	then Some (AtS1 (Det (factory#top_s2, rel_opt), ctx))
+	else Some (AtS1 (Det (det, rel_opt), ctx))
+      | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+      | _ -> None in
+  match focus2_opt with
+    | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
+    | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
+    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
+    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
+    | other -> other
+
+let insert_term t focus = insert_elt_s2 (Term t) focus
+let insert_id id focus = insert_elt_s2 (The id) focus
+
+(*
 let insert_term t focus =
   let focus2_opt =
     match focus with
@@ -393,7 +425,7 @@ let insert_term t focus =
       | AtP1 _ -> insert_elt_p1 (p1_of_term t) focus
       | AtS1 (Det (det,rel_opt), ctx) ->
 	if det = Term t
-	then Some (AtS1 (Det (top_s2, rel_opt), ctx))
+	then Some (AtS1 (Det (top_s2 ~id:genid#get, rel_opt), ctx))
 	else Some (AtS1 (Det (Term t, rel_opt), ctx))
       | AtS1 _ -> None (* no insertion of terms on complex NPs *)
       | _ -> None in
@@ -403,31 +435,32 @@ let insert_term t focus =
     | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
     | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
     | other -> other
+*)
 
 let insert_class c = function
   | AtS1 (Det (det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
-	Some (AtS1 (Det (An ((Select, Unordered), Class c), rel_opt), ctx))
-      | An (modif, Thing) ->
-	Some (AtS1 (Det (An (modif, Class c), rel_opt), ctx))
-      | An (modif, Class c2) when c2 = c ->
-	Some (AtS1 (Det (An (modif, Thing), rel_opt), ctx))
+	Some (AtS1 (Det (An (factory#new_id, (Select, Unordered), Class c), rel_opt), ctx))
+      | An (id, modif, Thing) ->
+	Some (AtS1 (Det (An (id, modif, Class c), rel_opt), ctx))
+      | An (id, modif, Class c2) when c2 = c ->
+	Some (AtS1 (Det (An (id, modif, Thing), rel_opt), ctx))
       | _ ->
 	let rel = match rel_opt with None -> IsThere | Some rel -> rel in
 	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
   | focus -> insert_elt_p1 (Type c) focus
 
 let insert_property p focus =
-  let foc_opt = insert_elt_p1 (Has (p, top_s1)) focus in
+  let foc_opt = insert_elt_p1 (Has (p, factory#top_s1)) focus in
   focus_moves [down_focus] foc_opt
 
 let insert_inverse_property p focus =
-  let foc_opt = insert_elt_p1 (IsOf (p, top_s1)) focus in
+  let foc_opt = insert_elt_p1 (IsOf (p, factory#top_s1)) focus in
   focus_moves [down_focus] foc_opt
 
 let insert_triple arg focus =
-  let foc_opt = insert_elt_p1 (Triple (arg, top_s1, top_s1)) focus in
+  let foc_opt = insert_elt_p1 (Triple (arg, factory#top_s1, factory#top_s1)) focus in
   let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
   focus_moves steps foc_opt
 
@@ -440,49 +473,49 @@ let insert_triplify = function
 
 let insert_constr constr focus =
   match focus with
-    | AtS1 (f, ReturnX) when f = top_s1 -> insert_elt_p1 (Search constr) focus
+    | AtS1 (f, ReturnX) when is_top_s1 f -> insert_elt_p1 (Search constr) focus
     | _ -> insert_elt_p1 (Filter constr) focus
 
 let insert_is focus =
-  let foc_opt = insert_elt_p1 (Is top_s1) focus in
+  let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
   focus_moves [down_focus] foc_opt
 
 let insert_and = function
   | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
   | AtP1 (f, AndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_p1 ctx2 IsThere (And ar))
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx IsThere f)
-  | AtS1 (NAnd ar, ctx) -> Some (append_and_s1 ctx top_s1 (NAnd ar))
-  | AtS1 (f, NAndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_s1 ctx2 top_s1 (NAnd ar))
-  | AtS1 (f, ctx) -> Some (append_and_s1 ctx top_s1 f)
+  | AtS1 (NAnd ar, ctx) -> Some (append_and_s1 ctx factory#top_s1 (NAnd ar))
+  | AtS1 (f, NAndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_s1 ctx2 factory#top_s1 (NAnd ar))
+  | AtS1 (f, ctx) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_or = function
   | AtP1 (Or ar, ctx) -> Some (append_or_p1 ctx IsThere (Or ar))
   | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_p1 ctx2 IsThere (Or ar))
   | AtP1 (f, ctx) -> Some (append_or_p1 ctx IsThere f)
-  | AtS1 (NOr ar, ctx) -> Some (append_or_s1 ctx top_s1 (NOr ar))
-  | AtS1 (f, NOrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_s1 ctx2 top_s1 (NOr ar))
-  | AtS1 (f, ctx) -> Some (append_or_s1 ctx top_s1 f)
+  | AtS1 (NOr ar, ctx) -> Some (append_or_s1 ctx factory#top_s1 (NOr ar))
+  | AtS1 (f, NOrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_s1 ctx2 factory#top_s1 (NOr ar))
+  | AtS1 (f, ctx) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if f = top_p1 then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))
+  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))
   | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if f = top_s1 then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))
+  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))
   | _ -> None
 
 let insert_not = function
   | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if f = top_p1 then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
+  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
   | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if f = top_s1 then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
+  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
   | _ -> None
 
 let insert_modif_transf f = function
-  | AtS1 (Det (An (modif, head), rel_opt), ctx) ->
+  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) ->
     let modif2 = f modif in
-    let foc2 = AtS1 (Det (An (modif2, head), rel_opt), ctx) in
+    let foc2 = AtS1 (Det (An (id, modif2, head), rel_opt), ctx) in
     ( match fst modif2 with
       | Unselect | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
       | _ -> Some foc2 )
@@ -491,6 +524,7 @@ let insert_modif_transf f = function
 let insert_increment incr focus =
   match incr with
     | IncrTerm t -> insert_term t focus
+    | IncrId id -> insert_id id focus
     | IncrClass c -> insert_class c focus
     | IncrProp p -> insert_property p focus
     | IncrInvProp p -> insert_inverse_property p focus
@@ -552,28 +586,31 @@ let rec delete_ctx_p1 = function
       | `Array (ar2, i2) -> Some (AtP1 (ar2.(i2), OrX (i2, ar2, ctx))) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
-and delete_ctx_s1 f ctx =
+and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX _
     | HasX _
     | IsOfX _
     | TripleX1 _
     | TripleX2 _ 
-    | ReturnX -> if f = top_s1 then None else Some (AtS1 (top_s1, ctx))
+    | ReturnX ->
+      ( match f_opt with
+	| None -> None
+	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | NAndX (i,ar,ctx2) ->
       ( match delete_array ar i with
-	| `Empty -> delete_ctx_s1 top_s1 ctx2
+	| `Empty -> delete_ctx_s1 None ctx2
 	| `Single elt -> Some (AtS1 (elt, ctx2))
 	| `Array (ar2,i2) -> Some (AtS1 (ar2.(i2), NAndX (i2,ar2,ctx2))) )
     | NOrX (i,ar,ctx2) ->
       ( match delete_array ar i with
-	| `Empty -> delete_ctx_s1 top_s1 ctx2
+	| `Empty -> delete_ctx_s1 None ctx2
 	| `Single elt -> Some (AtS1 (elt, ctx2))
 	| `Array (ar2, i2) -> Some (AtS1 (ar2.(i2), NOrX (i2, ar2, ctx2))) )
-    | NMaybeX ctx2 -> delete_ctx_s1 f ctx2
-    | NNotX ctx2 -> delete_ctx_s1 f ctx2
+    | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
+    | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
-  | AtS1 (f, ctx) -> delete_ctx_s1 f ctx
-  | AtS _ -> Some (AtS (Return top_s1))
+  | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
+  | AtS _ -> Some (AtS (Return factory#top_s1))

@@ -52,3 +52,7 @@ let escapeHTML (str : string) : string =
   let div = Dom_html.createDiv Dom_html.document in
   ignore (div##appendChild((Dom_html.document##createTextNode(string str) :> Dom.node t)));
   to_string (div##innerHTML)
+
+(* other utilities *)
+
+let list_rev_assoc y l = fst (List.find (fun (x1,y1) -> y1=y) l)
