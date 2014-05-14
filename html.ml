@@ -41,15 +41,6 @@ end
 
 (* pretty-printing of terms, NL in HTML *)
 
-let name_of_uri uri =
-  let uri = to_string (decodeURI (string uri)) in
-  let s =
-    match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
-      | Some (_,res) ->
-	( match Regexp.matched_string res with "" -> uri | name -> name )
-      | None -> uri in
-  escapeHTML s
-
 let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp "<") text "&lt;" in
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
@@ -77,28 +68,8 @@ let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
-let html_uri uri = html_span ~classe:"URI" ~title:uri (name_of_uri uri)
-let html_class c = html_span ~classe:"classURI" ~title:c (name_of_uri c)
-let html_prop p = html_span ~classe:"propURI" ~title:p (name_of_uri p)
-let html_modifier m = html_span ~classe:"modifier" m
-let html_id state id = html_span ~classe:"lisqlID" (state#lexicon#get_id_label id)
-
-let rec html_term ?(link = false) = function
-  | Rdf.URI uri ->
-    (*if uri_is_image uri (* too heavy loading *)
-    then
-      if link
-      then html_a uri (html_img uri)
-      else html_img ~height:60 uri
-    else*)
-      if link
-      then html_a uri (name_of_uri uri)
-      else html_uri uri
-  | Rdf.Number (f,s,dt) -> html_term ~link (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> html_literal s ^ " (" ^ name_of_uri dt ^ ")"
-  | Rdf.PlainLiteral (s,lang) -> html_literal s ^ (if lang="" then "" else " (" ^ lang ^ ")")
-  | Rdf.Bnode id -> "_:" ^ id
-  | Rdf.Var v -> "?" ^ v
+let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
+let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
 let html_and ar_html =
   let html = ref ("<ul class=\"list-and\"><li>" ^ ar_html.(0) ^ "</li>") in
@@ -127,15 +98,19 @@ let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
       (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
 
-let html_word state = function
+let html_word ?(link=false) = function
   | `Thing -> "thing"
-  | `Term t -> html_term t
-  | `Class c -> html_class c
-  | `Prop p -> html_prop p
   | `Relation -> html_modifier "relation"
-  | `Literal l -> html_literal l
+  | `Literal s -> html_literal s
+  | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
+  | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
+  | `Entity (uri,s) ->
+    if link
+    then html_a uri (escapeHTML s)
+    else html_uri ~classe:"URI" uri s
+  | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
+  | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
   | `Op op -> html_modifier op
-  | `Id id -> html_id state id
   | `DummyFocus -> html_dummy_focus
 
 let html_nl_focus state (foc : Lisql2nl.nl_focus) (html : string) : string =
@@ -162,13 +137,13 @@ let rec html_s state (foc, nl : Lisql2nl.s) : string =
 and html_np state (foc, nl : Lisql2nl.np) : string =
   let html =
     match nl with
-      | `PN (w, rel) -> html_word state w ^ html_rel_opt state rel
+      | `PN (w, rel) -> html_word w ^ html_rel_opt state rel
       | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, w, rel2)), [])))) ->
-	html_qu qu ^ html_adj state adj ^ html_nl_focus state foc2 (html_word state w ^ html_rel_opt state rel2)
+	html_qu qu ^ html_adj state adj ^ html_nl_focus state foc2 (html_word w ^ html_rel_opt state rel2)
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt state rel
-      | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj state adj ^ html_word state w ^ html_rel_opt state rel
-      | `QuOneOf (_, [w]) -> html_word state w
-      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map (html_word state) lw)
+      | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj state adj ^ html_word w ^ html_rel_opt state rel
+      | `QuOneOf (_, [w]) -> html_word w
+      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map (html_word) lw)
       | `And ar -> html_and (Array.map (html_np state) ar)
       | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_np state) ar)
       | `Maybe (suspended, np) -> html_maybe ~suspended (html_np state np)
@@ -182,9 +157,9 @@ and html_qu : Lisql2nl.qu -> string = function
   | `One -> "one "
 and html_adj state : Lisql2nl.adj -> string = function
   | `Nil -> ""
-  | `Order w -> html_word state w ^ " "
-  | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj state a ^ html_word state w) ^ " "
-  | `Adj (a, w) -> html_adj state a ^ html_word state w ^ " "
+  | `Order w -> html_word w ^ " "
+  | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj state a ^ html_word w) ^ " "
+  | `Adj (a, w) -> html_adj state a ^ html_word w ^ " "
 and html_rel_opt state foc_nl =
   if foc_nl = Lisql2nl.top_rel
   then ""
@@ -199,11 +174,11 @@ and html_rel state (foc, nl : Lisql2nl.rel) : string =
 	  | `Nil -> ""
 	  | `That (_, `IsThere) -> html_ellipsis
 	  | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))), lpp)) ->
-	    "whose " ^ html_nl_focus state foc2 (html_word state p ^ html_pp_list state lpp ^ " " ^ html_vp state (foc3,nl_vp))
+	    "whose " ^ html_nl_focus state foc2 (html_word p ^ html_pp_list state lpp ^ " " ^ html_vp state (foc3,nl_vp))
 	  | `That (_, `IsPP pp) -> html_pp state pp
 	  | `That vp -> "that " ^ html_vp state vp
 	  | `Of np -> "of " ^ html_np state np
-	  | `Ing (w, np) -> html_word state w ^ " " ^ html_np state np
+	  | `Ing (w, np) -> html_word w ^ " " ^ html_np state np
 	  | `And ar -> html_and (Array.map (html_rel state) ar)
 	  | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_rel state) ar) in
       html_nl_focus state foc html
@@ -214,9 +189,9 @@ and html_vp state (foc, nl : Lisql2nl.vp) : string =
       | `IsNP (np,lpp) -> "is " ^ html_np state np ^ html_pp_list state lpp
       | `IsPP pp -> "is " ^ html_pp state pp
       | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp state (foc, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
-      | `HasProp (p, np, lpp) -> "has " ^ html_word state p ^ " " ^ html_np state np ^ html_pp_list state lpp
+      | `HasProp (p, np, lpp) -> "has " ^ html_word p ^ " " ^ html_np state np ^ html_pp_list state lpp
       | `Has (np, lpp) -> "has " ^ html_np state np ^ html_pp_list state lpp
-      | `VT (w, np, lpp) -> html_word state w ^ " " ^ html_np state np ^ html_pp_list state lpp
+      | `VT (w, np, lpp) -> html_word w ^ " " ^ html_np state np ^ html_pp_list state lpp
       | `And ar -> html_and (Array.map (html_vp state) ar)
       | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_vp state) ar)
       | `Maybe (suspended, vp) -> html_maybe ~suspended (html_vp state vp)
@@ -227,10 +202,10 @@ and html_pp_list state : Lisql2nl.pp list -> string = function
   | [] -> ""
   | pp::lpp -> " " ^ html_pp state pp ^ html_pp_list state lpp
 and html_pp state : Lisql2nl.pp -> string = function
-  | `Prep (prep,np) -> html_word state prep ^ " " ^ html_np state np
-  | `PrepBin (prep1,np1,prep2,np2) -> html_word state prep1 ^ " " ^ html_np state np1 ^ " " ^ html_word state prep2 ^ " " ^ html_np state np2
+  | `Prep (prep,np) -> html_word prep ^ " " ^ html_np state np
+  | `PrepBin (prep1,np1,prep2,np2) -> html_word prep1 ^ " " ^ html_np state np1 ^ " " ^ html_word prep2 ^ " " ^ html_np state np2
 
-let html_focus (state : #lisql_state) (focus : focus) : string = html_s state (Lisql2nl.s_of_focus focus)
+let html_focus (state : #lisql_state) (focus : focus) : string = html_s state (Lisql2nl.s_of_focus state#lexicon focus)
 
 
 (* HTML of increment lists *)
@@ -252,23 +227,26 @@ let html_increment_frequency focus state (incr,freq) =
   let text =
     match incr with
       | IncrTerm t ->
+	let html_t = html_word (Lisql2nl.word_of_term t) in
 	( match focus with
-	  | AtS1 _ -> html_term t
-	  | _ -> html_increment_coordinate focus ("that is " ^ html_term t) )
+	  | AtS1 _ -> html_t
+	  | _ -> html_increment_coordinate focus ("that is " ^ html_t) )
       | IncrId id ->
+	let html_id = html_word (Lisql2nl.word_of_id state#lexicon id) in
 	( match focus with
-	  | AtS1 _ -> "the " ^ html_id state id
-	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id state id) )
+	  | AtS1 _ -> "the " ^ html_id
+	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id) )
       | IncrClass c ->
+	let html_c = html_word (Lisql2nl.word_of_class c) in
 	( match focus with
-	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
-	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_class c
+	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_c
+	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_c
 	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
 	    (*"<del>a " ^ html_class c ^ "</del>"*)
-	    "a " ^ html_class c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
-	  | _ -> html_increment_coordinate focus ("that is a " ^ html_class c) )
-      | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_prop p)
-      | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_prop p ^ " of ...")
+	    "a " ^ html_c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
+	  | _ -> html_increment_coordinate focus ("that is a " ^ html_c) )
+      | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_word (Lisql2nl.word_of_property p))
+      | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_word (Lisql2nl.word_of_property p) ^ " of ...")
       | IncrTriple (S | O as arg) -> html_increment_coordinate focus ("that has a relation " ^ (if arg = S then "to ..." else "from ..."))
       | IncrTriple P -> html_increment_coordinate focus "that is a relation from ... to ..."
       | IncrTriplify -> "has a relation from/to"
@@ -309,7 +287,7 @@ let html_index focus state (index : Lisql.increment Lis.index) =
 (* HTML of results *)
 
 let html_img ?(height = 120) url =
-  "<img src=\"" ^ url ^ "\" alt=\"" ^ name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">"
+  "<img src=\"" ^ url ^ "\" alt=\"" ^ Lisql2nl.name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">"
 
 let html_video url mime =
   "<video width=\"320\" height=\"240\" controls>\
@@ -334,8 +312,8 @@ let html_cell t =
 	html_video uri "video/ogg"
       else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
 	html_audio uri "audio/mpeg"
-      else html_term ~link:true t
-    | _ -> html_term ~link:true t
+      else html_word ~link:true (Lisql2nl.word_of_term t)
+    | _ -> html_word ~link:true (Lisql2nl.word_of_term t)
 
 let html_table_of_results ~first_rank ~focus_var results =
   let open Sparql_endpoint in
