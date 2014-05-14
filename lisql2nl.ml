@@ -1,4 +1,5 @@
 
+open Jsutils
 open Lisql
 
 (* NL generation from focus *)
@@ -61,6 +62,105 @@ let top_vp = `Nofocus, `IsThere
 let top_rel = `NoFocus, `Nil
 let top_np = `NoFocus, `Qu (`A, `Nil, `Thing, top_rel)
 let top_s = `NoFocus, `Return top_np
+
+(* verbalization of URIs and ids *)
+
+(*
+let label_of_uri uri =
+  let uri = Js.to_string (Js.decodeURI (Js.string uri)) in
+  let s =
+    match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
+      | Some (_,res) ->
+	( match Regexp.matched_string res with "" -> uri | name -> name )
+      | None -> uri in
+  escapeHTML s
+*)
+
+let labels_of_uri uri = (* for variable names *)
+  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
+    | Some (i,res) -> [Regexp.matched_string res]
+    | None -> []
+
+class lexicon =
+object (self)
+  method labels_uri (uri : Rdf.uri) : string list = labels_of_uri uri
+
+  val mutable prefix_cpt = []
+  method private new_label prefix =
+    let k =
+      try
+	let cpt = List.assoc prefix prefix_cpt in
+	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
+	cpt+1
+      with Not_found ->
+	prefix_cpt <- (prefix,1)::prefix_cpt;
+	1 in
+    let l = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
+    l
+
+  val mutable id_label_rev_list : (id * string) list = []
+
+  method set_id_labels (id : id) (labels : string list) : unit =
+    let labels = list_to_set labels in (* removing duplicates *)
+    let labels = if labels = [] then ["thing"] else labels in (* default label *)
+    let labels = List.map self#new_label labels in (* numbering duplicates *)
+    id_label_rev_list <- (id, List.hd labels)::id_label_rev_list
+
+  method get_id_label (id : id) : string =
+    List.assoc id id_label_rev_list
+
+  method get_label_id (l : string) : id =
+    list_rev_assoc l id_label_rev_list
+
+  method id_label_list = List.rev id_label_rev_list
+
+end
+
+let labels_of_arg0 = function P -> ["relation"] | S | O -> []
+let labels_of_arg1 = function S -> ["relation"] | P | O -> []
+let labels_of_arg2 = function O -> ["relation"] | S | P -> []
+
+let rec labels_elt_p1 lex : elt_p1 -> string list = function
+  | Is np -> labels_elt_s1 lex ~labels:[] np
+  | Type c -> lex#labels_uri c
+  | Has (p,np) -> let _ = labels_elt_s1 lex ~labels:(lex#labels_uri p) np in []
+  | IsOf (p,np) -> let _ = labels_elt_s1 lex ~labels:[] np in lex#labels_uri p
+  | Triple (arg,np1,np2) ->
+    let _ = labels_elt_s1 lex ~labels:(labels_of_arg1 arg) np1 in
+    let _ = labels_elt_s1 lex ~labels:(labels_of_arg2 arg) np2 in
+    labels_of_arg0 arg
+  | Search c -> []
+  | Filter c -> []
+  | And ar ->
+    let ar_labels = Array.map (fun f -> labels_elt_p1 lex f) ar in
+    List.concat (Array.to_list ar_labels)
+  | Or ar -> []
+  | Maybe f -> []
+  | Not f -> []
+  | IsThere -> []
+and labels_elt_s1 lex ~labels : elt_s1 -> string list = function
+  | Det (An (id, modif, head), rel_opt) ->
+    let l_head = match head with Thing -> [] | Class c -> lex#labels_uri c in
+    let l_rel_opt = match rel_opt with None -> [] | Some rel -> labels_elt_p1 lex rel in
+    let labels = l_head @ labels @ l_rel_opt in
+    lex#set_id_labels id labels;
+    labels
+  | Det (_,rel_opt) ->
+    let l_rel_opt = match rel_opt with None -> [] | Some rel -> labels_elt_p1 lex rel in
+    labels @ l_rel_opt
+  | NAnd ar -> Array.iter (fun f -> ignore (labels_elt_s1 lex ~labels f)) ar; []
+  | NOr ar -> Array.iter (fun f -> ignore (labels_elt_s1 lex ~labels f)) ar; []
+  | NMaybe f -> ignore (labels_elt_s1 lex ~labels f); []
+  | NNot f -> ignore (labels_elt_s1 lex ~labels f); []
+and labels_elt_s lex : elt_s -> unit = function
+  | Return np -> ignore (labels_elt_s1 lex ~labels:["result"] np)
+
+let lexicon_of_focus focus : lexicon =
+  let lex = new lexicon in
+  labels_elt_s lex (elt_s_of_focus focus);
+  lex
+
+(* verbalization of focus *)
 
 let np_of_word w = `NoFocus, `PN (w, top_rel)
 let np_of_literal l = np_of_word (`Literal l)

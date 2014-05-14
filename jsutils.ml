@@ -56,3 +56,11 @@ let escapeHTML (str : string) : string =
 (* other utilities *)
 
 let list_rev_assoc y l = fst (List.find (fun (x1,y1) -> y1=y) l)
+
+(* retaining first occurences and removing duplicates *)
+let list_to_set l =
+  let rec aux acc = function
+    | [] -> List.rev acc
+    | x::l -> if List.mem x acc then aux acc l else aux (x::acc) l
+  in
+  aux [] l

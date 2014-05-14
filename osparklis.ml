@@ -72,38 +72,6 @@ let pattern_of_constr =
 	| HasLang pat -> pat
 	| HasDatatype pat -> pat
 
-(* dictionaries for foci and increments in user interface *)
-
-class ['a] dico (prefix : string) =
-object
-  val mutable cpt = 0
-  val ht : (string,'a) Hashtbl.t = Hashtbl.create 100
-
-  method add (x : 'a) : string =
-    cpt <- cpt + 1;
-    let key = prefix ^ string_of_int cpt in
-    Hashtbl.add ht key x;
-    key
-
-  method get (key : string) : 'a =
-    try Hashtbl.find ht key
-    with _ ->
-      Firebug.console##log(string ("Missing element in dico: " ^ key));
-      failwith "Osparqlis.dico#get"
-end
-
-class dico_foci =
-object
-  inherit [Lisql.focus] dico "focus"
-end
-
-class dico_increments =
-object
-  inherit [Lisql.increment] dico "incr"
-  val dico_foci = new dico_foci
-  method dico_foci = dico_foci
-end
-
 (* navigation place and history *)
 
 class navigation =
@@ -115,7 +83,7 @@ end
 class place =
 object (self)
   val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.factory#home_focus
-(*  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.home_focus *)
+(*  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.factory#home_focus *)
   method lis = lis
 
   val mutable offset = 0
@@ -127,8 +95,8 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable dico_foci = new dico_foci
-  val mutable dico_incrs = new dico_increments
+  val mutable lisql_state = new Html.lisql_state (new Lisql2nl.lexicon)
+  val mutable index_state = new Html.index_state (new Lisql2nl.lexicon)
 
   method show_permalink : unit =
     let args =
@@ -150,13 +118,13 @@ object (self)
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
-      elt##innerHTML <- string (html_focus dico_foci lis#focus);
+      elt##innerHTML <- string (html_focus lisql_state lis#focus);
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
 	navigation#update_focus ~push_in_history:false (fun _ ->
 	  let key = to_string (elt_foc##id) in
 	  Firebug.console##log(string key);
-	  Some (dico_foci#get key))));
+	  Some (lisql_state#dico_foci#get key))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
 	  Dom_html.stopPropagation ev;
@@ -203,10 +171,10 @@ object (self)
     jquery "#list-terms" (fun elt ->
       lis#ajax_index_terms_init term_constr [elt]
 	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
+	  elt##innerHTML <- string (html_index lis#focus index_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
+	      (Lisql.insert_increment (index_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-terms"
 	    (html_count_unit (List.length index) 100 "entity" "entities")))
 
@@ -214,10 +182,10 @@ object (self)
     let index = lis#index_ids @ lis#index_terms in
     jquery "#list-terms" (fun elt ->
       elt##innerHTML <- string
-	(html_index lis#focus dico_incrs index);
+	(html_index lis#focus index_state index);
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment (dico_incrs#get (to_string (elt##id)))))));
+	  (Lisql.insert_increment (index_state#dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
       (html_count_unit (List.length index) Lis.max_results "entity" "entities")
 
@@ -225,10 +193,10 @@ object (self)
     jquery "#list-properties" (fun elt ->
       lis#ajax_index_properties_init property_constr elt
 	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
+	  elt##innerHTML <- string (html_index lis#focus index_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
+	      (Lisql.insert_increment (index_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index) 1000 "concept" "concepts")))
 
@@ -236,26 +204,26 @@ object (self)
     jquery "#list-properties" (fun elt ->
       lis#ajax_index_properties property_constr elt
 	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus dico_incrs index);
+	  elt##innerHTML <- string (html_index lis#focus index_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
+	      (Lisql.insert_increment (index_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
 	    (html_count_unit (List.length index) Lis.max_properties "concept" "concepts")))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
       let index = lis#index_modifiers ~init in
-      elt##innerHTML <- string (html_index lis#focus dico_incrs index);
+      elt##innerHTML <- string (html_index lis#focus index_state index);
       jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment (dico_incrs#get (to_string (elt##id))))));
+	  (Lisql.insert_increment (index_state#dico_incrs#get (to_string (elt##id))))));
       jquery_set_innerHTML "#count-modifiers"
 	(html_count_unit (List.length index) max_int "modifier" "modifiers"))
 
   method refresh =
-    dico_foci <- new dico_foci;
-    dico_incrs <- new dico_increments;
+    lisql_state <- new Html.lisql_state lis#lexicon;
+    index_state <- new Html.index_state lis#lexicon;
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
     self#refresh_constrs;
@@ -341,7 +309,7 @@ object (self)
       let there_is_match = ref false in
       jquery_all_from elt_list "li" (fun elt_li ->
 	jquery_from elt_li ".increment" (fun elt_incr ->
-	  let incr = dico_incrs#get (to_string (elt_incr##id)) in
+	  let incr = index_state#dico_incrs#get (to_string (elt_incr##id)) in
 	  let t =
 	    match Lisql.term_of_increment incr with
 	      | Some t -> t
@@ -521,7 +489,7 @@ let _ =
 	history#change_endpoint url;
 	try
 	  let query = Permalink.to_query (List.assoc "query" args) in
-	  history#update_focus ~push_in_history:true (fun _ -> Some (Lisql.AtS query))
+	  history#update_focus ~push_in_history:true (Lisql.goto query)
 	with _ -> ()
       with _ ->
 	history#present#refresh in

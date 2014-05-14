@@ -125,6 +125,7 @@ let factory =
 object (self)
   val mutable cpt_id = 0
   method new_id = cpt_id <- cpt_id + 1; cpt_id
+  method set n = cpt_id <- n
   method reset = cpt_id <- 0
 
   method top_p1 = IsThere
@@ -162,6 +163,35 @@ let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
   | AtS1 (f,ctx) -> elt_s_of_ctx_s1 f ctx
   | AtS f -> f
+
+(* ids retrieval *)
+
+let rec ids_elt_p1 = function
+  | Is np -> ids_elt_s1 np
+  | Type _ -> []
+  | Has (p,np) -> ids_elt_s1 np
+  | IsOf (p,np) -> ids_elt_s1 np
+  | Triple (arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
+  | Search _ -> []
+  | Filter _ -> []
+  | And ar -> List.concat (Array.to_list (Array.map ids_elt_p1 ar))
+  | Or ar -> List.concat (Array.to_list (Array.map ids_elt_p1 ar))
+  | Maybe f -> ids_elt_p1 f
+  | Not f -> ids_elt_p1 f
+  | IsThere -> []
+and ids_elt_s1 = function
+  | Det (det,rel_opt) -> ids_elt_s2 det @ (match rel_opt with None -> [] | Some rel -> ids_elt_p1 rel)
+  | NAnd ar -> List.concat (Array.to_list (Array.map ids_elt_s1 ar))
+  | NOr ar -> List.concat (Array.to_list (Array.map ids_elt_s1 ar))
+  | NMaybe f -> ids_elt_s1 f
+  | NNot f -> ids_elt_s1 f
+and ids_elt_s2 = function
+  | Term _ -> []
+  | An (id, _, _) -> [id]
+  | The _ -> []
+and ids_elt_s = function
+  | Return np -> ids_elt_s1 np
+
 
 (* focus moves *)
 
@@ -614,3 +644,9 @@ let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
   | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
   | AtS _ -> Some (AtS (Return factory#top_s1))
+
+(* goto to query *)
+
+let goto (s : elt_s) focus =
+  factory#set (List.fold_left max 0 (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
+  Some (AtS s)

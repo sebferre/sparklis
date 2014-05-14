@@ -116,7 +116,8 @@ object (self)
 
   (* derived state *)
 
-  val mutable var_id_list : (Rdf.var * Lisql.id) list = []
+  val mutable lex = new Lisql2nl.lexicon
+  method lexicon = lex
 
   val mutable focus_term_list : Rdf.term list = []
   method focus_term_list = focus_term_list
@@ -128,8 +129,8 @@ object (self)
 
   method private init =
     begin
-      let vi_list, t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus focus in
-      var_id_list <- vi_list;
+      lex <- Lisql2nl.lexicon_of_focus focus;
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus lex focus in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
@@ -212,8 +213,10 @@ object (self)
 	  if freqs.(i) <> 0 then begin
 	    let v = try list_rev_assoc i vars with _ -> assert false in
 	    if focus_term <> (Rdf.Var v) then begin
-	      let id = try List.assoc v var_id_list with _ -> 0 (* TODO *) in
-	      ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
+	      try
+		let id = lex#get_label_id v in
+		ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
+	      with _ -> () (* ex: aggregation variables *)
 	    end
 	  end
 	done;

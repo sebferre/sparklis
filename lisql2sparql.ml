@@ -4,27 +4,10 @@ open Lisql
 
 (* translation from LISQL elts to SPARQL queries *)
 
-let prefix_of_uri uri = (* for variable names *)
-  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
-    | Some (i,res) -> Regexp.matched_string res
-    | None -> "thing"
-
-
 (* SPARQL variable generator *)
-class state =
+class state (lex : Lisql2nl.lexicon) =
 object
-  val mutable prefix_cpt = []
-  method new_var prefix =
-    let k =
-      try
-	let cpt = List.assoc prefix prefix_cpt in
-	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
-	cpt+1
-      with Not_found ->
-	prefix_cpt <- (prefix,1)::prefix_cpt;
-	1 in
-    let v = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
-    v
+  method lexicon = lex
 
   val mutable vars : Rdf.var list = []
   method add_var v = if not (List.mem v vars) then vars <- v::vars
@@ -33,12 +16,6 @@ object
   val mutable focus_terms : Rdf.term list = []
   method add_focus_term t = if not (List.mem t focus_terms) then focus_terms <- t::focus_terms
   method focus_terms = focus_terms
-
-  val mutable var_id_list : (Rdf.var * id) list = []
-  method set_id v id = var_id_list <- (v,id)::var_id_list
-  method id_of_var v = try List.assoc v var_id_list with _ -> failwith "Lisql2sparql.state#id_of_var"
-  method var_of_id id = try list_rev_assoc id var_id_list with _ -> failwith "Lisql2sparql.state#var_of_id"
-  method var_id_list = var_id_list
 
   val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
   method set_modif (v : Rdf.var) (modif : modif_s2) : unit =
@@ -120,10 +97,6 @@ let triple_arg arg x y z =
       | P -> Sparql.triple y x z
       | O -> Sparql.triple y z x )
 
-let prefix_of_arg0 = function P -> "relation" | S | O -> ""
-let prefix_of_arg1 = function S -> "relation" | P | O -> ""
-let prefix_of_arg2 = function O -> "relation" | S | P -> ""
-
 type sparql_p1 = Rdf.term -> Sparql.formula
 type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
@@ -134,14 +107,14 @@ let rec elt_p1 state : elt_p1 -> sparql_p1 = function
   | Is np -> elt_s1_as_p1 state np
   | Type c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
   | Has (p,np) ->
-    let q_np = elt_s1 state ~prefix:(prefix_of_uri p) np in
+    let q_np = elt_s1 state np in
     (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
   | IsOf (p,np) ->
-    let q_np = elt_s1 state ~prefix:"" np in
+    let q_np = elt_s1 state np in
     (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
   | Triple (arg,np1,np2) ->
-    let q_np1 = elt_s1 state ~prefix:(prefix_of_arg1 arg) np1 in
-    let q_np2 = elt_s1 state ~prefix:(prefix_of_arg2 arg) np2 in
+    let q_np1 = elt_s1 state np1 in
+    let q_np2 = elt_s1 state np2 in
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
   | Search c -> (fun x -> search_constr x c)
   | Filter c -> (fun x -> filter_constr x c)
@@ -187,95 +160,74 @@ and elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
     d_head
   | The id ->
     (fun x ->
-      let v = state#var_of_id id in
+      let v = state#lexicon#get_id_label id (*state#var_of_id id*) in
       let t = Rdf.Var v in
       Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))    
-and elt_s1 state ~prefix : elt_s1 -> sparql_s1 = function
+and elt_s1 state : elt_s1 -> sparql_s1 = function
   | Det (det,rel_opt) ->
-    let prefix =
-      if prefix = ""
-      then
-	match rel_opt with
-	  | Some (IsOf (p,_)) -> prefix_of_uri p
-	  | Some (Triple (arg,_,_)) -> prefix_of_arg0 arg
-	  | _ -> prefix
-      else prefix in
-    let qu = elt_s2 state ~prefix det in
+    let qu = elt_s2 state det in
     let d1 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> elt_p1 state rel in
     (fun d -> qu d1 d)
   | NAnd ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state ~prefix elt) ar in
+    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
     (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
   | NOr ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state ~prefix elt) ar in
+    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
     (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
   | NMaybe f ->
-    let q = elt_s1 state ~prefix f in
+    let q = elt_s1 state f in
     (fun d -> Sparql.formula_optional (q d))
   | NNot f ->
-    let q = elt_s1 (Oo.copy state) ~prefix f in
+    let q = elt_s1 (Oo.copy state) f in
     (fun d -> Sparql.formula_not (q d))
-and elt_s2 state ~prefix : elt_s2 -> sparql_s2 = function
+and elt_s2 state : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
-    let prefix, qhead = elt_head state ~prefix head in
-    let v = state#new_var prefix in
-    state#set_id v id;
+    let qhead = elt_head state head in
+    let v = state#lexicon#get_id_label id in
     state#set_modif v modif;
     let t = Rdf.Var v in
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d1 t) (d2 t)))
   | The id ->
-    (fun d1 d2 ->
-      let v = state#var_of_id id in
-      let t = Rdf.Var v in
-      Sparql.formula_and (d1 t) (d2 t))
-and elt_head state ~prefix : elt_head -> string * (Rdf.term -> Sparql.formula -> Sparql.formula) = function
+    let v = state#lexicon#get_id_label id in
+    let t = Rdf.Var v in
+    (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
+and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
-    let prefix = if prefix<>"" then prefix else "thing" in
-    prefix, (fun x form -> Sparql.formula_bind x form)
+    (fun x form -> Sparql.formula_bind x form)
   | Class c ->
-    let prefix = if prefix<>"" then prefix else prefix_of_uri c in
-    prefix, (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
+    (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
 and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
-    let q = elt_s1 state ~prefix:"" np in
+    let q = elt_s1 state np in
     q (fun t -> Sparql.True)
 
-let rec elt_s1_bis state ~prefix (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
+let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
   | (Det _ as np1) -> (* q_alt is not used in this case *)
-    let q1 = elt_s1 state ~prefix np1 in
+    let q1 = elt_s1 state np1 in
     (fun r -> q1 (fun x -> q (fun y -> r x y)))
-  | NAnd ar -> elt_s1_bis_and state ~prefix q q_alt (Array.to_list ar)
+  | NAnd ar -> elt_s1_bis_and state q q_alt (Array.to_list ar)
   | NOr ar ->
-    let ar_b = Array.map (fun elt -> elt_s1_bis state ~prefix q q_alt elt) ar in
+    let ar_b = Array.map (fun elt -> elt_s1_bis state q q_alt elt) ar in
     (fun r -> Sparql.formula_or_list (Array.to_list (Array.map (fun b -> b r) ar_b)))
-  | NMaybe np1 -> elt_s1_bis state ~prefix q q_alt np1
-  | NNot np1 -> elt_s1_bis state ~prefix q q_alt np1
-and elt_s1_bis_and state ~prefix q q_alt = function
+  | NMaybe np1 -> elt_s1_bis state q q_alt np1
+  | NNot np1 -> elt_s1_bis state q q_alt np1
+and elt_s1_bis_and state q q_alt = function
   | [] -> (fun r -> Sparql.True)
-  | [np1] -> elt_s1_bis state ~prefix q q_alt np1
+  | [np1] -> elt_s1_bis state q q_alt np1
   | np1::nps ->
-    let b1 = elt_s1_bis state ~prefix q q_alt np1 in
-    let b1_alt = elt_s1_bis state ~prefix q_alt (fun d -> Sparql.False) np1 in
-    let bs = elt_s1_bis_and state ~prefix q q_alt nps in
-    let bs_alt = elt_s1_bis_and state ~prefix q_alt (fun d -> Sparql.False) nps in
+    let b1 = elt_s1_bis state q q_alt np1 in
+    let b1_alt = elt_s1_bis state q_alt (fun d -> Sparql.False) np1 in
+    let bs = elt_s1_bis_and state q q_alt nps in
+    let bs_alt = elt_s1_bis_and state q_alt (fun d -> Sparql.False) nps in
     (fun r -> Sparql.formula_or_list [Sparql.formula_and (b1 r) (bs r);
 				      Sparql.formula_and (b1 r) (bs_alt r);
 				      Sparql.formula_and (b1_alt r) (bs r)])
 
 
-let rec ctx_p1 state ~prefix (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
+let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
-    let prefix =
-      if prefix = ""
-      then
-	match ctx with
-	  | HasX (p,_) -> prefix_of_uri p
-	  | TripleX1 (arg,_,_) -> prefix_of_arg1 arg
-	  | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
-	  | _ -> prefix
-      else prefix in
-    let q_det = elt_s2 state ~prefix det in
+    let q_det = elt_s2 state det in
     let d_det = elt_s2_as_p1 state det in
     ctx_s1 state
       (fun d2 -> q_det d d2)
@@ -284,43 +236,37 @@ let rec ctx_p1 state ~prefix (d : sparql_p1) : ctx_p1 -> Sparql.formula = functi
       ctx
   | AndX (i,ar,ctx) ->
     let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_p1 state elt) ar in
-    ctx_p1 state ~prefix
+    ctx_p1 state
       (fun x ->	Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
       ctx
   (* ignoring algebra in ctx *)
-  | OrX (i,ar,ctx) -> ctx_p1 state ~prefix d ctx
-  | MaybeX ctx -> ctx_p1 state ~prefix d ctx
-  | NotX ctx -> ctx_p1 state ~prefix d ctx
+  | OrX (i,ar,ctx) -> ctx_p1 state d ctx
+  | MaybeX ctx -> ctx_p1 state d ctx
+  | NotX ctx -> ctx_p1 state d ctx
 and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
-  | IsX ctx -> ctx_p1 state ~prefix:"" d ctx
+  | IsX ctx -> ctx_p1 state d ctx
   | HasX (p,ctx) ->
-    ctx_p1 state ~prefix:""
+    ctx_p1 state
       (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
       ctx
   | IsOfX (p,ctx) ->
-    ctx_p1 state ~prefix:(prefix_of_uri p)
+    ctx_p1 state
       (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
       ctx
   | TripleX1 (arg,np,ctx) ->
-    let q_np = elt_s1 state ~prefix:(prefix_of_arg2 arg) np in
-    ctx_p1 state ~prefix:""
+    let q_np = elt_s1 state np in
+    ctx_p1 state
       (fun x -> q (fun y -> q_np (fun z -> triple_arg arg x y z)))
       ctx
   | TripleX2 (arg,np,ctx) ->
-    let b_np = elt_s1_bis state ~prefix:(prefix_of_arg1 arg) q q_alt np in
-    ctx_p1 state ~prefix:""
+    let b_np = elt_s1_bis state q q_alt np in
+    ctx_p1 state
       (fun x -> b_np (fun y z -> triple_arg arg x y z))
       ctx
-(*
-    let q_np = elt_s1 state ~prefix:(prefix_of_arg1 arg) np in
-    ctx_p1 state ~prefix:""
-      (fun x -> q_np (fun y -> q (fun z -> triple_arg arg x y z)))
-      ctx
-*)
   | ReturnX ->
     q (fun t -> Sparql.True)
   | NAndX (i,ar,ctx) ->
-    let ar_q = Array.mapi (fun j elt -> if j=i then q else elt_s1 state ~prefix:"" elt) ar in
+    let ar_q = Array.mapi (fun j elt -> if j=i then q else elt_s1 state elt) ar in
     let ar_q_alt = let ar = Array.copy ar_q in ar.(i) <- q_alt; ar in
     let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_s1_as_p1 state elt) ar in
     ctx_s1 state
@@ -330,7 +276,7 @@ and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 ->
       ctx
   (* ignoring algebra in ctx *)
   | NOrX (i,ar,ctx) ->
-    let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else elt_s1 state ~prefix:"" elt) ar in
+    let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else elt_s1 state elt) ar in
     ctx_s1 state
       q
       (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
@@ -341,28 +287,18 @@ and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 ->
 
 type template = ?constr:constr -> limit:int -> string
 
-let focus (focus : focus) : (Rdf.var * id) list * Rdf.term list * template option * template option * template option * template option =
-  let state = new state in
+let focus (lex : Lisql2nl.lexicon) (focus : focus)
+    : Rdf.term list * template option * template option * template option * template option =
+  let state = new state lex in
   let form =
     match focus with
       | AtP1 (f,ctx) ->
-	let prefix =
-	  match f with
-	    | IsOf (p, _) -> prefix_of_uri p
-	    | Triple (arg,_,_) -> prefix_of_arg0 arg
-	    | _ -> "" in
 	let d = elt_p1 state f in
-	ctx_p1 state ~prefix
+	ctx_p1 state
 	  (fun t -> state#add_focus_term t; d t)
 	  ctx
       | AtS1 (f,ctx) ->
-	let prefix =
-	  match ctx with
-	    | HasX (p,_) -> prefix_of_uri p
-	    | TripleX1 (arg,_,_) -> prefix_of_arg1 arg
-	    | TripleX2 (arg,_,_) -> prefix_of_arg2 arg
-	    | _ -> "" in
-	let q = elt_s1 state ~prefix f in
+	let q = elt_s1 state f in
 	let d = elt_s1_as_p1 state f in
 	ctx_s1 state
 	  (fun d -> q (fun t -> state#add_focus_term t; d t))
@@ -373,7 +309,6 @@ let focus (focus : focus) : (Rdf.var * id) list * Rdf.term list * template optio
 	(*state#set_focus_term None;*)
 	elt_s state f
   in
-  let vi_list = state#var_id_list in
   let t_list = state#focus_terms in
   let query_opt =
     if form = Sparql.True
@@ -427,4 +362,4 @@ let focus (focus : focus) : (Rdf.var * id) list * Rdf.term list * template optio
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Rdf.Bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Rdf.Bnode "") tp t)) in
-  vi_list, t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt
+  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt

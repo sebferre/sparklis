@@ -3,6 +3,42 @@ open Js
 open Jsutils
 open Lisql
 
+(* dictionaries *)
+
+(* dictionaries for foci and increments in user interface *)
+
+class ['a] dico (prefix : string) =
+object
+  val mutable cpt = 0
+  val ht : (string,'a) Hashtbl.t = Hashtbl.create 100
+
+  method add (x : 'a) : string =
+    cpt <- cpt + 1;
+    let key = prefix ^ string_of_int cpt in
+    Hashtbl.add ht key x;
+    key
+
+  method get (key : string) : 'a =
+    try Hashtbl.find ht key
+    with _ ->
+      Firebug.console##log(string ("Missing element in dico: " ^ key));
+      failwith "Osparqlis.dico#get"
+end
+
+class lisql_state (lex : Lisql2nl.lexicon) =
+object
+  method lexicon = lex
+  val dico_foci : Lisql.focus dico = new dico "focus"
+  method dico_foci = dico_foci
+end
+
+class index_state (lex : Lisql2nl.lexicon) =
+object
+  inherit lisql_state lex
+  val dico_incrs : Lisql.increment dico = new dico "incr"
+  method dico_incrs = dico_incrs
+end
+
 (* pretty-printing of terms, NL in HTML *)
 
 let name_of_uri uri =
@@ -45,7 +81,7 @@ let html_uri uri = html_span ~classe:"URI" ~title:uri (name_of_uri uri)
 let html_class c = html_span ~classe:"classURI" ~title:c (name_of_uri c)
 let html_prop p = html_span ~classe:"propURI" ~title:p (name_of_uri p)
 let html_modifier m = html_span ~classe:"modifier" m
-let html_id id = html_span ~classe:"lisqlID" (string_of_int id) (* TODO: verbalize ids *)
+let html_id state id = html_span ~classe:"lisqlID" (state#lexicon#get_id_label id)
 
 let rec html_term ?(link = false) = function
   | Rdf.URI uri ->
@@ -91,22 +127,22 @@ let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
       (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
 
-let html_word = function
+let html_word state = function
   | `Thing -> "thing"
   | `Term t -> html_term t
   | `Class c -> html_class c
   | `Prop p -> html_prop p
-  | `Relation -> "relation"
+  | `Relation -> html_modifier "relation"
   | `Literal l -> html_literal l
   | `Op op -> html_modifier op
-  | `Id id -> html_id id
+  | `Id id -> html_id state id
   | `DummyFocus -> html_dummy_focus
 
-let html_nl_focus dico (foc : Lisql2nl.nl_focus) (html : string) : string =
+let html_nl_focus state (foc : Lisql2nl.nl_focus) (html : string) : string =
   match foc with
     | `NoFocus -> html
     | `Focus (focus, pos) ->
-      let id = dico#add focus in
+      let id = state#dico_foci#add focus in
       let class_pos =
 	match pos with
 	  | `In -> "in-current-focus"
@@ -118,83 +154,83 @@ let html_nl_focus dico (foc : Lisql2nl.nl_focus) (html : string) : string =
       then html_current_focus html
       else html
 
-let rec html_s dico (foc, nl : Lisql2nl.s) : string =
+let rec html_s state (foc, nl : Lisql2nl.s) : string =
   let html =
     match nl with
-      | `Return np -> html_return (html_np dico np) in
-  html_nl_focus dico foc html			  
-and html_np dico (foc, nl : Lisql2nl.np) : string =
+      | `Return np -> html_return (html_np state np) in
+  html_nl_focus state foc html			  
+and html_np state (foc, nl : Lisql2nl.np) : string =
   let html =
     match nl with
-      | `PN (w, rel) -> html_word w ^ html_rel_opt dico rel
+      | `PN (w, rel) -> html_word state w ^ html_rel_opt state rel
       | `Qu (qu, adj, `Thing, (foc2, `That (_, `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, w, rel2)), [])))) ->
-	html_qu qu ^ html_adj adj ^ html_nl_focus dico foc2 (html_word w ^ html_rel_opt dico rel2)
-      | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt dico rel
-      | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj adj ^ html_word w ^ html_rel_opt dico rel
-      | `QuOneOf (_, [w]) -> html_word w
-      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map html_word lw)
-      | `And ar -> html_and (Array.map (html_np dico) ar)
-      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_np dico) ar)
-      | `Maybe (suspended, np) -> html_maybe ~suspended (html_np dico np)
-      | `Not (suspended, np) -> html_not ~suspended (html_np dico np) in
-  html_nl_focus dico foc html
+	html_qu qu ^ html_adj state adj ^ html_nl_focus state foc2 (html_word state w ^ html_rel_opt state rel2)
+      | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt state rel
+      | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj state adj ^ html_word state w ^ html_rel_opt state rel
+      | `QuOneOf (_, [w]) -> html_word state w
+      | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map (html_word state) lw)
+      | `And ar -> html_and (Array.map (html_np state) ar)
+      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_np state) ar)
+      | `Maybe (suspended, np) -> html_maybe ~suspended (html_np state np)
+      | `Not (suspended, np) -> html_not ~suspended (html_np state np) in
+  html_nl_focus state foc html
 and html_qu : Lisql2nl.qu -> string = function
   | `A -> "a "
   | `Any susp -> html_suspended ~suspended:susp (html_modifier "any ")
   | `The -> "the "
   | `All -> "all "
   | `One -> "one "
-and html_adj : Lisql2nl.adj -> string = function
+and html_adj state : Lisql2nl.adj -> string = function
   | `Nil -> ""
-  | `Order w -> html_word w ^ " "
-  | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj a ^ html_word w) ^ " "
-  | `Adj (a, w) -> html_adj a ^ html_word w ^ " "
-and html_rel_opt dico foc_nl =
+  | `Order w -> html_word state w ^ " "
+  | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj state a ^ html_word state w) ^ " "
+  | `Adj (a, w) -> html_adj state a ^ html_word state w ^ " "
+and html_rel_opt state foc_nl =
   if foc_nl = Lisql2nl.top_rel
   then ""
-  else " " ^ html_rel dico foc_nl
-and html_rel dico (foc, nl : Lisql2nl.rel) : string =
+  else " " ^ html_rel state foc_nl
+and html_rel state (foc, nl : Lisql2nl.rel) : string =
   match nl with (* transformations *)
-    | `That (_, `And ar) -> html_rel dico (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
-    | `That (_, `Or (susp,ar)) -> html_rel dico (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+    | `That (_, `And ar) -> html_rel state (foc, `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
+    | `That (_, `Or (susp,ar)) -> html_rel state (foc, `Or (susp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar))
     | _ ->
       let html =
 	match nl with
 	  | `Nil -> ""
 	  | `That (_, `IsThere) -> html_ellipsis
 	  | `That (_, `HasProp (p, (foc2, `Qu (`A, `Nil, `Thing, (foc3, `That (_,nl_vp)))), lpp)) ->
-	    "whose " ^ html_nl_focus dico foc2 (html_word p ^ html_pp_list dico lpp ^ " " ^ html_vp dico (foc3,nl_vp))
-	  | `That (_, `IsPP pp) -> html_pp dico pp
-	  | `That vp -> "that " ^ html_vp dico vp
-	  | `Of np -> "of " ^ html_np dico np
-	  | `Ing (w, np) -> html_word w ^ " " ^ html_np dico np
-	  | `And ar -> html_and (Array.map (html_rel dico) ar)
-	  | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_rel dico) ar) in
-      html_nl_focus dico foc html
-and html_vp dico (foc, nl : Lisql2nl.vp) : string =
+	    "whose " ^ html_nl_focus state foc2 (html_word state p ^ html_pp_list state lpp ^ " " ^ html_vp state (foc3,nl_vp))
+	  | `That (_, `IsPP pp) -> html_pp state pp
+	  | `That vp -> "that " ^ html_vp state vp
+	  | `Of np -> "of " ^ html_np state np
+	  | `Ing (w, np) -> html_word state w ^ " " ^ html_np state np
+	  | `And ar -> html_and (Array.map (html_rel state) ar)
+	  | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_rel state) ar) in
+      html_nl_focus state foc html
+and html_vp state (foc, nl : Lisql2nl.vp) : string =
   let html =
     match nl with
       | `IsThere -> html_ellipsis
-      | `IsNP (np,lpp) -> "is " ^ html_np dico np ^ html_pp_list dico lpp
-      | `IsPP pp -> "is " ^ html_pp dico pp
-      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp dico (foc, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
-      | `HasProp (p, np, lpp) -> "has " ^ html_word p ^ " " ^ html_np dico np ^ html_pp_list dico lpp
-      | `Has (np, lpp) -> "has " ^ html_np dico np ^ html_pp_list dico lpp
-      | `VT (w, np, lpp) -> html_word w ^ " " ^ html_np dico np ^ html_pp_list dico lpp
-      | `And ar -> html_and (Array.map (html_vp dico) ar)
-      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_vp dico) ar)
-      | `Maybe (suspended, vp) -> html_maybe ~suspended (html_vp dico vp)
-      | `Not (suspended, vp) -> html_not ~suspended (html_vp dico vp)
+      | `IsNP (np,lpp) -> "is " ^ html_np state np ^ html_pp_list state lpp
+      | `IsPP pp -> "is " ^ html_pp state pp
+      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp state (foc, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
+      | `HasProp (p, np, lpp) -> "has " ^ html_word state p ^ " " ^ html_np state np ^ html_pp_list state lpp
+      | `Has (np, lpp) -> "has " ^ html_np state np ^ html_pp_list state lpp
+      | `VT (w, np, lpp) -> html_word state w ^ " " ^ html_np state np ^ html_pp_list state lpp
+      | `And ar -> html_and (Array.map (html_vp state) ar)
+      | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_vp state) ar)
+      | `Maybe (suspended, vp) -> html_maybe ~suspended (html_vp state vp)
+      | `Not (suspended, vp) -> html_not ~suspended (html_vp state vp)
       | `DummyFocus -> html_dummy_focus in
-  html_nl_focus dico foc html
-and html_pp_list dico : Lisql2nl.pp list -> string = function
+  html_nl_focus state foc html
+and html_pp_list state : Lisql2nl.pp list -> string = function
   | [] -> ""
-  | pp::lpp -> " " ^ html_pp dico pp ^ html_pp_list dico lpp
-and html_pp dico : Lisql2nl.pp -> string = function
-  | `Prep (prep,np) -> html_word prep ^ " " ^ html_np dico np
-  | `PrepBin (prep1,np1,prep2,np2) -> html_word prep1 ^ " " ^ html_np dico np1 ^ " " ^ html_word prep2 ^ " " ^ html_np dico np2
+  | pp::lpp -> " " ^ html_pp state pp ^ html_pp_list state lpp
+and html_pp state : Lisql2nl.pp -> string = function
+  | `Prep (prep,np) -> html_word state prep ^ " " ^ html_np state np
+  | `PrepBin (prep1,np1,prep2,np2) -> html_word state prep1 ^ " " ^ html_np state np1 ^ " " ^ html_word state prep2 ^ " " ^ html_np state np2
 
-let html_focus dico focus = html_s dico (Lisql2nl.s_of_focus focus)
+let html_focus (state : #lisql_state) (focus : focus) : string = html_s state (Lisql2nl.s_of_focus focus)
 
 
 (* HTML of increment lists *)
@@ -211,8 +247,8 @@ let html_increment_coordinate focus html =
     | AtP1 (IsThere, _) -> html
     | _ -> "and " ^ html
 
-let html_increment_frequency focus dico_incrs (incr,freq) =
-  let key = dico_incrs#add incr in
+let html_increment_frequency focus state (incr,freq) =
+  let key = state#dico_incrs#add incr in
   let text =
     match incr with
       | IncrTerm t ->
@@ -221,8 +257,8 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
 	  | _ -> html_increment_coordinate focus ("that is " ^ html_term t) )
       | IncrId id ->
 	( match focus with
-	  | AtS1 _ -> "the " ^ html_id id
-	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id id) )
+	  | AtS1 _ -> "the " ^ html_id state id
+	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id state id) )
       | IncrClass c ->
 	( match focus with
 	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_class c
@@ -242,13 +278,13 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
       | IncrUnselect ->
-	html_np dico_incrs#dico_foci
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
       | IncrAggreg g ->
-	html_np dico_incrs#dico_foci
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
       | IncrOrder order ->
-	html_np dico_incrs#dico_foci
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
   in
   let text_freq =
@@ -258,13 +294,13 @@ let html_increment_frequency focus dico_incrs (incr,freq) =
   "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus dico_incrs (index : Lisql.increment Lis.index) =
+let html_index focus state (index : Lisql.increment Lis.index) =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
     (fun incr_freq ->
       Buffer.add_string buf "<li>";
-      Buffer.add_string buf (html_increment_frequency focus dico_incrs incr_freq);
+      Buffer.add_string buf (html_increment_frequency focus state incr_freq);
       Buffer.add_string buf "</li>")
     index;
   Buffer.add_string buf "</ul>";
