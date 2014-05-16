@@ -621,11 +621,14 @@ let rec delete_ctx_p1 = function
   | NotX ctx -> delete_ctx_p1 ctx
 and delete_ctx_s1 f_opt ctx =
   match ctx with
-    | IsX _
-    | HasX _
-    | IsOfX _
-    | TripleX1 _
-    | TripleX2 _ 
+    | IsX ctx2
+    | HasX (_,ctx2)
+    | IsOfX (_,ctx2)
+    | TripleX1 (_,_,ctx2)
+    | TripleX2 (_,_,ctx2) ->
+      ( match f_opt with
+	| None -> delete_ctx_p1 ctx2
+	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | ReturnX ->
       ( match f_opt with
 	| None -> None
@@ -645,7 +648,7 @@ and delete_ctx_s1 f_opt ctx =
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
-  | AtS1 (f, ctx) -> delete_ctx_s1 ((*if is_top_s1 f then None else*) Some f) ctx
+  | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
   | AtS _ -> Some (AtS (Return factory#top_s1))
 
 (* goto to query *)

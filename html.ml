@@ -200,7 +200,7 @@ and html_vp state (foc, nl : Lisql2nl.vp) : string =
       | `IsThere -> html_ellipsis
       | `IsNP (np,lpp) -> "is " ^ html_np state np ^ html_pp_list state lpp
       | `IsPP pp -> "is " ^ html_pp state pp
-      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp state (foc, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
+      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp state (`NoFocus, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
       | `HasProp (p, np, lpp) -> "has " ^ html_word p ^ " " ^ html_np state np ^ html_pp_list state lpp
       | `Has (np, lpp) -> "has " ^ html_np state np ^ html_pp_list state lpp
       | `VT (w, np, lpp) -> html_word w ^ " " ^ html_np state np ^ html_pp_list state lpp
