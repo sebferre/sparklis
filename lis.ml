@@ -214,7 +214,7 @@ object (self)
 	    let v = try list_rev_assoc i vars with _ -> assert false in
 	    if focus_term <> (Rdf.Var v) then begin
 	      try
-		let id = lex#get_label_id v in
+		let id = lex#get_var_id v in
 		ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
 	      with _ -> () (* ex: aggregation variables *)
 	    end

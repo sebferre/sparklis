@@ -149,7 +149,7 @@ object (self)
       else begin
 	elt_results##style##display <- string "block";
 	jquery_set_innerHTML "#list-results"
-	  (html_table_of_results
+	  (html_table_of_results lis#lexicon
 	     ~first_rank:(offset+1)
 	     ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> v | _ -> "")
 	     (lis#results_page offset limit));

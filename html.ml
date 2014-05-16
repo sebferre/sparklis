@@ -315,7 +315,7 @@ let html_cell t =
       else html_word ~link:true (Lisql2nl.word_of_term t)
     | _ -> html_word ~link:true (Lisql2nl.word_of_term t)
 
-let html_table_of_results ~first_rank ~focus_var results =
+let html_table_of_results lexicon ~first_rank ~focus_var results =
   let open Sparql_endpoint in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<table id=\"extension\"><tr><th></th>";
@@ -325,7 +325,7 @@ let html_table_of_results ~first_rank ~focus_var results =
 	(if var = focus_var
 	 then "<th class=\"in-current-focus\">"
 	 else "<th>");
-      Buffer.add_string buf var;
+      Buffer.add_string buf (escapeHTML (lexicon#get_id_label (lexicon#get_var_id var)));
       Buffer.add_string buf "</th>")
     results.vars;
   Buffer.add_string buf "</tr>";

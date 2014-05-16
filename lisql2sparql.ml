@@ -160,7 +160,7 @@ and elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
     d_head
   | The id ->
     (fun x ->
-      let v = state#lexicon#get_id_label id (*state#var_of_id id*) in
+      let v = state#lexicon#get_id_var id in
       let t = Rdf.Var v in
       Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))    
 and elt_s1 state : elt_s1 -> sparql_s1 = function
@@ -184,12 +184,12 @@ and elt_s2 state : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = elt_head state head in
-    let v = state#lexicon#get_id_label id in
+    let v = state#lexicon#get_id_var id in
     state#set_modif v modif;
     let t = Rdf.Var v in
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d1 t) (d2 t)))
   | The id ->
-    let v = state#lexicon#get_id_label id in
+    let v = state#lexicon#get_id_var id in
     let t = Rdf.Var v in
     (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
 and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) = function
