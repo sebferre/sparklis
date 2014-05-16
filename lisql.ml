@@ -139,6 +139,9 @@ let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
 let is_top_s1 = function Det (det, None) -> is_top_s2 det | _ -> false
 let is_home_focus = function AtS1 (f, ReturnX) -> is_top_s1 f | _ -> false
 
+let is_root_focus = function AtS _ -> true | _ -> false
+let id_of_focus = function AtS1 (Det (An (id, _, _), _), _) -> Some id | _ -> None
+
 (* extraction of LISQL s element from focus *)
 
 let rec elt_s_of_ctx_p1 (f : elt_p1) = function
@@ -642,7 +645,7 @@ and delete_ctx_s1 f_opt ctx =
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
-  | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
+  | AtS1 (f, ctx) -> delete_ctx_s1 ((*if is_top_s1 f then None else*) Some f) ctx
   | AtS _ -> Some (AtS (Return factory#top_s1))
 
 (* goto to query *)

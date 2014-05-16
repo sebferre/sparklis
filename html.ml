@@ -13,10 +13,12 @@ object
   val ht : (string,'a) Hashtbl.t = Hashtbl.create 100
 
   method add (x : 'a) : string =
-    cpt <- cpt + 1;
-    let key = prefix ^ string_of_int cpt in
-    Hashtbl.add ht key x;
-    key
+    let k = cpt <- cpt + 1; prefix ^ string_of_int cpt in
+    Hashtbl.add ht k x;
+    k
+
+  method add_key (key : string) (x : 'a) : unit =
+    Hashtbl.add ht key x
 
   method get (key : string) : 'a =
     try Hashtbl.find ht key
@@ -25,11 +27,21 @@ object
       failwith "Osparqlis.dico#get"
 end
 
+let focus_key_of_root = "root"
+let focus_key_of_id (id : Lisql.id) : string = "id" ^ string_of_int id
+
 class lisql_state (lex : Lisql2nl.lexicon) =
 object
   method lexicon = lex
   val dico_foci : Lisql.focus dico = new dico "focus"
-  method dico_foci = dico_foci
+  val mutable id_focus_list : (Lisql.id * Lisql.focus) list = []
+  method add_focus (focus : Lisql.focus) : string =
+    if Lisql.is_root_focus focus then dico_foci#add_key focus_key_of_root focus;
+    ( match Lisql.id_of_focus focus with
+      | Some id -> dico_foci#add_key (focus_key_of_id id) focus
+      | None -> () );
+    dico_foci#add focus
+  method get_focus (key : string) : Lisql.focus = dico_foci#get key
 end
 
 class index_state (lex : Lisql2nl.lexicon) =
@@ -117,7 +129,7 @@ let html_nl_focus state (foc : Lisql2nl.nl_focus) (html : string) : string =
   match foc with
     | `NoFocus -> html
     | `Focus (focus, pos) ->
-      let id = state#dico_foci#add focus in
+      let id = state#add_focus focus in
       let class_pos =
 	match pos with
 	  | `In -> "in-current-focus"
@@ -129,7 +141,7 @@ let html_nl_focus state (foc : Lisql2nl.nl_focus) (html : string) : string =
       then html_current_focus html
       else html
 
-let rec html_s state (foc, nl : Lisql2nl.s) : string =
+let rec html_s (state : lisql_state) (foc, nl : Lisql2nl.s) : string =
   let html =
     match nl with
       | `Return np -> html_return (html_np state np) in
@@ -222,7 +234,7 @@ let html_increment_coordinate focus html =
     | AtP1 (IsThere, _) -> html
     | _ -> "and " ^ html
 
-let html_increment_frequency focus state (incr,freq) =
+let html_increment_frequency focus (state : index_state) (incr,freq) =
   let key = state#dico_incrs#add incr in
   let text =
     match incr with
@@ -256,13 +268,13 @@ let html_increment_frequency focus state (incr,freq) =
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
       | IncrUnselect ->
-	html_np state
+	html_np (state :> lisql_state)
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
       | IncrAggreg g ->
-	html_np state
+	html_np (state :> lisql_state)
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
       | IncrOrder order ->
-	html_np state
+	html_np (state :> lisql_state)
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
   in
   let text_freq =
@@ -272,7 +284,7 @@ let html_increment_frequency focus state (incr,freq) =
   "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus state (index : Lisql.increment Lis.index) =
+let html_index focus (state : index_state) (index : Lisql.increment Lis.index) =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
@@ -318,14 +330,23 @@ let html_cell t =
 let html_table_of_results lexicon ~first_rank ~focus_var results =
   let open Sparql_endpoint in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf "<table id=\"extension\"><tr><th></th>";
+  Buffer.add_string buf "<table id=\"extension\"><tr><th>";
+  Buffer.add_string buf
+    (html_span ~id:focus_key_of_root ~classe:"header"
+       ~title:"Click on this column header to hide focus."
+       "#");
+  Buffer.add_string buf "</th>";
   List.iter
     (fun (var,i) ->
       Buffer.add_string buf
 	(if var = focus_var
 	 then "<th class=\"in-current-focus\">"
 	 else "<th>");
-      Buffer.add_string buf (escapeHTML (lexicon#get_id_label (lexicon#get_var_id var)));
+      let id = lexicon#get_var_id var in
+      Buffer.add_string buf
+	(html_span ~id:(focus_key_of_id id) ~classe:"header"
+	   ~title:"Click on this column header to set focus on it."
+	   (escapeHTML (lexicon#get_id_label id)));
       Buffer.add_string buf "</th>")
     results.vars;
   Buffer.add_string buf "</tr>";

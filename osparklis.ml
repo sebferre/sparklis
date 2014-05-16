@@ -123,8 +123,7 @@ object (self)
 	Dom_html.stopPropagation ev;
 	navigation#update_focus ~push_in_history:false (fun _ ->
 	  let key = to_string (elt_foc##id) in
-	  Firebug.console##log(string key);
-	  Some (lisql_state#dico_foci#get key))));
+	  Some (lisql_state#get_focus key))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
 	  Dom_html.stopPropagation ev;
@@ -164,7 +163,12 @@ object (self)
 		  string_of_int b ^ (if b=1 then " result" else " results")
 		else
 		  "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		    " of " ^ string_of_int nb ^ (if nb < Lis.max_results then "" else "+")))
+		    " of " ^ string_of_int nb ^ (if nb < Lis.max_results then "" else "+")));
+	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
+	  Dom_html.stopPropagation ev;
+	  navigation#update_focus ~push_in_history:false (fun _ ->
+	    let key = to_string (elt_foc##id) in
+	    Some (lisql_state#get_focus key))))
       end)
 
   method private refresh_term_increments_init =

@@ -92,46 +92,6 @@ let rec word_of_term = function
 
 (* verbalization of IDs *)
 
-(*
-let labels_of_uri uri = (* for variable names *)
-  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
-    | Some (i,res) -> [Regexp.matched_string res]
-    | None -> []
-
-class lexicon =
-object (self)
-  method labels_uri (uri : Rdf.uri) : string list = labels_of_uri uri
-
-  val mutable prefix_cpt = []
-  method private new_label prefix =
-    let k =
-      try
-	let cpt = List.assoc prefix prefix_cpt in
-	prefix_cpt <- (prefix,cpt+1)::List.remove_assoc prefix prefix_cpt;
-	cpt+1
-      with Not_found ->
-	prefix_cpt <- (prefix,1)::prefix_cpt;
-	1 in
-    let l = prefix ^ (if k=1 && prefix<>"" then "" else string_of_int k) in
-    l
-
-  val mutable id_label_rev_list : (id * string) list = []
-
-  method set_id_labels (id : id) (labels : string list) : unit =
-    let labels = list_to_set labels in (* removing duplicates *)
-    let labels = if labels = [] then ["thing"] else labels in (* default label *)
-    let labels = List.map self#new_label labels in (* numbering duplicates *)
-    id_label_rev_list <- (id, List.hd labels)::id_label_rev_list
-
-  method get_id_label (id : id) : string =
-    List.assoc id id_label_rev_list
-
-  method get_label_id (l : string) : id =
-    list_rev_assoc l id_label_rev_list
-
-end
-*)
-
 class ['a ] counter =
 object
   val mutable key_cpt = []
