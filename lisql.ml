@@ -498,8 +498,10 @@ let insert_triple arg focus =
   focus_moves steps foc_opt
 
 let insert_triplify = function
-  | AtP1 (Has (p,np), ctx) -> Some (AtP1 (Triple (S, Det (Term (Rdf.URI p), None), np), ctx))
-  | AtP1 (IsOf (p,np), ctx) -> Some (AtP1 (Triple (O, np, Det (Term (Rdf.URI p), None)), ctx))
+  | AtP1 (Has (p,np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
+(* Some (AtP1 (Triple (S, Det (Term (Rdf.URI p), None), np), ctx)) *)
+  | AtP1 (IsOf (p,np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX1 (O, np, ctx)))
+(* Some (AtP1 (Triple (O, np, Det (Term (Rdf.URI p), None)), ctx)) *)
   | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Has (p,np), ctx))
   | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (IsOf (p,np), ctx))
   | _ -> None

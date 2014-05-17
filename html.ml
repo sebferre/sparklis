@@ -79,6 +79,11 @@ let html_suspended ~suspended html =
 let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
+let html_img ?id ~height ~alt ~title url =
+  "<img" ^
+    (match id with None -> "" | Some i -> " id=\"" ^ i ^ "\"") ^
+    " src=\"" ^ url ^ "\" height=\"" ^ string_of_int height ^ "\" alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
+
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
@@ -108,7 +113,9 @@ let html_ellipsis = "..."
 
 let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
-      (html ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" id=\"delete-current-focus\" title=\"Click on this red cross to delete the current focus\">")
+    (html ^ " " ^
+       html_img ~id:"delete-current-focus" ~height:16 ~alt:"Delete" "icon-delete.png"
+       ~title:"Click on this red cross to delete the current focus")
 
 let html_word ?(link=false) = function
   | `Thing -> "thing"
@@ -255,7 +262,9 @@ let html_increment_frequency focus (state : index_state) (incr,freq) =
 	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_c
 	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
 	    (*"<del>a " ^ html_class c ^ "</del>"*)
-	    "a " ^ html_c ^ " <img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"
+	    "a " ^ html_c ^ " " ^
+	      html_img ~height:16 ~alt:"Delete" ~title:"Remove this class at the head of the focus" "icon-delete.png"
+	    (*"<img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"*)
 	  | _ -> html_increment_coordinate focus ("that is a " ^ html_c) )
       | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_word (Lisql2nl.word_of_property p))
       | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_word (Lisql2nl.word_of_property p) ^ " of ...")
@@ -277,11 +286,30 @@ let html_increment_frequency focus (state : index_state) (incr,freq) =
 	html_np (state :> lisql_state)
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
   in
+  let title_opt =
+    match incr with
+      | IncrTerm _ -> None
+      | IncrId _ -> None
+      | IncrClass _ -> None
+      | IncrProp _ -> None
+      | IncrInvProp _ -> None
+      | IncrTriple _ -> None
+      | IncrTriplify -> Some "Adds a focus on the property to refine it"
+      | IncrIs -> None
+      | IncrAnd -> None
+      | IncrOr -> Some "Insert an alternative to the current focus"
+      | IncrMaybe -> Some "Make the current focus optional"
+      | IncrNot -> Some "Apply negation to the current focus"
+      | IncrUnselect -> Some "Hide the focus column in the table of results"
+      | IncrAggreg _ -> Some "Aggregate the focus column in the table of results, for each solution on other columns"
+      | IncrOrder Highest -> Some "Sort the focus column in decreasing order"
+      | IncrOrder Lowest -> Some "Sort the focus column in increasing order"
+      | IncrOrder _ -> None in
   let text_freq =
     if freq = 1
     then ""
     else " [" ^ string_of_int freq ^ "]" in
-  "<span class=\"increment\" id=\"" ^ key ^ "\">" ^ text ^ text_freq ^ "</span>"
+  html_span ~id:key ~classe:"increment" ?title:title_opt (text ^ text_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : index_state) (index : Lisql.increment Lis.index) =
@@ -298,16 +326,18 @@ let html_index focus (state : index_state) (index : Lisql.increment Lis.index) =
 
 (* HTML of results *)
 
-let html_img ?(height = 120) url =
-  "<img src=\"" ^ url ^ "\" alt=\"" ^ Lisql2nl.name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">"
+let html_cell_img ?(height = 120) url =
+  let label = Lisql2nl.name_of_uri url in
+  html_a url (html_img ~height ~alt:label ~title:label url)
+(*  "<img src=\"" ^ url ^ "\" alt=\"" ^ Lisql2nl.name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">" *)
 
-let html_video url mime =
+let html_cell_video url mime =
   "<video width=\"320\" height=\"240\" controls>\
   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
   Your browser does not support the video tag.\
   </video>"
 
-let html_audio url mime =
+let html_cell_audio url mime =
   "<audio controls>\
   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
   Your browser does not support this audio format.\
@@ -317,13 +347,13 @@ let html_cell t =
   match t with
     | Rdf.URI uri ->
       if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
-	html_a uri (html_img uri)
+	html_cell_img uri
       else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
-	html_video uri "video/mp4"
+	html_cell_video uri "video/mp4"
       else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
-	html_video uri "video/ogg"
+	html_cell_video uri "video/ogg"
       else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
-	html_audio uri "audio/mpeg"
+	html_cell_audio uri "audio/mpeg"
       else html_word ~link:true (Lisql2nl.word_of_term t)
     | _ -> html_word ~link:true (Lisql2nl.word_of_term t)
 
