@@ -124,9 +124,13 @@ let html_word ?(link=false) = function
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
   | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
   | `Entity (uri,s) ->
+    html_uri ~classe:"URI" uri s ^ " " ^
+      html_a uri (html_img ~height:12 ~alt:"Open" ~title:"Open in new window" "icon-open-new-window.png"(*"open_in_new_window.png"*))
+(*
     if link
     then html_a uri (escapeHTML s)
     else html_uri ~classe:"URI" uri s
+*)
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
   | `Op op -> html_modifier op

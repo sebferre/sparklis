@@ -153,10 +153,8 @@ object (self)
     with _ -> assert false
 
   method get_id_var (id : id) : string =
-    try
-      let prefix, _ = List.assoc id id_rev_list in
-      prefix ^ "_" ^ string_of_int id
-    with _ -> assert false
+    let prefix = try fst (List.assoc id id_rev_list) with _ -> "thing" in
+    prefix ^ "_" ^ string_of_int id
 
   method get_var_id (v : string) : id =
     match Regexp.search (Regexp.regexp "[0-9]+$") v 0 with
@@ -182,15 +180,15 @@ let rec words_elt_p1 lex : elt_p1 -> word list = function
   | And ar ->
     let ar_words = Array.map (fun f -> words_elt_p1 lex f) ar in
     List.concat (Array.to_list ar_words)
-  | Or ar -> []
-  | Maybe f -> []
-  | Not f -> []
+  | Or ar -> Array.iter (fun f -> ignore (words_elt_p1 lex f)) ar; []
+  | Maybe f -> ignore (words_elt_p1 lex f); []
+  | Not f -> ignore (words_elt_p1 lex f); []
   | IsThere -> []
 and words_elt_s1 lex ~words : elt_s1 -> word list = function
   | Det (An (id, modif, head), rel_opt) ->
     let l_head = match head with Thing -> [] | Class c -> [word_of_class c] in
     let l_rel_opt = match rel_opt with None -> [] | Some rel -> words_elt_p1 lex rel in
-    let words = l_head @ words @ l_rel_opt in
+    let words = words @ l_head @ l_rel_opt in
     lex#set_id_words id words;
     words
   | Det (_,rel_opt) ->
