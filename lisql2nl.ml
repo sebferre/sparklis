@@ -169,10 +169,10 @@ let rec id_label_aggregate : id_label -> id_label_word = function
   | `Word lw -> lw
   | `Gen (l,(v2,s2)) ->
     let v1, s1 = id_label_aggregate l in
-    (v1 ^ "_" ^ v2), (s1 ^ "'s " ^ s2)
+    v2, (s1 ^ "'s " ^ s2)
   | `Of ((v1,s1),l) ->
     let v2, s2 = id_label_aggregate l in
-    (v1 ^ "_of_" ^ v2), (s1 ^ " of the " ^ s2)
+    v1, (s1 ^ " of the " ^ s2)
 
 class ['a ] counter =
 object

@@ -77,6 +77,10 @@ let rec term : Rdf.term -> term = function
 
 let term_numeric (t : Rdf.term) : expr = "STRDT(str(" ^ term t ^ "),xsd:double)"
 
+let indent : int -> string -> string =
+  let re = Regexp.regexp_string "\n" in
+  fun w p -> Regexp.global_replace re p ("\n" ^ String.make w ' ')
+
 let expr_func (f : string) (expr : expr) : expr = f ^ "(" ^ expr ^ ")"
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^ " " ^ relop ^ " " ^ expr2
@@ -86,13 +90,13 @@ let log_false : expr = "false"
 let log_not (e : expr) : expr =
   if e = log_true then log_false
   else if e = log_false then log_true
-  else "!(" ^ e ^ ")"
+  else "!( " ^ indent 3 e ^ " )"
 let log_and (le : expr list) : expr = 
   if List.mem log_false le then log_false
-  else "(" ^ String.concat "\n && " (List.filter ((<>) log_true) le) ^ ")"
+  else "(  " ^ String.concat "\n&& " (List.map (indent 3) (List.filter ((<>) log_true) le)) ^ " )"
 let log_or (le : expr list) : expr =
   if List.mem log_true le then log_true
-  else "(" ^ String.concat "\n || " (List.filter ((<>) log_false) le) ^ ")"
+  else "(  " ^ String.concat "\n|| " (List.map (indent 3) (List.filter ((<>) log_false) le)) ^ " )"
 
 let empty : pattern = ""
 let something s = term s ^ " a [] ."
@@ -100,7 +104,7 @@ let rdf_type s c = term s ^ " a " ^ term c ^ " ."
 let triple s p o = term s ^ " " ^ term p ^ " " ^ term o ^ " ."
 let filter (e : expr) : pattern =
   if e = log_true then empty
-  else "FILTER (" ^ e ^ ")"
+  else "FILTER ( " ^ indent 9 e ^ " )"
 let join (lp : pattern list) : pattern =
   String.concat "\n" (List.filter ((<>) empty) lp)
 let union (lp : pattern list) : pattern =
@@ -108,11 +112,11 @@ let union (lp : pattern list) : pattern =
   match lp with
     | [] -> invalid_arg "Sparql.union: empty list"
     | [p] -> p
-    | _ -> String.concat "\n UNION " (List.map (fun p -> "{ " ^ p ^ " }") lp)
+    | p::lp1 -> "{ " ^ indent 2 p ^ " }\nUNION " ^ String.concat "\nUNION " (List.map (fun p -> "{ " ^ indent 8 p ^ " }") lp1)
 let optional (p : pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
-  "OPTIONAL { " ^ p ^ " }"
-let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ p ^ " }"
+  "OPTIONAL { " ^ indent 11 p ^ " }"
+let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ indent 13 p ^ " }"
 
 
 let search_label (t : Rdf.term) (l : Rdf.term) : pattern =
@@ -122,7 +126,7 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 
 
 let ask (pattern : pattern) : query =
-  prologue#declarations ^ "ASK WHERE {\n" ^ pattern ^ "\n}"
+  prologue#declarations ^ "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
 type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN
 type order = ASC | DESC
@@ -151,7 +155,7 @@ let select
 	       | MAX -> make_aggreg "MAX(" v ")" vg
 	       | MIN -> make_aggreg "MIN(" v ")" vg)
 	   aggregations) in
-    let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ " WHERE {\n" ^ pattern ^ "\n}" in
+    let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in
     let s =
       if aggregations = [] || dimensions = []
       then s
