@@ -187,11 +187,11 @@ and elt_s2 state : elt_s2 -> sparql_s2 = function
     let v = state#lexicon#get_id_var id in
     state#set_modif v modif;
     let t = Rdf.Var v in
-    (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d1 t) (d2 t)))
+    (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d2 t) (d1 t))) (* YES: d2 - d1 *)
   | The id ->
     let v = state#lexicon#get_id_var id in
     let t = Rdf.Var v in
-    (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
+    (fun d1 d2 -> Sparql.formula_and (d2 t) (d1 t)) (* YES: d2 - s1 *)
 and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
     (fun x form -> Sparql.formula_bind x form)

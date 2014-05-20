@@ -388,6 +388,7 @@ object (self)
     future <- []
 
   method change_endpoint url =
+    Sparql.prologue#reset;
     present#lis#abort_all_ajax;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in

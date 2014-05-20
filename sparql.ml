@@ -4,7 +4,61 @@ type expr = string
 type pattern = string
 type query = string
 
-let uri (uri : Rdf.uri) : term = "<" ^ uri ^ ">"
+let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
+  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
+    | Some (i,res) ->
+      let localname = Regexp.matched_string res in
+      let len_namespace = String.length uri - String.length localname in
+      if len_namespace > 0 && (uri.[len_namespace - 1] = '/' || uri.[len_namespace - 1] = '#')
+      then Some (String.sub uri 0 len_namespace, localname)
+      else None
+    | None -> None
+
+let prologue =
+object (self)
+  val mutable cpt = 0 (* prefix counter *)
+  val mutable map : (string * string) list = [] (* mapping from namespace to prefix *)
+  initializer self#reset
+
+  method reset : unit =
+    cpt <- 0;
+    map <- (* default namespaces (reverse order of declarations) *)
+      [("http://www.w3.org/2002/07/owl#", "owl:"); 
+       ("http://www.w3.org/2000/01/rdf-schema#", "rdfs:");
+       ("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:");
+       ("http://www.w3.org/2001/XMLSchema#", "xsd:")]
+
+  method qname_of_uri (uri : Rdf.uri) : string option (* prefix, local name *) =
+    match split_uri uri with
+      | None -> None
+      | Some (ns,ln) ->
+	let prefix =
+	  try List.assoc ns map
+	  with _ ->
+	    cpt <- cpt+1;
+	    let prefix = "n" ^ string_of_int cpt ^ ":" in
+	    map <- (ns,prefix)::map;
+	    prefix in
+	Some (prefix ^ ln)
+  
+  method declarations : string =
+    let buf = Buffer.create 500 in
+    List.fold_right
+      (fun (ns,pre) () ->
+	Buffer.add_string buf "PREFIX ";
+	Buffer.add_string buf pre;
+	Buffer.add_string buf " <";
+	Buffer.add_string buf ns;
+	Buffer.add_string buf ">\n")
+      map ();
+    Buffer.contents buf
+
+end
+
+let uri (uri : Rdf.uri) : term =
+  match prologue#qname_of_uri uri with
+    | None -> "<" ^ uri ^ ">"
+    | Some qname -> qname
 
 let var (v : Rdf.var) : term = "?" ^ v
 
@@ -68,7 +122,7 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 
 
 let ask (pattern : pattern) : query =
-  "ASK WHERE {\n" ^ pattern ^ "\n}"
+  prologue#declarations ^ "ASK WHERE {\n" ^ pattern ^ "\n}"
 
 type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN
 type order = ASC | DESC
@@ -112,8 +166,7 @@ let select
 	     | (DESC,v) -> "DESC(" ^ var v ^ ")")
 	   ordering) in
     let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
-    s
-
+    prologue#declarations ^ s
 
 type formula =
   | Pattern of pattern (* binding *)
