@@ -117,7 +117,7 @@ let html_current_focus html =
        html_img ~id:"delete-current-focus" ~height:16 ~alt:"Delete" "icon-delete.png"
        ~title:"Click on this red cross to delete the current focus")
 
-let html_word ?(link=false) = function
+let html_word = function
   | `Thing -> "thing"
   | `Relation -> html_modifier "relation"
   | `Literal s -> html_literal s
@@ -126,11 +126,6 @@ let html_word ?(link=false) = function
   | `Entity (uri,s) ->
     html_uri ~classe:"URI" uri s ^ " " ^
       html_a uri (html_img ~height:12 ~alt:"Open" ~title:"Open in new window" "icon-open-new-window.png"(*"open_in_new_window.png"*))
-(*
-    if link
-    then html_a uri (escapeHTML s)
-    else html_uri ~classe:"URI" uri s
-*)
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
   | `Op op -> html_modifier op
@@ -358,8 +353,8 @@ let html_cell t =
 	html_cell_video uri "video/ogg"
       else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
 	html_cell_audio uri "audio/mpeg"
-      else html_word ~link:true (Lisql2nl.word_of_term t)
-    | _ -> html_word ~link:true (Lisql2nl.word_of_term t)
+      else html_word (Lisql2nl.word_of_term t)
+    | _ -> html_word (Lisql2nl.word_of_term t)
 
 let html_table_of_results lexicon ~first_rank ~focus_var results =
   let open Sparql_endpoint in

@@ -166,40 +166,48 @@ let words_of_arg0 = function P -> [`Relation] | S | O -> []
 let words_of_arg1 = function S -> [`Relation] | P | O -> []
 let words_of_arg2 = function O -> [`Relation] | S | P -> []
 
-let rec words_elt_p1 lex : elt_p1 -> word list = function
-  | Is np -> words_elt_s1 lex ~words:[] np
-  | Type c -> [word_of_class c]
-  | Has (p,np) -> let _ = words_elt_s1 lex ~words:[word_of_property p] np in []
-  | IsOf (p,np) -> let _ = words_elt_s1 lex ~words:[] np in [word_of_property p]
+let rec words_elt_p1 lex : elt_p1 -> word list * (unit -> unit) = function
+  | Is np -> [], (fun () -> words_elt_s1 lex ~words:[] np)
+  | Type c -> [word_of_class c], (fun () -> ())
+  | Has (p,np) -> [], (fun () -> words_elt_s1 lex ~words:[word_of_property p] np)
+  | IsOf (p,np) -> [word_of_property p], (fun () -> words_elt_s1 lex ~words:[] np)
   | Triple (arg,np1,np2) ->
-    let _ = words_elt_s1 lex ~words:(words_of_arg1 arg) np1 in
-    let _ = words_elt_s1 lex ~words:(words_of_arg2 arg) np2 in
-    words_of_arg0 arg
-  | Search c -> []
-  | Filter c -> []
+    words_of_arg0 arg,
+    (fun () ->
+      words_elt_s1 lex ~words:(words_of_arg1 arg) np1;
+      words_elt_s1 lex ~words:(words_of_arg2 arg) np2)
+  | Search c -> [], (fun () -> ())
+  | Filter c -> [], (fun () -> ())
   | And ar ->
-    let ar_words = Array.map (fun f -> words_elt_p1 lex f) ar in
-    List.concat (Array.to_list ar_words)
-  | Or ar -> Array.iter (fun f -> ignore (words_elt_p1 lex f)) ar; []
-  | Maybe f -> ignore (words_elt_p1 lex f); []
-  | Not f -> ignore (words_elt_p1 lex f); []
-  | IsThere -> []
-and words_elt_s1 lex ~words : elt_s1 -> word list = function
+    let ar_words_f = Array.map (fun elt -> words_elt_p1 lex elt) ar in
+    let l_words, l_f = List.split (Array.to_list ar_words_f) in
+    List.concat l_words, (fun () -> List.iter (fun f -> f ()) l_f)
+  | Or ar ->
+    let ar_words_f = Array.map (fun elt -> words_elt_p1 lex elt) ar in
+    let l_words, l_f = List.split (Array.to_list ar_words_f) in
+    [], (fun () -> List.iter (fun f -> f ()) l_f)
+  | Maybe elt ->
+    let words, f = words_elt_p1 lex elt in
+    words, f
+  | Not elt ->
+    let words, f = words_elt_p1 lex elt in
+    [], f
+  | IsThere -> [], (fun () -> ())
+and words_elt_s1 lex ~words : elt_s1 -> unit = function
   | Det (An (id, modif, head), rel_opt) ->
     let l_head = match head with Thing -> [] | Class c -> [word_of_class c] in
-    let l_rel_opt = match rel_opt with None -> [] | Some rel -> words_elt_p1 lex rel in
-    let words = words @ l_head @ l_rel_opt in
-    lex#set_id_words id words;
-    words
+    let l_rel_opt, f = match rel_opt with None -> [], (fun () -> ()) | Some rel -> words_elt_p1 lex rel in
+    lex#set_id_words id (words @ l_head @ l_rel_opt);
+    f ()
   | Det (_,rel_opt) ->
-    let l_rel_opt = match rel_opt with None -> [] | Some rel -> words_elt_p1 lex rel in
-    words @ l_rel_opt
-  | NAnd ar -> Array.iter (fun f -> ignore (words_elt_s1 lex ~words f)) ar; []
-  | NOr ar -> Array.iter (fun f -> ignore (words_elt_s1 lex ~words f)) ar; []
-  | NMaybe f -> ignore (words_elt_s1 lex ~words f); []
-  | NNot f -> ignore (words_elt_s1 lex ~words f); []
+    let l_rel_opt, f = match rel_opt with None -> [], (fun () -> ()) | Some rel -> words_elt_p1 lex rel in
+    f ()
+  | NAnd ar -> Array.iter (fun f -> words_elt_s1 lex ~words f) ar
+  | NOr ar -> Array.iter (fun f -> words_elt_s1 lex ~words f) ar
+  | NMaybe f -> words_elt_s1 lex ~words f
+  | NNot f -> words_elt_s1 lex ~words f
 and words_elt_s lex : elt_s -> unit = function
-  | Return np -> ignore (words_elt_s1 lex ~words:[] np)
+  | Return np -> words_elt_s1 lex ~words:[] np
 
 let lexicon_of_focus focus : lexicon =
   let lex = new lexicon in
