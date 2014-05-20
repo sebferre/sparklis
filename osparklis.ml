@@ -95,8 +95,8 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable lisql_state = new Html.lisql_state (new Lisql2nl.lexicon)
-  val mutable index_state = new Html.index_state (new Lisql2nl.lexicon)
+  val mutable lisql_state = new Html.lisql_state (new Lisql2nl.lexicon [])
+  val mutable index_state = new Html.index_state (new Lisql2nl.lexicon [])
 
   method show_permalink : unit =
     let args =

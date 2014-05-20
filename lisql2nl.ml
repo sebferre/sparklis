@@ -92,6 +92,88 @@ let rec word_of_term = function
 
 (* verbalization of IDs *)
 
+type id_label_word = Rdf.var * string
+type id_label = [ `Word of id_label_word | `Gen of id_label * id_label_word | `Of of id_label_word * id_label ]
+type id_labelling = (Lisql.id * id_label list) list
+
+let gen_labels (ls : id_label list) (lw : id_label_word) : id_label list = List.fold_right (fun l acc -> `Gen (l,lw) :: acc) ls [`Word lw]
+let of_labels (lw : id_label_word) (ls : id_label list) : id_label list = List.fold_right (fun l acc -> `Of (lw,l) :: acc) ls [`Word lw]
+
+let var_of_uri (uri : Rdf.uri) : string =
+  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
+    | Some (i,res) -> Regexp.matched_string res
+    | None -> "thing"
+
+let id_label_word_of_uri uri = (var_of_uri uri, name_of_uri uri)
+
+let id_label_words_of_arg0 = function P -> Some ("relation","relation") | S | O -> None
+let id_label_words_of_arg1 = function S -> Some ("relation","relation") | P | O -> None
+let id_label_words_of_arg2 = function O -> Some ("relation","relation") | S | P -> None
+
+let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
+  | Is np -> labelling_s1 ~labels np
+  | Type c -> [`Word (id_label_word_of_uri c)], []
+  | Has (p,np) ->
+    let lw = id_label_word_of_uri p in
+    let _ls, lab = labelling_s1 ~labels:(gen_labels labels lw) np in
+    [], lab    
+  | IsOf (p,np) ->
+    let lw = id_label_word_of_uri p in
+    let ls, lab = labelling_s1 ~labels:[] np in
+    of_labels lw ls, lab
+  | Triple (arg,np1,np2) ->
+    let _ls1, lab1 = labelling_s1 ~labels:(match id_label_words_of_arg1 arg with None -> [] | Some lw -> gen_labels labels lw) np1 in
+    let _ls2, lab2 = labelling_s1 ~labels:(match id_label_words_of_arg2 arg with None -> [] | Some lw -> gen_labels labels lw) np2 in
+    [], lab1 @ lab2
+  | Search _ -> [], []
+  | Filter _ -> [], []
+  | And ar ->
+    let lss, labs = List.split (Array.to_list (Array.map (labelling_p1 ~labels) ar)) in
+    List.concat lss, List.concat labs
+  | Or ar ->
+    let _lss, labs = List.split (Array.to_list (Array.map (labelling_p1 ~labels) ar)) in
+    [], List.concat labs
+  | Maybe elt ->
+    let ls, lab = labelling_p1 ~labels elt in
+    ls, lab
+  | Not elt ->
+    let _ls, lab = labelling_p1 ~labels elt in
+    [], lab
+  | IsThere -> [], []
+and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
+  | Det (An (id, modif, head), rel_opt) ->
+    let labels2 = match head with Thing -> labels | Class c -> labels @ [`Word (id_label_word_of_uri c)] in
+    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels:labels2 rel in
+    ls_rel, (id, labels2 @ ls_rel) :: lab_rel
+  | Det (_, rel_opt) ->
+    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels rel in
+    ls_rel, lab_rel
+  | NAnd ar ->
+    let lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
+    List.concat lss, List.concat labs
+  | NOr ar ->
+    let _lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
+    [], List.concat labs
+  | NMaybe elt ->
+    let ls, lab = labelling_s1 ~labels elt in
+    ls, lab
+  | NNot elt ->
+    let _ls, lab = labelling_s1 ~labels elt in
+    [], lab
+and labelling_s : elt_s -> id_labelling = function
+  | Return np ->
+    let _ls, lab = labelling_s1 ~labels:[] np in
+    lab
+
+let rec id_label_aggregate : id_label -> id_label_word = function
+  | `Word lw -> lw
+  | `Gen (l,(v2,s2)) ->
+    let v1, s1 = id_label_aggregate l in
+    (v1 ^ "_" ^ v2), (s1 ^ "'s " ^ s2)
+  | `Of ((v1,s1),l) ->
+    let v2, s2 = id_label_aggregate l in
+    (v1 ^ "_of_" ^ v2), (s1 ^ " of the " ^ s2)
+
 class ['a ] counter =
 object
   val mutable key_cpt = []
@@ -108,52 +190,44 @@ object
     with Not_found -> 0
 end
 
-class lexicon =
-object (self)
+class lexicon (lab : id_labelling) =
+object
   val label_counter : string counter = new counter
-
-  method private var_of_uri (uri : Rdf.uri) : string =
-    match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
-      | Some (i,res) -> Regexp.matched_string res
-      | None -> "thing"
-
-  val mutable id_rev_list : (id * (Rdf.var * (string * int))) list = []
-
-  method set_id_words (id : id) (words : word list) : unit =
-    let words = list_to_set words in (* removing duplicates *)
-    let words = if words = [] then [`Thing] else words in (* default label *)
-    let l =
-      List.map
-	(fun w ->
-	  let var_prefix, s =
-	    match w with
-	      | `Thing -> "thing", "thing"
-	      | `Relation -> "relation", "relation"
-	      | `Class (uri,s) -> self#var_of_uri uri, s
-	      | `Prop (uri,s) -> self#var_of_uri uri, s
-	      | _ -> assert false in
-	  let k = label_counter#rank s in
-	  var_prefix, (s,k))
-	words in
-    id_rev_list <- (id, List.hd l)::id_rev_list
+  val mutable id_list : (id * (Rdf.var * (string * int))) list = []
+  initializer
+    id_list <- List.map
+      (fun (id,ls) ->
+	let ls = list_to_set ls in (* removing duplicates *)
+	let ls = if ls = [] then [`Word ("thing","thing")] else ls in (* default label *)
+	let vss =
+	  List.map
+	    (fun l ->
+	      let var_prefix, s = id_label_aggregate l in
+	      let k = label_counter#rank s in
+	      var_prefix, (s,k))
+	    ls in
+	(id, List.hd vss))
+      lab
 
   method get_id_label (id : id) : string =
     try
-      let _, (s, k) = List.assoc id id_rev_list in
+      let _, (s, k) = List.assoc id id_list in
       let n = label_counter#count s in
-      if n = 1
-      then s
-      else
-	let s_th_ =
-	  if k mod 10 = 1 && not (k mod 100 = 11) then "st "
-	  else if k mod 10 = 2 && not (k mod 100 = 12) then "nd "
-	  else if k mod 10 = 3 && not (k mod 100 = 13) then "rd "
-	  else "th " in
-	string_of_int k ^ s_th_ ^ s
+      let s_rank =
+	if n = 1
+	then ""
+	else
+	  let s_th_ =
+	    if k mod 10 = 1 && not (k mod 100 = 11) then "st "
+	    else if k mod 10 = 2 && not (k mod 100 = 12) then "nd "
+	    else if k mod 10 = 3 && not (k mod 100 = 13) then "rd "
+	    else "th " in
+	  string_of_int k ^ s_th_ in
+      "the " ^ s_rank ^ s
     with _ -> assert false
 
   method get_id_var (id : id) : string =
-    let prefix = try fst (List.assoc id id_rev_list) with _ -> "thing" in
+    let prefix = try fst (List.assoc id id_list) with _ -> "thing" in
     prefix ^ "_" ^ string_of_int id
 
   method get_var_id (v : string) : id =
@@ -162,57 +236,9 @@ object (self)
       | None -> assert false
 end
 
-let words_of_arg0 = function P -> [`Relation] | S | O -> []
-let words_of_arg1 = function S -> [`Relation] | P | O -> []
-let words_of_arg2 = function O -> [`Relation] | S | P -> []
-
-let rec words_elt_p1 lex : elt_p1 -> word list * (unit -> unit) = function
-  | Is np -> [], (fun () -> words_elt_s1 lex ~words:[] np)
-  | Type c -> [word_of_class c], (fun () -> ())
-  | Has (p,np) -> [], (fun () -> words_elt_s1 lex ~words:[word_of_property p] np)
-  | IsOf (p,np) -> [word_of_property p], (fun () -> words_elt_s1 lex ~words:[] np)
-  | Triple (arg,np1,np2) ->
-    words_of_arg0 arg,
-    (fun () ->
-      words_elt_s1 lex ~words:(words_of_arg1 arg) np1;
-      words_elt_s1 lex ~words:(words_of_arg2 arg) np2)
-  | Search c -> [], (fun () -> ())
-  | Filter c -> [], (fun () -> ())
-  | And ar ->
-    let ar_words_f = Array.map (fun elt -> words_elt_p1 lex elt) ar in
-    let l_words, l_f = List.split (Array.to_list ar_words_f) in
-    List.concat l_words, (fun () -> List.iter (fun f -> f ()) l_f)
-  | Or ar ->
-    let ar_words_f = Array.map (fun elt -> words_elt_p1 lex elt) ar in
-    let l_words, l_f = List.split (Array.to_list ar_words_f) in
-    [], (fun () -> List.iter (fun f -> f ()) l_f)
-  | Maybe elt ->
-    let words, f = words_elt_p1 lex elt in
-    words, f
-  | Not elt ->
-    let words, f = words_elt_p1 lex elt in
-    [], f
-  | IsThere -> [], (fun () -> ())
-and words_elt_s1 lex ~words : elt_s1 -> unit = function
-  | Det (An (id, modif, head), rel_opt) ->
-    let l_head = match head with Thing -> [] | Class c -> [word_of_class c] in
-    let l_rel_opt, f = match rel_opt with None -> [], (fun () -> ()) | Some rel -> words_elt_p1 lex rel in
-    lex#set_id_words id (words @ l_head @ l_rel_opt);
-    f ()
-  | Det (_,rel_opt) ->
-    let l_rel_opt, f = match rel_opt with None -> [], (fun () -> ()) | Some rel -> words_elt_p1 lex rel in
-    f ()
-  | NAnd ar -> Array.iter (fun f -> words_elt_s1 lex ~words f) ar
-  | NOr ar -> Array.iter (fun f -> words_elt_s1 lex ~words f) ar
-  | NMaybe f -> words_elt_s1 lex ~words f
-  | NNot f -> words_elt_s1 lex ~words f
-and words_elt_s lex : elt_s -> unit = function
-  | Return np -> words_elt_s1 lex ~words:[] np
-
 let lexicon_of_focus focus : lexicon =
-  let lex = new lexicon in
-  words_elt_s lex (elt_s_of_focus focus);
-  lex
+  let lab = labelling_s (elt_s_of_focus focus) in
+  new lexicon lab
 
 (* verbalization of focus *)
 

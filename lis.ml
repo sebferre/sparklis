@@ -103,20 +103,20 @@ let max_results = 200
 let max_classes = 200
 let max_properties = 1000
 
-class place (endpoint : string) (focus : Lisql.focus) =
+class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   (* essential state *)
 
   val endpoint = endpoint
   method endpoint = endpoint
 
-  val focus = focus
+  val focus = foc
   method focus = focus
   method query = Lisql.elt_s_of_focus focus
 
   (* derived state *)
 
-  val mutable lex = new Lisql2nl.lexicon
+  val mutable lex = new Lisql2nl.lexicon []
   method lexicon = lex
 
   val mutable focus_term_list : Rdf.term list = []
