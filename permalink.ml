@@ -2,7 +2,19 @@
 open Rdf
 open Lisql
 
-(* printing *)
+(* versioning *)
+
+type version =  (* must be extended whenever abstract syntax changes *)
+  | VInit (* initial permalink version *)
+  | VId (* addition of LISQL ids in existential determiners (constructor An) *)
+
+let current_version = VId (* must be changed whenever abstract syntax changes *)
+
+(* current-version printing *)
+
+let print_version = function
+  | VInit -> "VInit"
+  | VId -> "VId"
 
 let print_int i = Printf.sprintf "%d" i
 let print_float f = Printf.sprintf "%F" f
@@ -19,7 +31,9 @@ let print_ar pr f ar = print_nary f (List.map pr (Array.to_list ar))
 
 let print_opt pr = function None -> print_atom "None" | Some x -> print_un "Some" (pr x)
 
-let rec print_s = function
+let rec print s =
+  "[" ^ print_version current_version ^ "]" ^ print_s s
+and print_s = function
   | Return np -> print_un "Return" (print_s1 np)
 and print_p1 = function
   | Is np -> print_un "Is" (print_s1 np)
@@ -91,107 +105,118 @@ and print_uri uri = print_string uri
 and print_var v = print_string v
 and print_id id = print_int id
 
-let of_query (q : elt_s) : string = print_s q
+let of_query (q : elt_s) : string = print q
 
-(* parsing *)
+(* multi-version parsing *)
 
 open Genlex
 
-let lexer = make_lexer ["("; ")"; ","]
+let lexer = make_lexer ["[";"]";"("; ")"; ","]
 
-let parse_int = parser [< 'Int i >] -> i
-let parse_float = parser [< 'Float f >] -> f
-let parse_string = parser [< 'String s >] -> s
-let parse_atom f = parser [< 'Ident id when id = f >] -> ()
+let parse_version = parser
+  | [< 'Ident "VInit" >] -> VInit
+  | [< 'Ident "VId" >] -> VId
 
-let parse_un f ps1 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1; 'Kwd ")" >] -> x1
-let parse_bin f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1; 'Kwd ","; x2 = ps2; 'Kwd ")" >] -> x1, x2
-let parse_ter f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1; 'Kwd ","; x2 = ps2; 'Kwd ","; x3 = ps3; 'Kwd ")" >] -> x1, x2, x3
-let parse_opt ps = parser [< _ = parse_atom "None" >] -> None | [< x = parse_un "Some" ps >] -> Some x
+let parse_int ~version = parser [< 'Int i >] -> i
+let parse_float ~version = parser [< 'Float f >] -> f
+let parse_string ~version = parser [< 'String s >] -> s
+let parse_atom ~version f = parser [< 'Ident id when id = f >] -> ()
 
-let rec parse_list ps f = parser
-  | [< 'Ident id when id = f; 'Kwd "("; args = parse_args ps >] -> args
-and parse_args ps = parser
-  | [< x = ps; xs = parse_args_aux ps >] -> x::xs
+let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ")" >] -> x1
+let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ")" >] -> x1, x2
+let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ","; x3 = ps3 ~version; 'Kwd ")" >] -> x1, x2, x3
+let parse_opt ~version ps = parser [< _ = parse_atom ~version "None" >] -> None | [< x = parse_un ~version "Some" ps >] -> Some x
+
+let rec parse_list ~version ps f = parser
+  | [< 'Ident id when id = f; 'Kwd "("; args = parse_args ~version ps >] -> args
+and parse_args ~version ps = parser
+  | [< x = ps ~version; xs = parse_args_aux ~version ps >] -> x::xs
   | [< >] -> []
-and parse_args_aux ps = parser
-  | [< 'Kwd ","; xs = parse_args ps >] -> xs
+and parse_args_aux ~version ps = parser
+  | [< 'Kwd ","; xs = parse_args ~version ps >] -> xs
   | [< 'Kwd ")" >] -> []
 
-let parse_ar ps f = parser
-  | [< xs = parse_list ps f >] -> Array.of_list xs
+let parse_ar ~version ps f = parser
+  | [< xs = parse_list ~version ps f >] -> Array.of_list xs
 
-let rec parse_s = parser
-  | [< np = parse_un "Return" parse_s1 >] -> Return np
-and parse_p1 = parser
-  | [< np = parse_un "Is" parse_s1 >] -> Is np
-  | [< c = parse_un "Type" parse_uri >] -> Type c
-  | [< p, np = parse_bin "Has" parse_uri parse_s1 >] -> Has (p,np)
-  | [< p, np = parse_bin "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
-  | [< arg, np1, np2 = parse_ter "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
-  | [< c = parse_un "Search" parse_constr >] -> Search c
-  | [< c = parse_un "Filter" parse_constr >] -> Filter c
-  | [< c = parse_un "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
-  | [< ar = parse_ar parse_p1 "And" >] -> And ar
-  | [< ar = parse_ar parse_p1 "Or" >] -> Or ar
-  | [< f = parse_un "Maybe" parse_p1 >] -> Maybe f
-  | [< f = parse_un "Not" parse_p1 >] -> Not f
-  | [< _ = parse_atom "IsThere" >] -> IsThere
-and parse_s1 = parser
-  | [< det, rel_opt = parse_bin "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
-  | [< ar = parse_ar parse_s1 "NAnd" >] -> NAnd ar
-  | [< ar = parse_ar parse_s1 "NOr" >] -> NOr ar
-  | [< f = parse_un "NMaybe" parse_s1 >] -> NMaybe f
-  | [< f = parse_un "NNot" parse_s1 >] -> NNot f
-and parse_s2 = parser
-  | [< t = parse_un "Term" parse_term >] -> Term t
-  | [< id, modif, head = parse_ter "An" parse_id parse_modif parse_head >] -> An (id, modif, head)
-  | [< id = parse_un "The" parse_id >] -> The id
-and parse_head = parser
-  | [< _ = parse_atom "Thing" >] -> Thing
-  | [< c = parse_un "Class" parse_uri >] -> Class c
-and parse_arg = parser
-  | [< _ = parse_atom "S" >] -> S
-  | [< _ = parse_atom "P" >] -> P
-  | [< _ = parse_atom "O" >] -> O
-and parse_modif = parser
-  | [< p, o = parse_bin "Modif" parse_project parse_order >] -> (p,o)
-and parse_project = parser
-  | [< _ = parse_atom "Unselect" >] -> Unselect
-  | [< _ = parse_atom "Select" >] -> Select
-  | [< g, o = parse_bin "Aggreg" parse_aggreg parse_order >] -> Aggreg (g,o)
-and parse_aggreg = parser
-  | [< _ = parse_atom "NumberOf" >] -> NumberOf
-  | [< _ = parse_atom "ListOf" >] -> ListOf
-  | [< _ = parse_atom "Total" >] -> Total
-  | [< _ = parse_atom "Average" >] -> Average
-  | [< _ = parse_atom "Maximum" >] -> Maximum
-  | [< _ = parse_atom "Minimum" >] -> Minimum
-and parse_order = parser
-  | [< _ = parse_atom "Unordered" >] -> Unordered
-  | [< _ = parse_atom "Highest" >] -> Highest
-  | [< _ = parse_atom "Lowest" >] -> Lowest
-and parse_constr = parser
-  | [< _ = parse_atom "True" >] -> True
-  | [< lw = parse_list parse_string "MatchesAll" >] -> MatchesAll lw
-  | [< lw = parse_list parse_string "MatchesAny" >] -> MatchesAny lw
-  | [< s = parse_un "After" parse_string >] -> After s
-  | [< s = parse_un "Before" parse_string >] -> Before s
-  | [< s1, s2 = parse_bin "FromTo" parse_string parse_string >] -> FromTo (s1,s2)
-  | [< s = parse_un "HigherThan" parse_string >] -> HigherThan s
-  | [< s = parse_un "LowerThan" parse_string >] -> LowerThan s
-  | [< s1, s2 = parse_bin "Between" parse_string parse_string >] -> Between (s1,s2)
-  | [< s = parse_un "HasLang" parse_string >] -> HasLang s
-  | [< s = parse_un "HasDatatype" parse_string >] -> HasDatatype s
-and parse_term = parser
-  | [< uri = parse_un "URI" parse_uri >] -> URI uri
-  | [< f, s, dt = parse_ter "Number" parse_float parse_string parse_string >] -> Number (f,s,dt)
-  | [< s, dt = parse_bin "TypedLiteral" parse_string parse_uri >] -> TypedLiteral (s,dt)
-  | [< s, lang = parse_bin "PlainLiteral" parse_string parse_string >] -> PlainLiteral (s,lang)
-  | [< id = parse_un "Bnode" parse_string >] -> Bnode id
-  | [< v = parse_un "Var" parse_var >] -> Var v
-and parse_uri = parser [< s = parse_string >] -> s
-and parse_var = parser [< s = parse_string >] -> s
-and parse_id = parser [< i = parse_int >] -> i
+let rec parse = parser
+  | [< 'Kwd "["; version = parse_version; 'Kwd "]"; s = parse_s ~version >] -> s
+  | [< s = parse_s ~version:VInit >] -> s
+and parse_s ~version = parser
+  | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
+and parse_p1 ~version = parser
+  | [< np = parse_un ~version "Is" parse_s1 >] -> Is np
+  | [< c = parse_un ~version "Type" parse_uri >] -> Type c
+  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Has (p,np)
+  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
+  | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
+  | [< c = parse_un ~version "Search" parse_constr >] -> Search c
+  | [< c = parse_un ~version "Filter" parse_constr >] -> Filter c
+  | [< c = parse_un ~version "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
+  | [< ar = parse_ar ~version parse_p1 "And" >] -> And ar
+  | [< ar = parse_ar ~version parse_p1 "Or" >] -> Or ar
+  | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
+  | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
+  | [< _ = parse_atom ~version "IsThere" >] -> IsThere
+and parse_s1 ~version = parser
+  | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (fun ~version -> parse_opt ~version parse_p1) >] -> Det (det, rel_opt)
+  | [< ar = parse_ar ~version parse_s1 "NAnd" >] -> NAnd ar
+  | [< ar = parse_ar ~version parse_s1 "NOr" >] -> NOr ar
+  | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe f
+  | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot f
+and parse_s2 ~version = parser
+  | [< t = parse_un ~version "Term" parse_term >] -> Term t
+  | [< det_an = parse_s2_an ~version >] -> det_an
+  | [< id = parse_un ~version "The" parse_id >] -> The id
+and parse_s2_an ~version =
+  match version with
+    | VInit -> (parser [< modif, head = parse_bin ~version "An" parse_modif parse_head >] -> An (Lisql.factory#new_id, modif, head))
+    | VId -> (parser [< id, modif, head = parse_ter ~version "An" parse_id parse_modif parse_head >] -> An (id, modif, head))
+and parse_head ~version  = parser
+  | [< _ = parse_atom ~version "Thing" >] -> Thing
+  | [< c = parse_un ~version "Class" parse_uri >] -> Class c
+and parse_arg ~version = parser
+  | [< _ = parse_atom ~version "S" >] -> S
+  | [< _ = parse_atom ~version "P" >] -> P
+  | [< _ = parse_atom ~version "O" >] -> O
+and parse_modif ~version = parser
+  | [< p, o = parse_bin ~version "Modif" parse_project parse_order >] -> (p,o)
+and parse_project ~version = parser
+  | [< _ = parse_atom ~version "Unselect" >] -> Unselect
+  | [< _ = parse_atom ~version "Select" >] -> Select
+  | [< g, o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Aggreg (g,o)
+and parse_aggreg ~version = parser
+  | [< _ = parse_atom ~version "NumberOf" >] -> NumberOf
+  | [< _ = parse_atom ~version "ListOf" >] -> ListOf
+  | [< _ = parse_atom ~version "Total" >] -> Total
+  | [< _ = parse_atom ~version "Average" >] -> Average
+  | [< _ = parse_atom ~version "Maximum" >] -> Maximum
+  | [< _ = parse_atom ~version "Minimum" >] -> Minimum
+and parse_order ~version = parser
+  | [< _ = parse_atom ~version "Unordered" >] -> Unordered
+  | [< _ = parse_atom ~version "Highest" >] -> Highest
+  | [< _ = parse_atom ~version "Lowest" >] -> Lowest
+and parse_constr ~version = parser
+  | [< _ = parse_atom ~version "True" >] -> True
+  | [< lw = parse_list ~version parse_string "MatchesAll" >] -> MatchesAll lw
+  | [< lw = parse_list ~version parse_string "MatchesAny" >] -> MatchesAny lw
+  | [< s = parse_un ~version "After" parse_string >] -> After s
+  | [< s = parse_un ~version "Before" parse_string >] -> Before s
+  | [< s1, s2 = parse_bin ~version "FromTo" parse_string parse_string >] -> FromTo (s1,s2)
+  | [< s = parse_un ~version "HigherThan" parse_string >] -> HigherThan s
+  | [< s = parse_un ~version "LowerThan" parse_string >] -> LowerThan s
+  | [< s1, s2 = parse_bin ~version "Between" parse_string parse_string >] -> Between (s1,s2)
+  | [< s = parse_un ~version "HasLang" parse_string >] -> HasLang s
+  | [< s = parse_un ~version "HasDatatype" parse_string >] -> HasDatatype s
+and parse_term ~version = parser
+  | [< uri = parse_un ~version "URI" parse_uri >] -> URI uri
+  | [< f, s, dt = parse_ter ~version "Number" parse_float parse_string parse_string >] -> Number (f,s,dt)
+  | [< s, dt = parse_bin ~version "TypedLiteral" parse_string parse_uri >] -> TypedLiteral (s,dt)
+  | [< s, lang = parse_bin ~version "PlainLiteral" parse_string parse_string >] -> PlainLiteral (s,lang)
+  | [< id = parse_un ~version "Bnode" parse_string >] -> Bnode id
+  | [< v = parse_un ~version "Var" parse_var >] -> Var v
+and parse_uri ~version = parser [< s = parse_string ~version >] -> s
+and parse_var ~version = parser [< s = parse_string ~version >] -> s
+and parse_id ~version = parser [< i = parse_int ~version >] -> i
 
-let to_query (str : string) : elt_s = parse_s (lexer (Stream.of_string str))
+let to_query (str : string) : elt_s = parse (lexer (Stream.of_string str))
