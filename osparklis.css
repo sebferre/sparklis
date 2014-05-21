@@ -19,6 +19,11 @@ font-style:italic;
 font-weight:bold;
 }
 
+.open-new-window
+{
+vertical-align:top;
+}
+
 .classURI
 {
 color:darkorange;

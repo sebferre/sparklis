@@ -3,9 +3,7 @@ open Js
 open Jsutils
 open Lisql
 
-(* dictionaries *)
-
-(* dictionaries for foci and increments in user interface *)
+(* generic dictionary with automatic generation of keys *)
 
 class ['a] dico (prefix : string) =
 object
@@ -27,14 +25,15 @@ object
       failwith "Osparqlis.dico#get"
 end
 
+(* HTML state with dictionaries for foci and increments in user interface *)
+
 let focus_key_of_root = "root"
 let focus_key_of_id (id : Lisql.id) : string = "id" ^ string_of_int id
 
-class lisql_state (lex : Lisql2nl.lexicon) =
+class state (lex : Lisql2nl.lexicon) =
 object
   method lexicon = lex
   val dico_foci : Lisql.focus dico = new dico "focus"
-  val mutable id_focus_list : (Lisql.id * Lisql.focus) list = []
   method add_focus (focus : Lisql.focus) : string =
     if Lisql.is_root_focus focus then dico_foci#add_key focus_key_of_root focus;
     ( match Lisql.id_of_focus focus with
@@ -42,13 +41,12 @@ object
       | None -> () );
     dico_foci#add focus
   method get_focus (key : string) : Lisql.focus = dico_foci#get key
-end
 
-class index_state (lex : Lisql2nl.lexicon) =
-object
-  inherit lisql_state lex
   val dico_incrs : Lisql.increment dico = new dico "incr"
   method dico_incrs = dico_incrs
+
+  val dico_results : (int * Lisql.id * Rdf.term) dico = new dico "cell"
+  method dico_results = dico_results
 end
 
 (* pretty-printing of terms, NL in HTML *)
@@ -79,10 +77,17 @@ let html_suspended ~suspended html =
 let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
-let html_img ?id ~height ~alt ~title url =
+let html_img ?id ?classe ~height ~alt ~title url =
   "<img" ^
     (match id with None -> "" | Some i -> " id=\"" ^ i ^ "\"") ^
+    (match classe with None -> "" | Some c -> " class=\"" ^ c ^ "\"") ^
     " src=\"" ^ url ^ "\" height=\"" ^ string_of_int height ^ "\" alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
+
+let html_open_new_window ~height uri =
+  html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:"Open resource in new window" "icon-open-new-window.png")
+
+let html_delete ?id ~title () =
+  html_img ?id ~height:16 ~alt:"Delete" ~title "icon-delete.png"
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
@@ -113,9 +118,7 @@ let html_ellipsis = "..."
 
 let html_current_focus html =
   html_span ~id:"current-focus" ~classe:"in-current-focus"
-    (html ^ " " ^
-       html_img ~id:"delete-current-focus" ~height:16 ~alt:"Delete" "icon-delete.png"
-       ~title:"Click on this red cross to delete the current focus")
+    (html ^ " " ^ html_delete ~id:"delete-current-focus" ~title:"Click on this red cross to delete the current focus" ())
 
 let html_word = function
   | `Thing -> "thing"
@@ -123,9 +126,7 @@ let html_word = function
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
   | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
-  | `Entity (uri,s) ->
-    html_uri ~classe:"URI" uri s ^ " " ^
-      html_a uri (html_img ~height:12 ~alt:"Open" ~title:"Open in new window" "icon-open-new-window.png"(*"open_in_new_window.png"*))
+  | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
   | `Op op -> html_modifier op
@@ -147,7 +148,7 @@ let html_nl_focus state (foc : Lisql2nl.nl_focus) (html : string) : string =
       then html_current_focus html
       else html
 
-let rec html_s (state : lisql_state) (foc, nl : Lisql2nl.s) : string =
+let rec html_s (state : state) (foc, nl : Lisql2nl.s) : string =
   let html =
     match nl with
       | `Return np -> html_return (html_np state np) in
@@ -223,7 +224,7 @@ and html_pp state : Lisql2nl.pp -> string = function
   | `Prep (prep,np) -> html_word prep ^ " " ^ html_np state np
   | `PrepBin (prep1,np1,prep2,np2) -> html_word prep1 ^ " " ^ html_np state np1 ^ " " ^ html_word prep2 ^ " " ^ html_np state np2
 
-let html_focus (state : #lisql_state) (focus : focus) : string = html_s state (Lisql2nl.s_of_focus state#lexicon focus)
+let html_focus (state : state) (focus : focus) : string = html_s state (Lisql2nl.s_of_focus state#lexicon focus)
 
 
 (* HTML of increment lists *)
@@ -240,13 +241,15 @@ let html_increment_coordinate focus html =
     | AtP1 (IsThere, _) -> html
     | _ -> "and " ^ html
 
-let html_increment_frequency focus (state : index_state) (incr,freq) =
+let html_increment_frequency focus (state : state) (incr,freq) =
   let key = state#dico_incrs#add incr in
   let text =
     match incr with
       | IncrTerm t ->
 	let html_t = html_word (Lisql2nl.word_of_term t) in
 	( match focus with
+	  | AtS1 (Det (Term t0, _), _) when t0 = t ->
+	    html_t ^ " " ^ html_delete ~title:"Remove this entity at the head of the focus" ()
 	  | AtS1 _ -> html_t
 	  | _ -> html_increment_coordinate focus ("that is " ^ html_t) )
       | IncrId id ->
@@ -257,32 +260,32 @@ let html_increment_frequency focus (state : index_state) (incr,freq) =
       | IncrClass c ->
 	let html_c = html_word (Lisql2nl.word_of_class c) in
 	( match focus with
+(*
 	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_c
 	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_c
+*)
 	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
-	    (*"<del>a " ^ html_class c ^ "</del>"*)
-	    "a " ^ html_c ^ " " ^
-	      html_img ~height:16 ~alt:"Delete" ~title:"Remove this class at the head of the focus" "icon-delete.png"
-	    (*"<img src=\"icon-delete.png\" height=\"16\" alt=\"Delete\" title=\"Remove this class at the head of the focus\">"*)
+	    "a " ^ html_c ^ " " ^ html_delete ~title:"Remove this class at the head of the focus" ()
+	  | AtS1 _ -> "a " ^ html_c
 	  | _ -> html_increment_coordinate focus ("that is a " ^ html_c) )
       | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_word (Lisql2nl.word_of_property p))
       | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_word (Lisql2nl.word_of_property p) ^ " of ...")
-      | IncrTriple (S | O as arg) -> html_increment_coordinate focus ("that has a relation " ^ (if arg = S then "to ..." else "from ..."))
-      | IncrTriple P -> html_increment_coordinate focus "that is a relation from ... to ..."
-      | IncrTriplify -> "has a relation from/to"
+      | IncrTriple (S | O as arg) -> html_increment_coordinate focus ("that has a " ^ html_modifier "relation" ^ (if arg = S then " to ..." else " from ..."))
+      | IncrTriple P -> html_increment_coordinate focus ("that is a " ^ html_modifier "relation" ^ " from ... to ...")
+      | IncrTriplify -> "has a " ^ html_modifier "relation" ^ " from/to"
       | IncrIs -> html_increment_coordinate focus "that is ..."
       | IncrAnd -> "and " ^ html_ellipsis
       | IncrOr -> html_modifier "or " ^ html_ellipsis (*html_or [|html_dummy_focus; html_ellipsis|]*)
       | IncrMaybe -> html_maybe html_dummy_focus
       | IncrNot -> html_not html_dummy_focus
       | IncrUnselect ->
-	html_np (state :> lisql_state)
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
       | IncrAggreg g ->
-	html_np (state :> lisql_state)
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
       | IncrOrder order ->
-	html_np (state :> lisql_state)
+	html_np state
 	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
   in
   let title_opt =
@@ -311,7 +314,7 @@ let html_increment_frequency focus (state : index_state) (incr,freq) =
   html_span ~id:key ~classe:"increment" ?title:title_opt (text ^ text_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : index_state) (index : Lisql.increment Lis.index) =
+let html_index focus (state : state) (index : Lisql.increment Lis.index) =
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
@@ -327,59 +330,55 @@ let html_index focus (state : index_state) (index : Lisql.increment Lis.index) =
 
 let html_cell_img ?(height = 120) url =
   let label = Lisql2nl.name_of_uri url in
-  html_a url (html_img ~height ~alt:label ~title:label url)
-(*  "<img src=\"" ^ url ^ "\" alt=\"" ^ Lisql2nl.name_of_uri url ^ "\" height=\"" ^ string_of_int height ^ "\">" *)
+  html_img ~height ~alt:label ~title:label url ^ html_open_new_window ~height:16 url
 
 let html_cell_video url mime =
   "<video width=\"320\" height=\"240\" controls>\
   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
   Your browser does not support the video tag.\
-  </video>"
+  </video>" ^
+    html_open_new_window ~height:16 url
 
 let html_cell_audio url mime =
   "<audio controls>\
   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
   Your browser does not support this audio format.\
-  </audio>"
+  </audio>" ^ 
+    html_open_new_window ~height:16 url
 
-let html_cell t =
-  match t with
-    | Rdf.URI uri ->
-      if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
-	html_cell_img uri
-      else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
-	html_cell_video uri "video/mp4"
-      else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
-	html_cell_video uri "video/ogg"
-      else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
-	html_cell_audio uri "audio/mpeg"
-      else html_word (Lisql2nl.word_of_term t)
-    | _ -> html_word (Lisql2nl.word_of_term t)
+let html_cell state ~(line : int) ~(column : Lisql.id) t =
+  let key = state#dico_results#add (line,column,t) in
+  let contents =
+    match t with
+      | Rdf.URI uri ->
+	if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
+	  html_cell_img uri
+	else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
+	  html_cell_video uri "video/mp4"
+	else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
+	  html_cell_video uri "video/ogg"
+	else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
+	  html_cell_audio uri "audio/mpeg"
+	else html_word (Lisql2nl.word_of_term t)
+      | _ -> html_word (Lisql2nl.word_of_term t) in
+  html_span ~id:key ~classe:"cell" contents
 
-let html_table_of_results lexicon ~first_rank ~focus_var results =
+let html_table_of_results (state : state) ~first_rank ~focus_var results =
   let open Sparql_endpoint in
+  let focus_id = match focus_var with None -> -1 | Some v -> state#lexicon#get_var_id v in
+  let id_i_list = List.map (fun (var,i) -> (state#lexicon#get_var_id var, i)) results.vars in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf "<table id=\"extension\"><tr><th>";
-  Buffer.add_string buf
-    (html_span ~id:focus_key_of_root ~classe:"header"
-       ~title:"Click on this column header to hide focus."
-       "#");
-  Buffer.add_string buf "</th>";
+  Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"Click on this column header to hide the focus\"></th>");
   List.iter
-    (fun (var,i) ->
+    (fun (id,i) ->
       Buffer.add_string buf
-	(if var = focus_var
-	 then "<th class=\"in-current-focus\">"
-	 else "<th>");
-      let id = lexicon#get_var_id var in
-      Buffer.add_string buf
-	(html_span ~id:(focus_key_of_id id) ~classe:"header"
-	   ~title:"Click on this column header to set focus on it."
-	   (escapeHTML (lexicon#get_id_label id)));
+	(if id = focus_id
+	 then "<th class=\"header in-current-focus\">"
+	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"Click on this column header to set the focus on it\">");
+      Buffer.add_string buf (escapeHTML (state#lexicon#get_id_label id));
       Buffer.add_string buf "</th>")
-    results.vars;
+    id_i_list;
   Buffer.add_string buf "</tr>";
-  let li = List.map snd results.vars in
   let rank = ref first_rank in
   List.iter
     (fun binding ->
@@ -388,13 +387,13 @@ let html_table_of_results lexicon ~first_rank ~focus_var results =
       Buffer.add_string buf (string_of_int !rank);
       Buffer.add_string buf "</td>";
       List.iter
-	(fun i ->
+	(fun (id,i) ->
 	  Buffer.add_string buf "<td>";
 	  ( match binding.(i) with
 	    | None -> ()
-	    | Some t -> Buffer.add_string buf (html_cell t) );
+	    | Some t -> Buffer.add_string buf (html_cell state ~line:(!rank) ~column:id t) );
 	  Buffer.add_string buf "</td>")
-	li;
+	id_i_list;
       Buffer.add_string buf "</tr>";
       incr rank)
     results.bindings;

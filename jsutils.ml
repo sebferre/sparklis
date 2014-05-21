@@ -46,7 +46,10 @@ let oninput k elt =
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
 
-
+let stop_links_propagation_from elt =
+  jquery_all_from elt "a"
+    (onclick (fun elt ev -> Dom_html.stopPropagation ev))
+    
 (* prepare a string for safe insertion in HTML code *)
 let escapeHTML (str : string) : string =
   let div = Dom_html.createDiv Dom_html.document in
