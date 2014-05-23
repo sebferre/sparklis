@@ -34,6 +34,8 @@ let jquery_all s k = jquery_all_from Dom_html.document s k
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
 
+let jquery_click sel = jquery_input sel (fun input -> input##click())
+
 let onclick k elt =
   elt##onclick <- Dom.handler (fun ev -> k elt ev; bool true)
 
@@ -45,6 +47,14 @@ let oninput k elt =
 
 let onchange k elt =
   elt##onchange <- Dom.handler (fun ev -> k elt ev; bool true)
+
+let onkeypress k elt =
+  elt##onkeypress <- Dom.handler (fun ev -> k elt ev; bool true)
+
+let onenter k elt =
+  onkeypress
+    (fun elt ev -> if ev##keyCode = 13 then begin k elt; bool true end else bool false)
+    elt
 
 let stop_links_propagation_from elt =
   jquery_all_from elt "a"

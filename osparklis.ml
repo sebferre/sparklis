@@ -453,6 +453,8 @@ let _ =
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
 	history#change_endpoint url)));
+    jquery_input "#sparql-endpoint-input" (onenter (fun input ->
+      jquery_click "#sparql-endpoint-button"));
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
     jquery "#button-terms" (onclick (fun elt ev ->
@@ -470,6 +472,8 @@ let _ =
 		(Lisql.insert_constr constr)
 	  with Invalid_argument msg ->
 	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
+    jquery_input "#pattern-terms" (onenter (fun input ->
+      jquery_click "#button-terms"));
     List.iter
       (fun (sel_select, sel_input, sel_list, k) ->
 	jquery_select sel_select (fun select ->
