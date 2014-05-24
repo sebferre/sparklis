@@ -77,3 +77,11 @@ let list_to_set l =
     | x::l -> if List.mem x acc then aux acc l else aux (x::acc) l
   in
   aux [] l
+
+let unobfuscate_string s = (* symmetric, to be used for obfuscation *)
+  String.map
+    (fun oc ->
+      let ocode = Char.code oc in
+      let code = if ocode > 127 then ocode else 127 - ocode in
+      Char.chr code)
+    s

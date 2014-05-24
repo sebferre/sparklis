@@ -443,8 +443,13 @@ end
 
 (* main *)
 
+let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
+  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
+
 let _ =
   Firebug.console##log(string "Starting Sparklis");
+  if Url.Current.path_string <> "/home/ferre/prog/ajax/sparklis/osparklis.html" then (* to avoid counting tests as hits *)
+    Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
