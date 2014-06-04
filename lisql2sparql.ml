@@ -6,16 +6,19 @@ open Lisql
 
 (* SPARQL variable generator *)
 class state (lex : Lisql2nl.lexicon) =
-object
+object (self)
   method lexicon = lex
 
   val mutable vars : Rdf.var list = []
   method add_var v = if not (List.mem v vars) then vars <- v::vars
   method vars = List.rev vars
 
-  val mutable focus_terms : Rdf.term list = []
-  method add_focus_term t = if not (List.mem t focus_terms) then focus_terms <- t::focus_terms
-  method focus_terms = focus_terms
+  val h_var_aggreg : (Rdf.var, Rdf.var * modif_s2 * aggreg * Sparql.formula) Hashtbl.t = Hashtbl.create 3
+  method set_aggreg v aggreg : unit =
+    Hashtbl.add h_var_aggreg v aggreg
+  method aggreg v =
+    try Some (Hashtbl.find h_var_aggreg v)
+    with _ -> None
 
   val h_var_modif : (Rdf.var, modif_s2) Hashtbl.t = Hashtbl.create 13
   method set_modif (v : Rdf.var) (modif : modif_s2) : unit =
@@ -23,8 +26,22 @@ object
   method modif (v : Rdf.var) =
     try Hashtbl.find h_var_modif v
     with _ -> (Select, Unordered)
+
 end
 
+let is_constraint_only_focus = function
+  | AtS1 (AnAggreg _, _) -> true
+  | AtP1 (_, AnAggregThatX _) -> true
+    (* only constraints in HAVING clauses - TODO: use nested queries to relax this *)
+  | _ -> false
+
+let sparql_aggreg = function
+  | NumberOf -> Sparql.DistinctCOUNT
+  | ListOf -> Sparql.DistinctCONCAT
+  | Total -> Sparql.SUM
+  | Average -> Sparql.AVG
+  | Maximum -> Sparql.MAX
+  | Minimum -> Sparql.MIN
 
 let filter_constr (t : Rdf.term) : constr -> Sparql.formula = function
   | True -> Sparql.True
@@ -103,6 +120,7 @@ type sparql_s1 = sparql_p1 -> Sparql.formula
 type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
 
+
 let rec elt_p1 state : elt_p1 -> sparql_p1 = function
   | Is np -> elt_s1_as_p1 state np
   | Type c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
@@ -131,11 +149,20 @@ let rec elt_p1 state : elt_p1 -> sparql_p1 = function
     let d = elt_p1 (Oo.copy state) f in
     (fun x -> Sparql.formula_not (d x))
   | IsThere -> (fun x -> Sparql.True)
+and elt_p1_opt state = function
+  | None -> (fun x -> Sparql.True)
+  | Some rel -> elt_p1 state rel
 and elt_s1_as_p1 state : elt_s1 -> sparql_p1 = function
   | Det (det,rel_opt) ->
     let d1 = elt_s2_as_p1 state det in
-    let d2 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> elt_p1 state rel in
+    let d2 = elt_p1_opt state rel_opt in
     (fun x -> Sparql.formula_and (d1 x) (d2 x))
+  | AnAggreg (idg,modifg,g,relg_opt,np) ->
+    ( match np with
+      | Det (An (id, _modif, _head), _rel_opt) ->
+	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
+	elt_s1_as_p1 state np
+      | _ -> assert false )
   | NAnd ar ->
     let ar_d = Array.map (fun elt -> elt_s1_as_p1 state elt) ar in
     (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
@@ -166,8 +193,14 @@ and elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
 and elt_s1 state : elt_s1 -> sparql_s1 = function
   | Det (det,rel_opt) ->
     let qu = elt_s2 state det in
-    let d1 = match rel_opt with None -> (fun x -> Sparql.True) | Some rel -> elt_p1 state rel in
+    let d1 = elt_p1_opt state rel_opt in
     (fun d -> qu d1 d)
+  | AnAggreg (idg,modifg,g,relg_opt,np) ->
+    ( match np with
+      | Det (An (id, _modif, _head), _rel_opt) ->
+	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
+	elt_s1 state np
+      | _ -> assert false )
   | NAnd ar ->
     let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
     (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
@@ -197,6 +230,10 @@ and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) 
     (fun x form -> Sparql.formula_bind x form)
   | Class c ->
     (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
+and elt_aggreg state idg modifg g (d : sparql_p1) id : unit =
+  let vg = state#lexicon#get_id_var idg in
+  let v = state#lexicon#get_id_var id in
+  state#set_aggreg v (vg, modifg, g, (d (Rdf.Var vg)))
 and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = elt_s1 state np in
@@ -206,6 +243,13 @@ let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_
   | (Det _ as np1) -> (* q_alt is not used in this case *)
     let q1 = elt_s1 state np1 in
     (fun r -> q1 (fun x -> q (fun y -> r x y)))
+  | AnAggreg (idg,modifg,g,relg_opt,np) ->
+    ( match np with
+      | Det (An (id, _, _), _) ->
+	let q1 = elt_s1 state np in
+	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
+	(fun r -> q1 (fun x -> q (fun y -> r x y)))
+      | _ -> assert false )
   | NAnd ar -> elt_s1_bis_and state q q_alt (Array.to_list ar)
   | NOr ar ->
     let ar_b = Array.map (fun elt -> elt_s1_bis state q q_alt elt) ar in
@@ -229,11 +273,23 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
     let q_det = elt_s2 state det in
     let d_det = elt_s2_as_p1 state det in
-    ctx_s1 state
+    ctx_s1 state (id_of_s2 det)
       (fun d2 -> q_det d d2)
       (fun d2 -> Sparql.False)
       (fun x -> Sparql.formula_and (d x) (d_det x))
       ctx
+  | AnAggregThatX (idg,modifg,g,np,ctx) ->
+    ( match np with
+      | Det (An (id, _, _), _) ->
+	let q_np = elt_s1 state np in
+	let d_np = elt_s1_as_p1 state np in
+	elt_aggreg state idg modifg g d id;
+	ctx_s1 state (Some idg)
+	  (fun d2 -> q_np d2)
+	  (fun d2 -> Sparql.False)
+	  (fun x -> d_np x)
+	  ctx
+      | _ -> assert false )
   | AndX (i,ar,ctx) ->
     let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_p1 state elt) ar in
     ctx_p1 state
@@ -243,7 +299,7 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | OrX (i,ar,ctx) -> ctx_p1 state d ctx
   | MaybeX ctx -> ctx_p1 state d ctx
   | NotX ctx -> ctx_p1 state d ctx
-and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
+and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
   | IsX ctx -> ctx_p1 state d ctx
   | HasX (p,ctx) ->
     ctx_p1 state
@@ -265,11 +321,22 @@ and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 ->
       ctx
   | ReturnX ->
     q (fun t -> Sparql.True)
+  | AnAggregX (idg,modifg,g,relg_opt,ctx) -> (*ctx_s1 state q q_alt d ctx*)
+    ( match id_opt with
+      | Some id ->
+	let d_relg = elt_p1_opt state relg_opt in
+	elt_aggreg state idg modifg g d_relg id;
+	ctx_s1 state (Some idg)
+	  (fun d2 -> q d2)
+	  (fun d2 -> Sparql.False)
+	  (fun x -> d x)
+	  ctx
+      | _ -> assert false)
   | NAndX (i,ar,ctx) ->
     let ar_q = Array.mapi (fun j elt -> if j=i then q else elt_s1 state elt) ar in
     let ar_q_alt = let ar = Array.copy ar_q in ar.(i) <- q_alt; ar in
     let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_s1_as_p1 state elt) ar in
-    ctx_s1 state
+    ctx_s1 state None
       (fun d ->	Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
       (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
       (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
@@ -277,78 +344,102 @@ and ctx_s1 state (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 ->
   (* ignoring algebra in ctx *)
   | NOrX (i,ar,ctx) ->
     let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else elt_s1 state elt) ar in
-    ctx_s1 state
+    ctx_s1 state None
       q
       (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
       d
       ctx
-  | NMaybeX ctx -> ctx_s1 state q q_alt d ctx
-  | NNotX ctx -> ctx_s1 state q q_alt d ctx
+  | NMaybeX ctx -> ctx_s1 state None q q_alt d ctx
+  | NNotX ctx -> ctx_s1 state None q q_alt d ctx
+
 
 type template = ?constr:constr -> limit:int -> string
 
 let focus (lex : Lisql2nl.lexicon) (focus : focus)
     : Rdf.term list * template option * template option * template option * template option =
   let state = new state lex in
-  let form =
+  let t_list, form =
     match focus with
       | AtP1 (f,ctx) ->
 	let d = elt_p1 state f in
-	ctx_p1 state
-	  (fun t -> state#add_focus_term t; d t)
-	  ctx
+	let t_list_ref = ref [] in
+	let form =
+	  ctx_p1 state
+	    (fun t -> 
+	      if not (List.mem t !t_list_ref) then t_list_ref := t::!t_list_ref;
+	      d t)
+	    ctx in
+	!t_list_ref, form
       | AtS1 (f,ctx) ->
 	let q = elt_s1 state f in
 	let d = elt_s1_as_p1 state f in
-	ctx_s1 state
-	  (fun d -> q (fun t -> state#add_focus_term t; d t))
-	  (fun d -> Sparql.False)
-	  (fun x -> state#add_focus_term x; d x)
-	  ctx
+	let t_list =
+	  match f with
+	    | Det (det,_) ->
+	      ( match det with
+		| Term t -> [t]
+		| An (id,_,_) -> [Rdf.Var (lex#get_id_var id)]
+		| The id -> [Rdf.Var (lex#get_id_var id)] )
+	    | AnAggreg (id,_,_,_,_) -> [Rdf.Var (lex#get_id_var id)]
+	    | _ -> [] in
+	let form =
+	  ctx_s1 state (id_of_s1 f)
+	    (fun d -> q d)
+	    (fun d -> Sparql.False)
+	    (fun x -> d x)
+	    ctx in
+	t_list, form
       | AtS f ->
-	(*state#set_focus_term None;*)
-	elt_s state f
+	let form = elt_s state f in
+	[], form
   in
-  let t_list = state#focus_terms in
   let query_opt =
     if form = Sparql.True
     then None
     else
       let lv = state#vars in
-      let dimensions, aggregations, ordering =
+      let dimensions, aggregations, havings, ordering =
 	List.fold_right
-	  (fun v (dims,aggregs,ordering) ->
-	    let modif = state#modif v in
-	    let dims, aggregs, order, v_order = (* v_order is to be used in ordering *)
-	      match modif with
-		| (Unselect,order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
-		  dims, aggregs, order, v
-		| (Aggreg (g,gorder),order) when t_list <> [Rdf.Var v] -> (* when not on focus *)
-		  let g_sparql, vg_prefix =
-		    match g with
-		      | NumberOf -> Sparql.DistinctCOUNT, "number_of_"
-		      | ListOf -> Sparql.DistinctCONCAT, "list_of_"
-		      | Total -> Sparql.SUM, "total_"
-		      | Average -> Sparql.AVG, "average_"
-		      | Maximum -> Sparql.MAX, "maximum_"
-		      | Minimum -> Sparql.MIN, "minimum_" in
-		  let vg = vg_prefix ^ v in
-		  dims, (g_sparql,v,vg)::aggregs, gorder, vg
-		| (_, order) -> v::dims, aggregs, order, v in
+	  (fun v (dims,aggregs,havings,ordering) ->
+	    let at_focus = List.mem (Rdf.Var v) t_list in (* at-focus variables must not be hidden or aggregated *)
+	    let dims, aggregs, havings, order, v_order = (* v_order is to be used in ordering *)
+	      match state#aggreg v with
+		| Some (vg, (projectg,orderg), g, f) when not at_focus ->
+		  if projectg = Unselect && not at_focus
+		  then dims, aggregs, havings, Unordered, vg
+		  else dims, (sparql_aggreg g,v,vg)::aggregs, f::havings, orderg, vg
+		| _ ->
+		  match state#modif v with
+		    | (Unselect,order) when not at_focus ->
+		      dims, aggregs, havings, Unordered, v
+		    | (Aggreg (g,gorder),order) when not at_focus ->
+		      let g_sparql, vg_prefix =
+			match g with
+			  | NumberOf -> Sparql.DistinctCOUNT, "number_of_"
+			  | ListOf -> Sparql.DistinctCONCAT, "list_of_"
+			  | Total -> Sparql.SUM, "total_"
+			  | Average -> Sparql.AVG, "average_"
+			  | Maximum -> Sparql.MAX, "maximum_"
+			  | Minimum -> Sparql.MIN, "minimum_" in
+		      let vg = vg_prefix ^ v in
+		      dims, (g_sparql,v,vg)::aggregs, havings, gorder, vg
+		    | (_, order) -> v::dims, aggregs, havings, order, v in
 	    let ordering =
 	      match order with
 		| Unordered -> ordering
 		| Lowest -> (Sparql.ASC, v_order) :: ordering
 		| Highest -> (Sparql.DESC, v_order) :: ordering in
-	    dims, aggregs, ordering)
-	  lv ([],[],[]) in
+	    dims, aggregs, havings, ordering)
+	  lv ([],[],[],[]) in
+      let having = Sparql.expr_of_formula (Sparql.formula_and_list havings) in
       Some (fun ?(constr=True) ~limit ->
-	Sparql.select ~distinct:true ~dimensions ~aggregations ~ordering ~limit
+	Sparql.select ~distinct:true ~dimensions ~aggregations ~having ~ordering ~limit
 	  (Sparql.pattern_of_formula
 	     (match t_list with [t] -> Sparql.formula_and form (filter_constr t constr) | _ -> form))) in
   let query_incr_opt x triple =
-    match t_list with
-      | [t] ->
+    match focus, t_list with
+      | AtS1 (AnAggreg _, _), _ -> None (* aggregated variable is not accessible inside pattern *)
+      | _, [t] ->
 	let tx = Rdf.Var x in
 	let form_x =
 	  match t with

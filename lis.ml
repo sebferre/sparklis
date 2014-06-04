@@ -224,12 +224,9 @@ object (self)
       | _ -> []
 
   method index_terms =
-    if focus_term_index = []
-    then []
-    else
-      List.rev_map
-	(fun (t,freq) -> (Lisql.IncrTerm t, freq))
-	focus_term_index
+    List.rev_map
+      (fun (t,freq) -> (Lisql.IncrTerm t, freq))
+      focus_term_index
 
   method ajax_index_terms_init constr elt (k : Lisql.increment index -> unit) =
     let process results_term =
@@ -247,7 +244,7 @@ object (self)
 	  [] list_term in
       k index
     in
-    let sparql_term =
+    let sparql_term = (* TODO: when constr=True, use '?term a []' *)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
@@ -312,8 +309,8 @@ object (self)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
-    if focus_term_index = []
-    then k []
+    if Lisql2sparql.is_constraint_only_focus focus then k []
+    else if focus_term_index = [] then (*k []*) self#ajax_index_properties_init constr elt k
     else
       let process results_a results_has results_isof =
 	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
@@ -395,13 +392,15 @@ object (self)
 		      let modifs =
 			IncrOrder Highest :: IncrOrder Lowest :: modifs in
 		      modifs
+		    | AnAggreg (id,modif,g,rel_opt,np) ->
+		      IncrOrder Highest :: IncrOrder Lowest :: IncrUnselect :: IncrAggreg g :: []
 		    | _ -> [] in
 		let modifs =
 		  if ctx = ReturnX
 		  then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
 		    if is_top_s1 f
 		    then modifs
-		    else IncrOr :: modifs
+		    else IncrAnd :: IncrOr :: IncrMaybe :: modifs (* needs special treatment for increments *)
 		  else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
 		let modifs =
 		  match f with

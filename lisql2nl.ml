@@ -25,17 +25,23 @@ type s = nl_focus *
 and np = nl_focus *
   [ `PN of word * rel
   | `Qu of qu * adj * word * rel
+  | `QuAggreg of bool * qu * adj * ng_aggreg * ng
   | `QuOneOf of qu * word list
   | `And of np array
   | `Or of int option * np array (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of bool * np (* the bool indicates whether negation is suspended *)
   | `Not of bool * np ] (* the bool indicates whether negation is suspended *)
+and ng = nl_focus *
+  [ `That of word * rel ]
 and qu = [ `A | `Any of bool | `The | `All | `One ]
 and adj =
   [ `Nil
   | `Order of word
   | `Aggreg of bool * adj * word (* the bool is for 'suspended' *)
   | `Adj of adj * word ]
+and ng_aggreg =
+  [ `That of word * rel
+  | `ThatOf of word * rel ]
 and rel = nl_focus *
   [ `Nil
   | `That of vp
@@ -89,15 +95,26 @@ let rec word_of_term = function
   | Rdf.Bnode id -> `Entity ("_:" ^ id, id) (* should not occur *)
   | Rdf.Var v -> `Id (0, v) (* should not occur *)
 
+let word_of_aggreg g =
+  let s =
+    match g with
+      | NumberOf -> "number of"
+      | ListOf -> "list of"
+      | Total -> "total"
+      | Average -> "average"
+      | Maximum -> "maximum"
+      | Minimum -> "minimum" in
+  `Op s
 
 (* verbalization of IDs *)
 
 type id_label_word = Rdf.var * string
-type id_label = [ `Word of id_label_word | `Gen of id_label * id_label_word | `Of of id_label_word * id_label ]
+type id_label = [ `Word of id_label_word | `Gen of id_label * id_label_word | `Of of id_label_word * id_label | `Adj of id_label_word * id_label ]
 type id_labelling = (Lisql.id * id_label list) list
 
 let gen_labels (ls : id_label list) (lw : id_label_word) : id_label list = List.fold_right (fun l acc -> `Gen (l,lw) :: acc) ls [`Word lw]
 let of_labels (lw : id_label_word) (ls : id_label list) : id_label list = List.fold_right (fun l acc -> `Of (lw,l) :: acc) ls [`Word lw]
+let adj_labels (lw : id_label_word) (ls : id_label list) : id_label list = List.fold_right (fun l acc -> `Adj (lw,l) :: acc) ls [`Word lw]
 
 let var_of_uri (uri : Rdf.uri) : string =
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
@@ -105,13 +122,21 @@ let var_of_uri (uri : Rdf.uri) : string =
     | None -> "thing"
 
 let id_label_word_of_uri uri = (var_of_uri uri, name_of_uri uri)
+let id_label_word_of_aggreg g =
+  match g with
+    | NumberOf -> "number_of", "number of"
+    | ListOf -> "list_of", "list of"
+    | Total -> "total", "total"
+    | Average -> "average", "average"
+    | Maximum -> "maximum", "maximum"
+    | Minimum -> "minimum", "minimum"
 
 let id_label_words_of_arg0 = function P -> Some ("relation","relation") | S | O -> None
 let id_label_words_of_arg1 = function S -> Some ("relation","relation") | P | O -> None
 let id_label_words_of_arg2 = function O -> Some ("relation","relation") | S | P -> None
 
 let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
-  | Is np -> labelling_s1 ~labels np
+  | Is np -> labelling_s1 ~labels np (* TODO: avoid keeping np.id *)
   | Type c -> [`Word (id_label_word_of_uri c)], []
   | Has (p,np) ->
     let lw = id_label_word_of_uri p in
@@ -142,12 +167,17 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
   | IsThere -> [], []
 and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
   | Det (An (id, modif, head), rel_opt) ->
-    let labels2 = match head with Thing -> labels | Class c -> labels @ [`Word (id_label_word_of_uri c)] in
+    let ls_head = match head with Thing -> [] | Class c -> [`Word (id_label_word_of_uri c)] in
+    let labels2 = labels @ ls_head in
     let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels:labels2 rel in
-    ls_rel, (id, labels2 @ ls_rel) :: lab_rel
+    ls_head @ ls_rel, (id, labels2 @ ls_rel) :: lab_rel
   | Det (_, rel_opt) ->
     let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels rel in
     ls_rel, lab_rel
+  | AnAggreg (id, modif, g, rel_opt, np) ->
+    let ls_np, lab_np = labelling_s1 ~labels np in
+    let ls_g = adj_labels (id_label_word_of_aggreg g) (labels @ ls_np) in
+    ls_np, (id, ls_g) :: lab_np
   | NAnd ar ->
     let lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
     List.concat lss, List.concat labs
@@ -173,6 +203,9 @@ let rec id_label_aggregate : id_label -> id_label_word = function
   | `Of ((v1,s1),l) ->
     let v2, s2 = id_label_aggregate l in
     v1, (s1 ^ " of the " ^ s2)
+  | `Adj ((v1,s1),l) ->
+    let v2, s2 = id_label_aggregate l in
+    v1 ^ "_" ^ v2, s1 ^ " " ^ s2
 
 class ['a ] counter =
 object
@@ -244,8 +277,12 @@ let lexicon_of_focus focus : lexicon =
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
+let is_suspended_focus = function
+  | `Focus (_, `At) -> true
+  | _ -> false
+
 let rec head_of_modif foc nn rel (modif : modif_s2) : np =
-  let susp = match foc with `Focus (_, `At) -> true | _ -> false in
+  let susp = is_suspended_focus foc in
   let qu, adj =
     match modif with
       | Select, order -> qu_adj_of_order order
@@ -254,17 +291,19 @@ let rec head_of_modif foc nn rel (modif : modif_s2) : np =
 	let qu_order, adj_order = qu_adj_of_order gorder in
 	qu_order, adj_of_aggreg ~suspended:susp adj_order g in
   foc, `Qu (qu, adj, nn, rel)
+and qu_adj_of_modif ~suspended modif : qu * adj =
+  match modif with
+    | Select, order -> qu_adj_of_order order
+    | Unselect, order -> `Any suspended, snd (qu_adj_of_order order)
+    | Aggreg (g,gorder), _ ->
+      let qu_order, adj_order = qu_adj_of_order gorder in
+      qu_order, adj_of_aggreg ~suspended adj_order g
 and qu_adj_of_order : order -> qu * adj = function
   | Unordered -> `A, `Nil
   | Highest -> `The, `Order (`Op "highest-to-lowest")
   | Lowest -> `The, `Order (`Op "lowest-to-highest")
-and adj_of_aggreg ~suspended adj : aggreg -> adj = function
-  | NumberOf -> `Aggreg (suspended, adj, `Op "number of")
-  | ListOf -> `Aggreg (suspended, adj, `Op "list of")
-  | Total -> `Aggreg (suspended, adj, `Op "total")
-  | Average -> `Aggreg (suspended, adj, `Op "average")
-  | Maximum -> `Aggreg (suspended, adj, `Op "maximum")
-  | Minimum -> `Aggreg (suspended, adj, `Op "minimum")
+and adj_of_aggreg ~suspended adj (g : aggreg) : adj =
+  `Aggreg (suspended, adj, word_of_aggreg g)
 
 let word_of_id lexicon id = `Id (id, lexicon#get_id_label id)
 
@@ -280,6 +319,18 @@ let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
       `HasProp (`Relation, np2, [`Prep (`Op "from", np1)])
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
       `IsNP ((`NoFocus, `Qu (`A, `Nil, `Relation, top_rel)), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
+let np_of_elt_s1_AnAggreg ~suspended (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
+  let qu, adj = qu_adj_of_modif ~suspended modif in
+  let ng_aggreg =
+    match g with
+      | NumberOf -> `ThatOf (`Op "number", rel)
+      | ListOf -> `ThatOf (`Op "list", rel)
+      | Total -> `That (`Op "total", rel)
+      | Average -> `That (`Op "average", rel)
+      | Maximum -> `That (`Op "maximum", rel)
+      | Minimum -> `That (`Op "minimum", rel) in
+  `QuAggreg (suspended, qu, adj, ng_aggreg, ng)
+
 
 let rec vp_of_elt_p1 lexicon pos ctx f : vp =
   let nl =
@@ -312,21 +363,41 @@ and vp_of_constr = function
   | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", np_of_literal pat1, `Op "and", np_of_literal pat2))
   | HasLang pat -> `Has ((`NoFocus, `Qu (`A, `Nil, `Op "language", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))), [])
   | HasDatatype pat -> `Has ((`NoFocus, `Qu (`A, `Nil, `Op "datatype", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))), [])
+and rel_of_elt_p1_opt lexicon pos ctx = function
+  | None -> top_rel
+  | Some rel ->
+    let foc_rel, nl_rel = vp_of_elt_p1 lexicon pos ctx rel in
+    (foc_rel, `That (`NoFocus, nl_rel))
 and np_of_elt_s1 lexicon pos ctx f : np =
   let foc = `Focus (AtS1 (f,ctx),pos) in
   match f with
-    | Det (det, None) -> det_of_elt_s2 lexicon foc top_rel det
-    | Det (det, Some rel) ->
-      let foc_rel, nl_rel = vp_of_elt_p1 lexicon (focus_pos_down pos) (DetThatX (det,ctx)) rel in
-      det_of_elt_s2 lexicon foc (foc_rel, `That (`NoFocus, nl_rel)) det
+    | Det (det, rel_opt) ->
+      let nl_rel = rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
+      det_of_elt_s2 lexicon foc nl_rel det
+    | AnAggreg (id,modif,g,rel_opt,np) ->
+      let nl =
+	np_of_elt_s1_AnAggreg ~suspended:false
+	  modif g
+	  (rel_of_elt_p1_opt lexicon (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
+	  (ng_of_elt_s1 lexicon (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
+      foc, nl
     | NAnd ar -> foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar)
     | NOr ar -> foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar)
     | NMaybe elt -> foc, `Maybe (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NMaybeX ctx) elt)
     | NNot elt -> foc, `Not (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NNotX ctx) elt)
+and ng_of_elt_s1 lexicon pos ctx f =
+  let foc = `Focus (AtS1 (f,ctx), pos) in
+  match f with
+    | Det (An (id,modif,head) as det, rel_opt) ->
+      foc, `That (word_of_elt_head head, rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt)
+    | _ -> assert false
 and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
   | Term t -> foc, `PN (word_of_term t, rel)
-  | An (id, modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> word_of_class c) rel modif
-  | The id -> foc, `Qu (`The, `Nil, word_of_id lexicon id, top_rel)
+  | An (id, modif, head) -> head_of_modif foc (word_of_elt_head head) rel modif
+  | The id -> foc, `PN (word_of_id lexicon id, top_rel)
+and word_of_elt_head = function
+  | Thing -> `Thing
+  | Class c -> word_of_class c
 and s_of_elt_s lexicon pos : elt_s -> s = function
   | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np)
 
@@ -336,6 +407,13 @@ let rec s_of_ctx_p1 lexicon f (foc,nl as foc_nl) ctx : s =
       let f2 = Det (det, Some f) in
       let nl2 = det_of_elt_s2 lexicon (`Focus (AtS1 (f2,ctx2), `Out)) (foc, `That (`NoFocus, nl)) det in
       s_of_ctx_s1 lexicon f2 nl2 ctx2
+    | AnAggregThatX (id,modif,g,np,ctx2) ->
+      let f2 = AnAggreg (id, modif, g, Some f, np) in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let nl2 = np_of_elt_s1_AnAggreg ~suspended:false modif g
+	(foc, `That (`NoFocus, nl))
+	(ng_of_elt_s1 lexicon `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
+      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
@@ -396,6 +474,15 @@ and s_of_ctx_s1 lexicon f (foc,nl as foc_nl) ctx =
       let foc2 = `Focus (AtS f2, `Out) in
       let nl2 = `Return foc_nl in
       (foc2,nl2)
+    | AnAggregX (id,modif,g,rel_opt,ctx2) ->
+      let f2 = AnAggreg (id, modif, g, rel_opt, f) in
+      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let nl2 = np_of_elt_s1_AnAggreg ~suspended:true modif g
+	(rel_of_elt_p1_opt lexicon `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
+	( match nl with (* TODO: what to do with hidden modif/adj *)
+	  | `Qu (_, _, nn, rel) -> foc, `That (nn, rel)
+	  | _ -> assert false ) in
+      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
     | NAndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; NAnd ar in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
