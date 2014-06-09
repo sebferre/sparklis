@@ -401,19 +401,20 @@ and word_of_elt_head = function
 and s_of_elt_s lexicon pos : elt_s -> s = function
   | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np)
 
-let rec s_of_ctx_p1 lexicon f (foc,nl as foc_nl) ctx : s =
+(* in *_of_ctx_*, [pos = `At] if semantically at current focus *)
+let rec s_of_ctx_p1 lexicon pos f (foc,nl as foc_nl) ctx : s =
   match ctx with
     | DetThatX (det,ctx2) ->
       let f2 = Det (det, Some f) in
       let nl2 = det_of_elt_s2 lexicon (`Focus (AtS1 (f2,ctx2), `Out)) (foc, `That (`NoFocus, nl)) det in
-      s_of_ctx_s1 lexicon f2 nl2 ctx2
+      s_of_ctx_s1 lexicon pos f2 nl2 ctx2
     | AnAggregThatX (id,modif,g,np,ctx2) ->
       let f2 = AnAggreg (id, modif, g, Some f, np) in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
       let nl2 = np_of_elt_s1_AnAggreg ~suspended:false modif g
 	(foc, `That (`NoFocus, nl))
 	(ng_of_elt_s1 lexicon `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
@@ -421,7 +422,7 @@ let rec s_of_ctx_p1 lexicon f (foc,nl as foc_nl) ctx : s =
 	`And (Array.mapi
 		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Out (AndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
@@ -431,44 +432,44 @@ let rec s_of_ctx_p1 lexicon f (foc,nl as foc_nl) ctx : s =
 	     Array.mapi
 	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
-and s_of_ctx_s1 lexicon f (foc,nl as foc_nl) ctx =
+      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
+and s_of_ctx_s1 lexicon pos f (foc,nl as foc_nl) ctx =
   match ctx with
     | IsX ctx2 ->
       let f2 = Is f in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Is foc_nl in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
     | HasX (p,ctx2) ->
       let f2 = Has (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Has p foc_nl in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
     | IsOfX (p,ctx2) ->
       let f2 = IsOf (p,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_IsOf p foc_nl in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
     | TripleX1 (arg,np2,ctx2) ->
       let f2 = Triple (arg,f,np2) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 lexicon `Out (TripleX2 (arg,f,ctx2)) np2) in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
     | TripleX2 (arg,np1,ctx2) ->
       let f2 = Triple (arg,np1,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 lexicon `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
-      s_of_ctx_p1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
     | ReturnX ->
       let f2 = Return f in
       let foc2 = `Focus (AtS f2, `Out) in
@@ -477,12 +478,12 @@ and s_of_ctx_s1 lexicon f (foc,nl as foc_nl) ctx =
     | AnAggregX (id,modif,g,rel_opt,ctx2) ->
       let f2 = AnAggreg (id, modif, g, rel_opt, f) in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
-      let nl2 = np_of_elt_s1_AnAggreg ~suspended:true modif g
+      let nl2 = np_of_elt_s1_AnAggreg ~suspended:(pos = `At) (*is_suspended_focus foc*) modif g
 	(rel_of_elt_p1_opt lexicon `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
 	( match nl with (* TODO: what to do with hidden modif/adj *)
 	  | `Qu (_, _, nn, rel) -> foc, `That (nn, rel)
 	  | _ -> assert false ) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon `Out f2 (foc2,nl2) ctx2
     | NAndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; NAnd ar in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
@@ -490,7 +491,7 @@ and s_of_ctx_s1 lexicon f (foc,nl as foc_nl) ctx =
 	`And (Array.mapi
 		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Out (NAndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
     | NOrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = NOr ar in
@@ -500,19 +501,19 @@ and s_of_ctx_s1 lexicon f (foc,nl as foc_nl) ctx =
 	     Array.mapi
 	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Ex (NOrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
    | NMaybeX ctx2 ->
       let f2 = NMaybe f in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
    | NNotX ctx2 ->
       let f2 = NNot f in
       let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_s1 lexicon f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
 
 let s_of_focus lexicon : focus -> s = function
-  | AtP1 (f,ctx) -> s_of_ctx_p1 lexicon f (vp_of_elt_p1 lexicon `At ctx f) ctx
-  | AtS1 (f,ctx) -> s_of_ctx_s1 lexicon f (np_of_elt_s1 lexicon `At ctx f) ctx
+  | AtP1 (f,ctx) -> s_of_ctx_p1 lexicon `At f (vp_of_elt_p1 lexicon `At ctx f) ctx
+  | AtS1 (f,ctx) -> s_of_ctx_s1 lexicon `At f (np_of_elt_s1 lexicon `At ctx f) ctx
   | AtS f -> s_of_elt_s lexicon `Out f

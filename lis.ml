@@ -309,7 +309,7 @@ object (self)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
-    if Lisql2sparql.is_constraint_only_focus focus then k []
+    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index = [] then (*k []*) self#ajax_index_properties_init constr elt k
     else
       let process results_a results_has results_isof =
@@ -378,7 +378,8 @@ object (self)
 	      | AtS1 (f,ctx) ->
 		let modifs =
 		  match f with
-		    | Det (An (id, modif, head), _) ->
+		    | Det (An (id, modif, head), _) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
+		      (* no aggregation and modifiers on predicative S1 (S1 as P1 or aggregated S1) *)
 		      let modifs =
 			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
 			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
@@ -396,15 +397,18 @@ object (self)
 		      IncrOrder Highest :: IncrOrder Lowest :: IncrUnselect :: IncrAggreg g :: []
 		    | _ -> [] in
 		let modifs =
-		  if ctx = ReturnX
-		  then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
+		  if ctx = ReturnX then
+		    (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
 		    if is_top_s1 f
 		    then modifs
 		    else IncrAnd :: IncrOr :: IncrMaybe :: modifs (* needs special treatment for increments *)
-		  else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
+		  else if not (Lisql.is_aggregated_ctx_s1 ctx) then
+		    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs
+		  else modifs in
 		let modifs =
 		  match f with
 		    | Det (An _, _) -> IncrIs :: modifs
+		    | AnAggreg _ -> IncrIs :: modifs
 		    | _ -> modifs in
 		modifs
 	      | _ -> [] in

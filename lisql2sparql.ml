@@ -29,11 +29,21 @@ object (self)
 
 end
 
-let is_constraint_only_focus = function
+(* only constraints in HAVING clauses - TODO: use nested queries to relax this *)
+(*
+let rec is_constraint_only_focus = function
   | AtS1 (AnAggreg _, _) -> true
-  | AtP1 (_, AnAggregThatX _) -> true
-    (* only constraints in HAVING clauses - TODO: use nested queries to relax this *)
-  | _ -> false
+  | AtS1 _ -> false
+  | AtP1 (_, ctx) -> is_constraint_only_ctx_p1 ctx
+  | AtS _ -> false
+and is_constraint_only_ctx_p1 = function
+  | DetThatX _ -> false
+  | AnAggregThatX _ -> true
+  | AndX (_,_,ctx) -> is_constraint_only_ctx_p1 ctx
+  | OrX (_,_,ctx) -> is_constraint_only_ctx_p1 ctx
+  | MaybeX ctx -> is_constraint_only_ctx_p1 ctx
+  | NotX ctx -> is_constraint_only_ctx_p1 ctx
+*)
 
 let sparql_aggreg = function
   | NumberOf -> Sparql.DistinctCOUNT
@@ -355,44 +365,50 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
 
 type template = ?constr:constr -> limit:int -> string
 
+class focus_term_list (lex : Lisql2nl.lexicon) =
+object
+  val mutable res : Rdf.term list = []
+  method add (t : Rdf.term) : unit = if not (List.mem t res) then res <- t::res
+  method result : Rdf.term list = res
+end
+
 let focus (lex : Lisql2nl.lexicon) (focus : focus)
     : Rdf.term list * template option * template option * template option * template option =
   let state = new state lex in
-  let t_list, form =
+  let t_list = new focus_term_list lex in
+  let form =
     match focus with
       | AtP1 (f,ctx) ->
 	let d = elt_p1 state f in
-	let t_list_ref = ref [] in
 	let form =
 	  ctx_p1 state
-	    (fun t -> 
-	      if not (List.mem t !t_list_ref) then t_list_ref := t::!t_list_ref;
-	      d t)
+	    (fun t -> t_list#add t; d t)
 	    ctx in
-	!t_list_ref, form
+	form
       | AtS1 (f,ctx) ->
 	let q = elt_s1 state f in
 	let d = elt_s1_as_p1 state f in
-	let t_list =
-	  match f with
-	    | Det (det,_) ->
-	      ( match det with
-		| Term t -> [t]
-		| An (id,_,_) -> [Rdf.Var (lex#get_id_var id)]
-		| The id -> [Rdf.Var (lex#get_id_var id)] )
-	    | AnAggreg (id,_,_,_,_) -> [Rdf.Var (lex#get_id_var id)]
-	    | _ -> [] in
 	let form =
 	  ctx_s1 state (id_of_s1 f)
-	    (fun d -> q d)
+	    (fun d ->
+	      ( match f with
+		| Det (det,_) ->
+		  ( match det with
+		    | Term t -> t_list#add t
+		    | An (id,_,_) -> t_list#add (Rdf.Var (lex#get_id_var id))
+		    | The id -> t_list#add (Rdf.Var (lex#get_id_var id)) )
+		| AnAggreg (id,_,_,_,_) -> t_list#add (Rdf.Var (lex#get_id_var id))
+		| _ -> () );
+	      q d)
 	    (fun d -> Sparql.False)
-	    (fun x -> d x)
+	    (fun x -> t_list#add x; d x)
 	    ctx in
-	t_list, form
+	form
       | AtS f ->
 	let form = elt_s state f in
-	[], form
+	form
   in
+  let t_list = t_list#result in
   let query_opt =
     if form = Sparql.True
     then None
@@ -405,7 +421,7 @@ let focus (lex : Lisql2nl.lexicon) (focus : focus)
 	    let dims, aggregs, havings, order, v_order = (* v_order is to be used in ordering *)
 	      match state#aggreg v with
 		| Some (vg, (projectg,orderg), g, f) when not at_focus ->
-		  if projectg = Unselect && not at_focus
+		  if projectg = Unselect && not (List.mem (Rdf.Var vg) t_list)
 		  then dims, aggregs, havings, Unordered, vg
 		  else dims, (sparql_aggreg g,v,vg)::aggregs, f::havings, orderg, vg
 		| _ ->

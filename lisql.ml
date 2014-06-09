@@ -145,6 +145,54 @@ let is_home_focus = function AtS1 (f, ReturnX) -> is_top_s1 f | _ -> false
 
 let is_root_focus = function AtS _ -> true | _ -> false
 
+let rec is_aggregation_focus = function
+  | AtS1 (AnAggreg _, _) -> true
+  | AtS1 (_, ctx) -> is_aggregation_ctx_s1 ctx
+  | AtP1 (_, ctx) -> is_aggregation_ctx_p1 ctx
+  | AtS _ -> false
+and is_aggregation_ctx_p1 = function
+  | DetThatX (_,ctx) -> is_aggregation_ctx_s1 ctx
+  | AnAggregThatX _ -> true
+  | AndX (_,_,ctx) -> is_aggregation_ctx_p1 ctx
+  | OrX (_,_,ctx) -> is_aggregation_ctx_p1 ctx
+  | MaybeX ctx -> is_aggregation_ctx_p1 ctx
+  | NotX ctx -> is_aggregation_ctx_p1 ctx
+and is_aggregation_ctx_s1 = function
+  | IsX ctx -> is_aggregation_ctx_p1 ctx
+  | HasX _ -> false
+  | IsOfX _ -> false
+  | TripleX1 _ -> false
+  | TripleX2 _ -> false
+  | ReturnX -> false
+  | AnAggregX _ -> false
+  | NAndX (_,_,ctx) -> is_aggregation_ctx_s1 ctx
+  | NOrX (_,_,ctx) -> is_aggregation_ctx_s1 ctx
+  | NMaybeX ctx -> is_aggregation_ctx_s1 ctx
+  | NNotX ctx -> is_aggregation_ctx_s1 ctx
+
+let rec is_aggregated_focus = function
+  | AtS1 (_, ctx) -> is_aggregated_ctx_s1 ctx
+  | _ -> false
+and is_aggregated_ctx_s1 = function
+  | AnAggregX _ -> true
+  | _ -> false
+
+let rec is_s1_as_p1_focus = function
+  | AtS1 (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | _ -> false
+and is_s1_as_p1_ctx_s1 = function
+  | IsX _ -> true
+  | HasX _ -> false
+  | IsOfX _ -> false
+  | TripleX1 _ -> false
+  | TripleX2 _ -> false
+  | ReturnX -> false
+  | AnAggregX _ -> false
+  | NAndX (_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | NOrX (_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | NMaybeX ctx -> is_s1_as_p1_ctx_s1 ctx
+  | NNotX ctx -> is_s1_as_p1_ctx_s1 ctx
+
 let id_of_s2 = function
   | An (id, _, _) -> Some id
   | _ -> None
