@@ -115,7 +115,8 @@ let search_constr (t : Rdf.term) (c : constr) : Sparql.formula =
 		Sparql.Pattern (Sparql.search_contains l w)])
 	   lw)
     | _ ->
-      Sparql.Pattern (Sparql.search_label t l)
+      Sparql.Pattern (Sparql.something t)
+      (*Sparql.Pattern (Sparql.search_label t l)*)
 
 let triple_arg arg x y z =
   Sparql.Pattern
