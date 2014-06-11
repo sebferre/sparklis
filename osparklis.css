@@ -163,6 +163,7 @@ width:130px;
 width:300px;
 height:200px;
 overflow:auto;
+resize:both;
 }
 
 .list-incrs ul
