@@ -326,7 +326,7 @@ and np_of_elt_s1 lexicon pos ctx f : np =
 and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
   | Term t -> foc, `PN (word_of_term t, rel)
   | An (id, modif, head) -> head_of_modif foc (match head with Thing -> `Thing | Class c -> word_of_class c) rel modif
-  | The id -> foc, `Qu (`The, `Nil, word_of_id lexicon id, top_rel)
+  | The id -> foc, `PN (word_of_id lexicon id, rel)
 and s_of_elt_s lexicon pos : elt_s -> s = function
   | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np)
 

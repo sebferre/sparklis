@@ -255,8 +255,8 @@ let html_increment_frequency focus (state : state) (incr,freq) =
       | IncrId id ->
 	let html_id = html_word (Lisql2nl.word_of_id state#lexicon id) in
 	( match focus with
-	  | AtS1 _ -> "the " ^ html_id
-	  | _ -> html_increment_coordinate focus ("that is the " ^ html_id) )
+	  | AtS1 _ -> html_id
+	  | _ -> html_increment_coordinate focus ("that is " ^ html_id) )
       | IncrClass c ->
 	let html_c = html_word (Lisql2nl.word_of_class c) in
 	( match focus with
