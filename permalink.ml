@@ -71,7 +71,7 @@ and print_modif = function
 and print_project = function
   | Unselect -> print_atom "Unselect"
   | Select -> print_atom "Select"
-  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o)
+(*  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o) *)
 and print_aggreg = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"
@@ -188,7 +188,7 @@ and parse_modif ~version = parser
 and parse_project ~version = parser
   | [< _ = parse_atom ~version "Unselect" >] -> Unselect
   | [< _ = parse_atom ~version "Select" >] -> Select
-  | [< g, o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Aggreg (g,o)
+  | [< g, o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Select (* Aggreg (g,o) is lost *)
 and parse_aggreg ~version = parser
   | [< _ = parse_atom ~version "NumberOf" >] -> NumberOf
   | [< _ = parse_atom ~version "ListOf" >] -> ListOf

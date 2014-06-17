@@ -29,22 +29,6 @@ object (self)
 
 end
 
-(* only constraints in HAVING clauses - TODO: use nested queries to relax this *)
-(*
-let rec is_constraint_only_focus = function
-  | AtS1 (AnAggreg _, _) -> true
-  | AtS1 _ -> false
-  | AtP1 (_, ctx) -> is_constraint_only_ctx_p1 ctx
-  | AtS _ -> false
-and is_constraint_only_ctx_p1 = function
-  | DetThatX _ -> false
-  | AnAggregThatX _ -> true
-  | AndX (_,_,ctx) -> is_constraint_only_ctx_p1 ctx
-  | OrX (_,_,ctx) -> is_constraint_only_ctx_p1 ctx
-  | MaybeX ctx -> is_constraint_only_ctx_p1 ctx
-  | NotX ctx -> is_constraint_only_ctx_p1 ctx
-*)
-
 let sparql_aggreg = function
   | NumberOf -> Sparql.DistinctCOUNT
   | ListOf -> Sparql.DistinctCONCAT
@@ -429,17 +413,6 @@ let focus (lex : Lisql2nl.lexicon) (focus : focus)
 		  match state#modif v with
 		    | (Unselect,order) when not at_focus ->
 		      dims, aggregs, havings, Unordered, v
-		    | (Aggreg (g,gorder),order) when not at_focus ->
-		      let g_sparql, vg_prefix =
-			match g with
-			  | NumberOf -> Sparql.DistinctCOUNT, "number_of_"
-			  | ListOf -> Sparql.DistinctCONCAT, "list_of_"
-			  | Total -> Sparql.SUM, "total_"
-			  | Average -> Sparql.AVG, "average_"
-			  | Maximum -> Sparql.MAX, "maximum_"
-			  | Minimum -> Sparql.MIN, "minimum_" in
-		      let vg = vg_prefix ^ v in
-		      dims, (g_sparql,v,vg)::aggregs, havings, gorder, vg
 		    | (_, order) -> v::dims, aggregs, havings, order, v in
 	    let ordering =
 	      match order with

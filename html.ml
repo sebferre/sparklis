@@ -299,13 +299,14 @@ let html_increment_frequency focus (state : state) (incr,freq) =
       | IncrNot -> html_not html_dummy_focus
       | IncrUnselect ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
+	  (Lisql2nl.head_of_modif `NoFocus Lisql2nl.dummy_word Lisql2nl.top_rel (Unselect,Unordered))
       | IncrAggreg g ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
+	  (`NoFocus, Lisql2nl.np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g Lisql2nl.top_rel Lisql2nl.dummy_ng)
+	  (*Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered)*)
       | IncrOrder order ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
+	  (Lisql2nl.head_of_modif `NoFocus Lisql2nl.dummy_word Lisql2nl.top_rel (Select,order))
   in
   let title_opt =
     match incr with

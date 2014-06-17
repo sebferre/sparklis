@@ -70,6 +70,10 @@ let top_rel = `NoFocus, `Nil
 let top_np = `NoFocus, `Qu (`A, `Nil, `Thing, top_rel)
 let top_s = `NoFocus, `Return top_np
 
+let dummy_word : word = `DummyFocus
+let dummy_vp : vp = (`NoFocus, `DummyFocus)
+let dummy_ng : ng = (`NoFocus, `That (`DummyFocus, top_rel))
+
 let np_of_word w = `NoFocus, `PN (w, top_rel)
 let np_of_literal l = np_of_word (`Literal l)
 
@@ -286,24 +290,16 @@ let rec head_of_modif foc nn rel (modif : modif_s2) : np =
   let qu, adj =
     match modif with
       | Select, order -> qu_adj_of_order order
-      | Unselect, order -> `Any susp, snd (qu_adj_of_order order)
-      | Aggreg (g,gorder), _ ->
-	let qu_order, adj_order = qu_adj_of_order gorder in
-	qu_order, adj_of_aggreg ~suspended:susp adj_order g in
+      | Unselect, order -> `Any susp, snd (qu_adj_of_order order) in
   foc, `Qu (qu, adj, nn, rel)
 and qu_adj_of_modif ~suspended modif : qu * adj =
   match modif with
     | Select, order -> qu_adj_of_order order
     | Unselect, order -> `Any suspended, snd (qu_adj_of_order order)
-    | Aggreg (g,gorder), _ ->
-      let qu_order, adj_order = qu_adj_of_order gorder in
-      qu_order, adj_of_aggreg ~suspended adj_order g
 and qu_adj_of_order : order -> qu * adj = function
   | Unordered -> `A, `Nil
   | Highest -> `The, `Order (`Op "highest-to-lowest")
   | Lowest -> `The, `Order (`Op "lowest-to-highest")
-and adj_of_aggreg ~suspended adj (g : aggreg) : adj =
-  `Aggreg (suspended, adj, word_of_aggreg g)
 
 let word_of_id lexicon id = `Id (id, lexicon#get_id_label id)
 

@@ -63,7 +63,7 @@ type id = int
 type arg = S | P | O
 type order = Unordered | Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
-type project = Unselect | Select | Aggreg of aggreg * order
+type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
 
 (* LISQL elts *)
@@ -615,14 +615,14 @@ let insert_modif_transf f = function
     let modif2 = f modif in
     let foc2 = AtS1 (Det (An (id, modif2, head), rel_opt), ctx) in
     ( match fst modif2 with
-      | Unselect | Aggreg _ -> up_focus foc2 (* to enforce visible aggregation *)
-      | _ -> Some foc2 )
+      | Unselect -> up_focus foc2 (* to enforce visible aggregation *)
+      | Select -> Some foc2 )
   | AtS1 (AnAggreg (id, modif, g, rel_opt, np), ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (AnAggreg (id, modif2, g, rel_opt, np), ctx) in
     ( match fst modif2 with
-      | Unselect | Aggreg _ -> up_focus foc2 (* to enforce visible unselection *)
-      | _ -> Some foc2 )
+      | Unselect -> up_focus foc2 (* to enforce visible unselection *)
+      | Select -> Some foc2 )
   | _ -> None
 
 let insert_increment incr focus =
@@ -646,25 +646,12 @@ let insert_increment incr focus =
 	  | (Unselect,order) -> Select, order
 	  | (_,order) ->  Unselect, order)
 	focus
-(*
-    | IncrAggreg g ->
-      insert_modif_transf
-	(function
-	  | (Aggreg (g0, gorder), order) when g = g0 -> Select, order
-	  | (_, order) -> Aggreg (g, Unordered), order)
-	focus
-*)
     | IncrOrder order ->
       insert_modif_transf
-	(function
-	  | (Aggreg (g,gorder), order0) -> 
-	    if gorder = order
-	    then Aggreg (g, Unordered), order0
-	    else Aggreg (g, order), order0
-	  | ((Select | Unselect) as proj, order0) ->
-	    if order0 = order
-	    then proj, Unordered
-	    else proj, order)
+	(function (proj, order0) ->
+	  if order0 = order
+	  then proj, Unordered
+	  else proj, order)
 	focus
 
 let delete_array ar i =
