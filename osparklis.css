@@ -139,13 +139,9 @@ margin:0px;
 
 .incr-box
 {
-    border:4px groove #a0f0a0;
-    margin:5px;
-}
-@media screen
-{
-    .incr-box
-    { float:left; }
+border:4px groove #a0f0a0;
+margin:5px;
+float:left;
 }
 
 .pattern-incrs
@@ -162,6 +158,7 @@ width:130px;
 {
 width:300px;
 height:200px;
+resize:both;
 overflow:auto;
 resize:both;
 }

@@ -50,6 +50,7 @@ and print_p1 = function
   | IsThere -> print_atom "IsThere"
 and print_s1 = function
   | Det (det, rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
+  | AnAggreg (id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
   | NAnd ar -> print_ar print_s1 "NAnd" ar
   | NOr ar -> print_ar print_s1 "NOr" ar
   | NMaybe f -> print_un "NMaybe" (print_s1 f)
@@ -70,7 +71,7 @@ and print_modif = function
 and print_project = function
   | Unselect -> print_atom "Unselect"
   | Select -> print_atom "Select"
-  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o)
+(*  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o) *)
 and print_aggreg = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"
@@ -125,19 +126,21 @@ let parse_atom ~version f = parser [< 'Ident id when id = f >] -> ()
 let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ")" >] -> x1
 let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ")" >] -> x1, x2
 let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ","; x3 = ps3 ~version; 'Kwd ")" >] -> x1, x2, x3
-let parse_opt ~version ps = parser [< _ = parse_atom ~version "None" >] -> None | [< x = parse_un ~version "Some" ps >] -> Some x
+let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ","; x3 = ps3 ~version; 'Kwd ","; x4 = ps4 ~version; 'Kwd ","; x5 = ps5 ~version; 'Kwd ")" >] -> x1, x2, x3, x4, x5
 
-let rec parse_list ~version ps f = parser
-  | [< 'Ident id when id = f; 'Kwd "("; args = parse_args ~version ps >] -> args
-and parse_args ~version ps = parser
-  | [< x = ps ~version; xs = parse_args_aux ~version ps >] -> x::xs
+let parse_opt ps ~version = parser [< _ = parse_atom ~version "None" >] -> None | [< x = parse_un ~version "Some" ps >] -> Some x
+
+let rec parse_list ps ~version f = parser
+  | [< 'Ident id when id = f; 'Kwd "("; args = parse_args ps ~version >] -> args
+and parse_args ps ~version = parser
+  | [< x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
   | [< >] -> []
-and parse_args_aux ~version ps = parser
-  | [< 'Kwd ","; xs = parse_args ~version ps >] -> xs
+and parse_args_aux ps ~version = parser
+  | [< 'Kwd ","; xs = parse_args ps ~version >] -> xs
   | [< 'Kwd ")" >] -> []
 
-let parse_ar ~version ps f = parser
-  | [< xs = parse_list ~version ps f >] -> Array.of_list xs
+let parse_ar ps ~version f = parser
+  | [< xs = parse_list ps ~version f >] -> Array.of_list xs
 
 let rec parse = parser
   | [< 'Kwd "["; version = parse_version; 'Kwd "]"; s = parse_s ~version >] -> s
@@ -153,15 +156,16 @@ and parse_p1 ~version = parser
   | [< c = parse_un ~version "Search" parse_constr >] -> Search c
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter c
   | [< c = parse_un ~version "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
-  | [< ar = parse_ar ~version parse_p1 "And" >] -> And ar
-  | [< ar = parse_ar ~version parse_p1 "Or" >] -> Or ar
+  | [< ar = parse_ar parse_p1 ~version "And" >] -> And ar
+  | [< ar = parse_ar parse_p1 ~version "Or" >] -> Or ar
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
   | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
   | [< _ = parse_atom ~version "IsThere" >] -> IsThere
 and parse_s1 ~version = parser
-  | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (fun ~version -> parse_opt ~version parse_p1) >] -> Det (det, rel_opt)
-  | [< ar = parse_ar ~version parse_s1 "NAnd" >] -> NAnd ar
-  | [< ar = parse_ar ~version parse_s1 "NOr" >] -> NOr ar
+  | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
+  | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg (id,modif,g,rel_opt,np)
+  | [< ar = parse_ar parse_s1 ~version "NAnd" >] -> NAnd ar
+  | [< ar = parse_ar parse_s1 ~version "NOr" >] -> NOr ar
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe f
   | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot f
 and parse_s2 ~version = parser
@@ -184,7 +188,7 @@ and parse_modif ~version = parser
 and parse_project ~version = parser
   | [< _ = parse_atom ~version "Unselect" >] -> Unselect
   | [< _ = parse_atom ~version "Select" >] -> Select
-  | [< g, o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Aggreg (g,o)
+  | [< _g, _o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Select (* Aggreg (g,o) is lost *)
 and parse_aggreg ~version = parser
   | [< _ = parse_atom ~version "NumberOf" >] -> NumberOf
   | [< _ = parse_atom ~version "ListOf" >] -> ListOf
@@ -198,8 +202,8 @@ and parse_order ~version = parser
   | [< _ = parse_atom ~version "Lowest" >] -> Lowest
 and parse_constr ~version = parser
   | [< _ = parse_atom ~version "True" >] -> True
-  | [< lw = parse_list ~version parse_string "MatchesAll" >] -> MatchesAll lw
-  | [< lw = parse_list ~version parse_string "MatchesAny" >] -> MatchesAny lw
+  | [< lw = parse_list parse_string ~version "MatchesAll" >] -> MatchesAll lw
+  | [< lw = parse_list parse_string ~version "MatchesAny" >] -> MatchesAny lw
   | [< s = parse_un ~version "After" parse_string >] -> After s
   | [< s = parse_un ~version "Before" parse_string >] -> Before s
   | [< s1, s2 = parse_bin ~version "FromTo" parse_string parse_string >] -> FromTo (s1,s2)

@@ -224,12 +224,9 @@ object (self)
       | _ -> []
 
   method index_terms =
-    if focus_term_index = []
-    then []
-    else
-      List.rev_map
-	(fun (t,freq) -> (Lisql.IncrTerm t, freq))
-	focus_term_index
+    List.rev_map
+      (fun (t,freq) -> (Lisql.IncrTerm t, freq))
+      focus_term_index
 
   method ajax_index_terms_init constr elt (k : Lisql.increment index -> unit) =
     let process results_term =
@@ -247,7 +244,7 @@ object (self)
 	  [] list_term in
       k index
     in
-    let sparql_term =
+    let sparql_term = (* TODO: when constr=True, use '?term a []' *)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
@@ -312,8 +309,8 @@ object (self)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
-    if focus_term_index = []
-    then k []
+    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
+    else if focus_term_index = [] then (*k []*) self#ajax_index_properties_init constr elt k
     else
       let process results_a results_has results_isof =
 	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
@@ -381,7 +378,8 @@ object (self)
 	      | AtS1 (f,ctx) ->
 		let modifs =
 		  match f with
-		    | Det (An (id, modif, head), _) ->
+		    | Det (An (id, modif, head), _) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
+		      (* no aggregation and modifiers on predicative S1 (S1 as P1 or aggregated S1) *)
 		      let modifs =
 			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
 			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
@@ -395,17 +393,22 @@ object (self)
 		      let modifs =
 			IncrOrder Highest :: IncrOrder Lowest :: modifs in
 		      modifs
+		    | AnAggreg (id,modif,g,rel_opt,np) ->
+		      IncrOrder Highest :: IncrOrder Lowest :: IncrUnselect :: IncrAggreg g :: []
 		    | _ -> [] in
 		let modifs =
-		  if ctx = ReturnX
-		  then (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
+		  if ctx = ReturnX then
+		    (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
 		    if is_top_s1 f
 		    then modifs
-		    else IncrOr :: modifs
-		  else IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs in
+		    else IncrAnd :: IncrOr :: IncrMaybe :: modifs (* needs special treatment for increments *)
+		  else if not (Lisql.is_aggregated_ctx_s1 ctx) then
+		    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs
+		  else modifs in
 		let modifs =
 		  match f with
 		    | Det (An _, _) -> IncrIs :: modifs
+		    | AnAggreg _ -> IncrIs :: modifs
 		    | _ -> modifs in
 		modifs
 	      | _ -> [] in

@@ -161,12 +161,25 @@ and html_np state (foc, nl : Lisql2nl.np) : string =
 	html_qu qu ^ html_adj state adj ^ html_nl_focus state foc2 (html_word w ^ html_rel_opt state rel2)
       | `Qu (`A, `Nil, `Thing, rel) -> "something" ^ html_rel_opt state rel
       | `Qu (qu, adj, w, rel) -> html_qu qu ^ html_adj state adj ^ html_word w ^ html_rel_opt state rel
+      | `QuAggreg (suspended, qu, adj, ngg, (foc2, `That (`Thing, (_, `That (_, `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, w, rel2)), [])))))) ->
+	html_qu qu ^ html_suspended ~suspended (html_adj state adj ^ html_ng_aggreg state ngg) ^
+	  " " ^
+	  html_nl_focus state foc2 (html_word w ^ html_rel_opt state rel2)
+      | `QuAggreg (suspended, qu, adj, ngg, ng) ->
+	html_qu qu ^ html_suspended ~suspended (html_adj state adj ^ html_ng_aggreg state ngg) ^
+	  " " ^
+	  html_ng state ng
       | `QuOneOf (_, [w]) -> html_word w
       | `QuOneOf (qu, lw) -> html_qu qu ^ "of " ^ String.concat ", " (List.map (html_word) lw)
       | `And ar -> html_and (Array.map (html_np state) ar)
       | `Or (susp, ar) -> html_or ~suspended:susp (Array.map (html_np state) ar)
       | `Maybe (suspended, np) -> html_maybe ~suspended (html_np state np)
       | `Not (suspended, np) -> html_not ~suspended (html_np state np) in
+  html_nl_focus state foc html
+and html_ng state (foc, nl : Lisql2nl.ng) : string =
+  let html =
+    match nl with
+      | `That (w,rel) -> html_word w ^ html_rel_opt state rel in
   html_nl_focus state foc html
 and html_qu : Lisql2nl.qu -> string = function
   | `A -> "a "
@@ -179,6 +192,9 @@ and html_adj state : Lisql2nl.adj -> string = function
   | `Order w -> html_word w ^ " "
   | `Aggreg (susp, a, w) -> html_suspended ~suspended:susp (html_adj state a ^ html_word w) ^ " "
   | `Adj (a, w) -> html_adj state a ^ html_word w ^ " "
+and html_ng_aggreg state : Lisql2nl.ng_aggreg -> string = function
+  | `That (g, rel) -> html_word g ^ html_rel_opt state rel
+  | `ThatOf (g, rel) -> html_word g ^ html_rel_opt state rel ^ " of"
 and html_rel_opt state foc_nl =
   if foc_nl = Lisql2nl.top_rel
   then ""
@@ -207,7 +223,10 @@ and html_vp state (foc, nl : Lisql2nl.vp) : string =
       | `IsThere -> html_ellipsis
       | `IsNP (np,lpp) -> "is " ^ html_np state np ^ html_pp_list state lpp
       | `IsPP pp -> "is " ^ html_pp state pp
-      | `HasProp (w, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) -> html_vp state (`NoFocus, `Has ((foc2, `Qu (qu, adj, w, rel)), lpp))
+      | `HasProp (p, (foc2, `Qu (qu, adj, `Thing, rel)), lpp) ->
+	html_vp state (`NoFocus, `Has ((foc2, `Qu (qu, adj, p, rel)), lpp))
+      | `HasProp (p, (foc2, `QuAggreg (susp, qu, adj, ngg, (foc3, `That (`Thing, rel2)))), lpp) ->
+	html_vp state (`NoFocus, `Has ((foc2, `QuAggreg (susp, qu, adj, ngg, (foc3, `That (p, rel2)))), lpp))
       | `HasProp (p, np, lpp) -> "has " ^ html_word p ^ " " ^ html_np state np ^ html_pp_list state lpp
       | `Has (np, lpp) -> "has " ^ html_np state np ^ html_pp_list state lpp
       | `VT (w, np, lpp) -> html_word w ^ " " ^ html_np state np ^ html_pp_list state lpp
@@ -280,13 +299,14 @@ let html_increment_frequency focus (state : state) (incr,freq) =
       | IncrNot -> html_not html_dummy_focus
       | IncrUnselect ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Unselect,Unordered))
+	  (Lisql2nl.head_of_modif `NoFocus Lisql2nl.dummy_word Lisql2nl.top_rel (Unselect,Unordered))
       | IncrAggreg g ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered))
+	  (`NoFocus, Lisql2nl.np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g Lisql2nl.top_rel Lisql2nl.dummy_ng)
+	  (*Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Aggreg (g,Unordered),Unordered)*)
       | IncrOrder order ->
 	html_np state
-	  (Lisql2nl.head_of_modif `NoFocus `DummyFocus Lisql2nl.top_rel (Select,order))
+	  (Lisql2nl.head_of_modif `NoFocus Lisql2nl.dummy_word Lisql2nl.top_rel (Select,order))
   in
   let title_opt =
     match incr with

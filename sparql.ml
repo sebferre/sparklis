@@ -135,6 +135,7 @@ let select
     ?(distinct=false)
     ~(dimensions : Rdf.var list)
     ?(aggregations : (aggreg * Rdf.var * Rdf.var) list = [])
+    ?(having : expr = log_true)
     ?(ordering : (order * Rdf.var) list = [])
     ?(limit : int option)
     (pattern : pattern) : query =
@@ -160,6 +161,10 @@ let select
       if aggregations = [] || dimensions = []
       then s
       else s ^ "\nGROUP BY " ^ String.concat " " (List.map var dimensions) in
+    let s =
+      if having = log_true
+      then s
+      else s ^ "\nHAVING ( " ^ indent 9 having ^ " )" in
     let s =
       if ordering = []
       then s
@@ -198,29 +203,6 @@ let formula_and (f1 : formula) (f2 : formula) : formula =
 let formula_and_list (lf : formula list) : formula =
   List.fold_left formula_and True lf
 
-(*
-let formula_or (f1 : formula) (f2 : formula) : formula =
-  match f1, f2 with
-    | False, _ -> f2
-    | _, False -> f1
-    | True, True -> True
-    | True, Pattern p2 -> Or (p2, log_true)
-    | Pattern p1, True -> Or (p1, log_true)
-    | True, Filter _ -> True
-    | Filter _, True -> True
-    | True, Or (p2,_) -> Or (p2, log_true)
-    | Or (p1,_), True -> Or (p1, log_true)
-    | Pattern p1, Pattern p2 -> Pattern (union [p1;p2])
-    | Filter e1, Filter e2 -> Filter (log_or [e1;e2])
-    | Pattern p1, Filter e2 -> Or (p1,e2)
-    | Filter e1, Pattern p2 -> Or (p2,e1)
-    | Or (p1,e1), Pattern p2 -> Or (union [p1;p2], e1)
-    | Or (p1,e1), Filter e2 -> Or (p1, log_or [e1;e2])
-    | Pattern p1, Or (p2,e2) -> Or (union [p1;p2], e2)
-    | Filter e1, Or (p2,e2) -> Or (p2, log_or [e1;e2])
-    | Or (p1,e1), Or (p2,e2) -> Or (union [p1;p2], log_or [e1;e2])
-*)
-
 let formula_or_list (lf : formula list) : formula =
   let lp, le, btrue =
     List.fold_right
@@ -240,7 +222,6 @@ let formula_or_list (lf : formula list) : formula =
     | _::_, _, true -> Or (union lp, log_true)
     | _::_, _::_, false -> Or (union lp, log_or le)
 
-(*  List.fold_left formula_or False lf *)
 
 let formula_optional : formula -> formula = function
   | Pattern p -> Pattern (optional p)
@@ -262,6 +243,10 @@ let formula_bind (x : Rdf.term) : formula -> formula = function
   | True -> True (*Pattern (something x)*)
   | False -> False
   | Or (p,e) -> Pattern (union [p; join [something x; filter e]])
+
+let expr_of_formula : formula -> expr = function
+  | Filter e -> e
+  | _ -> log_true (* TODO: dummy default *)
 
 let pattern_of_formula : formula -> pattern = function
   | Pattern p -> p
