@@ -163,6 +163,11 @@ overflow:auto;
 resize:both;
 }
 
+#list-terms
+{
+width:335px;
+}
+
 .list-incrs ul
 {
 list-style-type: none;
