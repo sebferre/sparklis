@@ -3,6 +3,15 @@ open Js
 open Jsutils
 open Html
 
+let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
+  Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
+
+let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
+  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
+
+let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.php" *)
+  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015"
+
 (* LISQL constraints <--> user patterns *)
 
 let string_is_float =
@@ -392,6 +401,12 @@ object (self)
   method present : place = present
 
   method push (p : place) : unit =
+    if not is_dev_version then (* not counting tests with dev *)
+      Lwt.ignore_result
+	(XmlHttpRequest.perform_raw_url
+	   ~get_args:[("endpoint", p#lis#endpoint);
+		      ("query", Permalink.of_query p#lis#query)]
+	   url_querylog_php); (* counting hits *)
     past <- present::past;
     present <- p;
     future <- []
@@ -443,12 +458,9 @@ end
 
 (* main *)
 
-let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
-  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
-
 let _ =
   Firebug.console##log(string "Starting Sparklis");
-  if Url.Current.path_string <> "/home/ferre/prog/ajax/sparklis/osparklis.html" then (* to avoid counting tests as hits *)
+  if not is_dev_version then (* to avoid counting tests as hits *)
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
     jquery "#home" (onclick (fun elt ev -> history#home));
