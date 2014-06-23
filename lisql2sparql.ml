@@ -119,12 +119,11 @@ type sparql_b1 = sparql_p2 -> Sparql.formula
 let rec elt_p1 state : elt_p1 -> sparql_p1 = function
   | Is np -> elt_s1_as_p1 state np
   | Type c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
-  | Has (p,np) ->
+  | Rel (p,m,np) ->
     let q_np = elt_s1 state np in
-    (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
-  | IsOf (p,np) ->
-    let q_np = elt_s1 state np in
-    (fun x -> q_np (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
+    (fun x -> q_np (fun y ->
+      let s, o = match m with Fwd -> x, y | Bwd -> y, x in
+      Sparql.Pattern (Sparql.triple s (Rdf.URI p) o)))
   | Triple (arg,np1,np2) ->
     let q_np1 = elt_s1 state np1 in
     let q_np2 = elt_s1 state np2 in
@@ -296,13 +295,11 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | NotX ctx -> ctx_p1 state d ctx
 and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
   | IsX ctx -> ctx_p1 state d ctx
-  | HasX (p,ctx) ->
+  | RelX (p,m,ctx) ->
     ctx_p1 state
-      (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple x (Rdf.URI p) y)))
-      ctx
-  | IsOfX (p,ctx) ->
-    ctx_p1 state
-      (fun x -> q (fun y -> Sparql.Pattern (Sparql.triple y (Rdf.URI p) x)))
+      (fun x -> q (fun y ->
+	let s, o = match m with Fwd -> x, y | Bwd -> y, x in
+	Sparql.Pattern (Sparql.triple s (Rdf.URI p) o)))
       ctx
   | TripleX1 (arg,np,ctx) ->
     let q_np = elt_s1 state np in

@@ -261,13 +261,13 @@ object (self)
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI c -> (Lisql.IncrClass c, 1) :: res
+	    | Rdf.URI c -> (Lisql.IncrType c, 1) :: res
 	    | _ -> res)
 	  [] list_class in
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI c -> (Lisql.IncrProp c, 1) :: (Lisql.IncrInvProp c, 1) :: res
+	    | Rdf.URI p -> (Lisql.IncrRel (p,Lisql.Fwd), 1) :: (Lisql.IncrRel (p,Lisql.Bwd), 1) :: res
 	    | _ -> res)
 	  index list_prop in
       let index = List.sort cmp_index_elt index in
@@ -313,11 +313,11 @@ object (self)
     else if focus_term_index = [] then (*k []*) self#ajax_index_properties_init constr elt k
     else
       let process results_a results_has results_isof =
-	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrClass c)
+	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrType c)
 	  (index_of_results_column "class" results_a) in (* increasing *)
-	let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrProp p)
+	let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Fwd))
 	  (index_of_results_column "prop" results_has) in (* increasing *)
-	let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrInvProp p)
+	let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Bwd))
 	  (index_of_results_column "prop" results_isof) in (* increasing *)
 	let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
 	k index
@@ -369,8 +369,7 @@ object (self)
 		let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
 		let modifs =
 		  match f with
-		    | Has _
-		    | IsOf _
+		    | Rel _
 		    | Triple (S, Det (Term (Rdf.URI _), _), _)
 		    | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
 		    | _ -> modifs in

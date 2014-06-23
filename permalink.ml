@@ -38,8 +38,7 @@ and print_s = function
 and print_p1 = function
   | Is np -> print_un "Is" (print_s1 np)
   | Type c -> print_un "Type" (print_uri c)
-  | Has (p,np) -> print_bin "Has" (print_uri p) (print_s1 np)
-  | IsOf (p,np) -> print_bin "IsOf" (print_uri p) (print_s1 np)
+  | Rel (p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
   | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | Search c -> print_un "Search" (print_constr c)
   | Filter c -> print_un "Filter" (print_constr c)
@@ -48,6 +47,9 @@ and print_p1 = function
   | Maybe f -> print_un "Maybe" (print_p1 f)
   | Not f -> print_un "Not" (print_p1 f)
   | IsThere -> print_atom "IsThere"
+and print_modif_p2 = function
+  | Fwd -> print_atom "Fwd"
+  | Bwd -> print_atom "Bwd"
 and print_s1 = function
   | Det (det, rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
@@ -150,8 +152,9 @@ and parse_s ~version = parser
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is np
   | [< c = parse_un ~version "Type" parse_uri >] -> Type c
-  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Has (p,np)
-  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> IsOf (p,np)
+  | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel (p,m,np)
+  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel (p,Fwd,np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel (p,Bwd,np) (* for backward compatibility *)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search c
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter c
@@ -161,6 +164,9 @@ and parse_p1 ~version = parser
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
   | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
   | [< _ = parse_atom ~version "IsThere" >] -> IsThere
+and parse_modif_p2 ~version = parser
+  | [< _ = parse_atom "Fwd" >] -> Fwd
+  | [< _ = parse_atom "Bwd" >] -> Bwd
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg (id,modif,g,rel_opt,np)

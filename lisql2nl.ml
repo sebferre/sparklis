@@ -142,11 +142,11 @@ let id_label_words_of_arg2 = function O -> Some ("relation","relation") | S | P 
 let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
   | Is np -> labelling_s1 ~labels np (* TODO: avoid keeping np.id *)
   | Type c -> [`Word (id_label_word_of_uri c)], []
-  | Has (p,np) ->
+  | Rel (p, Fwd, np) ->
     let lw = id_label_word_of_uri p in
     let _ls, lab = labelling_s1 ~labels:(gen_labels labels lw) np in
     [], lab    
-  | IsOf (p,np) ->
+  | Rel (p, Bwd, np) ->
     let lw = id_label_word_of_uri p in
     let ls, lab = labelling_s1 ~labels:[] np in
     of_labels lw ls, lab
@@ -307,6 +307,10 @@ let vp_of_elt_p1_Is (np : np) = `IsNP (np, [])
 let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP ((`NoFocus, `Qu (`A, `Nil, word_of_class c, top_rel)), [])
 let vp_of_elt_p1_Has (p : Rdf.uri) (np : np) = `HasProp (word_of_property p, np, [])
 let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) = `IsNP ((`NoFocus, `Qu (`The, `Nil, word_of_property p, (`NoFocus, `Of np))), [])
+let vp_of_elt_p1_Rel (p : Rdf.uri) (m : modif_p2) (np : np) =
+  match m with
+    | Fwd -> vp_of_elt_p1_Has p np
+    | Bwd -> vp_of_elt_p1_IsOf p np
 let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
   match arg with
     | S -> (* has relation npp to npo / has property npp with value npo / has p npo *)
@@ -334,8 +338,7 @@ let rec vp_of_elt_p1 lexicon pos ctx f : vp =
       | IsThere -> `IsThere
       | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 lexicon (focus_pos_down pos) (IsX ctx) np)
       | Type c -> vp_of_elt_p1_Type c
-      | Has (p,np) -> vp_of_elt_p1_Has p (np_of_elt_s1 lexicon (focus_pos_down pos) (HasX (p,ctx)) np)
-      | IsOf (p,np) -> vp_of_elt_p1_IsOf p (np_of_elt_s1 lexicon (focus_pos_down pos) (IsOfX (p,ctx)) np)
+      | Rel (p,m,np) -> vp_of_elt_p1_Rel p m (np_of_elt_s1 lexicon (focus_pos_down pos) (RelX (p,m,ctx)) np)
       | Triple (arg,np1,np2) ->
 	vp_of_elt_p1_Triple arg
 	  (np_of_elt_s1 lexicon (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
@@ -446,15 +449,10 @@ and s_of_ctx_s1 lexicon pos f (foc,nl as foc_nl) ctx =
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Is foc_nl in
       s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
-    | HasX (p,ctx2) ->
-      let f2 = Has (p,f) in
+    | RelX (p,m,ctx2) ->
+      let f2 = Rel (p,m,f) in
       let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_Has p foc_nl in
-      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
-    | IsOfX (p,ctx2) ->
-      let f2 = IsOf (p,f) in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_IsOf p foc_nl in
+      let nl2 = vp_of_elt_p1_Rel p m foc_nl in
       s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
     | TripleX1 (arg,np2,ctx2) ->
       let f2 = Triple (arg,f,np2) in

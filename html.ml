@@ -276,19 +276,15 @@ let html_increment_frequency focus (state : state) (incr,freq) =
 	( match focus with
 	  | AtS1 _ -> html_id
 	  | _ -> html_increment_coordinate focus ("that is " ^ html_id) )
-      | IncrClass c ->
+      | IncrType c ->
 	let html_c = html_word (Lisql2nl.word_of_class c) in
 	( match focus with
-(*
-	  | AtS1 (Det (Term _, _), _) -> "a " ^ html_c
-	  | AtS1 (Det (An (_, _, Thing), _), _) -> "a " ^ html_c
-*)
 	  | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
 	    "a " ^ html_c ^ " " ^ html_delete ~title:"Remove this class at the head of the focus" ()
 	  | AtS1 _ -> "a " ^ html_c
 	  | _ -> html_increment_coordinate focus ("that is a " ^ html_c) )
-      | IncrProp p -> html_increment_coordinate focus ("that has a " ^ html_word (Lisql2nl.word_of_property p))
-      | IncrInvProp p -> html_increment_coordinate focus ("that is the " ^ html_word (Lisql2nl.word_of_property p) ^ " of ...")
+      | IncrRel (p,Lisql.Fwd) -> html_increment_coordinate focus ("that has a " ^ html_word (Lisql2nl.word_of_property p))
+      | IncrRel (p,Lisql.Bwd) -> html_increment_coordinate focus ("that is the " ^ html_word (Lisql2nl.word_of_property p) ^ " of ...")
       | IncrTriple (S | O as arg) -> html_increment_coordinate focus ("that has a " ^ html_modifier "relation" ^ (if arg = S then " to ..." else " from ..."))
       | IncrTriple P -> html_increment_coordinate focus ("that is a " ^ html_modifier "relation" ^ " from ... to ...")
       | IncrTriplify -> "has a " ^ html_modifier "relation" ^ " from/to"
@@ -312,9 +308,8 @@ let html_increment_frequency focus (state : state) (incr,freq) =
     match incr with
       | IncrTerm _ -> None
       | IncrId _ -> None
-      | IncrClass _ -> None
-      | IncrProp _ -> None
-      | IncrInvProp _ -> None
+      | IncrType _ -> None
+      | IncrRel _ -> None
       | IncrTriple _ -> None
       | IncrTriplify -> Some "Adds a focus on the property to refine it"
       | IncrIs -> None

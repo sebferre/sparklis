@@ -65,13 +65,13 @@ type order = Unordered | Highest | Lowest
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
 type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
+type modif_p2 = Fwd | Bwd
 
 (* LISQL elts *)
 type elt_p1 =
   | Is of elt_s1
   | Type of Rdf.uri
-  | Has of Rdf.uri * elt_s1
-  | IsOf of Rdf.uri * elt_s1
+  | Rel of Rdf.uri * modif_p2 * elt_s1
   | Triple of arg * elt_s1 * elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | Search of constr
   | Filter of constr
@@ -107,8 +107,7 @@ type ctx_p1 =
   | NotX of ctx_p1
 and ctx_s1 =
   | IsX of ctx_p1
-  | HasX of Rdf.uri * ctx_p1
-  | IsOfX of Rdf.uri * ctx_p1
+  | RelX of Rdf.uri * modif_p2 * ctx_p1
   | TripleX1 of arg * elt_s1 * ctx_p1 (* context on first S1 arg *)
   | TripleX2 of arg * elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX
@@ -159,8 +158,7 @@ and is_aggregation_ctx_p1 = function
   | NotX ctx -> is_aggregation_ctx_p1 ctx
 and is_aggregation_ctx_s1 = function
   | IsX ctx -> is_aggregation_ctx_p1 ctx
-  | HasX _ -> false
-  | IsOfX _ -> false
+  | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
   | ReturnX -> false
@@ -182,8 +180,7 @@ let rec is_s1_as_p1_focus = function
   | _ -> false
 and is_s1_as_p1_ctx_s1 = function
   | IsX _ -> true
-  | HasX _ -> false
-  | IsOfX _ -> false
+  | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
   | ReturnX -> false
@@ -215,8 +212,7 @@ let rec elt_s_of_ctx_p1 (f : elt_p1) = function
   | NotX ctx -> elt_s_of_ctx_p1 (Not f) ctx
 and elt_s_of_ctx_s1 (f : elt_s1) = function
   | IsX ctx -> elt_s_of_ctx_p1 (Is f) ctx
-  | HasX (p,ctx) -> elt_s_of_ctx_p1 (Has (p,f)) ctx
-  | IsOfX (p,ctx) -> elt_s_of_ctx_p1 (IsOf (p,f)) ctx
+  | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel (p,modif,f)) ctx
   | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,f,np)) ctx
   | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,np,f)) ctx
   | ReturnX -> Return f
@@ -236,8 +232,7 @@ let elt_s_of_focus = function
 let rec ids_elt_p1 = function
   | Is np -> ids_elt_s1 np
   | Type _ -> []
-  | Has (p,np) -> ids_elt_s1 np
-  | IsOf (p,np) -> ids_elt_s1 np
+  | Rel (p,modif,np) -> ids_elt_s1 np
   | Triple (arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
   | Search _ -> []
   | Filter _ -> []
@@ -269,8 +264,7 @@ and ids_elt_s = function
 let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Is np -> Some (AtS1 (np, IsX ctx))
   | Type _ -> None
-  | Has (p,np) -> Some (AtS1 (np, HasX (p,ctx)))
-  | IsOf (p,np) -> Some (AtS1 (np, IsOfX (p,ctx)))
+  | Rel (p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
   | Triple (arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | Search _ -> None
   | Filter _ -> None
@@ -281,7 +275,6 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
   | Det (det,None) -> None
-  | Det (An (id, modif, Thing), Some (IsOf (p,np))) -> Some (AtS1 (np, IsOfX (p, DetThatX (An (id, modif, Thing), ctx))))
   | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
   | AnAggreg (id, modif, g, Some rel, np) -> Some (AtP1 (rel, AnAggregThatX (id, modif, g, np, ctx)))
@@ -306,8 +299,7 @@ let rec up_p1 f = function
   | NotX ctx -> Some (AtP1 (Not f, ctx))
 let rec up_s1 f = function
   | IsX ctx -> Some (AtP1 (Is f, ctx))
-  | HasX (p,ctx) -> Some (AtP1 (Has (p,f), ctx))
-  | IsOfX (p,ctx) -> Some (AtP1 (IsOf (p,f), ctx))
+  | RelX (p,m,ctx) -> Some (AtP1 (Rel (p,m,f), ctx))
   | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple (arg,f,np), ctx))
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple (arg,np,f), ctx))
   | ReturnX -> Some (AtS (Return f))
@@ -340,8 +332,7 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | NotX ctx -> None
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
-  | HasX _ -> None
-  | IsOfX _ -> None
+  | RelX _ -> None
   | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
   | TripleX2 _ -> None
   | ReturnX -> None
@@ -384,8 +375,7 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | NotX ctx -> None
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
-  | HasX _ -> None
-  | IsOfX _ -> None
+  | RelX _ -> None
   | TripleX1 _ -> None
   | TripleX2 (arg,np,ctx) -> Some (AtS1 (np, TripleX1 (arg,f,ctx)))
   | ReturnX -> None
@@ -421,13 +411,14 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 
 (* increments *)
 
+type increment_property_modifier
+
 type increment =
   | IncrTerm of Rdf.term
   | IncrId of id
   | IncrIs
-  | IncrClass of Rdf.uri
-  | IncrProp of Rdf.uri
-  | IncrInvProp of Rdf.uri
+  | IncrType of Rdf.uri
+  | IncrRel of Rdf.uri * modif_p2
   | IncrTriple of arg
   | IncrTriplify
   | IncrAnd
@@ -441,9 +432,8 @@ type increment =
 let term_of_increment : increment -> Rdf.term option = function
   | IncrTerm t -> Some t
   | IncrId id -> None
-  | IncrClass c -> Some (Rdf.URI c)
-  | IncrProp p -> Some (Rdf.URI p)
-  | IncrInvProp p -> Some (Rdf.URI p)
+  | IncrType c -> Some (Rdf.URI c)
+  | IncrRel (p,m) -> Some (Rdf.URI p)
   | IncrTriple arg -> None
   | IncrTriplify -> None
   | IncrIs -> None
@@ -513,8 +503,7 @@ let insert_elt_s2 det focus =
       | AtS1 _ -> None (* no insertion of terms on complex NPs and aggregations *)
       | _ -> None in
   match focus2_opt with
-    | Some (AtS1 (f, HasX (p, ctx))) -> Some (AtP1 (Has (p,f), ctx))
-    | Some (AtS1 (f, IsOfX (p, ctx))) -> Some (AtP1 (IsOf (p,f), ctx))
+    | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel (p,m,f), ctx))
     | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
     | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
     | other -> other
@@ -522,7 +511,7 @@ let insert_elt_s2 det focus =
 let insert_term t focus = insert_elt_s2 (Term t) focus
 let insert_id id focus = insert_elt_s2 (The id) focus
 
-let insert_class c = function
+let insert_type c = function
   | AtS1 (Det (det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
@@ -536,12 +525,8 @@ let insert_class c = function
 	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
   | focus -> insert_elt_p1 (Type c) focus
 
-let insert_property p focus =
-  let foc_opt = insert_elt_p1 (Has (p, factory#top_s1)) focus in
-  focus_moves [down_focus] foc_opt
-
-let insert_inverse_property p focus =
-  let foc_opt = insert_elt_p1 (IsOf (p, factory#top_s1)) focus in
+let insert_rel p m focus =
+  let foc_opt = insert_elt_p1 (Rel (p, m, factory#top_s1)) focus in
   focus_moves [down_focus] foc_opt
 
 let insert_triple arg focus =
@@ -550,12 +535,10 @@ let insert_triple arg focus =
   focus_moves steps foc_opt
 
 let insert_triplify = function
-  | AtP1 (Has (p,np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
-(* Some (AtP1 (Triple (S, Det (Term (Rdf.URI p), None), np), ctx)) *)
-  | AtP1 (IsOf (p,np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
-(* Some (AtP1 (Triple (O, np, Det (Term (Rdf.URI p), None)), ctx)) *)
-  | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Has (p,np), ctx))
-  | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (IsOf (p,np), ctx))
+  | AtP1 (Rel (p, Fwd, np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
+  | AtP1 (Rel (p, Bwd, np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
+  | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel (p, Fwd, np), ctx))
+  | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel (p, Bwd, np), ctx))
   | _ -> None
 
 let insert_constr constr focus =
@@ -629,9 +612,8 @@ let insert_increment incr focus =
   match incr with
     | IncrTerm t -> insert_term t focus
     | IncrId id -> insert_id id focus
-    | IncrClass c -> insert_class c focus
-    | IncrProp p -> insert_property p focus
-    | IncrInvProp p -> insert_inverse_property p focus
+    | IncrType c -> insert_type c focus
+    | IncrRel (p,m) -> insert_rel p m focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrIs -> insert_is focus
@@ -684,8 +666,7 @@ let rec delete_ctx_p1 = function
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
-    | HasX (_,ctx2)
-    | IsOfX (_,ctx2)
+    | RelX (_,_,ctx2)
     | TripleX1 (_,_,ctx2)
     | TripleX2 (_,_,ctx2) ->
       ( match f_opt with
