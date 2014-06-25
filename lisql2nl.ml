@@ -393,7 +393,7 @@ and ng_of_elt_s1 lexicon pos ctx f =
 and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
   | Term t -> foc, `PN (word_of_term t, rel)
   | An (id, modif, head) -> head_of_modif foc (word_of_elt_head head) rel modif
-  | The id -> foc, `PN (word_of_id lexicon id, top_rel)
+  | The id -> foc, `PN (word_of_id lexicon id, rel)
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c

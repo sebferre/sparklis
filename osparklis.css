@@ -160,6 +160,12 @@ width:300px;
 height:200px;
 resize:both;
 overflow:auto;
+resize:both;
+}
+
+#list-terms
+{
+width:335px;
 }
 
 .list-incrs ul

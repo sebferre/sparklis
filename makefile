@@ -6,6 +6,7 @@ osparklis: $(OBJ)
 	js_of_ocaml osparklis.byte
 
 install:
+	cp log/*.php /local/ferre/web/ferre/sparklis/log
 	cp osparklis.html /local/ferre/web/ferre/sparklis
 	cp osparklis.css /local/ferre/web/ferre/sparklis
 	cp osparklis.js /local/ferre/web/ferre/sparklis
