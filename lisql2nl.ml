@@ -1,5 +1,4 @@
 
-open Jsutils
 open Lisql
 
 (* NL generation from focus *)
@@ -234,7 +233,7 @@ object
   initializer
     id_list <- List.map
       (fun (id,ls) ->
-	let ls = list_to_set ls in (* removing duplicates *)
+	let ls = Common.list_to_set ls in (* removing duplicates *)
 	let ls = if ls = [] then [`Word ("thing","thing")] else ls in (* default label *)
 	let vss =
 	  List.map

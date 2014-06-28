@@ -7,10 +7,10 @@ let is_dev_version : bool = (* flag at TRUE if this is the dev version that is r
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
 
 let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
-  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
+  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
 
 let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.php" *)
-  unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015"
+  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015"
 
 (* LISQL constraints <--> user patterns *)
 
@@ -80,6 +80,52 @@ let pattern_of_constr =
 	| Between (pat1,pat2) -> pat1 ^ " " ^ pat2
 	| HasLang pat -> pat
 	| HasDatatype pat -> pat
+
+(* constraint compilation *)
+
+let compile_constr constr : Rdf.term -> bool =
+  let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i" in
+  let matches s re = Regexp.search re s 0 <> None in
+  let leq t pat = try (Rdf.float_of_term t) <= (float_of_string pat) with _ -> false in
+  let geq t pat = try (Rdf.float_of_term t) >= (float_of_string pat) with _ -> false in
+  let open Lisql in
+  match constr with
+    | True -> (fun t -> true)
+    | MatchesAll lpat ->
+      let lre = List.map regexp_of_pat lpat in
+      (fun t ->
+	let s = Rdf.string_of_term t in
+	List.for_all (fun re -> matches s re) lre)
+    | MatchesAny lpat ->
+      let lre = List.map regexp_of_pat lpat in
+      (fun t ->
+	let s = Rdf.string_of_term t in
+	List.exists (fun re -> matches s re) lre)
+    | After pat ->
+      (fun t -> (Rdf.string_of_term t) >= pat)
+    | Before pat ->
+      (fun t -> (Rdf.string_of_term t) <= pat)
+    | FromTo (pat1,pat2) ->
+      (fun t ->
+	let s = Rdf.string_of_term t in
+	pat1 <= s && s <= pat2)
+    | HigherThan pat ->
+      (fun t -> geq t pat)
+    | LowerThan pat ->
+      (fun t -> leq t pat)
+    | Between (pat1,pat2) ->
+      (fun t -> geq t pat1 && leq t pat2)
+    | HasLang pat ->
+      let re = regexp_of_pat pat in
+      (function
+	| Rdf.PlainLiteral (s,lang) -> matches lang re
+	| _ -> false)
+    | HasDatatype pat ->
+      let re = regexp_of_pat pat in
+      (function
+	| Rdf.Number (_,s,dt)
+	| Rdf.TypedLiteral (s,dt) -> matches dt re
+	| _ -> false)
 
 (* navigation place and history *)
 
@@ -327,7 +373,7 @@ object (self)
     else
     try
       let constr = make_constr op pat in
-      let matcher = Lisql.compile_constr constr in
+      let matcher = compile_constr constr in
       let there_is_match = ref false in
       jquery_all_from elt_list "li" (fun elt_li ->
 	jquery_from elt_li ".increment" (fun elt_incr ->

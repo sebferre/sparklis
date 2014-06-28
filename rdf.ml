@@ -1,7 +1,4 @@
 
-open Js
-open Jsutils
-
 type uri = string
 
 let uri_has_ext uri exts =

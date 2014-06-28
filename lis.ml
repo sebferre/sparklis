@@ -1,6 +1,5 @@
 
 open Js
-open Jsutils
 
 type 'a index = ('a * int) list
 
@@ -211,7 +210,7 @@ object (self)
 	let ref_index = ref [] in
 	for i = dim-1 downto 0 do
 	  if freqs.(i) <> 0 then begin
-	    let v = try list_rev_assoc i vars with _ -> assert false in
+	    let v = try Common.list_rev_assoc i vars with _ -> assert false in
 	    if focus_term <> (Rdf.Var v) then begin
 	      try
 		let id = lex#get_var_id v in

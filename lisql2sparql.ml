@@ -1,5 +1,5 @@
 
-open Jsutils
+(*open Jsutils*)
 open Lisql
 
 (* translation from LISQL elts to SPARQL queries *)

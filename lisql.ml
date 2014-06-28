@@ -15,49 +15,6 @@ type constr =
   | HasLang of string
   | HasDatatype of string
 
-let compile_constr constr : Rdf.term -> bool =
-  let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i" in
-  let matches s re = Regexp.search re s 0 <> None in
-  let leq t pat = try (Rdf.float_of_term t) <= (float_of_string pat) with _ -> false in
-  let geq t pat = try (Rdf.float_of_term t) >= (float_of_string pat) with _ -> false in
-  match constr with
-    | True -> (fun t -> true)
-    | MatchesAll lpat ->
-      let lre = List.map regexp_of_pat lpat in
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	List.for_all (fun re -> matches s re) lre)
-    | MatchesAny lpat ->
-      let lre = List.map regexp_of_pat lpat in
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	List.exists (fun re -> matches s re) lre)
-    | After pat ->
-      (fun t -> (Rdf.string_of_term t) >= pat)
-    | Before pat ->
-      (fun t -> (Rdf.string_of_term t) <= pat)
-    | FromTo (pat1,pat2) ->
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	pat1 <= s && s <= pat2)
-    | HigherThan pat ->
-      (fun t -> geq t pat)
-    | LowerThan pat ->
-      (fun t -> leq t pat)
-    | Between (pat1,pat2) ->
-      (fun t -> geq t pat1 && leq t pat2)
-    | HasLang pat ->
-      let re = regexp_of_pat pat in
-      (function
-	| Rdf.PlainLiteral (s,lang) -> matches lang re
-	| _ -> false)
-    | HasDatatype pat ->
-      let re = regexp_of_pat pat in
-      (function
-	| Rdf.Number (_,s,dt)
-	| Rdf.TypedLiteral (s,dt) -> matches dt re
-	| _ -> false)
-
 (* LISQL modifiers *)
 type id = int
 type arg = S | P | O
