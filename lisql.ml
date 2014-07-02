@@ -374,9 +374,9 @@ type increment =
   | IncrTerm of Rdf.term
   | IncrId of id
   | IncrIs
+  | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
-  | IncrTriple of arg
   | IncrTriplify
   | IncrAnd
   | IncrOr

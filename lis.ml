@@ -257,12 +257,13 @@ object (self)
     let process results_class results_prop =
       let list_class = list_of_results_column "class" results_class in
       let list_prop = list_of_results_column "prop" results_prop in
+      let index = [] in
       let index =
 	List.fold_left
 	  (fun res -> function
 	    | Rdf.URI c -> (Lisql.IncrType c, 1) :: res
 	    | _ -> res)
-	  [] list_class in
+	  index list_class in
       let index =
 	List.fold_left
 	  (fun res -> function
@@ -319,6 +320,8 @@ object (self)
 	let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Bwd))
 	  (index_of_results_column "prop" results_isof) in (* increasing *)
 	let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
+	let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, 1) :: index in
+	let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, 1) :: index in
 	k index
       in	
       let sparql_a =
