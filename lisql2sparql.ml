@@ -100,7 +100,6 @@ let search_constr (t : Rdf.term) (c : constr) : Sparql.formula =
 	   lw)
     | _ ->
       Sparql.Pattern (Sparql.something t)
-      (*Sparql.Pattern (Sparql.search_label t l)*)
 
 let triple_arg arg x y z =
   Sparql.Pattern
@@ -430,7 +429,8 @@ let focus (lex : Lisql2nl.lexicon) (focus : focus)
 	let tx = Rdf.Var x in
 	let form_x =
 	  match t with
-	    | Rdf.Var v -> Sparql.formula_and form (triple t tx)
+	    | Rdf.Var _
+	    | Rdf.Bnode _ -> Sparql.formula_and form (triple t tx)
 	    | _ -> triple t tx in
 	Some (fun ?(constr=True) ~limit ->
 	  Sparql.select ~dimensions:[x] ~limit

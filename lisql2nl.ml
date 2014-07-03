@@ -10,6 +10,7 @@ type word =
   | `Entity of Rdf.uri * string
   | `Literal of string
   | `TypedLiteral of string * string (* string, datatype/lang *)
+  | `Blank of string
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
   | `Op of string
@@ -95,7 +96,7 @@ let rec word_of_term = function
   | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, name_of_uri dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
-  | Rdf.Bnode id -> `Entity ("_:" ^ id, id) (* should not occur *)
+  | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> `Id (0, v) (* should not occur *)
 
 let word_of_aggreg g =

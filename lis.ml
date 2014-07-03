@@ -141,6 +141,7 @@ object (self)
 
   val mutable results = Sparql_endpoint.empty_results
   val mutable focus_term_index : (Rdf.term * int) list = []
+  val mutable some_focus_term_is_blank : bool = false
 
 
   (* utilities *)
@@ -154,32 +155,47 @@ object (self)
     match query_opt with
       | None ->
 	results <- Sparql_endpoint.empty_results;
-	focus_term_index <-
-	  ( match focus_term_list with
-	    | [Rdf.Var _] -> []
-	    | [term] -> [(term,1)]
-	    | _ -> [] );
+	let fti, sftib =
+	  match focus_term_list with
+	    | [Rdf.Var _] -> [], false
+	    | [Rdf.Bnode _] ->
+	      Firebug.console##log(string "no query and focus_term_list is a Bnode");
+	      [], true (* should not happen *)
+	    | [term] -> [(term,1)], false
+	    | _ -> [], false in
+	focus_term_index <- fti;
+	some_focus_term_is_blank <- sftib;
 	k None
       | Some query ->
 	let sparql = query ~constr:term_constr ~limit:max_results in
 	Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
-	    focus_term_index <-
-	      ( match focus_term_list with
+	    let fti, sftib =
+	      match focus_term_list with
 		| [Rdf.Var v] ->
-		  List.filter
-		    (function
-		      | (Rdf.URI uri, _) when String.contains uri ' ' -> false
-	                (* URIs with spaces inside are not allowed in SPARQL queries *)
-		      | _ -> true)
-		    (index_of_results_column v results)
-		| [t] -> [(t, 1)]
-		| _ -> [] );
+		  let index = index_of_results_column v results in
+		  List.fold_right
+		    (fun (t,freq) (fti,sftib) ->
+		      match t with
+			| Rdf.URI uri when String.contains uri ' ' -> (fti,sftib)
+	                  (* URIs with spaces inside are not allowed in SPARQL queries *)
+			| Rdf.Bnode _ -> (fti,true)
+		          (* blank nodes are not allowed in SPARQL queries *)
+			| _ -> ((t,freq)::fti, sftib))
+		    index ([],false)
+		| [Rdf.Bnode _] ->
+		  Firebug.console##log(string "focus_term_list is a Bnode");
+		  [], true (* should not happen *)
+		| [t] -> [(t, 1)], false
+		| _ -> [], false in
+	    focus_term_index <- fti;
+	    some_focus_term_is_blank <- sftib;
 	    k (Some sparql))
 	  (fun code ->
 	    results <- Sparql_endpoint.empty_results;
 	    focus_term_index <- [];
+	    some_focus_term_is_blank <- false;
 	    k (Some sparql))
 
   method results_dim = results.Sparql_endpoint.dim
@@ -243,17 +259,18 @@ object (self)
 	  [] list_term in
       k index
     in
-    let sparql_term = (* TODO: when constr=True, use '?term a []' *)
+    let sparql_term =
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
-	" } LIMIT 200" in
+	" FILTER (!BNODE(?term)) } LIMIT 200" in
     Firebug.console##log(string sparql_term);
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
       (fun results_term -> process results_term)
       (fun code -> process Sparql_endpoint.empty_results)
 
   method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
+    Firebug.console##log(string "ajax_properties_init !");
     let process results_class results_prop =
       let list_class = list_of_results_column "class" results_class in
       let list_prop = list_of_results_column "prop" results_prop in
@@ -309,21 +326,35 @@ object (self)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
-    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
-    else if focus_term_index = [] then (*k []*) self#ajax_index_properties_init constr elt k
-    else
-      let process results_a results_has results_isof =
-	let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrType c)
-	  (index_of_results_column "class" results_a) in (* increasing *)
-	let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Fwd))
-	  (index_of_results_column "prop" results_has) in (* increasing *)
-	let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Bwd))
-	  (index_of_results_column "prop" results_isof) in (* increasing *)
-	let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
-	let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, 1) :: index in
-	let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, 1) :: index in
-	k index
-      in	
+    let process results_a results_has results_isof =
+      let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrType c)
+	(index_of_results_column "class" results_a) in (* increasing *)
+      let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Fwd))
+	(index_of_results_column "prop" results_has) in (* increasing *)
+      let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Bwd))
+	(index_of_results_column "prop" results_isof) in (* increasing *)
+      let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
+      let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, 1) :: index in
+      let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, 1) :: index in
+      k index
+    in
+    let ajax_intent () =
+      Firebug.console##log(string "ajax_properties_intent !");
+      match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
+	| None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
+	| Some query_a, Some query_has, Some query_isof ->
+	  let sparql_a = query_a ~constr ~limit:max_classes in
+	  let sparql_has = query_has ~constr ~limit:max_properties in
+	  let sparql_isof = query_isof ~constr ~limit:max_properties in
+	  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
+	    (function
+	      | [results_a; results_has; results_isof] -> process results_a results_has results_isof
+	      | _ -> assert false)
+	    (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	| _ -> assert false
+    in
+    let ajax_extent () =
+      Firebug.console##log(string "ajax_properties_extent !");
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
 	Sparql.select ~dimensions:["class"] ~limit:max_classes
@@ -344,21 +375,16 @@ object (self)
 	  | [results_a; results_has; results_isof] ->
 	    if results_a.Sparql_endpoint.length > 0 || results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
 	    then process results_a results_has results_isof
-	    else
-	      ( match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
-		| None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
-		| Some query_a, Some query_has, Some query_isof ->
-		  let sparql_a = query_a ~constr ~limit:max_classes in
-		  let sparql_has = query_has ~constr ~limit:max_properties in
-		  let sparql_isof = query_isof ~constr ~limit:max_properties in
-		  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
-		    (function
-		      | [results_a; results_has; results_isof] -> process results_a results_has results_isof
-		      | _ -> assert false)
-		    (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
-		| _ -> assert false )
+	    else ajax_intent ()
 	  | _ -> assert false)
 	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+    in
+    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
+    else if focus_term_index = [] then
+      if some_focus_term_is_blank
+      then ajax_intent ()
+      else self#ajax_index_properties_init constr elt k
+    else ajax_extent ()
 
   method index_modifiers ~init =
     if init

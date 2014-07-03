@@ -465,7 +465,10 @@ let insert_elt_s2 det focus =
     | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
     | other -> other
 
-let insert_term t focus = insert_elt_s2 (Term t) focus
+let insert_term t focus =
+  match t with
+    | Rdf.Bnode _ -> None (* blank nodes cannot be injected in queries *)
+    | _ -> insert_elt_s2 (Term t) focus
 let insert_id id focus = insert_elt_s2 (The id) focus
 
 let insert_type c = function

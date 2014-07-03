@@ -125,6 +125,7 @@ let html_word = function
   | `Relation -> html_modifier "relation"
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
+  | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
   | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
@@ -362,7 +363,6 @@ let html_cell_audio url mime =
     html_open_new_window ~height:16 url
 
 let html_cell state ~(line : int) ~(column : Lisql.id) t =
-  let key = state#dico_results#add (line,column,t) in
   let contents =
     match t with
       | Rdf.URI uri ->
@@ -376,6 +376,7 @@ let html_cell state ~(line : int) ~(column : Lisql.id) t =
 	  html_cell_audio uri "audio/mpeg"
 	else html_word (Lisql2nl.word_of_term t)
       | _ -> html_word (Lisql2nl.word_of_term t) in
+  let key = state#dico_results#add (line,column,t) in
   html_span ~id:key ~classe:"cell" contents
 
 let html_table_of_results (state : state) ~first_rank ~focus_var results =
