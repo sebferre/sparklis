@@ -4,7 +4,7 @@ margin:5px 0px;
 padding:5px 10px;
 height:50px;
 color:white;
-background-image:url('stars_background.png');
+background-image:url('sparkles_background.png');
 background-repeat:repeat-x;
 }
 
@@ -97,28 +97,16 @@ font-weight:bold;
 .in-current-focus
 {
 background-color:#a0f0a0;
-/*
-font-style:normal;
-font-weight:900;
-*/
 }
 
 .out-current-focus
 {
 background-color:white;
-/*
-font-style:normal;
-font-weight:900;
-*/
 }
 
 .ex-current-focus
 {
 background-color:white;
-/*
-font-style:italic;
-font-weight:100;
-*/
 }
 
 .suspended
@@ -140,6 +128,11 @@ margin:0px;
 
 #increments
 {
+}
+
+#increments-focus
+{
+font-weight:bold;
 }
 
 .incr-box

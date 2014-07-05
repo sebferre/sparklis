@@ -184,6 +184,19 @@ object (self)
 	  Dom_html.stopPropagation ev;
 	  navigation#update_focus ~push_in_history:true Lisql.delete_focus)))
 
+  method private refresh_increments_focus =
+    let html_focus =
+      match lis#focus_term_list with
+	| [Rdf.Var v] ->
+	  (try
+	    let id = lis#lexicon#get_var_id v in
+	    escapeHTML (lis#lexicon#get_id_label id)
+	   with _ -> escapeHTML v (* should not happen *))
+	| [t] -> Html.html_word (Lisql2nl.word_of_term t)
+	| _ -> "" in
+    jquery "#increments-focus" (fun elt ->
+      elt##innerHTML <- string html_focus)
+
   method private refresh_constrs =
     List.iter
       (fun (sel_select, sel_input, constr) ->
@@ -294,6 +307,7 @@ object (self)
     html_state <- new Html.state lis#lexicon;
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
+    self#refresh_increments_focus;
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#results" (fun elt_res ->
