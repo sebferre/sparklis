@@ -3,6 +3,12 @@ open Js
 open XmlHttpRequest
 open Jsutils
 
+(* endpoint-specific aspects *)
+
+let uri_of_id (id : string) : Rdf.uri option =
+  if Common.has_prefix id "nodeID://" then Some id (* Virtuoso *)
+  else None
+
 (* SPARQL results JSon <--> OCaml *)
 
 type results =
@@ -102,7 +108,9 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
 			  try
 			    let elt_bnode = Xml.find elt_binding "bnode" in
 			    let id = Xml.get_text elt_bnode in
-			    Some (Rdf.Bnode id)
+			    match uri_of_id id with
+			      | Some uri -> Some (Rdf.URI uri)
+			      | None -> Some (Rdf.Bnode id)
 			  with _ ->
 			    None in
 		    binding.(i) <- term_opt))
@@ -150,7 +158,9 @@ let results_of_json s_json =
 		let v = Unsafe.get ovalue (string "fullBytes") in
 		match to_string (Unsafe.get otype (string "fullBytes")) with
 		  | "uri" -> Rdf.URI (to_string v (*decodeURI v*))
-		  | "bnode" -> Rdf.Bnode (to_string v)
+		  | "bnode" ->
+		    let id = to_string v in
+		    ( match uri_of_id id with Some uri -> Rdf.URI uri | None -> Rdf.Bnode id )
 		  | "typed-literal" ->
 		    let odatatype = Unsafe.get ocell (string "datatype") in
 		    let s = to_string v in
