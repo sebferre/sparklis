@@ -75,7 +75,8 @@ let rec term : Rdf.term -> term = function
   | Rdf.Bnode name -> if name="" then "[]" else "_:" ^ name
   | Rdf.Var v -> var v
 
-let term_numeric (t : Rdf.term) : expr = "STRDT(str(" ^ term t ^ "),xsd:double)"
+let term_numeric (t : Rdf.term) : expr = "xsd:double(" ^ term t ^ ")" (* "STRDT(str(" ^ term t ^ "),xsd:double)" *)
+let var_numeric (v : Rdf.var) : expr = term_numeric (Rdf.Var v)
 
 let indent : int -> string -> string =
   let re = Regexp.regexp_string "\n" in
@@ -142,19 +143,19 @@ let select
   if dimensions = [] && aggregations = []
   then ask pattern
   else
-    let make_aggreg prefix_g v suffix_g vg = "(" ^ prefix_g ^ var v ^ suffix_g ^ " AS " ^ var vg ^ ")" in
+    let make_aggreg prefix_g expr suffix_g vg = "(" ^ prefix_g ^ expr ^ suffix_g ^ " AS " ^ var vg ^ ")" in
     let sel =
       String.concat " " (List.map var dimensions) ^ " " ^
 	String.concat " "
 	(List.map
 	   (fun (g,v,vg) ->
 	     match g with
-	       | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " v ")" vg
-	       | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " v (" ; separator=', ')") vg
-	       | SUM -> make_aggreg "SUM(" v ")" vg
-	       | AVG -> make_aggreg "AVG(" v ")" vg
-	       | MAX -> make_aggreg "MAX(" v ")" vg
-	       | MIN -> make_aggreg "MIN(" v ")" vg)
+	       | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " (var v) ")" vg
+	       | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " (var v) (" ; separator=', ')") vg
+	       | SUM -> make_aggreg "SUM(" (var_numeric v) ")" vg
+	       | AVG -> make_aggreg "AVG(" (var_numeric v) ")" vg
+	       | MAX -> make_aggreg "MAX(" (var v) ")" vg
+	       | MIN -> make_aggreg "MIN(" (var v) ")" vg)
 	   aggregations) in
     let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in
     let s =
