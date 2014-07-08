@@ -263,7 +263,7 @@ object (self)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
-	" FILTER (!BNODE(?term)) } LIMIT 200" in
+	" FILTER (!IsBlank(?term)) } LIMIT 200" in
     Firebug.console##log(string sparql_term);
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
       (fun results_term -> process results_term)
@@ -294,15 +294,17 @@ object (self)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
+	"FILTER EXISTS { [] a ?class } " ^
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "class") constr) ^
-	" } LIMIT 500" in
+	" } LIMIT 200" in
     let sparql_prop =
       "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
         "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
+	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "prop") constr) ^
-	" } LIMIT 500" in
+	" } LIMIT 200" in
     Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
       (function
 	| [results_class; results_prop] ->
