@@ -116,24 +116,30 @@ open Genlex
 
 let lexer = make_lexer ["[";"]";"("; ")"; ","]
 
+let syntax_error msg = raise (Stream.Error msg)
+
 let parse_version = parser
   | [< 'Ident "VInit" >] -> VInit
   | [< 'Ident "VId" >] -> VId
+  | [<>] -> syntax_error "invalid version"
 
 let parse_int ~version = parser [< 'Int i >] -> i
 let parse_float ~version = parser [< 'Float f >] -> f
 let parse_string ~version = parser [< 'String s >] -> s
 let parse_atom ~version f = parser [< 'Ident id when id = f >] -> ()
 
-let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ")" >] -> x1
-let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ")" >] -> x1, x2
-let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ","; x3 = ps3 ~version; 'Kwd ")" >] -> x1, x2, x3
-let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "("; x1 = ps1 ~version; 'Kwd ","; x2 = ps2 ~version; 'Kwd ","; x3 = ps3 ~version; 'Kwd ","; x4 = ps4 ~version; 'Kwd ","; x5 = ps5 ~version; 'Kwd ")" >] -> x1, x2, x3, x4, x5
+let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd ")" ?? "missing )" >] -> x1
+let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2
+let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
+let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd "," ?? "missing ,"; x4 = ps4 ~version; 'Kwd "," ?? "missing ,"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
 
-let parse_opt ps ~version = parser [< _ = parse_atom ~version "None" >] -> None | [< x = parse_un ~version "Some" ps >] -> Some x
+let parse_opt ps ~version = parser
+  | [< () = parse_atom ~version "None" >] -> None
+  | [< x = parse_un ~version "Some" ps >] -> Some x
+  | [<>] -> syntax_error "invalid option"
 
 let rec parse_list ps ~version f = parser
-  | [< 'Ident id when id = f; 'Kwd "("; args = parse_args ps ~version >] -> args
+  | [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; args = parse_args ps ~version >] -> args
 and parse_args ps ~version = parser
   | [< x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
   | [< >] -> []
@@ -145,7 +151,7 @@ let parse_ar ps ~version f = parser
   | [< xs = parse_list ps ~version f >] -> Array.of_list xs
 
 let rec parse = parser
-  | [< 'Kwd "["; version = parse_version; 'Kwd "]"; s = parse_s ~version >] -> s
+  | [< 'Kwd "["; version = parse_version; 'Kwd "]" ?? "missing ]"; s = parse_s ~version >] -> s
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
   | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
@@ -163,10 +169,12 @@ and parse_p1 ~version = parser
   | [< ar = parse_ar parse_p1 ~version "Or" >] -> Or ar
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
   | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
-  | [< _ = parse_atom ~version "IsThere" >] -> IsThere
+  | [< () = parse_atom ~version "IsThere" >] -> IsThere
+  | [<>] -> syntax_error "invalid p1"
 and parse_modif_p2 ~version = parser
-  | [< _ = parse_atom "Fwd" >] -> Fwd
-  | [< _ = parse_atom "Bwd" >] -> Bwd
+  | [< () = parse_atom ~version "Fwd" >] -> Fwd
+  | [< () = parse_atom ~version "Bwd" >] -> Bwd
+  | [<>] -> syntax_error "invalid modif_p2"
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg (id,modif,g,rel_opt,np)
@@ -174,40 +182,48 @@ and parse_s1 ~version = parser
   | [< ar = parse_ar parse_s1 ~version "NOr" >] -> NOr ar
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe f
   | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot f
+  | [<>] -> syntax_error "invalid s1"
 and parse_s2 ~version = parser
   | [< t = parse_un ~version "Term" parse_term >] -> Term t
   | [< det_an = parse_s2_an ~version >] -> det_an
   | [< id = parse_un ~version "The" parse_id >] -> The id
+  | [<>] -> syntax_error "invalid s2"
 and parse_s2_an ~version =
   match version with
     | VInit -> (parser [< modif, head = parse_bin ~version "An" parse_modif parse_head >] -> An (Lisql.factory#new_id, modif, head))
     | VId -> (parser [< id, modif, head = parse_ter ~version "An" parse_id parse_modif parse_head >] -> An (id, modif, head))
 and parse_head ~version  = parser
-  | [< _ = parse_atom ~version "Thing" >] -> Thing
+  | [< () = parse_atom ~version "Thing" >] -> Thing
   | [< c = parse_un ~version "Class" parse_uri >] -> Class c
+  | [<>] -> syntax_error "invalid head"
 and parse_arg ~version = parser
-  | [< _ = parse_atom ~version "S" >] -> S
-  | [< _ = parse_atom ~version "P" >] -> P
-  | [< _ = parse_atom ~version "O" >] -> O
+  | [< () = parse_atom ~version "S" >] -> S
+  | [< () = parse_atom ~version "P" >] -> P
+  | [< () = parse_atom ~version "O" >] -> O
+  | [<>] -> syntax_error "invalid arg"
 and parse_modif ~version = parser
   | [< p, o = parse_bin ~version "Modif" parse_project parse_order >] -> (p,o)
+  | [<>] -> syntax_error "invalid modif"
 and parse_project ~version = parser
-  | [< _ = parse_atom ~version "Unselect" >] -> Unselect
-  | [< _ = parse_atom ~version "Select" >] -> Select
+  | [< () = parse_atom ~version "Unselect" >] -> Unselect
+  | [< () = parse_atom ~version "Select" >] -> Select
   | [< _g, _o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Select (* Aggreg (g,o) is lost *)
+  | [<>] -> syntax_error "invalid project"
 and parse_aggreg ~version = parser
-  | [< _ = parse_atom ~version "NumberOf" >] -> NumberOf
-  | [< _ = parse_atom ~version "ListOf" >] -> ListOf
-  | [< _ = parse_atom ~version "Total" >] -> Total
-  | [< _ = parse_atom ~version "Average" >] -> Average
-  | [< _ = parse_atom ~version "Maximum" >] -> Maximum
-  | [< _ = parse_atom ~version "Minimum" >] -> Minimum
+  | [< () = parse_atom ~version "NumberOf" >] -> NumberOf
+  | [< () = parse_atom ~version "ListOf" >] -> ListOf
+  | [< () = parse_atom ~version "Total" >] -> Total
+  | [< () = parse_atom ~version "Average" >] -> Average
+  | [< () = parse_atom ~version "Maximum" >] -> Maximum
+  | [< () = parse_atom ~version "Minimum" >] -> Minimum
+  | [<>] -> syntax_error "invalid aggreg"
 and parse_order ~version = parser
-  | [< _ = parse_atom ~version "Unordered" >] -> Unordered
-  | [< _ = parse_atom ~version "Highest" >] -> Highest
-  | [< _ = parse_atom ~version "Lowest" >] -> Lowest
+  | [< () = parse_atom ~version "Unordered" >] -> Unordered
+  | [< () = parse_atom ~version "Highest" >] -> Highest
+  | [< () = parse_atom ~version "Lowest" >] -> Lowest
+  | [<>] -> syntax_error "invalid order"
 and parse_constr ~version = parser
-  | [< _ = parse_atom ~version "True" >] -> True
+  | [< () = parse_atom ~version "True" >] -> True
   | [< lw = parse_list parse_string ~version "MatchesAll" >] -> MatchesAll lw
   | [< lw = parse_list parse_string ~version "MatchesAny" >] -> MatchesAny lw
   | [< s = parse_un ~version "After" parse_string >] -> After s
@@ -218,6 +234,7 @@ and parse_constr ~version = parser
   | [< s1, s2 = parse_bin ~version "Between" parse_string parse_string >] -> Between (s1,s2)
   | [< s = parse_un ~version "HasLang" parse_string >] -> HasLang s
   | [< s = parse_un ~version "HasDatatype" parse_string >] -> HasDatatype s
+  | [<>] -> syntax_error "invalid constr"
 and parse_term ~version = parser
   | [< uri = parse_un ~version "URI" parse_uri >] -> URI uri
   | [< f, s, dt = parse_ter ~version "Number" parse_float parse_string parse_string >] -> Number (f,s,dt)
@@ -225,6 +242,7 @@ and parse_term ~version = parser
   | [< s, lang = parse_bin ~version "PlainLiteral" parse_string parse_string >] -> PlainLiteral (s,lang)
   | [< id = parse_un ~version "Bnode" parse_string >] -> Bnode id
   | [< v = parse_un ~version "Var" parse_var >] -> Var v
+  | [<>] -> syntax_error "invalid term"
 and parse_uri ~version = parser [< s = parse_string ~version >] -> s
 and parse_var ~version = parser [< s = parse_string ~version >] -> s
 and parse_id ~version = parser [< i = parse_int ~version >] -> i

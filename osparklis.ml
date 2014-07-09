@@ -584,7 +584,10 @@ let _ =
 	try
 	  let query = Permalink.to_query (List.assoc "query" args) in
 	  history#update_focus ~push_in_history:true (Lisql.goto query)
-	with _ -> ()
+	with
+	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
+	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
+	  |  _ -> ()
       with _ ->
 	history#present#refresh in
     bool true)
