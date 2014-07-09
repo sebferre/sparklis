@@ -51,7 +51,6 @@ struct
 end
 
 let results_of_xml (doc_xml : Dom.element Dom.document t) =
-  Firebug.console##log(string "Entering sparql_results_of_xml");
   try
     let elt_xml : Dom.element t = doc_xml##documentElement in
     (try
@@ -230,7 +229,6 @@ end
 let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
-  (*Firebug.console##log(string sparql);*)
   let fields : (string * Form.form_elt) list =
     [("query", `String (string sparql))] in
   let req = create () in
@@ -262,8 +260,8 @@ let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
 	  List.iter pool#remove_elt elts;
 	  do_check_headers ();
 	  let code = req##status in
-	  Firebug.console##log(string ("HTTP code: " ^ string_of_int code));
-	  Firebug.console##log(req##statusText);
+	  (* Firebug.console##log(string ("HTTP code: " ^ string_of_int code)); *)
+	  (* Firebug.console##log(req##statusText); *)
 	  ( match code / 100 with
 	    | 2 ->
 	     (*Firebug.console##log(req##responseText);*)

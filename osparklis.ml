@@ -356,7 +356,6 @@ object (self)
 	term_constr <- constr;
 	self#refresh_term_increments_init end      
       else begin
-	Firebug.console##log(string "set_term_constr!");
 	term_constr <- constr;
 	self#refresh
       end
@@ -381,7 +380,6 @@ object (self)
     =
     let op = to_string (select##value) in
     let pat = to_string (input##value) in
-    Firebug.console##log(string pat);
     if pat = ""
     then k Lisql.True
     else
@@ -406,7 +404,7 @@ object (self)
       let n = String.length pat in
       if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 2 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
       then begin
-	Firebug.console##log(string "pattern: no match, call k");
+	(*Firebug.console##log(string "pattern: no match, call continuation");*)
 	k constr
       end
     with Invalid_argument msg -> ()
@@ -567,7 +565,6 @@ let _ =
     jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));
     jquery_all ".limit-results" (fun elt ->
       Opt.iter (Dom_html.CoerceTo.select elt) (onchange (fun select ev ->
-	Firebug.console##log(select##value);
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit)));
 

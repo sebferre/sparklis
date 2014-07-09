@@ -264,13 +264,11 @@ object (self)
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
 	" FILTER (!IsBlank(?term)) } LIMIT 200" in
-    Firebug.console##log(string sparql_term);
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
       (fun results_term -> process results_term)
       (fun code -> process Sparql_endpoint.empty_results)
 
   method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
-    Firebug.console##log(string "ajax_properties_init !");
     let process results_class results_prop =
       let list_class = list_of_results_column "class" results_class in
       let list_prop = list_of_results_column "prop" results_prop in
@@ -341,7 +339,6 @@ object (self)
       k index
     in
     let ajax_intent () =
-      Firebug.console##log(string "ajax_properties_intent !");
       match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
 	| None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
 	| Some query_a, Some query_has, Some query_isof ->
@@ -356,7 +353,6 @@ object (self)
 	| _ -> assert false
     in
     let ajax_extent () =
-      Firebug.console##log(string "ajax_properties_extent !");
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
 	Sparql.select ~dimensions:["class"] ~limit:max_classes
