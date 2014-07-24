@@ -94,19 +94,9 @@ font-weight:bold;
 {
 }
 
-.in-current-focus
+.highlighted
 {
 background-color:#a0f0a0;
-}
-
-.out-current-focus
-{
-background-color:white;
-}
-
-.ex-current-focus
-{
-background-color:white;
 }
 
 .suspended
@@ -114,13 +104,7 @@ background-color:white;
 opacity:0.3;
 }
 
-.list-and
-{
-list-style-type:none;
-margin:0px;
-}
-
-.list-or
+.coordination
 {
 list-style-type:none;
 margin:0px;
