@@ -18,13 +18,12 @@ type word =
 
 type focus_pos = [ `In | `At | `Out | `Ex ]
 
-type nl_focus =
-  [ `NoFocus
-  | `Focus of focus * focus_pos ]
+type nl_focus = focus * focus_pos
 
-type s = nl_focus *
-  [ `Return of np ]
-and np = nl_focus *
+type s =
+  [ `Return of np
+  | `Focus of nl_focus * s ]
+and np =
   [ `PN of word * rel
   | `Qu of qu * adj * ng
   | `QuAggreg of bool * qu * adj * ng_aggreg * ng
@@ -32,9 +31,11 @@ and np = nl_focus *
   | `And of np array
   | `Or of int option * np array (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of bool * np (* the bool indicates whether negation is suspended *)
-  | `Not of bool * np ] (* the bool indicates whether negation is suspended *)
-and ng = nl_focus *
-  [ `That of word * rel ]
+  | `Not of bool * np (* the bool indicates whether negation is suspended *)
+  | `Focus of nl_focus * np ]
+and ng =
+  [ `That of word * rel
+  | `Focus of nl_focus * ng ]
 and qu = [ `A | `Any of bool | `The | `All | `One ]
 and adj =
   [ `Nil
@@ -44,7 +45,7 @@ and adj =
 and ng_aggreg =
   [ `That of word * rel
   | `ThatOf of word * rel ]
-and rel = nl_focus *
+and rel =
   [ `Nil
   | `That of vp
   | `Whose of nl_focus * word * pp list * vp
@@ -53,8 +54,9 @@ and rel = nl_focus *
   | `Ing of word * np
   | `And of rel array
   | `Or of int option * rel array
-  | `Ellipsis ]
-and vp = nl_focus *
+  | `Ellipsis
+  | `Focus of nl_focus * rel ]
+and vp =
   [ `IsNP of np * pp list
   | `IsPP of pp
   | `HasProp of word * np * pp list
@@ -64,19 +66,20 @@ and vp = nl_focus *
   | `Or of int option * vp array (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of bool * vp (* the bool indicates whether negation is suspended *)
   | `Not of bool * vp (* the bool indicates whether negation is suspended *)
-  | `Ellipsis ]
+  | `Ellipsis
+  | `Focus of nl_focus * vp ]
 and pp =
   [ `Prep of word * np
   | `PrepBin of word * np * word * np ]
 
-let top_rel = `NoFocus, `Nil
-let top_np = `NoFocus, `Qu (`A, `Nil, (`NoFocus, `That (`Thing, top_rel)))
-let top_s = `NoFocus, `Return top_np
+let top_rel = `Nil
+let top_np = `Qu (`A, `Nil, `That (`Thing, top_rel))
+let top_s = `Return top_np
 
 let dummy_word : word = `DummyFocus
-let dummy_ng : ng = (`NoFocus, `That (`DummyFocus, top_rel))
+let dummy_ng : ng = `That (`DummyFocus, top_rel)
 
-let np_of_word w = `NoFocus, `PN (w, top_rel)
+let np_of_word w = `PN (w, top_rel)
 let np_of_literal l = np_of_word (`Literal l)
 
 (* verbalization of terms, classes, properties *)
@@ -283,17 +286,20 @@ let lexicon_of_focus focus : lexicon =
 
 let focus_pos_down = function `In -> `In | `At -> `In | `Out -> `Out | `Ex -> `Ex
 
+let nl_focus_map f = function
+  | `Focus (foc,nl) -> `Focus (foc, f nl)
+  | nl -> f nl
+
 let is_suspended_focus = function
-  | `Focus (_, `At) -> true
+  | (_, `At) -> true
   | _ -> false
 
-let rec head_of_modif foc nn rel (modif : modif_s2) : np =
-  let susp = is_suspended_focus foc in
+let rec head_of_modif ~suspended nn rel (modif : modif_s2) : np =
   let qu, adj =
     match modif with
       | Select, order -> qu_adj_of_order order
-      | Unselect, order -> `Any susp, snd (qu_adj_of_order order) in
-  foc, `Qu (qu, adj, (`NoFocus, `That (nn, rel)))
+      | Unselect, order -> `Any suspended, snd (qu_adj_of_order order) in
+  `Qu (qu, adj, `That (nn, rel))
 and qu_adj_of_modif ~suspended modif : qu * adj =
   match modif with
     | Select, order -> qu_adj_of_order order
@@ -306,9 +312,9 @@ and qu_adj_of_order : order -> qu * adj = function
 let word_of_id lexicon id = `Id (id, lexicon#get_id_label id)
 
 let vp_of_elt_p1_Is (np : np) = `IsNP (np, [])
-let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP ((`NoFocus, `Qu (`A, `Nil, (`NoFocus, `That (word_of_class c, top_rel)))), [])
+let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP (`Qu (`A, `Nil, `That (word_of_class c, top_rel)), [])
 let vp_of_elt_p1_Has (p : Rdf.uri) (np : np) = `HasProp (word_of_property p, np, [])
-let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) = `IsNP ((`NoFocus, `Qu (`The, `Nil, (`NoFocus, `That (word_of_property p, (`NoFocus, `Of np))))), [])
+let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) = `IsNP (`Qu (`The, `Nil, `That (word_of_property p, `Of np)), [])
 let vp_of_elt_p1_Rel (p : Rdf.uri) (m : modif_p2) (np : np) =
   match m with
     | Fwd -> vp_of_elt_p1_Has p np
@@ -320,7 +326,7 @@ let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
     | O -> (* has relation npp from nps / is the value of npp of nps / is the p of nps *)
       `HasProp (`Relation, np2, [`Prep (`Op "from", np1)])
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
-      `IsNP ((`NoFocus, `Qu (`A, `Nil, (`NoFocus, `That (`Relation, top_rel)))), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
+      `IsNP (`Qu (`A, `Nil, `That (`Relation, top_rel)), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
 let np_of_elt_s1_AnAggreg ~suspended (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif ~suspended modif in
   let ng_aggreg =
@@ -351,26 +357,26 @@ let rec vp_of_elt_p1 lexicon pos ctx f : vp =
       | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 lexicon (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
       | Maybe elt -> `Maybe (false, vp_of_elt_p1 lexicon (focus_pos_down pos) (MaybeX ctx) elt)
       | Not elt -> `Not (false, vp_of_elt_p1 lexicon (focus_pos_down pos) (NotX ctx) elt) in
-  `Focus (AtP1 (f,ctx), pos), nl
+  `Focus ((AtP1 (f,ctx), pos), nl)
 and vp_of_constr = function
   | True -> `Ellipsis
-  | MatchesAll lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), [])
-  | MatchesAny lpat -> `VT (`Op "matches", (`NoFocus, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)), [])
+  | MatchesAll lpat -> `VT (`Op "matches", `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat), [])
+  | MatchesAny lpat -> `VT (`Op "matches", `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat), [])
   | After pat -> `IsPP (`Prep (`Op "after", np_of_literal pat))
   | Before pat -> `IsPP (`Prep (`Op "before", np_of_literal pat))
   | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", np_of_literal pat1, `Op "to", np_of_literal pat2))
   | HigherThan pat -> `IsPP (`Prep (`Op "higher or equal to", np_of_literal pat))
   | LowerThan pat -> `IsPP (`Prep (`Op "lower or equal to", np_of_literal pat))
   | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", np_of_literal pat1, `Op "and", np_of_literal pat2))
-  | HasLang pat -> `Has ((`NoFocus, `Qu (`A, `Nil, (`NoFocus, `That (`Op "language", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))))), [])
-  | HasDatatype pat -> `Has ((`NoFocus, `Qu (`A, `Nil, (`NoFocus, `That (`Op "datatype", (`NoFocus, `Ing (`Op "matching", (`NoFocus, `PN (`Literal pat, top_rel)))))))), [])
+  | HasLang pat -> `Has (`Qu (`A, `Nil, `That (`Op "language", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
+  | HasDatatype pat -> `Has (`Qu (`A, `Nil, `That (`Op "datatype", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
 and rel_of_elt_p1_opt lexicon pos ctx = function
   | None -> top_rel
   | Some rel ->
-    let foc_rel, nl_rel = vp_of_elt_p1 lexicon pos ctx rel in
-    (foc_rel, `That (`NoFocus, nl_rel))
+    nl_focus_map (fun vp -> `That vp)
+      (vp_of_elt_p1 lexicon pos ctx rel)
 and np_of_elt_s1 lexicon pos ctx f : np =
-  let foc = `Focus (AtS1 (f,ctx),pos) in
+  let foc = (AtS1 (f,ctx),pos) in
   match f with
     | Det (det, rel_opt) ->
       let nl_rel = rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
@@ -381,133 +387,137 @@ and np_of_elt_s1 lexicon pos ctx f : np =
 	  modif g
 	  (rel_of_elt_p1_opt lexicon (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
 	  (ng_of_elt_s1 lexicon (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
-      foc, nl
-    | NAnd ar -> foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar)
-    | NOr ar -> foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar)
-    | NMaybe elt -> foc, `Maybe (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NMaybeX ctx) elt)
-    | NNot elt -> foc, `Not (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NNotX ctx) elt)
+      `Focus (foc, nl)
+    | NAnd ar -> `Focus (foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar))
+    | NOr ar -> `Focus (foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar))
+    | NMaybe elt -> `Focus (foc, `Maybe (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NMaybeX ctx) elt))
+    | NNot elt -> `Focus (foc, `Not (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NNotX ctx) elt))
 and ng_of_elt_s1 lexicon pos ctx f =
-  let foc = `Focus (AtS1 (f,ctx), pos) in
+  let foc = (AtS1 (f,ctx), pos) in
   match f with
     | Det (An (id,modif,head) as det, rel_opt) ->
-      foc, `That (word_of_elt_head head, rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt)
+      `Focus (foc, `That (word_of_elt_head head, rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt))
     | _ -> assert false
 and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
-  | Term t -> foc, `PN (word_of_term t, rel)
-  | An (id, modif, head) -> head_of_modif foc (word_of_elt_head head) rel modif
-  | The id -> foc, `PN (word_of_id lexicon id, rel)
+  | Term t -> `Focus (foc, `PN (word_of_term t, rel))
+  | An (id, modif, head) -> `Focus (foc, head_of_modif ~suspended:(is_suspended_focus foc) (word_of_elt_head head) rel modif)
+  | The id -> `Focus (foc, `PN (word_of_id lexicon id, rel))
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
 and s_of_elt_s lexicon pos : elt_s -> s = function
-  | Return np -> `Focus (AtS (Return np), pos), `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np)
+  | Return np ->
+    let foc = (AtS (Return np), pos) in
+    `Focus (foc, `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np))
 
 (* in *_of_ctx_*, [pos = `At] if semantically at current focus *)
-let rec s_of_ctx_p1 lexicon pos f (foc,nl as foc_nl) ctx : s =
+let rec s_of_ctx_p1 lexicon pos f foc_nl ctx : s =
   match ctx with
     | DetThatX (det,ctx2) ->
       let f2 = Det (det, Some f) in
-      let nl2 = det_of_elt_s2 lexicon (`Focus (AtS1 (f2,ctx2), `Out)) (foc, `That (`NoFocus, nl)) det in
-      s_of_ctx_s1 lexicon pos f2 nl2 ctx2
+      let foc2_nl2 = det_of_elt_s2 lexicon (AtS1 (f2,ctx2), `Out) (nl_focus_map (fun nl -> `That nl) foc_nl) det in
+      s_of_ctx_s1 lexicon pos f2 foc2_nl2 ctx2
     | AnAggregThatX (id,modif,g,np,ctx2) ->
       let f2 = AnAggreg (id, modif, g, Some f, np) in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 = np_of_elt_s1_AnAggreg ~suspended:false modif g
-	(foc, `That (`NoFocus, nl))
+	(nl_focus_map (fun nl -> `That nl) foc_nl)
 	(ng_of_elt_s1 lexicon `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
-      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
 		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Out (AndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
+      let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
 	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
+      let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Ex) in
+      let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
-and s_of_ctx_s1 lexicon pos f (foc,nl as foc_nl) ctx =
+      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+and s_of_ctx_s1 lexicon pos f foc_nl ctx =
   match ctx with
     | IsX ctx2 ->
       let f2 = Is f in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Is foc_nl in
-      s_of_ctx_p1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
     | RelX (p,m,ctx2) ->
       let f2 = Rel (p,m,f) in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Rel p m foc_nl in
-      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX1 (arg,np2,ctx2) ->
       let f2 = Triple (arg,f,np2) in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 lexicon `Out (TripleX2 (arg,f,ctx2)) np2) in
-      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX2 (arg,np1,ctx2) ->
       let f2 = Triple (arg,np1,f) in
-      let foc2 = `Focus (AtP1 (f2,ctx2), `Out) in
+      let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 lexicon `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
-      s_of_ctx_p1 lexicon `Out f2 (foc2,nl2) ctx2
+      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
     | ReturnX ->
       let f2 = Return f in
-      let foc2 = `Focus (AtS f2, `Out) in
+      let foc2 = (AtS f2, `Out) in
       let nl2 = `Return foc_nl in
-      (foc2,nl2)
+      `Focus (foc2,nl2)
     | AnAggregX (id,modif,g,rel_opt,ctx2) ->
       let f2 = AnAggreg (id, modif, g, rel_opt, f) in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 = np_of_elt_s1_AnAggreg ~suspended:(pos = `At) (*is_suspended_focus foc*) modif g
 	(rel_of_elt_p1_opt lexicon `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
-	( match nl with (* TODO: what to do with hidden modif/adj *)
-	  | `Qu (_, _, (_, ng)) -> foc, ng
-	  | _ -> assert false ) in
-      s_of_ctx_s1 lexicon `Out f2 (foc2,nl2) ctx2
+	(nl_focus_map
+	   (function (* TODO: what to do with hidden modif/adj *)
+	     | `Qu (_, _, ng) -> ng
+	     | _ -> assert false)
+	   foc_nl) in
+      s_of_ctx_s1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
     | NAndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; NAnd ar in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Out) in
+      let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
 		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Out (NAndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
     | NOrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = NOr ar in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
 	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Ex (NOrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
    | NMaybeX ctx2 ->
       let f2 = NMaybe f in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
    | NNotX ctx2 ->
       let f2 = NNot f in
-      let foc2 = `Focus (AtS1 (f2,ctx2), `Ex) in
+      let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_s1 lexicon pos f2 (foc2,nl2) ctx2
+      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
 
 let s_of_focus lexicon : focus -> s = function
   | AtP1 (f,ctx) -> s_of_ctx_p1 lexicon `At f (vp_of_elt_p1 lexicon `At ctx f) ctx
@@ -530,14 +540,11 @@ end
 
 (* top-down recursive transformation using [transf] like a visitor *)
 let rec map_s (transf : transf) s =
-  let foc, nl = transf#s s in
-  foc,
-  match nl with
+  match transf#s s with
     | `Return np -> `Return (map_np transf np)
+    | `Focus (foc,s) -> `Focus (foc, map_s transf s)
 and map_np transf np =
-  let foc, nl = transf#np np in
-  foc,
-  match nl with
+  match transf#np np with
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuAggreg (susp,qu,adj,ngg,ng) -> `QuAggreg (susp, qu, map_adj transf adj, map_ng_aggreg transf ngg, map_ng transf ng)
@@ -546,11 +553,11 @@ and map_np transf np =
     | `Or (isusp,ar) -> `Or (isusp, Array.map (map_np transf) ar)
     | `Maybe (susp,np) -> `Maybe (susp, map_np transf np)
     | `Not (susp,np) -> `Not (susp, map_np transf np)
+    | `Focus (foc,np) -> `Focus (foc, map_np transf np)
 and map_ng transf ng =
-  let foc, nl = transf#ng ng in
-  foc,
-  match nl with
+  match transf#ng ng with
     | `That (w,rel) -> `That (w, map_rel transf rel)
+    | `Focus (foc,ng) -> `Focus (foc, map_ng transf ng)
 and map_adj transf adj =
   match transf#adj adj with
     | `Nil -> `Nil
@@ -562,9 +569,7 @@ and map_ng_aggreg transf ngg =
     | `That (w,rel) -> `That (w, map_rel transf rel)
     | `ThatOf (w,rel) -> `ThatOf (w, map_rel transf rel)
 and map_rel transf rel =
-  let foc, nl = transf#rel rel in
-  foc,
-  match nl with
+  match transf#rel rel with
     | `Nil -> `Nil
     | `That vp -> `That (map_vp transf vp)
     | `Whose (foc1,p,lpp,vp) -> `Whose (foc1, p, List.map (map_pp transf) lpp, map_vp transf vp)
@@ -574,10 +579,9 @@ and map_rel transf rel =
     | `And ar -> `And (Array.map (map_rel transf) ar)
     | `Or (isusp,ar) -> `Or (isusp, Array.map (map_rel transf) ar)
     | `Ellipsis -> `Ellipsis
+    | `Focus (foc, rel) -> `Focus (foc, map_rel transf rel)
 and map_vp transf vp =
-  let foc, nl = transf#vp vp in
-  foc,
-  match nl with
+  match transf#vp vp with
     | `IsNP (np,lpp) -> `IsNP (map_np transf np, List.map (map_pp transf) lpp)
     | `IsPP pp -> `IsPP (map_pp transf pp)
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
@@ -588,6 +592,7 @@ and map_vp transf vp =
     | `Maybe (susp,vp) -> `Maybe (susp, map_vp transf vp)
     | `Not (susp,vp) -> `Not (susp, map_vp transf vp)
     | `Ellipsis -> `Ellipsis
+    | `Focus (foc,vp) -> `Focus (foc, map_vp transf vp)
 and map_pp transf pp =
   match transf#pp pp with
     | `Prep (w,np) -> `Prep (w, map_np transf np)
@@ -595,42 +600,33 @@ and map_pp transf pp =
 
 
 let main_transf =
-object
+object (self)
   inherit transf
-  method np (foc,nl) =
-    let nl =
-      match nl with
-	| `Qu (qu, adj, (`NoFocus, `That (`Thing, (foc2, `That (`NoFocus, `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, (`NoFocus, nl_ng))), [])))))) ->
-	  `Qu (qu, adj, (foc2, nl_ng))
-(* a thing = something *)
-	| `QuAggreg (susp, qu, adj, ngg,
-		     (foc2, `That (`Thing,
-				   (`NoFocus, `That (`NoFocus,
-						     `IsNP ((`NoFocus, `Qu ((`A | `The), `Nil, (`NoFocus, nl_ng))), [])))))) ->
-	  `QuAggreg (susp, qu, adj, ngg, (foc2, nl_ng))
-	| `QuOneOf (_, [w]) -> `PN (w, top_rel)
-	| _ -> nl in
-    foc, nl
-  method rel (foc,nl) =
-    let nl =
-      match nl with
-	| `That (`NoFocus, `Ellipsis) -> `Ellipsis
-	| `That (`NoFocus, `And ar) -> `And (Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar)
-	| `That (`NoFocus, `Or (isusp,ar)) -> `Or (isusp, Array.map (fun (foc_i,nl_i) -> (foc_i, `That (`NoFocus, nl_i))) ar)
-	| `That (`NoFocus, `HasProp (p, (foc2, `Qu (`A, `Nil, (`NoFocus, `That (`Thing, (foc3, `That (`NoFocus, nl_vp)))))), lpp)) ->
-	  `Whose (foc2, p, lpp, (foc3,nl_vp))
-	| `That (`NoFocus, `IsPP pp) -> `PP [pp]
-	| _ -> nl in
-    foc, nl
-  method vp (foc,nl) =
-    let nl =
-      match nl with
-	| `HasProp (p, (foc2, `Qu (qu, adj, (`NoFocus, `That (`Thing, rel)))), lpp) ->
-	  `Has ((foc2, `Qu (qu, adj, (`NoFocus, `That (p, rel)))), lpp)
-	| `HasProp (p, (foc2, `QuAggreg (susp, qu, adj, ngg, (foc3, `That (`Thing, rel2)))), lpp) ->
-	  `Has ((foc2, `QuAggreg (susp, qu, adj, ngg, (foc3, `That (p, rel2)))), lpp)
-	| _ -> nl in
-    foc, nl
+  method np = function
+    | `Focus (foc,np) -> `Focus (foc, self#np np)
+    | `Qu (qu, adj, `That (`Thing, `Focus (foc2, `That (`IsNP (`Qu ((`A | `The), `Nil, nl_ng), []))))) ->
+      `Qu (qu, adj, `Focus (foc2, nl_ng))
+	(* a thing = something *)
+    | `QuAggreg (susp, qu, adj, ngg, `Focus (foc2, `That (`Thing, `That (`IsNP (`Qu ((`A | `The), `Nil, nl_ng), []))))) ->
+      `QuAggreg (susp, qu, adj, ngg, `Focus (foc2, nl_ng))
+    | `QuOneOf (_, [w]) -> `PN (w, top_rel)
+    | nl -> nl
+  method rel = function
+    | `Focus (foc,rel) -> `Focus (foc, self#rel rel)
+    | `That `Ellipsis -> `Ellipsis
+    | `That (`And ar) -> `And (Array.map (nl_focus_map (fun nl_i -> `That nl_i)) ar)
+    | `That (`Or (isusp,ar)) -> `Or (isusp, Array.map (nl_focus_map (fun nl_i -> `That nl_i)) ar)
+    | `That (`HasProp (p, `Focus (foc2, `Qu (`A, `Nil, `That (`Thing, `Focus (foc3, `That nl_vp)))), lpp)) ->
+      `Whose (foc2, p, lpp, `Focus (foc3,nl_vp))
+    | `That (`IsPP pp) -> `PP [pp]
+    | nl -> nl
+  method vp = function
+    | `Focus (foc,vp) -> `Focus (foc, self#vp vp)
+    | `HasProp (p, `Focus (foc2, `Qu (qu, adj, `That (`Thing, rel))), lpp) ->
+      `Has (`Focus (foc2, `Qu (qu, adj, `That (p, rel))), lpp)
+    | `HasProp (p, `Focus (foc2, `QuAggreg (susp, qu, adj, ngg, `Focus (foc3, `That (`Thing, rel2)))), lpp) ->
+      `Has (`Focus (foc2, `QuAggreg (susp, qu, adj, ngg, `Focus (foc3, `That (p, rel2)))), lpp)
+    | nl -> nl
 end
 
 (* tagged serialization - a la XML *)
@@ -672,35 +668,26 @@ let xml_not susp xml =
   xml_suspended susp [Word (`Op "not")] @ xml
 let xml_ellipsis = [Kwd "..."]
 
-let xml_focus foc xml =
-  match foc with
-    | `NoFocus -> xml
-    | `Focus (focus,pos) ->
-      let xml = if pos = `At then [Highlight (xml @ [DeleteCurrentFocus])] else xml in
-      [Focus (focus, xml)]
+let xml_focus (focus,pos) xml =
+  let xml = if pos = `At then [Highlight (xml @ [DeleteCurrentFocus])] else xml in
+  [Focus (focus, xml)]
 
-let rec xml_s (foc,nl) =
-  let xml =
-    match nl with
-      | `Return np -> Kwd "Give" :: Kwd "me" :: xml_np np in
-  xml_focus foc xml
-and xml_np (foc,nl) =
-  let xml =
-    match nl with
-      | `PN (w,rel) -> Word w :: xml_rel rel
-      | `Qu (qu,adj,ng) -> xml_qu qu @ xml_adj adj @ xml_ng ng
-      | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu qu @ xml_suspended susp (xml_adj adj @ xml_ng_aggreg ngg) @ xml_ng ng
-      | `QuOneOf (qu,lw) -> xml_qu qu @ Kwd "of" :: Enum (", ", List.map (fun w -> [Word w]) lw) :: []
-      | `And ar -> xml_and (Array.map xml_np ar)
-      | `Or (isusp,ar) -> xml_or isusp (Array.map xml_np ar)
-      | `Maybe (susp,np) -> xml_maybe susp (xml_np np)
-      | `Not (susp,np) -> xml_not susp (xml_np np) in
-  xml_focus foc xml
-and xml_ng (foc,nl) =
-  let xml =
-    match nl with
-      | `That (w,rel) -> Word w :: xml_rel rel in
-  xml_focus foc xml
+let rec xml_s = function
+  | `Return np -> Kwd "Give" :: Kwd "me" :: xml_np np
+  | `Focus (foc,s) -> xml_focus foc (xml_s s)
+and xml_np = function
+  | `PN (w,rel) -> Word w :: xml_rel rel
+  | `Qu (qu,adj,ng) -> xml_qu qu @ xml_adj adj @ xml_ng ng
+  | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu qu @ xml_suspended susp (xml_adj adj @ xml_ng_aggreg ngg) @ xml_ng ng
+  | `QuOneOf (qu,lw) -> xml_qu qu @ Kwd "of" :: Enum (", ", List.map (fun w -> [Word w]) lw) :: []
+  | `And ar -> xml_and (Array.map xml_np ar)
+  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_np ar)
+  | `Maybe (susp,np) -> xml_maybe susp (xml_np np)
+  | `Not (susp,np) -> xml_not susp (xml_np np)
+  | `Focus (foc,np) -> xml_focus foc (xml_np np)
+and xml_ng = function
+  | `That (w,rel) -> Word w :: xml_rel rel
+  | `Focus (foc,ng) -> xml_focus foc (xml_ng ng)
 and xml_qu = function
   | `A -> [Kwd "a"]
   | `Any susp -> xml_suspended susp [Word (`Op "any")]
@@ -715,33 +702,29 @@ and xml_adj = function
 and xml_ng_aggreg = function
   | `That (g,rel) -> Word g :: xml_rel rel
   | `ThatOf (g,rel) -> Word g :: xml_rel rel @ [Kwd "of"]
-and xml_rel (foc,nl) =
-  let xml =
-    match nl with
-      | `Nil -> []
-      | `That vp -> Kwd "that" :: xml_vp vp
-      | `Whose (foc1,p,lpp,vp) -> Kwd "whose" :: xml_focus foc1 (Word p :: xml_pp_list lpp @ xml_vp vp) 
-      | `Of np -> Kwd "of" :: xml_np np
-      | `PP lpp -> xml_pp_list lpp
-      | `Ing (w,np) -> Word w :: xml_np np
-      | `And ar -> xml_and (Array.map xml_rel ar)
-      | `Or (isusp,ar) -> xml_or isusp (Array.map xml_rel ar)
-      | `Ellipsis -> xml_ellipsis in
-  xml_focus foc xml
-and xml_vp (foc,nl) =
-  let xml =
-    match nl with
-      | `IsNP (np,lpp) -> Kwd "is" :: xml_np np @ xml_pp_list lpp
-      | `IsPP pp -> Kwd "is" :: xml_pp pp
-      | `HasProp (p,np,lpp) -> Kwd "has" :: Word p :: xml_np np @ xml_pp_list lpp
-      | `Has (np,lpp) -> Kwd "has" :: xml_np np @ xml_pp_list lpp
-      | `VT (w,np,lpp) -> Word w :: xml_np np @ xml_pp_list lpp
-      | `And ar -> xml_and (Array.map xml_vp ar)
-      | `Or (isusp,ar) -> xml_or isusp (Array.map xml_vp ar)
-      | `Maybe (susp,vp) -> xml_maybe susp (xml_vp vp)
-      | `Not (susp,vp) -> xml_not susp (xml_vp vp)
-      | `Ellipsis -> xml_ellipsis in
-  xml_focus foc xml
+and xml_rel = function
+  | `Nil -> []
+  | `That vp -> Kwd "that" :: xml_vp vp
+  | `Whose (foc1,p,lpp,vp) -> Kwd "whose" :: xml_focus foc1 (Word p :: xml_pp_list lpp @ xml_vp vp) 
+  | `Of np -> Kwd "of" :: xml_np np
+  | `PP lpp -> xml_pp_list lpp
+  | `Ing (w,np) -> Word w :: xml_np np
+  | `And ar -> xml_and (Array.map xml_rel ar)
+  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_rel ar)
+  | `Ellipsis -> xml_ellipsis
+  | `Focus (foc,rel) -> xml_focus foc (xml_rel rel)
+and xml_vp = function
+  | `IsNP (np,lpp) -> Kwd "is" :: xml_np np @ xml_pp_list lpp
+  | `IsPP pp -> Kwd "is" :: xml_pp pp
+  | `HasProp (p,np,lpp) -> Kwd "has" :: Word p :: xml_np np @ xml_pp_list lpp
+  | `Has (np,lpp) -> Kwd "has" :: xml_np np @ xml_pp_list lpp
+  | `VT (w,np,lpp) -> Word w :: xml_np np @ xml_pp_list lpp
+  | `And ar -> xml_and (Array.map xml_vp ar)
+  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_vp ar)
+  | `Maybe (susp,vp) -> xml_maybe susp (xml_vp vp)
+  | `Not (susp,vp) -> xml_not susp (xml_vp vp)
+  | `Ellipsis -> xml_ellipsis
+  | `Focus (foc,vp) -> xml_focus foc (xml_vp vp)
 and xml_pp_list lpp =
   List.concat (List.map xml_pp lpp)
 and xml_pp = function
@@ -798,6 +781,6 @@ let xml_incr lexicon (focus : focus) = function
   | IncrOr -> Word (`Op "or") :: xml_ellipsis
   | IncrMaybe -> xml_maybe false [Word dummy_word]
   | IncrNot -> xml_not false [Word dummy_word]
-  | IncrUnselect -> xml_np (head_of_modif `NoFocus dummy_word top_rel (Unselect,Unordered))
-  | IncrAggreg g -> xml_np (`NoFocus, np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
-  | IncrOrder order -> xml_np (head_of_modif `NoFocus dummy_word top_rel (Select,order))
+  | IncrUnselect -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Unselect,Unordered))
+  | IncrAggreg g -> xml_np (np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
+  | IncrOrder order -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Select,order))
