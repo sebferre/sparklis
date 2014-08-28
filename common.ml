@@ -29,3 +29,28 @@ let has_prefix (s1 : string) (s2 : string) : bool =
     incr i
   done;
   !res && !i <= n1
+
+let uncamel s =
+  let n = String.length s in
+  let lower = Array.init n (fun i -> 'a' <= s.[i] && s.[i] <= 'z') in
+  let upper = Array.init n (fun i -> 'A' <= s.[i] && s.[i] <= 'Z') in
+  let s2 = String.create (2*n) in
+  s2.[0] <- if upper.(0) && 1 <= n-1 && not lower.(1) then s.[0] else Char.lowercase s.[0];
+  let j = ref 1 in
+  for i = 1 to n-1 do
+    if lower.(i-1) && upper.(i) then begin
+      s2.[!j] <- ' ';
+      incr j;
+      s2.[!j] <- if i+1 <= n-1 && not lower.(i+1) then s.[i] else Char.lowercase s.[i];
+      incr j end
+    else if upper.(i-1) && upper.(i) && i+1 <= n-1 && lower.(i+1) then begin
+      s2.[!j] <- ' ';
+      incr j;
+      s2.[!j] <- Char.lowercase s.[i];
+      incr j end
+    else begin
+      s2.[!j] <- s.[i];
+      incr j
+    end
+  done;
+  String.sub s2 0 !j

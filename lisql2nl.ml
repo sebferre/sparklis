@@ -51,7 +51,6 @@ and ng_aggreg =
 and rel =
   [ `Nil
   | `That of vp
-(*  | `Whose of nl_focus * word * pp list * vp *)
   | `Whose of ng * vp
   | `Of of np
   | `PP of pp list
@@ -97,9 +96,31 @@ let name_of_uri uri =
       ( match Regexp.matched_string res with "" -> uri | name -> name )
     | None -> uri
 
-let word_of_entity uri = `Entity (uri, name_of_uri uri)
-let word_of_class uri = `Class (uri, name_of_uri uri)
-let word_of_property uri = `Prop (uri, name_of_uri uri)
+let name_of_uri_entity =
+  let re_white = Regexp.regexp "_" in
+  fun uri ->
+    let name = name_of_uri uri in
+    try Regexp.global_replace re_white name " "
+    with _ -> name
+
+let name_of_uri_concept =
+(*
+  let re_word_frontier = Regexp.regexp "([a-z])([A-Z][a-z])" in
+  let re_space = Regexp.regexp " " in
+*)
+  fun uri ->
+    let name = name_of_uri uri in
+    try Common.uncamel name
+(*
+      let name = Regexp.global_replace re_word_frontier name "$1 $2" in
+      let words = Regexp.split re_space name in
+      String.concat " " (List.map String.uncapitalize words)
+*)
+    with _ -> name
+
+let word_of_entity uri = `Entity (uri, name_of_uri_entity uri)
+let word_of_class uri = `Class (uri, name_of_uri_concept uri)
+let word_of_property uri = `Prop (uri, name_of_uri_concept uri)
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
