@@ -26,7 +26,8 @@ type s =
   | `Truth of np * vp
   | `Focus of nl_focus * s ]
 and np =
-  [ `PN of word * rel
+  [ `Void
+  | `PN of word * rel
   | `Qu of qu * adj * ng
   | `QuAggreg of bool * qu * adj * ng_aggreg * ng
   | `QuOneOf of qu * word list
@@ -67,6 +68,7 @@ and vp =
   | `HasProp of word * np * pp list
   | `Has of np * pp list
   | `VT of word * np * pp list
+  | `Subject of np * vp (* np is the subject of vp *)
   | `And of vp array
   | `Or of int option * vp array (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of bool * vp (* the bool indicates whether negation is suspended *)
@@ -103,24 +105,30 @@ let name_of_uri_entity =
     try Regexp.global_replace re_white name " "
     with _ -> name
 
+let word_of_entity uri = `Entity (uri, name_of_uri_entity uri)
+
 let name_of_uri_concept =
-(*
-  let re_word_frontier = Regexp.regexp "([a-z])([A-Z][a-z])" in
-  let re_space = Regexp.regexp " " in
-*)
   fun uri ->
     let name = name_of_uri uri in
     try Common.uncamel name
-(*
-      let name = Regexp.global_replace re_word_frontier name "$1 $2" in
-      let words = Regexp.split re_space name in
-      String.concat " " (List.map String.uncapitalize words)
-*)
     with _ -> name
 
-let word_of_entity uri = `Entity (uri, name_of_uri_entity uri)
+type property_syntagm = Noun | InvNoun | TransVerb | TransAdj
+
+let prepositions = ["by"; "for"; "with"; "on"; "from"; "to"; "off"; "in"; "about"; "after"; "at"; "down"; "up"; "into"; "over"; "until"; "upon"; "within"; "without"]
+
+let syntagm_of_property_name (name : string) : property_syntagm * string =
+  if Common.has_suffix name " of" then InvNoun, String.sub name 0 (String.length name - 3)
+  else if Common.has_prefix name "has " then Noun, String.sub name 4 (String.length name - 4)
+  else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then TransVerb, name
+  else if List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then TransAdj, name
+  else Noun, name
+
 let word_of_class uri = `Class (uri, name_of_uri_concept uri)
-let word_of_property uri = `Prop (uri, name_of_uri_concept uri)
+let word_syntagm_of_property uri = 
+  let name = name_of_uri_concept uri in
+  let synt, name = syntagm_of_property_name name in
+  `Prop (uri, name), synt
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
@@ -336,14 +344,31 @@ and qu_adj_of_order : order -> qu * adj = function
 
 let word_of_id lexicon id = `Id (id, lexicon#get_id_label id)
 
+
 let vp_of_elt_p1_Is (np : np) = `IsNP (np, [])
+
 let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP (`Qu (`A, `Nil, `That (word_of_class c, top_rel)), [])
-let vp_of_elt_p1_Has (p : Rdf.uri) (np : np) = `HasProp (word_of_property p, np, [])
-let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) = `IsNP (`Qu (`The, `Nil, `That (word_of_property p, `Of np)), [])
+
+let vp_of_elt_p1_Has (p : Rdf.uri) (np : np) =
+  let word, synt = word_syntagm_of_property p in
+  match synt with
+    | Noun -> `HasProp (word, np, [])
+    | InvNoun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
+    | TransVerb -> `VT (word, np, [])
+    | TransAdj -> `IsPP (`Prep (word, np))
+let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) =
+  let word, synt = word_syntagm_of_property p in
+  match synt with
+    | Noun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
+    | InvNoun -> `HasProp (word, np, [])
+    | TransVerb -> `Subject (np, `VT (word, `Void, []))
+    | TransAdj -> `Subject (np, `IsPP (`Prep (word, `Void)))
+
 let vp_of_elt_p1_Rel (p : Rdf.uri) (m : modif_p2) (np : np) =
   match m with
     | Fwd -> vp_of_elt_p1_Has p np
     | Bwd -> vp_of_elt_p1_IsOf p np
+
 let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
   match arg with
     | S -> (* has relation npp to npo / has property npp with value npo / has p npo *)
@@ -352,6 +377,7 @@ let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
       `HasProp (`Relation, np2, [`Prep (`Op "from", np1)])
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
       `IsNP (`Qu (`A, `Nil, `That (`Relation, top_rel)), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
+
 let np_of_elt_s1_AnAggreg ~suspended (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif ~suspended modif in
   let ng_aggreg =
@@ -566,6 +592,7 @@ let rec map_s (transf : transf) s =
     | `Focus (foc,s) -> `Focus (foc, map_s transf s)
 and map_np transf np =
   match transf#np np with
+    | `Void -> `Void
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuAggreg (susp,qu,adj,ngg,ng) -> `QuAggreg (susp, qu, map_adj transf adj, map_ng_aggreg transf ngg, map_ng transf ng)
@@ -611,6 +638,7 @@ and map_vp transf vp =
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
     | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
     | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
+    | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
     | `And ar -> `And (Array.map (map_vp transf) ar)
     | `Or (isusp,ar) -> `Or (isusp, Array.map (map_vp transf) ar)
     | `Maybe (susp,vp) -> `Maybe (susp, map_vp transf vp)
@@ -748,6 +776,7 @@ let rec xml_s = function
   | `Truth (np,vp) -> Kwd "It" :: Kwd "is" :: Kwd "true" :: Kwd "that" :: xml_np np @ xml_vp vp
   | `Focus (foc,s) -> xml_focus foc (xml_s s)
 and xml_np = function
+  | `Void -> []
   | `PN (w,rel) -> Word w :: xml_rel rel
   | `Qu (qu,adj,ng) -> xml_qu qu (xml_adj adj @ xml_ng ng)
   | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu qu (xml_suspended susp (xml_adj adj @ xml_ng_aggreg ngg) @ xml_ng ng)
@@ -810,6 +839,7 @@ and xml_vp = function
   | `HasProp (p,np,lpp) -> Kwd "has" :: Word p :: xml_np np @ xml_pp_list lpp
   | `Has (np,lpp) -> Kwd "has" :: xml_np np @ xml_pp_list lpp
   | `VT (w,np,lpp) -> Word w :: xml_np np @ xml_pp_list lpp
+  | `Subject (np,vp) -> xml_np np @ xml_vp vp
   | `And ar -> xml_and (Array.map xml_vp ar)
   | `Or (isusp,ar) -> xml_or isusp (Array.map xml_vp ar)
   | `Maybe (susp,vp) -> xml_maybe susp (xml_vp vp)
@@ -865,10 +895,22 @@ let xml_incr lexicon (focus : focus) = function
 	  (Kwd "that" :: Kwd "is" :: xml_a_an xml_c) )
   | IncrRel (p,Lisql.Fwd) ->
     xml_incr_coordinate focus
-      (Kwd "that" :: Kwd "has" :: xml_a_an [Word (word_of_property p)])
+      (Kwd "that" ::
+       let word, synt = word_syntagm_of_property p in
+       match synt with
+	 | Noun -> Kwd "has" :: xml_a_an [Word word]
+	 | InvNoun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
+	 | TransVerb -> Word word :: xml_ellipsis
+	 | TransAdj -> Kwd "is" :: Word word :: xml_ellipsis)
   | IncrRel (p,Lisql.Bwd) ->
     xml_incr_coordinate focus
-      (Kwd "that" :: Kwd "is" :: Kwd "the" :: Word (word_of_property p) :: Kwd "of" :: xml_ellipsis)
+      (Kwd "that" ::
+       let word, synt = word_syntagm_of_property p in
+       match synt with
+	 | Noun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
+	 | InvNoun -> Kwd "has" :: xml_a_an [Word word]
+	 | TransVerb -> xml_ellipsis @ Word word :: []
+	 | TransAdj -> xml_ellipsis @ Kwd "is" :: Word word :: [])
   | IncrTriple (S | O as arg) ->
     xml_incr_coordinate focus
       (Kwd "that" :: Kwd "has" :: Kwd "a" :: Word `Relation :: (if arg = S then Kwd "to" :: xml_ellipsis else Kwd "from" :: xml_ellipsis))

@@ -30,6 +30,19 @@ let has_prefix (s1 : string) (s2 : string) : bool =
   done;
   !res && !i <= n1
 
+let has_suffix (s1 : string) (s2 : string) : bool =
+  let n1 = String.length s1 in
+  let n2 = String.length s2 in
+  let i1 = ref (n1-1) in
+  let i2 = ref (n2-1) in
+  let res = ref true in
+  while !res && !i1 >= 0 && !i2 >= 0 do
+    res := s1.[!i1] = s2.[!i2];
+    decr i1;
+    decr i2
+  done;
+  !res && !i2 < 0
+
 let uncamel s =
   let n = String.length s in
   let lower = Array.init n (fun i -> 'a' <= s.[i] && s.[i] <= 'z') in
