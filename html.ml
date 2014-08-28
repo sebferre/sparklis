@@ -102,27 +102,34 @@ let html_word = function
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
 let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
-  String.concat " " (List.map (html_of_nl_node ~highlight state) xml)
-and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = function
-  | Lisql2nl.Kwd s -> s
-  | Lisql2nl.Word w -> html_word w
-  | Lisql2nl.Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
-  | Lisql2nl.Coord (coord,lxml) ->
-    "<ul class=\"coordination\"><li>"
-    ^ String.concat ("</li><li> " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
-      (List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml)
-    ^ "</li></ul>"
-  | Lisql2nl.Focus (focus,xml) ->
-    let id = state#add_focus focus in
-    html_span ~id ~classe:"focus" (html_of_nl_xml ~highlight state xml)
-  | Lisql2nl.Highlight xml ->
-    html_highlight true (html_of_nl_xml ~highlight:true state xml)
-  | Lisql2nl.Suspended xml ->
-    html_span ~classe:"suspended" (html_of_nl_xml ~highlight state xml)
-  | Lisql2nl.DeleteCurrentFocus ->
-    html_delete ~id:"delete-current-focus" ~title:"Click on this red cross to delete the current focus" ()
-  | Lisql2nl.DeleteIncr ->
-    html_delete ~title:"Remove this query element at the query focus" ()
+  let open Lisql2nl in
+  match xml with
+    | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
+    | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
+    | node :: xml -> html_of_nl_node ~highlight state node ^ " " ^ html_of_nl_xml ~highlight state xml
+    | [] -> ""
+and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
+  let open Lisql2nl in
+  function
+    | Kwd s -> s
+    | Word w -> html_word w
+    | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
+    | Coord (coord,lxml) ->
+      "<ul class=\"coordination\"><li>"
+      ^ String.concat ("</li><li> " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
+	(List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml)
+      ^ "</li></ul>"
+    | Focus (focus,xml) ->
+      let id = state#add_focus focus in
+      html_span ~id ~classe:"focus" (html_of_nl_xml ~highlight state xml)
+    | Highlight xml ->
+      html_highlight true (html_of_nl_xml ~highlight:true state xml)
+    | Suspended xml ->
+      html_span ~classe:"suspended" (html_of_nl_xml ~highlight state xml)
+    | DeleteCurrentFocus ->
+      html_delete ~id:"delete-current-focus" ~title:"Click on this red cross to delete the current focus" ()
+    | DeleteIncr ->
+      html_delete ~title:"Remove this query element at the query focus" ()
 and html_highlight h xml =
   if h
   then html_span ~classe:"highlighted" xml
