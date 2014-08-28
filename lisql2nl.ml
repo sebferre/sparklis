@@ -9,7 +9,7 @@ type word =
   | `Id of id * string
   | `Entity of Rdf.uri * string
   | `Literal of string
-  | `TypedLiteral of string * string (* string, datatype/lang *)
+  | `TypedLiteral of string * string (* lexical value, datatype/lang *)
   | `Blank of string
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
@@ -133,7 +133,7 @@ let word_syntagm_of_property uri =
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, name_of_uri dt)
+  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, name_of_uri_concept dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)
@@ -165,7 +165,7 @@ let var_of_uri (uri : Rdf.uri) : string =
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
 
-let id_label_word_of_uri uri = (var_of_uri uri, name_of_uri uri)
+let id_label_word_of_uri uri = (var_of_uri uri, name_of_uri_concept uri)
 let id_label_word_of_aggreg g =
   match g with
     | NumberOf -> "number_of", "number of"
