@@ -25,7 +25,20 @@
 	 title="Click to go forward in navigation history">
     <span id="sparql-endpoint">
       SPARQL endpoint: 
-      <input id="sparql-endpoint-input" type="url" value="http://dbpedia.org/sparql"
+      <select id="sparql-endpoint-select"
+	      title="Select a SPARQL endpoint from a short list">
+	<option value="http://lisfs2008.irisa.fr/dbpedia/sparql">Core English DBpedia</option>
+	<option value="http://dbpedia.org/sparql">DBpedia</option>
+	<option value="http://live.dbpedia.org/sparql">Live DBpedia</option>
+	<option value="http://data.nobelprize.org/sparql">Nobel prizes</option>
+	<option value="http://lod.euscreen.eu/sparql">European Television Heritage</option>
+<!--	<option value="http://bnb.data.bl.uk/sparql">British National Bibliography</option> -->
+	<option value="http://rdf.insee.fr/sparql">INSEE</option>
+	<option value="http://datos.bcn.cl/sparql">Chile government</option>
+<!--	<option value="http://data.ox.ac.uk/sparql/">University of Oxford</option> -->
+	<option value="">other</option>
+      </select>
+      <input id="sparql-endpoint-input" type="url" value="http://lisfs2008.irisa.fr/dbpedia/sparql"
 	     title="Enter here the URL of the desired SPARQL endpoint">
       <input id="sparql-endpoint-button" type="button" value="Go"
 	     title="Click to connect to the entered SPARQL endpoint">

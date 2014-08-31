@@ -137,8 +137,7 @@ end
 
 class place =
 object (self)
-  val lis = new Lis.place "http://dbpedia.org/sparql" Lisql.factory#home_focus
-(*  val lis = new Lis.place "http://localhost:3030/ds/sparql" Lisql.factory#home_focus *)
+  val lis = new Lis.place "http://lisfs2008.irisa.fr/dbpedia/sparql" Lisql.factory#home_focus
   method lis = lis
 
   val mutable offset = 0
@@ -305,6 +304,13 @@ object (self)
 
   method refresh =
     html_state <- new Html.state lis#lexicon;
+    jquery_select "#sparql-endpoint-select" (fun select ->
+      let options = select##options in
+      for i = options##length - 1 downto 0 do
+	Opt.iter options##item(i) (fun option ->
+	  let value = to_string option##value in
+	  if value = lis#endpoint || value = "" then option##selected <- true)
+      done);
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
     self#refresh_increments_focus;
@@ -524,6 +530,18 @@ let _ =
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
     jquery "#forward" (onclick (fun elt ev -> history#forward));
+    jquery_select "#sparql-endpoint-select"
+      (onchange (fun select ev ->
+	jquery_input "#sparql-endpoint-input" (fun input ->
+	  let url = to_string select##value in
+	  if url = ""
+	  then begin
+	    input##value <- string "http://";
+	    input##select() end
+	  else begin
+	    input##value <- string url;
+	    history#change_endpoint url
+	  end)));
     jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
@@ -563,10 +581,10 @@ let _ =
     
     jquery_all ".previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));
-    jquery_all ".limit-results" (fun elt ->
-      Opt.iter (Dom_html.CoerceTo.select elt) (onchange (fun select ev ->
+    jquery_select ".limit-results"
+      (onchange (fun select ev ->
 	let limit = int_of_string (to_string (select##value)) in
-	history#present#set_limit limit)));
+	history#present#set_limit limit));
 
     let _ =
       let args = Url.Current.arguments in
