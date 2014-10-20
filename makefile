@@ -8,6 +8,7 @@ osparklis: $(OBJ)
 install:
 	cp log/*.php /local/ferre/web/ferre/sparklis/log
 	cp osparklis.html /local/ferre/web/ferre/sparklis
+	cp osparklis.html /local/ferre/web/ferre/sparklis/index.html
 	cp osparklis.css /local/ferre/web/ferre/sparklis
 	cp osparklis.js /local/ferre/web/ferre/sparklis
 	cp *.png /local/ferre/web/ferre/sparklis

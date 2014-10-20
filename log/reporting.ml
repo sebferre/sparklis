@@ -62,6 +62,46 @@ let process_hitlog () =
 
 open Lisql
 
+let rec size_s = function
+  | Return np -> size_s1 np
+and size_s1 = function
+  | Det (det, rel_opt) -> size_s2 det + size_p1_opt rel_opt
+  | AnAggreg (idg,mg,g,relg_opt,np) -> 1 + size_modif_s2 mg + size_p1_opt relg_opt + size_s1 np
+  | NAnd ar -> Array.fold_left (fun res np -> res + 1 + size_s1 np) (-1) ar
+  | NOr ar -> Array.fold_left (fun res np -> res + 1 + size_s1 np) (-1) ar
+  | NMaybe np -> 1 + size_s1 np
+  | NNot np -> 1 + size_s1 np
+and size_s2 = function
+  | Term t -> 1
+  | An (id,m,head) -> size_modif_s2 m + size_head head
+  | The id -> 1
+and size_head = function
+  | Thing -> 0
+  | Class uri -> 1
+and size_modif_s2 (project,order) = size_project project + size_order order
+and size_project = function
+  | Unselect -> 1
+  | Select -> 0
+and size_order = function
+  | Unordered -> 0
+  | _ -> 1
+and size_p1_opt = function
+  | None -> 0
+  | Some vp -> size_p1 vp
+and size_p1 = function
+  | Is np -> 1 + size_s1 np
+  | Type uri -> 1
+  | Rel (uri,_,np) -> 1 + size_s1 np
+  | Triple (_,np1,np2) -> 1 + size_s1 np1 + size_s1 np2
+  | Search _ -> 1
+  | Filter _ -> 1
+  | And ar -> Array.fold_left (fun res vp -> res + size_p1 vp) 0 ar
+  | Or ar -> Array.fold_left (fun res vp -> res + 1 + size_p1 vp) (-1) ar
+  | Maybe vp -> 1 + size_p1 vp
+  | Not vp -> 1 + size_p1 vp
+  | IsThere -> 0
+
+
 let rec print_s = function
   | Return np -> "Give me " ^ print_s1 np
 and print_s1 = function
@@ -142,22 +182,41 @@ and print_uri uri =
   with _ -> uri
 
 let process_querylog () =
-  let out = open_out "data/querylog_processed.txt" in
-  print_endline "Processing data/querylog.txt > result in data/querylog_processed.txt";
+  let out_txt = open_out "data/querylog_processed.txt" in
+  let out_ttl = open_out "data/querylog_processed.ttl" in
+  print_endline "Processing data/querylog.txt > result in data/querylog_processed.txt/.ttl";
+  output_string out_ttl "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n";
+  output_string out_ttl "@prefix : <http://example.com/> .\n";
   iter_lines
     (fun line ->
       print_string "."; flush stdout;
       ( match split_line ~bound:4 line with
 	| dt::ip::endpoint::query::_ ->
-	  output_string out dt; output_string out "  ";
-	  output_string out (get_ns ip); output_string out "\t";
-	  output_string out endpoint; output_string out "\t";
-	  output_string out (print_s (Permalink.to_query query))
-	| _ -> output_string out "*** wrong format ***");
-      output_string out "\n")
+	  let ast_query = Permalink.to_query query in
+	  let s_query = print_s ast_query in
+	  let size_query = size_s ast_query in
+	  let ns_ip = get_ns ip in
+	  begin
+	    output_string out_txt dt; output_string out_txt "  ";
+	    output_string out_txt ns_ip; output_string out_txt "\t";
+	    output_string out_txt endpoint; output_string out_txt "\t";
+	    output_string out_txt s_query; output_string out_txt "\n"
+	  end;
+	  begin
+	    output_string out_ttl "[] a :Step ; ";
+	    output_string out_ttl ":timestamp \""; output_string out_ttl dt; output_string out_ttl "\"^^xsd:dateTime ; ";
+	    output_string out_ttl ":date \""; output_string out_ttl (try String.sub dt 0 10 with _ -> ""); output_string out_ttl "\"^^xsd:date ; ";
+	    output_string out_ttl ":userIP \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":endpoint \""; output_string out_ttl endpoint; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":query \""; output_string out_ttl s_query; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
+	  end
+	| _ -> output_string out_txt "*** wrong format ***"))
     "data/querylog.txt";
   print_newline ();
-  close_out out;;
+  close_out out_txt;
+  close_out out_ttl;
+  ignore (Sys.command ("java -jar /local/ferre/soft/rdf2rdf.jar " ^ "data/querylog_processed.ttl" ^ " " ^ "data/querylog_processed.rdf"));;
 
 let _ =
   process_hitlog ();
