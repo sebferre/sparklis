@@ -657,6 +657,8 @@ let delete_focus = function
 
 (* goto to query *)
 
-let goto (s : elt_s) focus =
+let focus_of_query (s : elt_s) = 
   factory#set (List.fold_left max 0 (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
-  Some (AtS s)
+  AtS s
+
+let goto (s : elt_s) focus = Some (focus_of_query s)

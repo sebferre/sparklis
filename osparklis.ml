@@ -135,9 +135,9 @@ object
   method update_focus ~(push_in_history : bool) (f : Lisql.focus -> Lisql.focus option) : unit = ()
 end
 
-class place =
+class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
-  val lis = new Lis.place "http://lisfs2008.irisa.fr/dbpedia/sparql" Lisql.factory#home_focus
+  val lis = new Lis.place endpoint foc
   method lis = lis
 
   val mutable offset = 0
@@ -454,10 +454,10 @@ object (self)
 
 end
 
-let history =
+class history (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable past : place list = []
-  val mutable present : place = new place
+  val mutable present : place = new place endpoint foc
   val mutable future : place list = []
 
   initializer present#set_navigation (self :> navigation)
@@ -527,6 +527,33 @@ let _ =
   if not is_dev_version then (* to avoid counting tests as hits *)
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
+    (* defining navigation history *)
+    let default_endpoint = ref "" in
+    let default_focus = ref Lisql.factory#home_focus in
+    jquery_input "#sparql-endpoint-input" (fun input ->
+      let url = to_string input##value in
+      default_endpoint := url); (* using default endpoint as given in HTML *)
+    let _ = (* changing endpoint and focus if permalink *)
+      let args = Url.Current.arguments in
+      let args =
+	match args with
+	  | [] -> []
+	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
+      Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
+      try
+	let url = List.assoc "endpoint" args in
+	default_endpoint := url;
+	try
+	  let query = Permalink.to_query (List.assoc "query" args) in
+	  default_focus := Lisql.focus_of_query query
+	with
+	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
+	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
+	  |  _ -> ()
+      with _ -> () in
+    let history = new history !default_endpoint !default_focus in
+
+    (* setting event callbacks *)
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
     jquery "#forward" (onclick (fun elt ev -> history#forward));
@@ -586,23 +613,6 @@ let _ =
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit));
 
-    let _ =
-      let args = Url.Current.arguments in
-      let args =
-	match args with
-	  | [] -> []
-	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
-      Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
-      try
-	let url = List.assoc "endpoint" args in
-	history#change_endpoint url;
-	try
-	  let query = Permalink.to_query (List.assoc "query" args) in
-	  history#update_focus ~push_in_history:true (Lisql.goto query)
-	with
-	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
-	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
-	  |  _ -> ()
-      with _ ->
-	history#present#refresh in
+    (* generating and displaying contents *)
+    history#present#refresh;
     bool true)
