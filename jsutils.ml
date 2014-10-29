@@ -66,3 +66,12 @@ let escapeHTML (str : string) : string =
   ignore (div##appendChild((Dom_html.document##createTextNode(string str) :> Dom.node t)));
   to_string (div##innerHTML)
 
+let integer_of_input ?(min = min_int) ?(max = max_int) ?(default = 0) v : int =
+  try
+    let n = int_of_string (to_string v) in
+    if n < min then alert ("Please enter a value greater or equal to " ^ string_of_int min);
+    if n > max then alert ("Please enter a value lesser or equal to " ^ string_of_int max);
+    n
+  with _ ->
+    alert "Please enter an integer value";
+    default

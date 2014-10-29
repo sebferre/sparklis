@@ -98,10 +98,6 @@ let index_incr_of_index_term_uri (f : Rdf.uri -> Lisql.increment) (l : Rdf.term 
 
 (* LIS navigation places *)
 
-let max_results = 200
-let max_classes = 200
-let max_properties = 1000
-
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   (* essential state *)
@@ -151,7 +147,7 @@ object (self)
 
   (* SPARQL query and results *)
 
-  method ajax_sparql_results term_constr elts (k : string option -> unit) =
+  method ajax_sparql_results ~max_results term_constr elts (k : string option -> unit) =
     match query_opt with
       | None ->
 	results <- Sparql_endpoint.empty_results;
@@ -325,7 +321,7 @@ object (self)
 	| _ -> assert false)
       (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 
-  method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
+  method ajax_index_properties ~max_classes ~max_properties constr elt (k : Lisql.increment index -> unit) =
     let process results_a results_has results_isof =
       let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrType c)
 	(index_of_results_column "class" results_a) in (* increasing *)
