@@ -3,6 +3,8 @@ open Js
 open Jsutils
 open Html
 
+(* logging utilities *)
+
 let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
 
@@ -11,6 +13,9 @@ let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
 
 let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.php" *)
   Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015"
+
+let session_id : string = (* random session ID to disambiguate undefinite IPs *)
+  Random.self_init (); string_of_int (Random.int 1000000000);;
 
 (* LISQL constraints <--> user patterns *)
 
@@ -468,7 +473,8 @@ object (self)
     if not is_dev_version then (* not counting tests with dev *)
       Lwt.ignore_result
 	(XmlHttpRequest.perform_raw_url
-	   ~get_args:[("endpoint", p#lis#endpoint);
+	   ~get_args:[("session", session_id);
+		      ("endpoint", p#lis#endpoint);
 		      ("query", Permalink.of_query p#lis#query)]
 	   url_querylog_php); (* counting hits *)
     past <- present::past;

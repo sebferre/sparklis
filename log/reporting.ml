@@ -1,6 +1,12 @@
 
 (* utilities *)
 
+let split_fragment str =
+  try
+    let i = String.rindex str '#' in
+    String.sub str 0 i, String.sub str (i+1) (String.length str - (i+1))
+  with _ -> str, ""
+
 let re_comma = Str.regexp ",";;
 
 let split_line ?bound line =
@@ -191,7 +197,8 @@ let process_querylog () =
     (fun line ->
       print_string "."; flush stdout;
       ( match split_line ~bound:4 line with
-	| dt::ip::endpoint::query::_ ->
+	| dt::ip_session::endpoint::query::_ ->
+	  let ip, session = split_fragment ip_session in
 	  let ast_query = Permalink.to_query query in
 	  let s_query = print_s ast_query in
 	  let size_query = size_s ast_query in
@@ -199,6 +206,7 @@ let process_querylog () =
 	  begin
 	    output_string out_txt dt; output_string out_txt "  ";
 	    output_string out_txt ns_ip; output_string out_txt "\t";
+	    if session <> "" then begin output_string out_txt session; output_string out_txt "\t" end;
 	    output_string out_txt endpoint; output_string out_txt "\t";
 	    output_string out_txt s_query; output_string out_txt "\n"
 	  end;
@@ -207,6 +215,7 @@ let process_querylog () =
 	    output_string out_ttl ":timestamp \""; output_string out_ttl dt; output_string out_ttl "\"^^xsd:dateTime ; ";
 	    output_string out_ttl ":date \""; output_string out_ttl (try String.sub dt 0 10 with _ -> ""); output_string out_ttl "\"^^xsd:date ; ";
 	    output_string out_ttl ":userIP \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; ";
+	    if session <> "" then begin output_string out_ttl ":sessionID \""; output_string out_ttl session; output_string out_ttl "\" ; " end;
 	    output_string out_ttl ":endpoint \""; output_string out_ttl endpoint; output_string out_ttl "\" ; ";
 	    output_string out_ttl ":query \""; output_string out_ttl s_query; output_string out_ttl "\" ; ";
 	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
