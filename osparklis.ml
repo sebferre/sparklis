@@ -3,10 +3,28 @@ open Js
 open Jsutils
 open Html
 
+(* configuration *)
+
+type config =
+    { mutable max_results : int;
+      mutable max_classes : int;
+      mutable max_properties : int;
+      mutable logging : bool;
+    }
+
+let config =
+  { max_results = 200;
+    max_classes = 200;
+    max_properties = 1000;
+    logging = true;
+  }
+
 (* logging utilities *)
 
 let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
+
+let logging_on () = not is_dev_version && config.logging
 
 let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
   Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
@@ -231,11 +249,11 @@ object (self)
 	     then "No results"
 	     else
 		let a, b = offset+1, min nb (offset+limit) in
-		if a = 1 && b = nb && nb < Lis.max_results then
+		if a = 1 && b = nb && nb < config.max_results then
 		  string_of_int b ^ (if b=1 then " result" else " results")
 		else
 		  "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		    " of " ^ string_of_int nb ^ (if nb < Lis.max_results then "" else "+")));
+		    " of " ^ string_of_int nb ^ (if nb < config.max_results then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -273,7 +291,7 @@ object (self)
 	navigation#update_focus ~push_in_history:true
 	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
     jquery_set_innerHTML "#count-terms"
-      (html_count_unit (List.length index) Lis.max_results "entity" "entities")
+      (html_count_unit (List.length index) config.max_results "entity" "entities")
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -288,14 +306,14 @@ object (self)
 
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
-      lis#ajax_index_properties property_constr elt
+      lis#ajax_index_properties ~max_classes:config.max_classes ~max_properties:config.max_properties property_constr elt
 	(fun index ->
 	  elt##innerHTML <- string (html_index lis#focus html_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) Lis.max_properties "concept" "concepts")))
+	    (html_count_unit (List.length index) config.max_properties "concept" "concepts")))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
@@ -325,7 +343,7 @@ object (self)
 	( match lis#focus_term_list with
 	  | [] -> elt_incrs##style##display <- string "none"
 	  | _::_ -> elt_incrs##style##display <- string "block" );
-	lis#ajax_sparql_results term_constr [elt_incrs; elt_res]
+	lis#ajax_sparql_results ~max_results:config.max_results term_constr [elt_incrs; elt_res]
 	  (function
 	    | None ->
 	      jquery_set_innerHTML "#sparql-query" "";
@@ -470,7 +488,7 @@ object (self)
   method present : place = present
 
   method push (p : place) : unit =
-    if not is_dev_version then (* not counting tests with dev *)
+    if logging_on () then
       Lwt.ignore_result
 	(XmlHttpRequest.perform_raw_url
 	   ~get_args:[("session", session_id);
@@ -530,9 +548,18 @@ end
 
 let _ =
   Firebug.console##log(string "Starting Sparklis");
-  if not is_dev_version then (* to avoid counting tests as hits *)
+  if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
+    (* initializing configuration from HTML *)
+    jquery_input "#input-max-results" (fun input ->
+      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value);
+    jquery_input "#input-max-classes" (fun input ->
+      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value);
+    jquery_input "#input-max-properties" (fun input ->
+      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value);
+    jquery_input "#input-logging" (fun input ->
+      config.logging <- to_bool input##checked);
     (* defining navigation history *)
     let default_endpoint = ref "" in
     let default_focus = ref Lisql.factory#home_focus in
@@ -563,6 +590,7 @@ let _ =
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
     jquery "#forward" (onclick (fun elt ev -> history#forward));
+    jquery "#refresh" (onclick (fun elt ev -> history#present#refresh));
     jquery_select "#sparql-endpoint-select"
       (onchange (fun select ev ->
 	jquery_input "#sparql-endpoint-input" (fun input ->
@@ -581,6 +609,22 @@ let _ =
 	history#change_endpoint url)));
     jquery_input "#sparql-endpoint-input" (onenter (fun input ->
       jquery_click "#sparql-endpoint-button"));
+    jquery "#config-control" (onclick (fun elt ev ->
+      jquery "#config-panel" (fun panel ->
+	let dis =
+	  if to_string panel##style##display = "none"
+	  then "block"
+	  else "none" in
+	panel##style##display <- string dis)));
+    jquery_input "#input-max-results" (oninput (fun input ev ->
+      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value));
+    jquery_input "#input-max-classes" (oninput (fun input ev ->
+      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value));
+    jquery_input "#input-max-properties" (oninput (fun input ev ->
+      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value));
+    jquery_input "#input-logging" (onclick (fun input ev ->
+      config.logging <- to_bool input##checked));
+
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
     jquery "#button-terms" (onclick (fun elt ev ->
