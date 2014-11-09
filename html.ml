@@ -94,7 +94,6 @@ let html_word = function
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
@@ -106,13 +105,14 @@ let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) :
   match xml with
     | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
     | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
-    | node :: xml -> html_of_nl_node ~highlight state node ^ " " ^ html_of_nl_xml ~highlight state xml
+    | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
     | [] -> ""
 and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
     | Kwd s -> s
     | Word w -> html_word w
+    | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Coord (coord,lxml) ->
       "<ul class=\"coordination\"><li>"
@@ -243,7 +243,10 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	(if id = focus_id
 	 then "<th class=\"header highlighted\">"
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"Click on this column header to set the focus on it\">");
-      Buffer.add_string buf (escapeHTML (state#lexicon#get_id_label id));
+      Buffer.add_string buf
+	(html_of_nl_xml state
+	   (Lisql2nl.xml_np_label
+	      (state#lexicon#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;
   Buffer.add_string buf "</tr>";

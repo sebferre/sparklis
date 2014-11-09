@@ -212,7 +212,7 @@ object (self)
 	| [Rdf.Var v] ->
 	  (try
 	    let id = lis#lexicon#get_var_id v in
-	    escapeHTML (lis#lexicon#get_id_label id)
+	    Html.html_of_nl_xml html_state (Lisql2nl.xml_np_label (lis#lexicon#get_id_label id))
 	   with _ -> escapeHTML v (* should not happen *))
 	| [t] -> Html.html_word (Lisql2nl.word_of_term t)
 	| _ -> "" in

@@ -6,7 +6,6 @@ open Lisql
 type word =
   [ `Thing
   | `Relation
-  | `Id of id * string
   | `Entity of Rdf.uri * string
   | `Literal of string
   | `TypedLiteral of string * string (* lexical value, datatype/lang *)
@@ -15,6 +14,14 @@ type word =
   | `Prop of Rdf.uri * string
   | `Op of string
   | `DummyFocus ]
+
+type np_label =
+  [ `The of int option * ng_label ]
+and ng_label =
+  [ `Word of word
+  | `Gen of ng_label * word
+  | `Of of word * ng_label
+  | `Aggreg of word * ng_label ]
 
 type focus_pos = [ `In | `At | `Out | `Ex ]
 
@@ -28,6 +35,7 @@ type s =
 and np =
   [ `Void
   | `PN of word * rel
+  | `Ref of np_label * rel
   | `Qu of qu * adj * ng
   | `QuAggreg of bool * qu * adj * ng_aggreg * ng
   | `QuOneOf of qu * word list
@@ -137,63 +145,59 @@ let rec word_of_term = function
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)
-  | Rdf.Var v -> `Id (0, v) (* should not occur *)
-
-let word_of_aggreg g =
-  let s =
-    match g with
-      | NumberOf -> "number of"
-      | ListOf -> "list of"
-      | Total -> "total"
-      | Average -> "average"
-      | Maximum -> "maximum"
-      | Minimum -> "minimum" in
-  `Op s
+  | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
 (* verbalization of IDs *)
 
-type id_label_word = Rdf.var * string
-type id_label = [ `Word of id_label_word | `Gen of id_label * id_label_word | `Of of id_label_word * id_label | `Adj of id_label_word * id_label ]
+type id_label = Rdf.var * ng_label
 type id_labelling = (Lisql.id * id_label list) list
-
-let gen_labels (ls : id_label list) (lw : id_label_word) : id_label list = List.fold_right (fun l acc -> `Gen (l,lw) :: acc) ls [`Word lw]
-let of_labels (lw : id_label_word) (ls : id_label list) : id_label list = List.fold_right (fun l acc -> `Of (lw,l) :: acc) ls [`Word lw]
-let adj_labels (lw : id_label_word) (ls : id_label list) : id_label list = List.fold_right (fun l acc -> `Adj (lw,l) :: acc) ls [`Word lw]
 
 let var_of_uri (uri : Rdf.uri) : string =
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
 
-let id_label_word_of_uri uri = (var_of_uri uri, name_of_uri_concept uri)
-let id_label_word_of_aggreg g =
-  match g with
-    | NumberOf -> "number_of", "number of"
-    | ListOf -> "list_of", "list of"
-    | Total -> "total", "total"
-    | Average -> "average", "average"
-    | Maximum -> "maximum", "maximum"
-    | Minimum -> "minimum", "minimum"
-
-let id_label_words_of_arg0 = function P -> Some ("relation","relation") | S | O -> None
-let id_label_words_of_arg1 = function S -> Some ("relation","relation") | P | O -> None
-let id_label_words_of_arg2 = function O -> Some ("relation","relation") | S | P -> None
-
 let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
   | Is np -> labelling_s1 ~labels np (* TODO: avoid keeping np.id *)
-  | Type c -> [`Word (id_label_word_of_uri c)], []
-  | Rel (p, Fwd, np) ->
-    let lw = id_label_word_of_uri p in
-    let _ls, lab = labelling_s1 ~labels:(gen_labels labels lw) np in
-    [], lab    
-  | Rel (p, Bwd, np) ->
-    let lw = id_label_word_of_uri p in
-    let ls, lab = labelling_s1 ~labels:[] np in
-    of_labels lw ls, lab
+  | Type c ->
+    let v, w = var_of_uri c, word_of_class c in
+    [(v, `Word w)], []
+  | Rel (p, m, np) ->
+    let v = var_of_uri p in
+    let w, synt = word_syntagm_of_property p in
+    let ls_np =
+      match synt, m with
+	| Noun, Fwd
+	| InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
+	| Noun, _
+	| InvNoun, _ -> [(v, `Word w)]
+	| _ -> [] in
+    let ls_np, lab = labelling_s1 ~labels:ls_np np in
+    let ls =
+      match synt, m with
+	| Noun, Bwd
+	| InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
+	| Noun, _
+	| InvNoun, _ -> [(v, `Word w)]
+	| _ -> [] in
+    ls, lab
   | Triple (arg,np1,np2) ->
-    let _ls1, lab1 = labelling_s1 ~labels:(match id_label_words_of_arg1 arg with None -> [] | Some lw -> gen_labels labels lw) np1 in
-    let _ls2, lab2 = labelling_s1 ~labels:(match id_label_words_of_arg2 arg with None -> [] | Some lw -> gen_labels labels lw) np2 in
-    [], lab1 @ lab2
+    let v, w = "relation", `Relation in
+    let ls_np1 =
+      match arg with
+	| S -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
+	| _ -> [] in
+    let ls_np2 =
+      match arg with
+	| O -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
+	| _ -> [] in
+    let ls_np1, lab1 = labelling_s1 ~labels:ls_np1 np1 in
+    let ls_np2, lab2 = labelling_s1 ~labels:ls_np2 np2 in
+    let ls =
+      match arg with
+	| P -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np1 @ [(v, `Word w)]
+	| _ -> [] in
+    ls, lab1 @ lab2
   | Search _ -> [], []
   | Filter _ -> [], []
   | And ar ->
@@ -211,7 +215,7 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
   | IsThere -> [], []
 and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
   | Det (An (id, modif, head), rel_opt) ->
-    let ls_head = match head with Thing -> [] | Class c -> [`Word (id_label_word_of_uri c)] in
+    let ls_head = match head with Thing -> [] | Class c -> [(var_of_uri c, `Word (word_of_class c))] in
     let labels2 = labels @ ls_head in
     let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels:labels2 rel in
     ls_head @ ls_rel, (id, labels2 @ ls_rel) :: lab_rel
@@ -219,8 +223,16 @@ and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
     let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels rel in
     ls_rel, lab_rel
   | AnAggreg (id, modif, g, rel_opt, np) ->
+    let v, w =
+      match g with
+	| NumberOf -> "number_of", `Op "number of"
+	| ListOf -> "list_of", `Op "list of"
+	| Total -> "total", `Op "total"
+	| Average -> "average", `Op "average"
+	| Maximum -> "maximum", `Op "maximum"
+	| Minimum -> "minimum", `Op "minimum" in
     let ls_np, lab_np = labelling_s1 ~labels np in
-    let ls_g = adj_labels (id_label_word_of_aggreg g) (labels @ ls_np) in
+    let ls_g = List.map (fun (u,l) -> (v ^ "_" ^ u, `Aggreg (w,l))) (labels @ ls_np) @ [(v, `Word w)] in
     ls_np, (id, ls_g) :: lab_np
   | NAnd ar ->
     let lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
@@ -238,18 +250,6 @@ and labelling_s : elt_s -> id_labelling = function
   | Return np ->
     let _ls, lab = labelling_s1 ~labels:[] np in
     lab
-
-let rec id_label_aggregate : id_label -> id_label_word = function
-  | `Word lw -> lw
-  | `Gen (l,(v2,s2)) ->
-    let v1, s1 = id_label_aggregate l in
-    v2, (s1 ^ "'s " ^ s2)
-  | `Of ((v1,s1),l) ->
-    let v2, s2 = id_label_aggregate l in
-    v1, (s1 ^ " of the " ^ s2)
-  | `Adj ((v1,s1),l) ->
-    let v2, s2 = id_label_aggregate l in
-    v1 ^ "_" ^ v2, s1 ^ " " ^ s2
 
 class ['a ] counter =
 object
@@ -269,38 +269,30 @@ end
 
 class lexicon (lab : id_labelling) =
 object
-  val label_counter : string counter = new counter
-  val mutable id_list : (id * (Rdf.var * (string * int))) list = []
+  val label_counter : ng_label counter = new counter
+  val mutable id_list : (id * (Rdf.var * (ng_label * int))) list = []
   initializer
     id_list <- List.map
       (fun (id,ls) ->
 	let ls = Common.list_to_set ls in (* removing duplicates *)
-	let ls = if ls = [] then [`Word ("thing","thing")] else ls in (* default label *)
+	let ls = if ls = [] then [("thing", `Word `Thing)] else ls in (* default label *)
 	let vss =
 	  List.map
-	    (fun l ->
-	      let var_prefix, s = id_label_aggregate l in
-	      let k = label_counter#rank s in
-	      var_prefix, (s,k))
+	    (fun (var_prefix, ng) ->
+	      (*let var_prefix, s = id_label_aggregate l in*)
+	      let k = label_counter#rank ng in
+	      var_prefix, (ng,k))
 	    ls in
 	(id, List.hd vss))
       lab
 
-  method get_id_label (id : id) : string =
+  method get_id_label (id : id) : np_label (* string *) =
     try
-      let _, (s, k) = List.assoc id id_list in
-      let n = label_counter#count s in
-      let s_rank =
-	if n = 1
-	then ""
-	else
-	  let s_th_ =
-	    if k mod 10 = 1 && not (k mod 100 = 11) then "st "
-	    else if k mod 10 = 2 && not (k mod 100 = 12) then "nd "
-	    else if k mod 10 = 3 && not (k mod 100 = 13) then "rd "
-	    else "th " in
-	  string_of_int k ^ s_th_ in
-      "the " ^ s_rank ^ s
+      let _, (ng, k) = List.assoc id id_list in
+      let n = label_counter#count ng in
+      if n = 1
+      then `The (None, ng)
+      else `The (Some k, ng)
     with _ -> assert false
 
   method get_id_var (id : id) : string =
@@ -341,8 +333,6 @@ and qu_adj_of_order : order -> qu * adj = function
   | Unordered -> `A, `Nil
   | Highest -> `The, `Order (`Op "highest-to-lowest")
   | Lowest -> `The, `Order (`Op "lowest-to-highest")
-
-let word_of_id lexicon id = `Id (id, lexicon#get_id_label id)
 
 
 let vp_of_elt_p1_Is (np : np) = `IsNP (np, [])
@@ -450,7 +440,7 @@ and ng_of_elt_s1 lexicon pos ctx f =
 and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
   | Term t -> `Focus (foc, `PN (word_of_term t, rel))
   | An (id, modif, head) -> `Focus (foc, head_of_modif ~suspended:(is_suspended_focus foc) (word_of_elt_head head) rel modif)
-  | The id -> `Focus (foc, `PN (word_of_id lexicon id, rel))
+  | The id -> `Focus (foc, `Ref (lexicon#get_id_label id, rel))
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
@@ -594,6 +584,7 @@ and map_np transf np =
   match transf#np np with
     | `Void -> `Void
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
+    | `Ref (np_label,rel) -> `Ref (np_label, map_rel transf rel)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuAggreg (susp,qu,adj,ngg,ng) -> `QuAggreg (susp, qu, map_adj transf adj, map_ng_aggreg transf ngg, map_ng transf ng)
     | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
@@ -699,6 +690,7 @@ type xml = node list
 and node =
   | Kwd of string
   | Word of word
+  | Suffix of xml * string (* suffix: eg. !, 's *)
   | Enum of string * xml list (* separator: eg. commas *)
   | Coord of xml * xml list (* coordination: eg. 'and' *)
   | Focus of focus * xml
@@ -706,6 +698,25 @@ and node =
   | Suspended of xml
   | DeleteCurrentFocus
   | DeleteIncr
+
+let rec xml_np_label (`The (k_opt, ng) : np_label) =
+  let xml_ng = xml_ng_label ng in
+  let nl_rank =
+    match k_opt with
+      | None -> []
+      | Some k ->
+	let s_th =
+	  if k mod 10 = 1 && not (k mod 100 = 11) then "st"
+	  else if k mod 10 = 2 && not (k mod 100 = 12) then "nd"
+	  else if k mod 10 = 3 && not (k mod 100 = 13) then "rd"
+	  else "th" in
+	[Word (`Op (string_of_int k ^ s_th))] in
+  Word (`Op "the") :: nl_rank @ xml_ng
+and xml_ng_label = function
+  | `Word w -> [Word w]
+  | `Gen (ng, w) -> Suffix (xml_ng_label ng, "'s") :: Word w :: [] (* TODO: avoid space before 's *)
+  | `Of (w,ng) -> Word w :: Kwd "of" :: Kwd "the" :: xml_ng_label ng
+  | `Aggreg (w,ng) -> Word w :: xml_ng_label ng
 
 let rec xml_starts_with_vowel = function
   | [] -> false
@@ -715,6 +726,7 @@ and node_starts_with_vowel = function
   | Word w -> word_starts_with_vowel w
   | Enum (sep, []) -> false
   | Enum (sep, x::_) -> xml_starts_with_vowel x
+  | Suffix (x, _) -> xml_starts_with_vowel x
   | Coord (sep, []) -> false
   | Coord (sep, x::_) -> xml_starts_with_vowel x
   | Focus (foc, x) -> xml_starts_with_vowel x
@@ -778,6 +790,7 @@ let rec xml_s = function
 and xml_np = function
   | `Void -> []
   | `PN (w,rel) -> Word w :: xml_rel rel
+  | `Ref (np_label,rel) -> xml_np_label np_label @ xml_rel rel
   | `Qu (qu,adj,ng) -> xml_qu qu (xml_adj adj @ xml_ng ng)
   | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu qu (xml_suspended susp (xml_adj adj @ xml_ng_aggreg ngg) @ xml_ng ng)
   | `QuOneOf (qu,lw) -> xml_qu qu (Kwd "of" :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
@@ -878,7 +891,7 @@ let xml_incr lexicon (focus : focus) = function
 	xml_incr_coordinate focus
 	  (Kwd "that" :: Kwd "is" :: xml_t) )
   | IncrId id ->
-    let xml_id = [Word (word_of_id lexicon id)] in
+    let xml_id = xml_np_label (lexicon#get_id_label id) in
     ( match focus with
       | AtS1 _ -> xml_id
       | _ ->
@@ -926,3 +939,5 @@ let xml_incr lexicon (focus : focus) = function
   | IncrUnselect -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Unselect,Unordered))
   | IncrAggreg g -> xml_np (np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
   | IncrOrder order -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Select,order))
+
+
