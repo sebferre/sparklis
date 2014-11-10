@@ -135,7 +135,10 @@ and html_highlight h xml =
   then html_span ~classe:"highlighted" xml
   else xml
 
-(* HTML of focus *)
+(* HTML of different AST elements *)
+
+let html_term (t : Rdf.term) : string =
+  html_word (Lisql2nl.word_of_term t)
 
 let html_focus (state : state) (focus : focus) : string = 
   html_of_nl_xml state
@@ -143,6 +146,11 @@ let html_focus (state : state) (focus : focus) : string =
        (Lisql2nl.map_s Lisql2nl.main_transf
 	  (Lisql2nl.s_of_focus state#id_labelling focus)))
 
+
+let html_id (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_np_label
+       (state#id_labelling#get_id_label id))
 
 (* HTML of increment lists *)
 
