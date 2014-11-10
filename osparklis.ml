@@ -172,7 +172,7 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable html_state = new Html.state (new Lisql2nl.lexicon [])
+  val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
 
   method show_permalink : unit =
     let args =
@@ -211,8 +211,8 @@ object (self)
       match lis#focus_term_list with
 	| [Rdf.Var v] ->
 	  (try
-	    let id = lis#lexicon#get_var_id v in
-	    Html.html_of_nl_xml html_state (Lisql2nl.xml_np_label (lis#lexicon#get_id_label id))
+	    let id = lis#id_labelling#get_var_id v in
+	    Html.html_of_nl_xml html_state (Lisql2nl.xml_np_label (lis#id_labelling#get_id_label id))
 	   with _ -> escapeHTML v (* should not happen *))
 	| [t] -> Html.html_word (Lisql2nl.word_of_term t)
 	| _ -> "" in
@@ -326,7 +326,7 @@ object (self)
 	(html_count_unit (List.length index) max_int "modifier" "modifiers"))
 
   method refresh =
-    html_state <- new Html.state lis#lexicon;
+    html_state <- new Html.state lis#id_labelling;
     jquery_select "#sparql-endpoint-select" (fun select ->
       let options = select##options in
       for i = options##length - 1 downto 0 do

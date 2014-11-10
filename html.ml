@@ -30,9 +30,9 @@ end
 let focus_key_of_root = "root"
 let focus_key_of_id (id : Lisql.id) : string = "id" ^ string_of_int id
 
-class state (lex : Lisql2nl.lexicon) =
+class state (id_labelling : Lisql2nl.id_labelling) =
 object
-  method lexicon = lex
+  method id_labelling = id_labelling
   val dico_foci : Lisql.focus dico = new dico "focus"
   method add_focus (focus : Lisql.focus) : string =
     if Lisql.is_root_focus focus then dico_foci#add_key focus_key_of_root focus;
@@ -141,7 +141,7 @@ let html_focus (state : state) (focus : focus) : string =
   html_of_nl_xml state
     (Lisql2nl.xml_s
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_focus state#lexicon focus)))
+	  (Lisql2nl.s_of_focus state#id_labelling focus)))
 
 
 (* HTML of increment lists *)
@@ -156,7 +156,7 @@ let html_increment_frequency focus (state : state) (incr,freq) =
   let key = state#dico_incrs#add incr in
   let text =
     html_of_nl_xml state
-      (Lisql2nl.xml_incr state#lexicon focus incr) in
+      (Lisql2nl.xml_incr state#id_labelling focus incr) in
   let title_opt =
     match incr with
       | IncrTerm _ -> None
@@ -197,7 +197,7 @@ let html_index focus (state : state) (index : Lisql.increment Lis.index) =
 (* HTML of results *)
 
 let html_cell_img ?(height = 120) url =
-  let label = Lisql2nl.name_of_uri url in
+  let label = Lexicon.name_of_uri url in
   html_img ~height ~alt:label ~title:label url ^ html_open_new_window ~height:16 url
 
 let html_cell_video url mime =
@@ -233,8 +233,8 @@ let html_cell state ~(line : int) ~(column : Lisql.id) t =
 
 let html_table_of_results (state : state) ~first_rank ~focus_var results =
   let open Sparql_endpoint in
-  let focus_id = match focus_var with None -> -1 | Some v -> state#lexicon#get_var_id v in
-  let id_i_list = List.map (fun (var,i) -> (state#lexicon#get_var_id var, i)) results.vars in
+  let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
+  let id_i_list = List.map (fun (var,i) -> (state#id_labelling#get_var_id var, i)) results.vars in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"Click on this column header to hide the focus\"></th>");
   List.iter
@@ -246,7 +246,7 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
       Buffer.add_string buf
 	(html_of_nl_xml state
 	   (Lisql2nl.xml_np_label
-	      (state#lexicon#get_id_label id)));
+	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;
   Buffer.add_string buf "</tr>";

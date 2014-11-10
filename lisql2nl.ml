@@ -99,49 +99,16 @@ let np_of_literal l = np_of_word (`Literal l)
 
 (* verbalization of terms, classes, properties *)
 
-let name_of_uri uri =
-  let uri = Js.to_string (Js.decodeURI (Js.string uri)) in
-  match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
-    | Some (_,res) ->
-      ( match Regexp.matched_string res with "" -> uri | name -> name )
-    | None -> uri
-
-let name_of_uri_entity =
-  let re_white = Regexp.regexp "_" in
-  fun uri ->
-    let name = name_of_uri uri in
-    try Regexp.global_replace re_white name " "
-    with _ -> name
-
-let word_of_entity uri = `Entity (uri, name_of_uri_entity uri)
-
-let name_of_uri_concept =
-  fun uri ->
-    let name = name_of_uri uri in
-    try Common.uncamel name
-    with _ -> name
-
-type property_syntagm = Noun | InvNoun | TransVerb | TransAdj
-
-let prepositions = ["by"; "for"; "with"; "on"; "from"; "to"; "off"; "in"; "about"; "after"; "at"; "down"; "up"; "into"; "over"; "until"; "upon"; "within"; "without"]
-
-let syntagm_of_property_name (name : string) : property_syntagm * string =
-  if Common.has_suffix name " of" then InvNoun, String.sub name 0 (String.length name - 3)
-  else if Common.has_prefix name "has " then Noun, String.sub name 4 (String.length name - 4)
-  else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then TransVerb, name
-  else if List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then TransAdj, name
-  else Noun, name
-
-let word_of_class uri = `Class (uri, name_of_uri_concept uri)
+let word_of_entity uri = `Entity (uri, Lexicon.name_of_uri_entity uri)
+let word_of_class uri = `Class (uri, Lexicon.name_of_uri_concept uri)
 let word_syntagm_of_property uri = 
-  let name = name_of_uri_concept uri in
-  let synt, name = syntagm_of_property_name name in
+  let synt, name = Lexicon.syntagm_name_of_uri_property uri in
   `Prop (uri, name), synt
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, name_of_uri_concept dt)
+  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.name_of_uri_concept dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)
@@ -150,14 +117,14 @@ let rec word_of_term = function
 (* verbalization of IDs *)
 
 type id_label = Rdf.var * ng_label
-type id_labelling = (Lisql.id * id_label list) list
+type id_labelling_list = (Lisql.id * id_label list) list
 
 let var_of_uri (uri : Rdf.uri) : string =
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
 
-let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
+let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = function
   | Is np -> labelling_s1 ~labels np (* TODO: avoid keeping np.id *)
   | Type c ->
     let v, w = var_of_uri c, word_of_class c in
@@ -167,18 +134,18 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
     let w, synt = word_syntagm_of_property p in
     let ls_np =
       match synt, m with
-	| Noun, Fwd
-	| InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
-	| Noun, _
-	| InvNoun, _ -> [(v, `Word w)]
+	| `Noun, Fwd
+	| `InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
+	| `Noun, _
+	| `InvNoun, _ -> [(v, `Word w)]
 	| _ -> [] in
     let ls_np, lab = labelling_s1 ~labels:ls_np np in
     let ls =
       match synt, m with
-	| Noun, Bwd
-	| InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
-	| Noun, _
-	| InvNoun, _ -> [(v, `Word w)]
+	| `Noun, Bwd
+	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
+	| `Noun, _
+	| `InvNoun, _ -> [(v, `Word w)]
 	| _ -> [] in
     ls, lab
   | Triple (arg,np1,np2) ->
@@ -213,7 +180,7 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling = function
     let _ls, lab = labelling_p1 ~labels elt in
     [], lab
   | IsThere -> [], []
-and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
+and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling_list = function
   | Det (An (id, modif, head), rel_opt) ->
     let ls_head = match head with Thing -> [] | Class c -> [(var_of_uri c, `Word (word_of_class c))] in
     let labels2 = labels @ ls_head in
@@ -246,7 +213,7 @@ and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling = function
   | NNot elt ->
     let _ls, lab = labelling_s1 ~labels elt in
     [], lab
-and labelling_s : elt_s -> id_labelling = function
+and labelling_s : elt_s -> id_labelling_list = function
   | Return np ->
     let _ls, lab = labelling_s1 ~labels:[] np in
     lab
@@ -267,7 +234,7 @@ object
     with Not_found -> 0
 end
 
-class lexicon (lab : id_labelling) =
+class id_labelling (lab : id_labelling_list) =
 object
   val label_counter : ng_label counter = new counter
   val mutable id_list : (id * (Rdf.var * (ng_label * int))) list = []
@@ -305,9 +272,9 @@ object
       | None -> assert false
 end
 
-let lexicon_of_focus focus : lexicon =
+let id_labelling_of_focus focus : id_labelling =
   let lab = labelling_s (elt_s_of_focus focus) in
-  new lexicon lab
+  new id_labelling lab
 
 (* verbalization of focus *)
 
@@ -342,17 +309,17 @@ let vp_of_elt_p1_Type (c : Rdf.uri) = `IsNP (`Qu (`A, `Nil, `That (word_of_class
 let vp_of_elt_p1_Has (p : Rdf.uri) (np : np) =
   let word, synt = word_syntagm_of_property p in
   match synt with
-    | Noun -> `HasProp (word, np, [])
-    | InvNoun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
-    | TransVerb -> `VT (word, np, [])
-    | TransAdj -> `IsPP (`Prep (word, np))
+    | `Noun -> `HasProp (word, np, [])
+    | `InvNoun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
+    | `TransVerb -> `VT (word, np, [])
+    | `TransAdj -> `IsPP (`Prep (word, np))
 let vp_of_elt_p1_IsOf (p : Rdf.uri) (np : np) =
   let word, synt = word_syntagm_of_property p in
   match synt with
-    | Noun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
-    | InvNoun -> `HasProp (word, np, [])
-    | TransVerb -> `Subject (np, `VT (word, `Void, []))
-    | TransAdj -> `Subject (np, `IsPP (`Prep (word, `Void)))
+    | `Noun -> `IsNP (`Qu (`The, `Nil, `That (word, `Of np)), [])
+    | `InvNoun -> `HasProp (word, np, [])
+    | `TransVerb -> `Subject (np, `VT (word, `Void, []))
+    | `TransAdj -> `Subject (np, `IsPP (`Prep (word, `Void)))
 
 let vp_of_elt_p1_Rel (p : Rdf.uri) (m : modif_p2) (np : np) =
   match m with
@@ -381,23 +348,23 @@ let np_of_elt_s1_AnAggreg ~suspended (modif : modif_s2) (g : aggreg) (rel : rel)
   `QuAggreg (suspended, qu, adj, ng_aggreg, ng)
 
 
-let rec vp_of_elt_p1 lexicon pos ctx f : vp =
+let rec vp_of_elt_p1 ~id_labelling pos ctx f : vp =
   let nl =
     match f with
       | IsThere -> `Ellipsis
-      | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 lexicon (focus_pos_down pos) (IsX ctx) np)
+      | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (IsX ctx) np)
       | Type c -> vp_of_elt_p1_Type c
-      | Rel (p,m,np) -> vp_of_elt_p1_Rel p m (np_of_elt_s1 lexicon (focus_pos_down pos) (RelX (p,m,ctx)) np)
+      | Rel (p,m,np) -> vp_of_elt_p1_Rel p m (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (RelX (p,m,ctx)) np)
       | Triple (arg,np1,np2) ->
 	vp_of_elt_p1_Triple arg
-	  (np_of_elt_s1 lexicon (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
-	  (np_of_elt_s1 lexicon (focus_pos_down pos) (TripleX2 (arg,np1,ctx)) np2)
+	  (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
+	  (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (TripleX2 (arg,np1,ctx)) np2)
       | Search c -> vp_of_constr c
       | Filter c -> vp_of_constr c
-      | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 lexicon (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
-      | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 lexicon (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
-      | Maybe elt -> `Maybe (false, vp_of_elt_p1 lexicon (focus_pos_down pos) (MaybeX ctx) elt)
-      | Not elt -> `Not (false, vp_of_elt_p1 lexicon (focus_pos_down pos) (NotX ctx) elt) in
+      | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
+      | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
+      | Maybe elt -> `Maybe (false, vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (MaybeX ctx) elt)
+      | Not elt -> `Not (false, vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (NotX ctx) elt) in
   `Focus ((AtP1 (f,ctx), pos), nl)
 and vp_of_constr = function
   | True -> `Ellipsis
@@ -411,66 +378,66 @@ and vp_of_constr = function
   | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", np_of_literal pat1, `Op "and", np_of_literal pat2))
   | HasLang pat -> `Has (`Qu (`A, `Nil, `That (`Op "language", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
   | HasDatatype pat -> `Has (`Qu (`A, `Nil, `That (`Op "datatype", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
-and rel_of_elt_p1_opt lexicon pos ctx = function
+and rel_of_elt_p1_opt ~id_labelling pos ctx = function
   | None -> top_rel
-  | Some rel -> `That (vp_of_elt_p1 lexicon pos ctx rel)
-and np_of_elt_s1 lexicon pos ctx f : np =
+  | Some rel -> `That (vp_of_elt_p1 ~id_labelling pos ctx rel)
+and np_of_elt_s1 ~id_labelling pos ctx f : np =
   let foc = (AtS1 (f,ctx),pos) in
   match f with
     | Det (det, rel_opt) ->
-      let nl_rel = rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
-      det_of_elt_s2 lexicon foc nl_rel det
+      let nl_rel = rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
+      det_of_elt_s2 ~id_labelling foc nl_rel det
     | AnAggreg (id,modif,g,rel_opt,np) ->
       let nl =
 	np_of_elt_s1_AnAggreg ~suspended:false
 	  modif g
-	  (rel_of_elt_p1_opt lexicon (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
-	  (ng_of_elt_s1 lexicon (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
+	  (rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
+	  (ng_of_elt_s1 ~id_labelling (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
       `Focus (foc, nl)
-    | NAnd ar -> `Focus (foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar))
-    | NOr ar -> `Focus (foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 lexicon (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar))
-    | NMaybe elt -> `Focus (foc, `Maybe (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NMaybeX ctx) elt))
-    | NNot elt -> `Focus (foc, `Not (false, np_of_elt_s1 lexicon (focus_pos_down pos) (NNotX ctx) elt))
-and ng_of_elt_s1 lexicon pos ctx f =
+    | NAnd ar -> `Focus (foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar))
+    | NOr ar -> `Focus (foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar))
+    | NMaybe elt -> `Focus (foc, `Maybe (false, np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NMaybeX ctx) elt))
+    | NNot elt -> `Focus (foc, `Not (false, np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NNotX ctx) elt))
+and ng_of_elt_s1 ~id_labelling pos ctx f =
   let foc = (AtS1 (f,ctx), pos) in
   match f with
     | Det (An (id,modif,head) as det, rel_opt) ->
-      `Focus (foc, `That (word_of_elt_head head, rel_of_elt_p1_opt lexicon (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt))
+      `Focus (foc, `That (word_of_elt_head head, rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt))
     | _ -> assert false
-and det_of_elt_s2 lexicon foc rel : elt_s2 -> np = function
+and det_of_elt_s2 ~id_labelling foc rel : elt_s2 -> np = function
   | Term t -> `Focus (foc, `PN (word_of_term t, rel))
   | An (id, modif, head) -> `Focus (foc, head_of_modif ~suspended:(is_suspended_focus foc) (word_of_elt_head head) rel modif)
-  | The id -> `Focus (foc, `Ref (lexicon#get_id_label id, rel))
+  | The id -> `Focus (foc, `Ref (id_labelling#get_id_label id, rel))
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
-and s_of_elt_s lexicon pos : elt_s -> s = function
+and s_of_elt_s ~id_labelling pos : elt_s -> s = function
   | Return np ->
     let foc = (AtS (Return np), pos) in
-    `Focus (foc, `Return (np_of_elt_s1 lexicon (focus_pos_down pos) ReturnX np))
+    `Focus (foc, `Return (np_of_elt_s1 ~id_labelling (focus_pos_down pos) ReturnX np))
 
 (* in *_of_ctx_*, [pos = `At] if semantically at current focus *)
-let rec s_of_ctx_p1 lexicon pos f foc_nl ctx : s =
+let rec s_of_ctx_p1 ~id_labelling pos f foc_nl ctx : s =
   match ctx with
     | DetThatX (det,ctx2) ->
       let f2 = Det (det, Some f) in
-      let foc2_nl2 = det_of_elt_s2 lexicon (AtS1 (f2,ctx2), `Out) (`That foc_nl) det in
-      s_of_ctx_s1 lexicon pos f2 foc2_nl2 ctx2
+      let foc2_nl2 = det_of_elt_s2 ~id_labelling (AtS1 (f2,ctx2), `Out) (`That foc_nl) det in
+      s_of_ctx_s1 ~id_labelling pos f2 foc2_nl2 ctx2
     | AnAggregThatX (id,modif,g,np,ctx2) ->
       let f2 = AnAggreg (id, modif, g, Some f, np) in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 = np_of_elt_s1_AnAggreg ~suspended:false modif g
 	(`That foc_nl)
-	(ng_of_elt_s1 lexicon `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
-      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+	(ng_of_elt_s1 ~id_labelling `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
+      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
-		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Out (AndX (j,ar,ctx2)) elt)
+		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 ~id_labelling `Out (AndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
@@ -478,41 +445,41 @@ let rec s_of_ctx_p1 lexicon pos f foc_nl ctx : s =
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
-	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 lexicon `Ex (OrX (j,ar,ctx2)) elt)
+	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 ~id_labelling `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
       let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
       let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
-and s_of_ctx_s1 lexicon pos f foc_nl ctx =
+      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+and s_of_ctx_s1 ~id_labelling pos f foc_nl ctx =
   match ctx with
     | IsX ctx2 ->
       let f2 = Is f in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Is foc_nl in
-      s_of_ctx_p1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | RelX (p,m,ctx2) ->
       let f2 = Rel (p,m,f) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Rel p m foc_nl in
-      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX1 (arg,np2,ctx2) ->
       let f2 = Triple (arg,f,np2) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 lexicon `Out (TripleX2 (arg,f,ctx2)) np2) in
-      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
+      let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 ~id_labelling `Out (TripleX2 (arg,f,ctx2)) np2) in
+      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX2 (arg,np1,ctx2) ->
       let f2 = Triple (arg,np1,f) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 lexicon `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
-      s_of_ctx_p1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
+      let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 ~id_labelling `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
+      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | ReturnX ->
       let f2 = Return f in
       let foc2 = (AtS f2, `Out) in
@@ -522,17 +489,17 @@ and s_of_ctx_s1 lexicon pos f foc_nl ctx =
       let f2 = AnAggreg (id, modif, g, rel_opt, f) in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 = np_of_elt_s1_AnAggreg ~suspended:(pos = `At) (*is_suspended_focus foc*) modif g
-	(rel_of_elt_p1_opt lexicon `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
+	(rel_of_elt_p1_opt ~id_labelling `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
         ( match foc_nl with `Focus (foc, `Qu (_,_,ng)) -> `Focus (foc, ng) | `Qu (_,_,ng) -> ng | _ -> assert false )  (* TODO: what to do with hidden modif/adj *) in
-      s_of_ctx_s1 lexicon `Out f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | NAndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; NAnd ar in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
-		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Out (NAndX (j,ar,ctx2)) elt)
+		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 ~id_labelling `Out (NAndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | NOrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = NOr ar in
@@ -540,24 +507,24 @@ and s_of_ctx_s1 lexicon pos f foc_nl ctx =
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
-	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 lexicon `Ex (NOrX (j,ar,ctx2)) elt)
+	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 ~id_labelling `Ex (NOrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NMaybeX ctx2 ->
       let f2 = NMaybe f in
       let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NNotX ctx2 ->
       let f2 = NNot f in
       let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_s1 lexicon pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
 
-let s_of_focus lexicon : focus -> s = function
-  | AtP1 (f,ctx) -> s_of_ctx_p1 lexicon `At f (vp_of_elt_p1 lexicon `At ctx f) ctx
-  | AtS1 (f,ctx) -> s_of_ctx_s1 lexicon `At f (np_of_elt_s1 lexicon `At ctx f) ctx
-  | AtS f -> s_of_elt_s lexicon `Out f
+let s_of_focus ~id_labelling : focus -> s = function
+  | AtP1 (f,ctx) -> s_of_ctx_p1 ~id_labelling `At f (vp_of_elt_p1 ~id_labelling `At ctx f) ctx
+  | AtS1 (f,ctx) -> s_of_ctx_s1 ~id_labelling `At f (np_of_elt_s1 ~id_labelling `At ctx f) ctx
+  | AtS f -> s_of_elt_s ~id_labelling `Out f
 
 (* linguistic transformations *)
 
@@ -881,7 +848,7 @@ let xml_incr_coordinate focus xml =
     | AtP1 (IsThere, _) -> xml
     | _ -> Kwd "and" :: xml
 
-let xml_incr lexicon (focus : focus) = function
+let xml_incr ~id_labelling (focus : focus) = function
   | IncrTerm t ->
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
@@ -891,7 +858,7 @@ let xml_incr lexicon (focus : focus) = function
 	xml_incr_coordinate focus
 	  (Kwd "that" :: Kwd "is" :: xml_t) )
   | IncrId id ->
-    let xml_id = xml_np_label (lexicon#get_id_label id) in
+    let xml_id = xml_np_label (id_labelling#get_id_label id) in
     ( match focus with
       | AtS1 _ -> xml_id
       | _ ->
@@ -911,19 +878,19 @@ let xml_incr lexicon (focus : focus) = function
       (Kwd "that" ::
        let word, synt = word_syntagm_of_property p in
        match synt with
-	 | Noun -> Kwd "has" :: xml_a_an [Word word]
-	 | InvNoun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
-	 | TransVerb -> Word word :: xml_ellipsis
-	 | TransAdj -> Kwd "is" :: Word word :: xml_ellipsis)
+	 | `Noun -> Kwd "has" :: xml_a_an [Word word]
+	 | `InvNoun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
+	 | `TransVerb -> Word word :: xml_ellipsis
+	 | `TransAdj -> Kwd "is" :: Word word :: xml_ellipsis)
   | IncrRel (p,Lisql.Bwd) ->
     xml_incr_coordinate focus
       (Kwd "that" ::
        let word, synt = word_syntagm_of_property p in
        match synt with
-	 | Noun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
-	 | InvNoun -> Kwd "has" :: xml_a_an [Word word]
-	 | TransVerb -> xml_ellipsis @ Word word :: []
-	 | TransAdj -> xml_ellipsis @ Kwd "is" :: Word word :: [])
+	 | `Noun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
+	 | `InvNoun -> Kwd "has" :: xml_a_an [Word word]
+	 | `TransVerb -> xml_ellipsis @ Word word :: []
+	 | `TransAdj -> xml_ellipsis @ Kwd "is" :: Word word :: [])
   | IncrTriple (S | O as arg) ->
     xml_incr_coordinate focus
       (Kwd "that" :: Kwd "has" :: Kwd "a" :: Word `Relation :: (if arg = S then Kwd "to" :: xml_ellipsis else Kwd "from" :: xml_ellipsis))
