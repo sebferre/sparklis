@@ -1,20 +1,35 @@
 
 open Js
+open Config
 
 type 'a index = ('a * int) list
 
 (* extraction of the extension and indexes *)
 
-let page_of_results (offset : int) (limit : int) results : Sparql_endpoint.results =
+let lexicon_enqueue_term = function
+  | Rdf.URI uri -> config.entity_lexicon#enqueue uri
+  | Rdf.TypedLiteral (_,dt) -> config.class_lexicon#enqueue dt
+  | _ -> ()
+
+let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.results -> unit) : unit =
   let open Sparql_endpoint in
   let rec aux offset limit = function
     | [] -> []
     | binding::l ->
       if offset > 0 then aux (offset-1) limit l
-      else if limit > 0 then binding :: aux offset (limit-1) l
+      else if limit > 0 then begin
+	Array.iter
+	  (function
+	    | Some t -> lexicon_enqueue_term t
+	    | None -> ())
+	  binding;
+	binding :: aux offset (limit-1) l end
       else []
   in
-  { results with bindings = aux offset limit results.bindings }
+  let partial_bindings = aux offset limit results.bindings in
+  config.class_lexicon#sync (fun () ->
+    config.entity_lexicon#sync (fun () ->
+      k { results with bindings = partial_bindings }))
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   let open Sparql_endpoint in
@@ -29,9 +44,6 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   with Not_found ->
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
-
-let cmp_index_elt = fun (x1,f1) (x2,f2) -> Pervasives.compare (f2,x1) (f1,x2)
-let cmp_index_elt_rev = fun (x1,f1) (x2,f2) -> Pervasives.compare (f1,x2) (f2,x1)
 
 let index_of_results_column (var : Rdf.var) results : Rdf.term index =
   let open Sparql_endpoint in
@@ -53,7 +65,7 @@ let index_of_results_column (var : Rdf.var) results : Rdf.term index =
       Hashtbl.fold
 	(fun term cpt res -> (term,!cpt)::res)
 	ht [] in
-    List.sort cmp_index_elt_rev index
+    index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
     []
@@ -80,11 +92,6 @@ let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : 
 	      (x, count)::res)
 	[] results.bindings in
     index
-(*
-    List.sort
-      (fun (_,f1) (_,f2) -> Pervasives.compare f1 f2)
-      index
-*)
   with Not_found ->
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     []
@@ -196,7 +203,7 @@ object (self)
 
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
-  method results_page offset limit = page_of_results offset limit results
+  method results_page offset limit k = page_of_results offset limit results k
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
@@ -234,21 +241,18 @@ object (self)
 	!ref_index
       | _ -> []
 
-  method index_terms =
-    List.rev_map
-      (fun (t,freq) -> (Lisql.IncrTerm t, freq))
-      focus_term_index
+  method index_terms (k : Lisql.increment index -> unit) =
+    let incr_index =
+      List.rev_map
+	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, freq))
+	focus_term_index in
+    config.entity_lexicon#sync (fun () ->
+      config.class_lexicon#sync (fun () ->
+	k incr_index))
 
   method ajax_index_terms_init constr elt (k : Lisql.increment index -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
-      let list_term =
-	List.sort
-	  (fun t1 t2 ->
-	    Pervasives.compare (* TODO: more efficient and correct way? *)
-	      (String.length (Rdf.string_of_term t2), t2)
-	      (String.length (Rdf.string_of_term t1), t1))
-	  list_term in
       let index =
 	List.fold_left
 	  (fun res t -> (Lisql.IncrTerm t, 1) :: res)
@@ -272,17 +276,18 @@ object (self)
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI c -> (Lisql.IncrType c, 1) :: res
+	    | Rdf.URI c -> config.class_lexicon#enqueue c; (Lisql.IncrType c, 1) :: res
 	    | _ -> res)
 	  index list_class in
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI p -> (Lisql.IncrRel (p,Lisql.Fwd), 1) :: (Lisql.IncrRel (p,Lisql.Bwd), 1) :: res
+	    | Rdf.URI p -> config.property_lexicon#enqueue p; (Lisql.IncrRel (p,Lisql.Fwd), 1) :: (Lisql.IncrRel (p,Lisql.Bwd), 1) :: res
 	    | _ -> res)
 	  index list_prop in
-      let index = List.sort cmp_index_elt index in
-      k index
+      config.class_lexicon#sync (fun () ->
+	config.property_lexicon#sync (fun () ->
+	  k index))
     in
     let sparql_class =
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
@@ -323,16 +328,18 @@ object (self)
 
   method ajax_index_properties ~max_classes ~max_properties constr elt (k : Lisql.increment index -> unit) =
     let process results_a results_has results_isof =
-      let index_a = index_incr_of_index_term_uri (fun c -> Lisql.IncrType c)
+      let index_a = index_incr_of_index_term_uri (fun c -> config.class_lexicon#enqueue c; Lisql.IncrType c)
 	(index_of_results_column "class" results_a) in (* increasing *)
-      let index_has = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Fwd))
+      let index_has = index_incr_of_index_term_uri (fun p -> config.property_lexicon#enqueue p; Lisql.IncrRel (p,Lisql.Fwd))
 	(index_of_results_column "prop" results_has) in (* increasing *)
-      let index_isof = index_incr_of_index_term_uri (fun p -> Lisql.IncrRel (p,Lisql.Bwd))
+      let index_isof = index_incr_of_index_term_uri (fun p -> config.property_lexicon#enqueue p; Lisql.IncrRel (p,Lisql.Bwd))
 	(index_of_results_column "prop" results_isof) in (* increasing *)
-      let index = List.merge cmp_index_elt index_a (List.merge cmp_index_elt index_has index_isof) in
+      let index = index_a @ index_has @ index_isof in
       let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, 1) :: index in
       let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, 1) :: index in
-      k index
+      config.class_lexicon#sync (fun () ->
+	config.property_lexicon#sync (fun () ->
+	  k index))
     in
     let ajax_intent () =
       match query_class_opt, query_prop_has_opt, query_prop_isof_opt with

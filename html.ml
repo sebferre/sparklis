@@ -160,45 +160,48 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
-let html_increment_frequency focus (state : state) (incr,freq) =
+let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
   let key = state#dico_incrs#add incr in
-  let text =
-    html_of_nl_xml state
-      (Lisql2nl.xml_incr state#id_labelling focus incr) in
-  let title_opt =
+  let xml = Lisql2nl.xml_incr state#id_labelling focus incr in
+  let text = Lisql2nl.word_text_content (Lisql2nl.word_of_incr incr) in
+  let html = html_of_nl_xml state xml in
+  let rank, title_opt =
     match incr with
-      | IncrTerm _ -> None
-      | IncrId _ -> None
-      | IncrType _ -> None
-      | IncrRel _ -> None
-      | IncrTriple _ -> None
-      | IncrTriplify -> Some "Adds a focus on the property to refine it"
-      | IncrIs -> None
-      | IncrAnd -> None
-      | IncrOr -> Some "Insert an alternative to the current focus"
-      | IncrMaybe -> Some "Make the current focus optional"
-      | IncrNot -> Some "Apply negation to the current focus"
-      | IncrUnselect -> Some "Hide the focus column in the table of results"
-      | IncrAggreg _ -> Some "Aggregate the focus column in the table of results, for each solution on other columns"
-      | IncrOrder Highest -> Some "Sort the focus column in decreasing order"
-      | IncrOrder Lowest -> Some "Sort the focus column in increasing order"
-      | IncrOrder _ -> None in
-  let text_freq =
+      | IncrTerm _ -> 2, None
+      | IncrId _ -> 1, None
+      | IncrType _ -> 4, None
+      | IncrRel _ -> 5, None
+      | IncrTriple _ -> 3, None
+      | IncrTriplify -> 6, Some "Adds a focus on the property to refine it"
+      | IncrIs -> 7, None
+      | IncrAnd -> 8, None
+      | IncrOr -> 9, Some "Insert an alternative to the current focus"
+      | IncrMaybe -> 10, Some "Make the current focus optional"
+      | IncrNot -> 11, Some "Apply negation to the current focus"
+      | IncrUnselect -> 14, Some "Hide the focus column in the table of results"
+      | IncrAggreg _ -> 15, Some "Aggregate the focus column in the table of results, for each solution on other columns"
+      | IncrOrder Highest -> 12, Some "Sort the focus column in decreasing order"
+      | IncrOrder Lowest -> 13, Some "Sort the focus column in increasing order"
+      | IncrOrder _ -> 12, None in
+  let html_freq =
     if freq = 1
     then ""
     else " [" ^ string_of_int freq ^ "]" in
-  html_span ~id:key ~classe:"increment" ?title:title_opt (text ^ text_freq)
+  freq, rank, String.lowercase text, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lisql.increment Lis.index) =
+  let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
+  let sorted_index = List.sort (fun (f1,r1,t1,_) (f2,r2,t2,_) -> Pervasives.compare (f2,r1,t1) (f1,r2,t2)) enriched_index in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
-    (fun incr_freq ->
+    (fun (_freq,_rank,_text,html) ->
       Buffer.add_string buf "<li>";
-      Buffer.add_string buf (html_increment_frequency focus state incr_freq);
+      Buffer.add_string buf html;
       Buffer.add_string buf "</li>")
-    index;
+    sorted_index;
+
   Buffer.add_string buf "</ul>";
   Buffer.contents buf
 

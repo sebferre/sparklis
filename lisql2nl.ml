@@ -1,5 +1,6 @@
 
 open Lisql
+open Config
 
 (* NL generation from focus *)
 
@@ -14,6 +15,18 @@ type word =
   | `Prop of Rdf.uri * string
   | `Op of string
   | `DummyFocus ]
+
+let word_text_content = function
+  | `Thing -> "thing"
+  | `Relation -> "relation"
+  | `Entity (uri,s) -> s
+  | `Literal s -> s
+  | `TypedLiteral (s, dt) -> s ^ " (" ^ dt ^ ")"
+  | `Blank id -> id
+  | `Class (uri,s) -> s
+  | `Prop (uri,s) -> s
+  | `Op s -> s
+  | `DummyFocus -> ""
 
 type np_label =
   [ `The of int option * ng_label ]
@@ -99,20 +112,50 @@ let np_of_literal l = np_of_word (`Literal l)
 
 (* verbalization of terms, classes, properties *)
 
-let word_of_entity uri = `Entity (uri, Lexicon.name_of_uri_entity uri)
-let word_of_class uri = `Class (uri, Lexicon.name_of_uri_concept uri)
-let word_syntagm_of_property uri = 
-  let synt, name = Lexicon.syntagm_name_of_uri_property uri in
+let word_of_entity uri = `Entity (uri, config.entity_lexicon#info uri)
+let word_of_class uri = `Class (uri, config.class_lexicon#info uri)
+let word_syntagm_of_property uri =
+  let synt, name = config.property_lexicon#info uri in
   `Prop (uri, name), synt
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.name_of_uri_concept dt)
+  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, config.class_lexicon#info dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
+
+let word_of_aggreg = function
+  | NumberOf -> `Op "number"
+  | ListOf -> `Op "list"
+  | Total -> `Op "total"
+  | Average -> `Op "average"
+  | Maximum -> `Op "maximum"
+  | Minimum -> `Op "minimum"
+
+let word_of_order = function
+  | Unordered -> `Op ""
+  | Highest -> `Op "highest"
+  | Lowest -> `Op "lowest"
+
+let word_of_incr = function
+  | IncrTerm t -> word_of_term t
+  | IncrId id -> `Thing
+  | IncrType c -> word_of_class c
+  | IncrRel (p,_) -> fst (word_syntagm_of_property p)
+  | IncrTriple _ -> `Relation
+  | IncrTriplify -> `Relation
+  | IncrIs -> `Op "is"
+  | IncrAnd -> `Op "and"
+  | IncrOr -> `Op "or"
+  | IncrMaybe -> `Op "optionally"
+  | IncrNot -> `Op "not"
+  | IncrUnselect -> `Op "any"
+  | IncrAggreg g -> word_of_aggreg g
+  | IncrOrder o -> word_of_order o
+
 
 (* verbalization of IDs *)
 
@@ -666,6 +709,20 @@ and node =
   | DeleteCurrentFocus
   | DeleteIncr
 
+let rec xml_text_content l =
+  String.concat " " (List.map xml_node_text_content l)
+and xml_node_text_content = function
+  | Kwd s -> s
+  | Word w -> word_text_content w
+  | Suffix (x,suf) -> xml_text_content x ^ suf
+  | Enum (sep, xs) -> String.concat sep (List.map xml_text_content xs)
+  | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content xsep ^ " ") (List.map xml_text_content xs)
+  | Focus (foc,x) -> xml_text_content x
+  | Highlight x -> xml_text_content x
+  | Suspended x -> xml_text_content x
+  | DeleteCurrentFocus -> ""
+  | DeleteIncr -> ""
+
 let rec xml_np_label (`The (k_opt, ng) : np_label) =
   let xml_ng = xml_ng_label ng in
   let nl_rank =
@@ -906,5 +963,3 @@ let xml_incr ~id_labelling (focus : focus) = function
   | IncrUnselect -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Unselect,Unordered))
   | IncrAggreg g -> xml_np (np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
   | IncrOrder order -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Select,order))
-
-

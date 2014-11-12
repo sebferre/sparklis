@@ -2,22 +2,7 @@
 open Js
 open Jsutils
 open Html
-
-(* configuration *)
-
-type config =
-    { mutable max_results : int;
-      mutable max_classes : int;
-      mutable max_properties : int;
-      mutable logging : bool;
-    }
-
-let config =
-  { max_results = 200;
-    max_classes = 200;
-    max_properties = 1000;
-    logging = true;
-  }
+open Config
 
 (* logging utilities *)
 
@@ -236,24 +221,25 @@ object (self)
       if lis#results_dim = 0 then begin
 	elt_results##style##display <- string "none" end
       else begin
-	elt_results##style##display <- string "block";
-	jquery_set_innerHTML "#list-results"
-	  (html_table_of_results html_state
-	     ~first_rank:(offset+1)
-	     ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> Some v | _ -> None)
-	     (lis#results_page offset limit));
+	lis#results_page offset limit (fun results_page ->
+	  elt_results##style##display <- string "block";
+	  jquery_set_innerHTML "#list-results"
+	    (html_table_of_results html_state
+	       ~first_rank:(offset+1)
+	       ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> Some v | _ -> None)
+	       results_page));
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
 	    (let nb = lis#results_nb in
 	     if nb = 0
 	     then "No results"
 	     else
-		let a, b = offset+1, min nb (offset+limit) in
-		if a = 1 && b = nb && nb < config.max_results then
-		  string_of_int b ^ (if b=1 then " result" else " results")
-		else
-		  "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		    " of " ^ string_of_int nb ^ (if nb < config.max_results then "" else "+")));
+	       let a, b = offset+1, min nb (offset+limit) in
+	       if a = 1 && b = nb && nb < config.max_results then
+		 string_of_int b ^ (if b=1 then " result" else " results")
+	       else
+		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		   " of " ^ string_of_int nb ^ (if nb < config.max_results then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -282,16 +268,18 @@ object (self)
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))))))
 
   method private refresh_term_increments =
-    let index = lis#index_ids @ lis#index_terms in
-    jquery "#list-terms" (fun elt ->
-      elt##innerHTML <- string
-	(html_index lis#focus html_state index);
-      stop_links_propagation_from elt;
-      jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
-    jquery_set_innerHTML "#count-terms"
-      (html_count_unit (List.length index) config.max_results "entity" "entities")
+    lis#index_terms
+      (fun index_terms ->
+	let index = lis#index_ids @ index_terms in
+	jquery "#list-terms" (fun elt ->
+	  elt##innerHTML <- string
+	    (html_index lis#focus html_state index);
+	  stop_links_propagation_from elt;
+	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	    navigation#update_focus ~push_in_history:true
+	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
+	jquery_set_innerHTML "#count-terms"
+	  (html_count_unit (List.length index) config.max_results "entity" "entities"))
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -418,8 +406,21 @@ object (self)
       let there_is_match = ref false in
       jquery_all_from elt_list "li" (fun elt_li ->
 	jquery_from elt_li ".increment" (fun elt_incr ->
-	  let incr = html_state#dico_incrs#get (to_string (elt_incr##id)) in
 	  let t =
+	    let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
+	      (* only works if a single element *)
+	      (fun () -> to_string (elt_incr##innerHTML))
+	      (fun elt -> to_string (elt##innerHTML)) in
+	    Rdf.PlainLiteral (s, "") in
+(*
+	  let t =
+	    let textContent = elt_incr##textContent in (* ##textContent only available since js_of_ocaml v2.4 *)
+	    let text = Opt.case textContent (fun () -> "") to_string in
+	    Rdf.PlainLiteral (text, "") in
+*)
+(*
+	  let t =
+	    let incr = html_state#dico_incrs#get (to_string (elt_incr##id)) in
 	    match Lisql.term_of_increment incr with
 	      | Some t -> t
 	      | None ->
@@ -427,6 +428,7 @@ object (self)
 		  (fun () -> to_string (elt_incr##innerHTML))
 		  (fun elt -> to_string (elt##innerHTML)) in
 		Rdf.PlainLiteral (s, "") in
+*)
 	  if matcher t
 	  then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	  else elt_li##style##display <- string "none"));
@@ -544,6 +546,39 @@ object (self)
 
 end
 
+(* configuration changes *)
+
+let change_lexicon endpoint (kind : [`E | `C]) =
+  let property = ref "" in
+  let lang = ref None in
+  jquery_select (match kind with `E -> "#config-label-entity-select" | `C -> "#config-label-concept-select")
+    (fun select -> property := to_string select##value);
+  if !property = "other" then
+    jquery_input (match kind with `E -> "#config-label-entity-input" | `C -> "#config-label-concept-input")
+      (fun input -> property := to_string input##value);
+  if !property <> "" then
+    jquery_input (match kind with `E -> "#config-label-entity-input-lang" | `C -> "#config-label-concept-input-lang")
+      (fun input -> let l = to_string input##value in if l <> "" then lang := Some l);
+(*  Firebug.console##log(string ("changing " ^ (match kind with `E -> "entity" | `C -> "concept") ^ " lexicon: " ^ !property ^ (match !lang with None -> "" | Some l -> " (" ^ l ^ ")"))); *)
+  match kind with
+    | `E -> 
+      config.entity_lexicon <-
+	if !property = ""
+	then Lexicon.default_entity_lexicon
+	else Lexicon.sparql_entity_lexicon ~endpoint ~property:!property ?language:!lang ();
+    | `C ->
+      config.class_lexicon <-
+	(if !property = ""
+	then Lexicon.default_class_lexicon
+	else Lexicon.sparql_class_lexicon ~endpoint ~property:!property ?language:!lang ());
+      config.property_lexicon <-
+	(if !property = ""
+	then Lexicon.default_property_lexicon
+	else Lexicon.sparql_property_lexicon ~endpoint ~property:!property ?language:!lang ())
+
+let change_entity_lexicon endpoint = change_lexicon endpoint `E
+let change_concept_lexicon endpoint = change_lexicon endpoint `C
+
 (* main *)
 
 let _ =
@@ -585,6 +620,8 @@ let _ =
 	  |  _ -> ()
       with _ -> () in
     let history = new history !default_endpoint !default_focus in
+    change_entity_lexicon history#present#lis#endpoint;
+    change_concept_lexicon history#present#lis#endpoint;
 
     (* setting event callbacks *)
     jquery "#home" (onclick (fun elt ev -> history#home));
@@ -622,6 +659,18 @@ let _ =
       config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value));
     jquery_input "#input-max-properties" (oninput (fun input ev ->
       config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value));
+    jquery_select "#config-label-entity-select" (onchange (fun select ev ->
+      if to_string (select##value) <> "other" then change_entity_lexicon history#present#lis#endpoint));
+    jquery_input "#config-label-entity-input" (oninput (fun input ev ->
+      change_entity_lexicon history#present#lis#endpoint));
+    jquery_input "#config-label-entity-input-lang" (oninput (fun input ev ->
+      change_entity_lexicon history#present#lis#endpoint));
+    jquery_select "#config-label-concept-select" (onchange (fun select ev ->
+      if to_string (select##value) <> "other" then change_concept_lexicon history#present#lis#endpoint));
+    jquery_input "#config-label-concept-input" (oninput (fun input ev ->
+      change_concept_lexicon history#present#lis#endpoint));
+    jquery_input "#config-label-concept-input-lang" (oninput (fun input ev ->
+      change_concept_lexicon history#present#lis#endpoint));
     jquery_input "#input-logging" (onclick (fun input ev ->
       config.logging <- to_bool input##checked));
 
