@@ -112,7 +112,6 @@ let sparql_lexicon
 		    :: ( match language with
 		      | None -> []
 		      | Some lang -> [Sparql.filter (Sparql.expr_comp "=" (Sparql.expr_func "lang" (Sparql.var l)) (Sparql.string lang))] ))) ]) in
-    (*Firebug.console##log(Js.string sparql);*)
     let pool = new Sparql_endpoint.ajax_pool in
     Sparql_endpoint.ajax_in [] pool endpoint sparql
       (fun results ->

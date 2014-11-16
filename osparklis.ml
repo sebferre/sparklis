@@ -9,7 +9,7 @@ open Config
 let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
 
-let logging_on () = not is_dev_version && config.logging
+let logging_on () = not is_dev_version && config#logging
 
 let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
   Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
@@ -235,11 +235,11 @@ object (self)
 	     then "No results"
 	     else
 	       let a, b = offset+1, min nb (offset+limit) in
-	       if a = 1 && b = nb && nb < config.max_results then
+	       if a = 1 && b = nb && nb < config#max_results then
 		 string_of_int b ^ (if b=1 then " result" else " results")
 	       else
 		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " of " ^ string_of_int nb ^ (if nb < config.max_results then "" else "+")));
+		   " of " ^ string_of_int nb ^ (if nb < config#max_results then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -279,7 +279,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
 	jquery_set_innerHTML "#count-terms"
-	  (html_count_unit (List.length index) config.max_results "entity" "entities"))
+	  (html_count_unit (List.length index) config#max_results "entity" "entities"))
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -294,14 +294,14 @@ object (self)
 
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
-      lis#ajax_index_properties ~max_classes:config.max_classes ~max_properties:config.max_properties property_constr elt
+      lis#ajax_index_properties property_constr elt
 	(fun index ->
 	  elt##innerHTML <- string (html_index lis#focus html_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) config.max_properties "concept" "concepts")))
+	    (html_count_unit (List.length index) config#max_properties "concept" "concepts")))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
@@ -331,7 +331,7 @@ object (self)
 	( match lis#focus_term_list with
 	  | [] -> elt_incrs##style##display <- string "none"
 	  | _::_ -> elt_incrs##style##display <- string "block" );
-	lis#ajax_sparql_results ~max_results:config.max_results term_constr [elt_incrs; elt_res]
+	lis#ajax_sparql_results term_constr [elt_incrs; elt_res]
 	  (function
 	    | None ->
 	      jquery_set_innerHTML "#sparql-query" "";
@@ -485,7 +485,8 @@ object (self)
   val mutable present : place = new place endpoint foc
   val mutable future : place list = []
 
-  initializer present#set_navigation (self :> navigation)
+  initializer
+    present#set_navigation (self :> navigation)
 
   method present : place = present
 
@@ -504,6 +505,7 @@ object (self)
   method change_endpoint url =
     Sparql.prologue#reset;
     present#lis#abort_all_ajax;
+    config#set_endpoint url;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
@@ -546,39 +548,6 @@ object (self)
 
 end
 
-(* configuration changes *)
-
-let change_lexicon endpoint (kind : [`E | `C]) =
-  let property = ref "" in
-  let lang = ref None in
-  jquery_select (match kind with `E -> "#config-label-entity-select" | `C -> "#config-label-concept-select")
-    (fun select -> property := to_string select##value);
-  if !property = "other" then
-    jquery_input (match kind with `E -> "#config-label-entity-input" | `C -> "#config-label-concept-input")
-      (fun input -> property := to_string input##value);
-  if !property <> "" then
-    jquery_input (match kind with `E -> "#config-label-entity-input-lang" | `C -> "#config-label-concept-input-lang")
-      (fun input -> let l = to_string input##value in if l <> "" then lang := Some l);
-(*  Firebug.console##log(string ("changing " ^ (match kind with `E -> "entity" | `C -> "concept") ^ " lexicon: " ^ !property ^ (match !lang with None -> "" | Some l -> " (" ^ l ^ ")"))); *)
-  match kind with
-    | `E -> 
-      config.entity_lexicon <-
-	if !property = ""
-	then Lexicon.default_entity_lexicon
-	else Lexicon.sparql_entity_lexicon ~endpoint ~property:!property ?language:!lang ();
-    | `C ->
-      config.class_lexicon <-
-	(if !property = ""
-	then Lexicon.default_class_lexicon
-	else Lexicon.sparql_class_lexicon ~endpoint ~property:!property ?language:!lang ());
-      config.property_lexicon <-
-	(if !property = ""
-	then Lexicon.default_property_lexicon
-	else Lexicon.sparql_property_lexicon ~endpoint ~property:!property ?language:!lang ())
-
-let change_entity_lexicon endpoint = change_lexicon endpoint `E
-let change_concept_lexicon endpoint = change_lexicon endpoint `C
-
 (* main *)
 
 let _ =
@@ -586,15 +555,6 @@ let _ =
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    (* initializing configuration from HTML *)
-    jquery_input "#input-max-results" (fun input ->
-      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value);
-    jquery_input "#input-max-classes" (fun input ->
-      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value);
-    jquery_input "#input-max-properties" (fun input ->
-      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value);
-    jquery_input "#input-logging" (fun input ->
-      config.logging <- to_bool input##checked);
     (* defining navigation history *)
     let default_endpoint = ref "" in
     let default_focus = ref Lisql.factory#home_focus in
@@ -619,9 +579,11 @@ let _ =
 	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
 	  |  _ -> ()
       with _ -> () in
+    (* initializing configuration from HTML *)
+    config#set_endpoint !default_endpoint;
+    config#init;
+    (* creating and initializing history *)
     let history = new history !default_endpoint !default_focus in
-    change_entity_lexicon history#present#lis#endpoint;
-    change_concept_lexicon history#present#lis#endpoint;
 
     (* setting event callbacks *)
     jquery "#home" (onclick (fun elt ev -> history#home));
@@ -652,27 +614,8 @@ let _ =
 	  if to_string panel##style##display = "none"
 	  then "block"
 	  else "none" in
-	panel##style##display <- string dis)));
-    jquery_input "#input-max-results" (oninput (fun input ev ->
-      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value));
-    jquery_input "#input-max-classes" (oninput (fun input ev ->
-      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value));
-    jquery_input "#input-max-properties" (oninput (fun input ev ->
-      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value));
-    jquery_select "#config-label-entity-select" (onchange (fun select ev ->
-      if to_string (select##value) <> "other" then change_entity_lexicon history#present#lis#endpoint));
-    jquery_input "#config-label-entity-input" (oninput (fun input ev ->
-      change_entity_lexicon history#present#lis#endpoint));
-    jquery_input "#config-label-entity-input-lang" (oninput (fun input ev ->
-      change_entity_lexicon history#present#lis#endpoint));
-    jquery_select "#config-label-concept-select" (onchange (fun select ev ->
-      if to_string (select##value) <> "other" then change_concept_lexicon history#present#lis#endpoint));
-    jquery_input "#config-label-concept-input" (oninput (fun input ev ->
-      change_concept_lexicon history#present#lis#endpoint));
-    jquery_input "#config-label-concept-input-lang" (oninput (fun input ev ->
-      change_concept_lexicon history#present#lis#endpoint));
-    jquery_input "#input-logging" (onclick (fun input ev ->
-      config.logging <- to_bool input##checked));
+	panel##style##display <- string dis;
+	if dis = "none" then config#if_has_changed (fun () -> history#present#refresh))));
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
