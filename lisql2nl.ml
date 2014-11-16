@@ -179,16 +179,12 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = fun
       match synt, m with
 	| `Noun, Fwd
 	| `InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
-	| `Noun, _
-	| `InvNoun, _ -> [(v, `Word w)]
 	| _ -> [] in
     let ls_np, lab = labelling_s1 ~labels:ls_np np in
     let ls =
       match synt, m with
 	| `Noun, Bwd
 	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
-	| `Noun, _
-	| `InvNoun, _ -> [(v, `Word w)]
 	| _ -> [] in
     ls, lab
   | Triple (arg,np1,np2) ->
