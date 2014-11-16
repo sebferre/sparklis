@@ -160,10 +160,11 @@ object (self)
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
 
   method show_permalink : unit =
+    let args = config#get_permalink in
     let args =
       if self#is_home
-      then [("endpoint", lis#endpoint)]
-      else [("endpoint", lis#endpoint); ("query", Permalink.of_query lis#query)] in
+      then ("endpoint", lis#endpoint) :: args
+      else ("endpoint", lis#endpoint) :: ("query", Permalink.of_query lis#query) :: args in
     try
       let permalink_url =
 	match Url.Current.get () with
@@ -568,7 +569,7 @@ let _ =
 	  | [] -> []
 	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
-      try
+      (try
 	let url = List.assoc "endpoint" args in
 	default_endpoint := url;
 	try
@@ -578,10 +579,9 @@ let _ =
 	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
 	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
 	  |  _ -> ()
-      with _ -> () in
-    (* initializing configuration from HTML *)
-    config#set_endpoint !default_endpoint;
-    config#init;
+      with _ -> ());
+      (* initializing configuration from HTML *)
+      config#init !default_endpoint args in
     (* creating and initializing history *)
     let history = new history !default_endpoint !default_focus in
 
