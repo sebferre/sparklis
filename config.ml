@@ -102,7 +102,7 @@ object (self)
   method reset = self#set_input init_v
 end
 
-class ['a,'h] lexicon_input ~(key : string)
+class ['lexicon] lexicon_input ~(key : string)
   ~select_selector ~input_selector ~lang_input_selector
   ~default_lexicon ~custom_lexicon () =
   let other = "other" in
@@ -175,7 +175,7 @@ object (self)
       self#set_select_property_lang s p l
     with _ -> ()
 
-  method value : 'a Lexicon.lexicon = current_lexicon
+  method value : 'lexicon = current_lexicon
 
   method init =
     jquery_select select_selector (fun select ->
@@ -250,6 +250,12 @@ let config =
       (max_results :> config_input); (max_classes :> config_input); (max_properties :> config_input);
       (entity_lexicon :> config_input); (class_lexicon :> config_input); (property_lexicon :> config_input) ] in
 object (self)
+(*
+  val mutable inputs : config_input list = []
+
+  method add_input input = inputs <- input :: inputs
+*)
+
   method logging = logging#value
   method max_results = max_results#value
   method max_classes = max_classes#value
