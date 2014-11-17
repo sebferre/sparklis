@@ -226,11 +226,18 @@ object
     elts <- []
 end
 
+let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#input-caching" ~default:true ()
+
 let cache =
 object
   val ht : (string * string, results) Hashtbl.t = Hashtbl.create 101
-  method replace endpoint sparql results = Hashtbl.replace ht (endpoint,sparql) results
-  method lookup endpoint sparql = try Some (Hashtbl.find ht (endpoint,sparql)) with _ -> None
+  method replace endpoint sparql results =
+    if config_caching#value
+    then Hashtbl.replace ht (endpoint,sparql) results
+  method lookup endpoint sparql =
+    if config_caching#value
+    then try Some (Hashtbl.find ht (endpoint,sparql)) with _ -> None
+    else None
   method clear = Hashtbl.clear ht
 end
 

@@ -1,6 +1,5 @@
 
 open Lisql
-open Config
 
 (* NL generation from focus *)
 
@@ -112,16 +111,16 @@ let np_of_literal l = np_of_word (`Literal l)
 
 (* verbalization of terms, classes, properties *)
 
-let word_of_entity uri = `Entity (uri, config#entity_lexicon#info uri)
-let word_of_class uri = `Class (uri, config#class_lexicon#info uri)
+let word_of_entity uri = `Entity (uri, Lexicon.config_entity_lexicon#value#info uri)
+let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri)
 let word_syntagm_of_property uri =
-  let synt, name = config#property_lexicon#info uri in
+  let synt, name = Lexicon.config_property_lexicon#value#info uri in
   `Prop (uri, name), synt
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, config#class_lexicon#info dt)
+  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.config_class_lexicon#value#info dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)

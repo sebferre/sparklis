@@ -2,14 +2,15 @@
 open Js
 open Jsutils
 open Html
-open Config
 
 (* logging utilities *)
+
+let config_logging = new Config.boolean_input ~key:"logging" ~input_selector:"#input-logging" ~default:true ()
 
 let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
 
-let logging_on () = not is_dev_version && config#logging
+let logging_on () = not is_dev_version && config_logging#value
 
 let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
   Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
@@ -135,6 +136,42 @@ let compile_constr constr : Rdf.term -> bool =
 	| Rdf.TypedLiteral (s,dt) -> matches dt re
 	| _ -> false)
 
+(* configuration *)
+
+let config =
+  let config_inputs : Config.input list =
+    [ (Lis.config_max_results :> Config.input);
+      (Lis.config_max_classes :> Config.input);
+      (Lis.config_max_properties :> Config.input);
+      (Lexicon.config_entity_lexicon :> Config.input);
+      (Lexicon.config_class_lexicon :> Config.input);
+      (Lexicon.config_property_lexicon :> Config.input);
+      (Sparql_endpoint.config_caching :> Config.input);
+      (config_logging :> Config.input); ] in
+object (self)
+  method set_endpoint (endpoint : string) : unit = List.iter (fun input -> input#set_endpoint endpoint) config_inputs
+
+  method get_permalink : (string * string) list =
+    List.concat (List.map (fun input -> input#get_permalink) config_inputs)
+  method set_permalink (args : (string * string) list) : unit =
+    List.iter (fun input -> input#set_permalink args) config_inputs
+
+  method if_has_changed (f : unit -> unit) : unit =
+    let has_changed = List.exists (fun input -> input#has_changed) config_inputs in
+    if has_changed then begin
+      List.iter (fun input -> input#reset_changed) config_inputs;
+      f ()
+    end
+
+  method init endpoint args =
+    self#set_endpoint endpoint;
+    List.iter (fun input -> input#init) config_inputs;
+    self#set_permalink args;
+    jquery "#config-reset-button" (onclick (fun elt ev ->
+      List.iter (fun input -> input#reset) config_inputs));
+    jquery "#button-clear-cache" (onclick (fun elt ev -> Sparql_endpoint.cache#clear))
+end
+
 (* navigation place and history *)
 
 class navigation =
@@ -236,11 +273,11 @@ object (self)
 	     then "No results"
 	     else
 	       let a, b = offset+1, min nb (offset+limit) in
-	       if a = 1 && b = nb && nb < config#max_results then
+	       if a = 1 && b = nb && nb < Lis.config_max_results#value then
 		 string_of_int b ^ (if b=1 then " result" else " results")
 	       else
 		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " of " ^ string_of_int nb ^ (if nb < config#max_results then "" else "+")));
+		   " of " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -280,7 +317,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
 	jquery_set_innerHTML "#count-terms"
-	  (html_count_unit (List.length index) config#max_results "entity" "entities"))
+	  (html_count_unit (List.length index) Lis.config_max_results#value "entity" "entities"))
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -302,7 +339,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) config#max_properties "concept" "concepts")))
+	    (html_count_unit (List.length index) Lis.config_max_properties#value "concept" "concepts")))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->

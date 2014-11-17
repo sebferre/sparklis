@@ -1,14 +1,19 @@
 
 open Js
-open Config
 
 type 'a index = ('a * int) list
+
+(* configuration *)
+
+let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
+let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
+let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
 
 (* extraction of the extension and indexes *)
 
 let lexicon_enqueue_term = function
-  | Rdf.URI uri -> config#entity_lexicon#enqueue uri
-  | Rdf.TypedLiteral (_,dt) -> config#class_lexicon#enqueue dt
+  | Rdf.URI uri -> Lexicon.config_entity_lexicon#value#enqueue uri
+  | Rdf.TypedLiteral (_,dt) -> Lexicon.config_class_lexicon#value#enqueue dt
   | _ -> ()
 
 let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.results -> unit) : unit =
@@ -27,8 +32,8 @@ let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.re
       else []
   in
   let partial_bindings = aux offset limit results.bindings in
-  config#class_lexicon#sync (fun () ->
-    config#entity_lexicon#sync (fun () ->
+  Lexicon.config_class_lexicon#value#sync (fun () ->
+    Lexicon.config_entity_lexicon#value#sync (fun () ->
       k { results with bindings = partial_bindings }))
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
@@ -170,7 +175,7 @@ object (self)
 	some_focus_term_is_blank <- sftib;
 	k None
       | Some query ->
-	let sparql = query ~constr:term_constr ~limit:config#max_results in
+	let sparql = query ~constr:term_constr ~limit:config_max_results#value in
 	Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
@@ -246,8 +251,8 @@ object (self)
       List.rev_map
 	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, freq))
 	focus_term_index in
-    config#entity_lexicon#sync (fun () ->
-      config#class_lexicon#sync (fun () ->
+    Lexicon.config_entity_lexicon#value#sync (fun () ->
+      Lexicon.config_class_lexicon#value#sync (fun () ->
 	k incr_index))
 
   method ajax_index_terms_init constr elt (k : Lisql.increment index -> unit) =
@@ -263,7 +268,7 @@ object (self)
       "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
-	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config#max_results in
+	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
       (fun results_term -> process results_term)
       (fun code -> process Sparql_endpoint.empty_results)
@@ -276,17 +281,21 @@ object (self)
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI c -> config#class_lexicon#enqueue c; (Lisql.IncrType c, 1) :: res
+	    | Rdf.URI c ->
+	      Lexicon.config_class_lexicon#value#enqueue c;
+	      (Lisql.IncrType c, 1) :: res
 	    | _ -> res)
 	  index list_class in
       let index =
 	List.fold_left
 	  (fun res -> function
-	    | Rdf.URI p -> config#property_lexicon#enqueue p; (Lisql.IncrRel (p,Lisql.Fwd), 1) :: (Lisql.IncrRel (p,Lisql.Bwd), 1) :: res
+	    | Rdf.URI p ->
+	      Lexicon.config_property_lexicon#value#enqueue p;
+	      (Lisql.IncrRel (p,Lisql.Fwd), 1) :: (Lisql.IncrRel (p,Lisql.Bwd), 1) :: res
 	    | _ -> res)
 	  index list_prop in
-      config#class_lexicon#sync (fun () ->
-	config#property_lexicon#sync (fun () ->
+      Lexicon.config_class_lexicon#value#sync (fun () ->
+	Lexicon.config_property_lexicon#value#sync (fun () ->
 	  k index))
     in
     let sparql_class =
@@ -295,7 +304,7 @@ object (self)
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	"FILTER EXISTS { [] a ?class } " ^
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "class") constr) ^
-	" } LIMIT " ^ string_of_int config#max_classes in
+	" } LIMIT " ^ string_of_int config_max_classes#value in
     let sparql_prop =
       "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
@@ -303,7 +312,7 @@ object (self)
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "prop") constr) ^
-	" } LIMIT " ^ string_of_int config#max_properties in
+	" } LIMIT " ^ string_of_int config_max_properties#value in
     Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
       (function
 	| [results_class; results_prop] ->
@@ -313,11 +322,11 @@ object (self)
 	    let sparql_class =
 	      "SELECT DISTINCT ?class WHERE { [] a ?class " ^
 		Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "class") constr) ^
-		" } LIMIT " ^ string_of_int config#max_classes in
+		" } LIMIT " ^ string_of_int config_max_classes#value in
 	    let sparql_prop =
 	      "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
 		Sparql.pattern_of_formula (Lisql2sparql.filter_constr (Rdf.Var "prop") constr) ^
-		" } LIMIT " ^ string_of_int config#max_properties in
+		" } LIMIT " ^ string_of_int config_max_properties#value in
 	    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	      (function
 		| [results_class; results_prop] -> process results_class results_prop
@@ -328,26 +337,35 @@ object (self)
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
     let process results_a results_has results_isof =
-      let index_a = index_incr_of_index_term_uri (fun c -> config#class_lexicon#enqueue c; Lisql.IncrType c)
+      let index_a = index_incr_of_index_term_uri
+	(fun c ->
+	  Lexicon.config_class_lexicon#value#enqueue c;
+	  Lisql.IncrType c)
 	(index_of_results_column "class" results_a) in (* increasing *)
-      let index_has = index_incr_of_index_term_uri (fun p -> config#property_lexicon#enqueue p; Lisql.IncrRel (p,Lisql.Fwd))
+      let index_has = index_incr_of_index_term_uri
+	(fun p ->
+	  Lexicon.config_property_lexicon#value#enqueue p;
+	  Lisql.IncrRel (p,Lisql.Fwd))
 	(index_of_results_column "prop" results_has) in (* increasing *)
-      let index_isof = index_incr_of_index_term_uri (fun p -> config#property_lexicon#enqueue p; Lisql.IncrRel (p,Lisql.Bwd))
+      let index_isof = index_incr_of_index_term_uri
+	(fun p -> 
+	  Lexicon.config_property_lexicon#value#enqueue p;
+	  Lisql.IncrRel (p,Lisql.Bwd))
 	(index_of_results_column "prop" results_isof) in (* increasing *)
       let index = index_a @ index_has @ index_isof in
       let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, 1) :: index in
       let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, 1) :: index in
-      config#class_lexicon#sync (fun () ->
-	config#property_lexicon#sync (fun () ->
+      Lexicon.config_class_lexicon#value#sync (fun () ->
+	Lexicon.config_property_lexicon#value#sync (fun () ->
 	  k index))
     in
     let ajax_intent () =
       match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
 	| None, None, None -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
 	| Some query_a, Some query_has, Some query_isof ->
-	  let sparql_a = query_a ~constr ~limit:config#max_classes in
-	  let sparql_has = query_has ~constr ~limit:config#max_properties in
-	  let sparql_isof = query_isof ~constr ~limit:config#max_properties in
+	  let sparql_a = query_a ~constr ~limit:config_max_classes#value in
+	  let sparql_has = query_has ~constr ~limit:config_max_properties#value in
+	  let sparql_isof = query_isof ~constr ~limit:config_max_properties#value in
 	  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	    (function
 	      | [results_a; results_has; results_isof] -> process results_a results_has results_isof
@@ -358,17 +376,17 @@ object (self)
     let ajax_extent () =
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
-	Sparql.select ~dimensions:["class"] ~limit:config#max_classes
+	Sparql.select ~dimensions:["class"] ~limit:config_max_classes#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "class") constr))) in
       let sparql_has =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index) in
-	Sparql.select ~dimensions:["prop"] ~limit:config#max_properties
+	Sparql.select ~dimensions:["prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "prop") constr))) in
       let sparql_isof =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index) in
-	Sparql.select ~dimensions:["prop"] ~limit:config#max_properties
+	Sparql.select ~dimensions:["prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr (Rdf.Var "prop") constr))) in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
