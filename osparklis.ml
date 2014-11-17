@@ -3,28 +3,14 @@ open Js
 open Jsutils
 open Html
 
-(* configuration *)
-
-type config =
-    { mutable max_results : int;
-      mutable max_classes : int;
-      mutable max_properties : int;
-      mutable logging : bool;
-    }
-
-let config =
-  { max_results = 200;
-    max_classes = 200;
-    max_properties = 1000;
-    logging = true;
-  }
-
 (* logging utilities *)
+
+let config_logging = new Config.boolean_input ~key:"logging" ~input_selector:"#input-logging" ~default:true ()
 
 let is_dev_version : bool = (* flag at TRUE if this is the dev version that is running *)
   Url.Current.path_string = "/home/ferre/prog/ajax/sparklis/osparklis.html"
 
-let logging_on () = not is_dev_version && config.logging
+let logging_on () = not is_dev_version && config_logging#value
 
 let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
   Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
@@ -150,6 +136,42 @@ let compile_constr constr : Rdf.term -> bool =
 	| Rdf.TypedLiteral (s,dt) -> matches dt re
 	| _ -> false)
 
+(* configuration *)
+
+let config =
+  let config_inputs : Config.input list =
+    [ (Lis.config_max_results :> Config.input);
+      (Lis.config_max_classes :> Config.input);
+      (Lis.config_max_properties :> Config.input);
+      (Lexicon.config_entity_lexicon :> Config.input);
+      (Lexicon.config_class_lexicon :> Config.input);
+      (Lexicon.config_property_lexicon :> Config.input);
+      (Sparql_endpoint.config_caching :> Config.input);
+      (config_logging :> Config.input); ] in
+object (self)
+  method set_endpoint (endpoint : string) : unit = List.iter (fun input -> input#set_endpoint endpoint) config_inputs
+
+  method get_permalink : (string * string) list =
+    List.concat (List.map (fun input -> input#get_permalink) config_inputs)
+  method set_permalink (args : (string * string) list) : unit =
+    List.iter (fun input -> input#set_permalink args) config_inputs
+
+  method if_has_changed (f : unit -> unit) : unit =
+    let has_changed = List.exists (fun input -> input#has_changed) config_inputs in
+    if has_changed then begin
+      List.iter (fun input -> input#reset_changed) config_inputs;
+      f ()
+    end
+
+  method init endpoint args =
+    self#set_endpoint endpoint;
+    List.iter (fun input -> input#init) config_inputs;
+    self#set_permalink args;
+    jquery "#config-reset-button" (onclick (fun elt ev ->
+      List.iter (fun input -> input#reset) config_inputs));
+    jquery "#button-clear-cache" (onclick (fun elt ev -> Sparql_endpoint.cache#clear))
+end
+
 (* navigation place and history *)
 
 class navigation =
@@ -172,13 +194,14 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable html_state = new Html.state (new Lisql2nl.lexicon [])
+  val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
 
   method show_permalink : unit =
+    let args = config#get_permalink in
     let args =
       if self#is_home
-      then [("endpoint", lis#endpoint)]
-      else [("endpoint", lis#endpoint); ("query", Permalink.of_query lis#query)] in
+      then ("endpoint", lis#endpoint) :: args
+      else ("endpoint", lis#endpoint) :: ("query", Permalink.of_query lis#query) :: args in
     try
       let permalink_url =
 	match Url.Current.get () with
@@ -211,10 +234,10 @@ object (self)
       match lis#focus_term_list with
 	| [Rdf.Var v] ->
 	  (try
-	    let id = lis#lexicon#get_var_id v in
-	    escapeHTML (lis#lexicon#get_id_label id)
+	    let id = lis#id_labelling#get_var_id v in
+	    Html.html_id html_state id
 	   with _ -> escapeHTML v (* should not happen *))
-	| [t] -> Html.html_word (Lisql2nl.word_of_term t)
+	| [t] -> Html.html_term t
 	| _ -> "" in
     jquery "#increments-focus" (fun elt ->
       elt##innerHTML <- string html_focus)
@@ -236,24 +259,25 @@ object (self)
       if lis#results_dim = 0 then begin
 	elt_results##style##display <- string "none" end
       else begin
-	elt_results##style##display <- string "block";
-	jquery_set_innerHTML "#list-results"
-	  (html_table_of_results html_state
-	     ~first_rank:(offset+1)
-	     ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> Some v | _ -> None)
-	     (lis#results_page offset limit));
+	lis#results_page offset limit (fun results_page ->
+	  elt_results##style##display <- string "block";
+	  jquery_set_innerHTML "#list-results"
+	    (html_table_of_results html_state
+	       ~first_rank:(offset+1)
+	       ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> Some v | _ -> None)
+	       results_page));
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
 	    (let nb = lis#results_nb in
 	     if nb = 0
 	     then "No results"
 	     else
-		let a, b = offset+1, min nb (offset+limit) in
-		if a = 1 && b = nb && nb < config.max_results then
-		  string_of_int b ^ (if b=1 then " result" else " results")
-		else
-		  "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		    " of " ^ string_of_int nb ^ (if nb < config.max_results then "" else "+")));
+	       let a, b = offset+1, min nb (offset+limit) in
+	       if a = 1 && b = nb && nb < Lis.config_max_results#value then
+		 string_of_int b ^ (if b=1 then " result" else " results")
+	       else
+		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		   " of " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -282,16 +306,18 @@ object (self)
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))))))
 
   method private refresh_term_increments =
-    let index = lis#index_ids @ lis#index_terms in
-    jquery "#list-terms" (fun elt ->
-      elt##innerHTML <- string
-	(html_index lis#focus html_state index);
-      stop_links_propagation_from elt;
-      jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
-    jquery_set_innerHTML "#count-terms"
-      (html_count_unit (List.length index) config.max_results "entity" "entities")
+    lis#index_terms
+      (fun index_terms ->
+	let index = lis#index_ids @ index_terms in
+	jquery "#list-terms" (fun elt ->
+	  elt##innerHTML <- string
+	    (html_index lis#focus html_state index);
+	  stop_links_propagation_from elt;
+	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
+	    navigation#update_focus ~push_in_history:true
+	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
+	jquery_set_innerHTML "#count-terms"
+	  (html_count_unit (List.length index) Lis.config_max_results#value "entity" "entities"))
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -306,14 +332,14 @@ object (self)
 
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
-      lis#ajax_index_properties ~max_classes:config.max_classes ~max_properties:config.max_properties property_constr elt
+      lis#ajax_index_properties property_constr elt
 	(fun index ->
 	  elt##innerHTML <- string (html_index lis#focus html_state index);
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) config.max_properties "concept" "concepts")))
+	    (html_count_unit (List.length index) Lis.config_max_properties#value "concept" "concepts")))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
@@ -326,7 +352,7 @@ object (self)
 	(html_count_unit (List.length index) max_int "modifier" "modifiers"))
 
   method refresh =
-    html_state <- new Html.state lis#lexicon;
+    html_state <- new Html.state lis#id_labelling;
     jquery_select "#sparql-endpoint-select" (fun select ->
       let options = select##options in
       for i = options##length - 1 downto 0 do
@@ -343,7 +369,7 @@ object (self)
 	( match lis#focus_term_list with
 	  | [] -> elt_incrs##style##display <- string "none"
 	  | _::_ -> elt_incrs##style##display <- string "block" );
-	lis#ajax_sparql_results ~max_results:config.max_results term_constr [elt_incrs; elt_res]
+	lis#ajax_sparql_results term_constr [elt_incrs; elt_res]
 	  (function
 	    | None ->
 	      jquery_set_innerHTML "#sparql-query" "";
@@ -418,8 +444,21 @@ object (self)
       let there_is_match = ref false in
       jquery_all_from elt_list "li" (fun elt_li ->
 	jquery_from elt_li ".increment" (fun elt_incr ->
-	  let incr = html_state#dico_incrs#get (to_string (elt_incr##id)) in
 	  let t =
+	    let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
+	      (* only works if a single element *)
+	      (fun () -> to_string (elt_incr##innerHTML))
+	      (fun elt -> to_string (elt##innerHTML)) in
+	    Rdf.PlainLiteral (s, "") in
+(*
+	  let t =
+	    let textContent = elt_incr##textContent in (* ##textContent only available since js_of_ocaml v2.4 *)
+	    let text = Opt.case textContent (fun () -> "") to_string in
+	    Rdf.PlainLiteral (text, "") in
+*)
+(*
+	  let t =
+	    let incr = html_state#dico_incrs#get (to_string (elt_incr##id)) in
 	    match Lisql.term_of_increment incr with
 	      | Some t -> t
 	      | None ->
@@ -427,6 +466,7 @@ object (self)
 		  (fun () -> to_string (elt_incr##innerHTML))
 		  (fun elt -> to_string (elt##innerHTML)) in
 		Rdf.PlainLiteral (s, "") in
+*)
 	  if matcher t
 	  then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	  else elt_li##style##display <- string "none"));
@@ -483,7 +523,8 @@ object (self)
   val mutable present : place = new place endpoint foc
   val mutable future : place list = []
 
-  initializer present#set_navigation (self :> navigation)
+  initializer
+    present#set_navigation (self :> navigation)
 
   method present : place = present
 
@@ -502,6 +543,7 @@ object (self)
   method change_endpoint url =
     Sparql.prologue#reset;
     present#lis#abort_all_ajax;
+    config#set_endpoint url;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
@@ -551,15 +593,6 @@ let _ =
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    (* initializing configuration from HTML *)
-    jquery_input "#input-max-results" (fun input ->
-      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value);
-    jquery_input "#input-max-classes" (fun input ->
-      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value);
-    jquery_input "#input-max-properties" (fun input ->
-      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value);
-    jquery_input "#input-logging" (fun input ->
-      config.logging <- to_bool input##checked);
     (* defining navigation history *)
     let default_endpoint = ref "" in
     let default_focus = ref Lisql.factory#home_focus in
@@ -573,7 +606,7 @@ let _ =
 	  | [] -> []
 	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
-      try
+      (try
 	let url = List.assoc "endpoint" args in
 	default_endpoint := url;
 	try
@@ -583,7 +616,10 @@ let _ =
 	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
 	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
 	  |  _ -> ()
-      with _ -> () in
+      with _ -> ());
+      (* initializing configuration from HTML *)
+      config#init !default_endpoint args in
+    (* creating and initializing history *)
     let history = new history !default_endpoint !default_focus in
 
     (* setting event callbacks *)
@@ -615,15 +651,8 @@ let _ =
 	  if to_string panel##style##display = "none"
 	  then "block"
 	  else "none" in
-	panel##style##display <- string dis)));
-    jquery_input "#input-max-results" (oninput (fun input ev ->
-      config.max_results <- integer_of_input ~min:1 ~default:config.max_results input##value));
-    jquery_input "#input-max-classes" (oninput (fun input ev ->
-      config.max_classes <- integer_of_input ~min:0 ~default:config.max_classes input##value));
-    jquery_input "#input-max-properties" (oninput (fun input ev ->
-      config.max_properties <- integer_of_input ~min:0 ~default:config.max_properties input##value));
-    jquery_input "#input-logging" (onclick (fun input ev ->
-      config.logging <- to_bool input##checked));
+	panel##style##display <- string dis;
+	if dis = "none" then config#if_has_changed (fun () -> history#present#refresh))));
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 

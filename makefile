@@ -1,5 +1,5 @@
 
-OBJ=common.cmo rdf.cmo lisql.cmo permalink.cmo sparql.cmo lisql2nl.cmo lisql2sparql.cmo jsutils.cmo sparql_endpoint.cmo lis.cmo html.cmo
+OBJ=common.cmo jsutils.cmo config.cmo rdf.cmo sparql_endpoint.cmo lisql.cmo permalink.cmo sparql.cmo lexicon.cmo lisql2nl.cmo lisql2sparql.cmo lis.cmo html.cmo
 
 osparklis: $(OBJ)
 	ocamlfind ocamlc -package js_of_ocaml -package js_of_ocaml.syntax -syntax camlp4o -linkpkg -o osparklis.byte $(OBJ) osparklis.ml

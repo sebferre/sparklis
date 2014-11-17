@@ -6,6 +6,8 @@ let alert msg = Dom_html.window##alert(string msg)
 
 let prompt msg text = Dom_html.window##prompt(string msg, string text)
 
+let firebug msg = Firebug.console##log(string msg)
+
 let jquery_from (root : #Dom_html.nodeSelector Js.t) s k =
   Opt.iter (root##querySelector(string s)) (fun elt ->
     k elt)
@@ -66,12 +68,10 @@ let escapeHTML (str : string) : string =
   ignore (div##appendChild((Dom_html.document##createTextNode(string str) :> Dom.node t)));
   to_string (div##innerHTML)
 
-let integer_of_input ?(min = min_int) ?(max = max_int) ?(default = 0) v : int =
+let integer_of_input ?(min = min_int) ?(max = max_int) input : int option =
   try
-    let n = int_of_string (to_string v) in
-    if n < min then alert ("Please enter a value greater or equal to " ^ string_of_int min);
-    if n > max then alert ("Please enter a value lesser or equal to " ^ string_of_int max);
-    n
-  with _ ->
-    alert "Please enter an integer value";
-    default
+    let n = int_of_string (to_string input##value) in
+    if n < min then None
+    else if n > max then None
+    else Some n
+  with _ -> None

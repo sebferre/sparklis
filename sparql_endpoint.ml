@@ -226,80 +226,100 @@ object
     elts <- []
 end
 
+let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#input-caching" ~default:true ()
+
+let cache =
+object
+  val ht : (string * string, results) Hashtbl.t = Hashtbl.create 101
+  method replace endpoint sparql results =
+    if config_caching#value
+    then Hashtbl.replace ht (endpoint,sparql) results
+  method lookup endpoint sparql =
+    if config_caching#value
+    then try Some (Hashtbl.find ht (endpoint,sparql)) with _ -> None
+    else None
+  method clear = Hashtbl.clear ht
+end
+
 let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
-  let fields : (string * Form.form_elt) list =
-    [("query", `String (string sparql))] in
-  let req = create () in
-  pool#add_req req;
-  List.iter pool#add_elt elts;
-  req##_open (Js.string "POST", Js.string endpoint, Js._true);
-  req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
-(*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
-  req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
-(*
-  let headers s =
+  match cache#lookup endpoint sparql with
+    | Some res -> k1 res
+    | None ->
+      let fields : (string * Form.form_elt) list =
+	[("query", `String (string sparql))] in
+      let req = create () in
+      pool#add_req req;
+      List.iter pool#add_elt elts;
+      req##_open (Js.string "POST", Js.string endpoint, Js._true);
+      req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
+  (*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
+      req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
+  (*
+    let headers s =
     Opt.case
-      (req##getResponseHeader (Js.bytestring s))
-      (fun () -> None)
-      (fun v -> Some (Js.to_string v)) in  
-*)
-  let do_check_headers () = () in
-  req##onreadystatechange <- Js.wrap_callback
-    (fun _ ->
-       (match req##readyState with
-          (* IE doesn't have the same semantics for HEADERS_RECEIVED.
-             so we wait til LOADING to check headers. See:
-             http://msdn.microsoft.com/en-us/library/ms534361(v=vs.85).aspx *)
-        | HEADERS_RECEIVED when not Dom_html.onIE -> do_check_headers ()
-        | LOADING when Dom_html.onIE -> do_check_headers ()
-        | DONE ->
-	  List.iter end_progress elts;
-	  pool#remove_req req;
-	  List.iter pool#remove_elt elts;
-	  do_check_headers ();
-	  let code = req##status in
+    (req##getResponseHeader (Js.bytestring s))
+    (fun () -> None)
+    (fun v -> Some (Js.to_string v)) in  
+  *)
+      let do_check_headers () = () in
+      req##onreadystatechange <- Js.wrap_callback
+	(fun _ ->
+	  (match req##readyState with
+        (* IE doesn't have the same semantics for HEADERS_RECEIVED.
+           so we wait til LOADING to check headers. See:
+           http://msdn.microsoft.com/en-us/library/ms534361(v=vs.85).aspx *)
+            | HEADERS_RECEIVED when not Dom_html.onIE -> do_check_headers ()
+            | LOADING when Dom_html.onIE -> do_check_headers ()
+            | DONE ->
+	      List.iter end_progress elts;
+	      pool#remove_req req;
+	      List.iter pool#remove_elt elts;
+	      do_check_headers ();
+	      let code = req##status in
 	  (* Firebug.console##log(string ("HTTP code: " ^ string_of_int code)); *)
 	  (* Firebug.console##log(req##statusText); *)
-	  ( match code / 100 with
-	    | 2 ->
-	     (*Firebug.console##log(req##responseText);*)
-	     (*	let results = results_of_json xhr.content in *)
-              let results_opt =
-                match Js.Opt.to_option (req##responseXML) with
-                  | None -> None
-                  | Some doc ->
-                    if (Js.some doc##documentElement) == Js.null
-                    then None
-                    else Some (results_of_xml doc) in
-	      ( match results_opt with
-		| None ->
-		  Firebug.console##log(string "No XML content");
-		  ()
-		| Some results -> k1 results )
-	    | 0 ->
-	      alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
-	      k0 code
-	    | 4 ->
-	      alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
-	      k0 code
-	    | 5 ->
-	      alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
-	      k0 code
-	    | _ ->
-	      alert ("Error " ^ string_of_int code);
-	      k0 code )
-        | _ -> ()));
-  let encode_fields l =
-    String.concat "&"
-      (List.map
-	 (function
-           | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
-           | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
-	 l) in
-  List.iter start_progress elts;
-  req##send(Js.some (string (encode_fields fields)))
+	      ( match code / 100 with
+		| 2 ->
+	      (*Firebug.console##log(req##responseText);*)
+	      (*	let results = results_of_json xhr.content in *)
+		  let results_opt =
+                    match Js.Opt.to_option (req##responseXML) with
+                      | None -> None
+                      | Some doc ->
+			if (Js.some doc##documentElement) == Js.null
+			then None
+			else Some (results_of_xml doc) in
+		  ( match results_opt with
+		    | None ->
+		      Firebug.console##log(string "No XML content");
+		      ()
+		    | Some results ->
+		      cache#replace endpoint sparql results;
+		      k1 results )
+		| 0 ->
+		  alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
+		  k0 code
+		| 4 ->
+		  alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		  k0 code
+		| 5 ->
+		  alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
+		  k0 code
+		| _ ->
+		  alert ("Error " ^ string_of_int code);
+		  k0 code )
+            | _ -> ()));
+      let encode_fields l =
+	String.concat "&"
+	  (List.map
+	     (function
+               | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
+               | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
+	     l) in
+      List.iter start_progress elts;
+      req##send(Js.some (string (encode_fields fields)))
 (*  req##send(Js.some (string sparql)) *)
 
 let rec ajax_list_in elts pool endpoint sparql_list k1 k0 =

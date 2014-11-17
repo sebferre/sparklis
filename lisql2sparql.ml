@@ -5,9 +5,9 @@ open Lisql
 (* translation from LISQL elts to SPARQL queries *)
 
 (* SPARQL variable generator *)
-class state (lex : Lisql2nl.lexicon) =
+class state (id_labelling : Lisql2nl.id_labelling) =
 object (self)
-  method lexicon = lex
+  method id_labelling = id_labelling
 
   val mutable vars : Rdf.var list = []
   method add_var v = if not (List.mem v vars) then vars <- v::vars
@@ -180,7 +180,7 @@ and elt_s2_as_p1 state : elt_s2 -> sparql_p1 = function
     d_head
   | The id ->
     (fun x ->
-      let v = state#lexicon#get_id_var id in
+      let v = state#id_labelling#get_id_var id in
       let t = Rdf.Var v in
       Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))    
 and elt_s1 state : elt_s1 -> sparql_s1 = function
@@ -210,12 +210,12 @@ and elt_s2 state : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = elt_head state head in
-    let v = state#lexicon#get_id_var id in
+    let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
     let t = Rdf.Var v in
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d2 t) (d1 t))) (* YES: d2 - d1 *)
   | The id ->
-    let v = state#lexicon#get_id_var id in
+    let v = state#id_labelling#get_id_var id in
     let t = Rdf.Var v in
     (fun d1 d2 -> Sparql.formula_and (d2 t) (d1 t)) (* YES: d2 - s1 *)
 and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) = function
@@ -224,8 +224,8 @@ and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) 
   | Class c ->
     (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
 and elt_aggreg state idg modifg g (d : sparql_p1) id : unit =
-  let vg = state#lexicon#get_id_var idg in
-  let v = state#lexicon#get_id_var id in
+  let vg = state#id_labelling#get_id_var idg in
+  let v = state#id_labelling#get_id_var id in
   state#set_aggreg v (vg, modifg, g, (d (Rdf.Var vg)))
 and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
@@ -346,17 +346,17 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
 
 type template = ?constr:constr -> limit:int -> string
 
-class focus_term_list (lex : Lisql2nl.lexicon) =
+class focus_term_list (id_labelling : Lisql2nl.id_labelling) =
 object
   val mutable res : Rdf.term list = []
   method add (t : Rdf.term) : unit = if not (List.mem t res) then res <- t::res
   method result : Rdf.term list = res
 end
 
-let focus (lex : Lisql2nl.lexicon) (focus : focus)
+let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
     : Rdf.term list * template option * template option * template option * template option =
-  let state = new state lex in
-  let t_list = new focus_term_list lex in
+  let state = new state id_labelling in
+  let t_list = new focus_term_list id_labelling in
   let form =
     match focus with
       | AtP1 (f,ctx) ->
@@ -376,9 +376,9 @@ let focus (lex : Lisql2nl.lexicon) (focus : focus)
 		| Det (det,_) ->
 		  ( match det with
 		    | Term t -> t_list#add t
-		    | An (id,_,_) -> t_list#add (Rdf.Var (lex#get_id_var id))
-		    | The id -> t_list#add (Rdf.Var (lex#get_id_var id)) )
-		| AnAggreg (id,_,_,_,_) -> t_list#add (Rdf.Var (lex#get_id_var id))
+		    | An (id,_,_) -> t_list#add (Rdf.Var (id_labelling#get_id_var id))
+		    | The id -> t_list#add (Rdf.Var (id_labelling#get_id_var id)) )
+		| AnAggreg (id,_,_,_,_) -> t_list#add (Rdf.Var (id_labelling#get_id_var id))
 		| _ -> () );
 	      q d)
 	    (fun d -> Sparql.False)

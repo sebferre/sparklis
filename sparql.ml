@@ -103,6 +103,7 @@ let empty : pattern = ""
 let something s = term s ^ " a [] ."
 let rdf_type s c = term s ^ " a " ^ term c ^ " ."
 let triple s p o = term s ^ " " ^ term p ^ " " ^ term o ^ " ."
+let bind (e : expr) (v : Rdf.var) : pattern = "BIND (" ^ e ^ " AS " ^ var v ^ ")"
 let filter (e : expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^ indent 9 e ^ " )"

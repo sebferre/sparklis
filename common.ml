@@ -3,6 +3,10 @@
 
 let list_rev_assoc y l = fst (List.find (fun (x1,y1) -> y1=y) l)
 
+let unsome = function
+  | Some x -> x
+  | None -> invalid_arg "unsome"
+
 (* retaining first occurences and removing duplicates *)
 let list_to_set l =
   let rec aux acc = function

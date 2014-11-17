@@ -30,9 +30,9 @@ end
 let focus_key_of_root = "root"
 let focus_key_of_id (id : Lisql.id) : string = "id" ^ string_of_int id
 
-class state (lex : Lisql2nl.lexicon) =
+class state (id_labelling : Lisql2nl.id_labelling) =
 object
-  method lexicon = lex
+  method id_labelling = id_labelling
   val dico_foci : Lisql.focus dico = new dico "focus"
   method add_focus (focus : Lisql.focus) : string =
     if Lisql.is_root_focus focus then dico_foci#add_key focus_key_of_root focus;
@@ -94,7 +94,6 @@ let html_word = function
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Id (id,s) -> html_span ~classe:"lisqlID" ~title:("#" ^ string_of_int id) (escapeHTML s)
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
@@ -106,13 +105,14 @@ let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) :
   match xml with
     | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
     | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
-    | node :: xml -> html_of_nl_node ~highlight state node ^ " " ^ html_of_nl_xml ~highlight state xml
+    | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
     | [] -> ""
 and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
     | Kwd s -> s
     | Word w -> html_word w
+    | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Coord (coord,lxml) ->
       "<ul class=\"coordination\"><li>"
@@ -135,14 +135,22 @@ and html_highlight h xml =
   then html_span ~classe:"highlighted" xml
   else xml
 
-(* HTML of focus *)
+(* HTML of different AST elements *)
+
+let html_term (t : Rdf.term) : string =
+  html_word (Lisql2nl.word_of_term t)
 
 let html_focus (state : state) (focus : focus) : string = 
   html_of_nl_xml state
     (Lisql2nl.xml_s
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_focus state#lexicon focus)))
+	  (Lisql2nl.s_of_focus state#id_labelling focus)))
 
+
+let html_id (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_np_label
+       (state#id_labelling#get_id_label id))
 
 (* HTML of increment lists *)
 
@@ -152,52 +160,55 @@ let html_count_unit count max unit units =
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
-let html_increment_frequency focus (state : state) (incr,freq) =
+let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
   let key = state#dico_incrs#add incr in
-  let text =
-    html_of_nl_xml state
-      (Lisql2nl.xml_incr state#lexicon focus incr) in
-  let title_opt =
+  let xml = Lisql2nl.xml_incr state#id_labelling focus incr in
+  let text = Lisql2nl.word_text_content (Lisql2nl.word_of_incr incr) in
+  let html = html_of_nl_xml state xml in
+  let rank, title_opt =
     match incr with
-      | IncrTerm _ -> None
-      | IncrId _ -> None
-      | IncrType _ -> None
-      | IncrRel _ -> None
-      | IncrTriple _ -> None
-      | IncrTriplify -> Some "Adds a focus on the property to refine it"
-      | IncrIs -> None
-      | IncrAnd -> None
-      | IncrOr -> Some "Insert an alternative to the current focus"
-      | IncrMaybe -> Some "Make the current focus optional"
-      | IncrNot -> Some "Apply negation to the current focus"
-      | IncrUnselect -> Some "Hide the focus column in the table of results"
-      | IncrAggreg _ -> Some "Aggregate the focus column in the table of results, for each solution on other columns"
-      | IncrOrder Highest -> Some "Sort the focus column in decreasing order"
-      | IncrOrder Lowest -> Some "Sort the focus column in increasing order"
-      | IncrOrder _ -> None in
-  let text_freq =
+      | IncrTerm _ -> 2, None
+      | IncrId _ -> 1, None
+      | IncrType _ -> 4, None
+      | IncrRel _ -> 5, None
+      | IncrTriple _ -> 3, None
+      | IncrTriplify -> 6, Some "Adds a focus on the property to refine it"
+      | IncrIs -> 7, None
+      | IncrAnd -> 8, None
+      | IncrOr -> 9, Some "Insert an alternative to the current focus"
+      | IncrMaybe -> 10, Some "Make the current focus optional"
+      | IncrNot -> 11, Some "Apply negation to the current focus"
+      | IncrUnselect -> 14, Some "Hide the focus column in the table of results"
+      | IncrAggreg _ -> 15, Some "Aggregate the focus column in the table of results, for each solution on other columns"
+      | IncrOrder Highest -> 12, Some "Sort the focus column in decreasing order"
+      | IncrOrder Lowest -> 13, Some "Sort the focus column in increasing order"
+      | IncrOrder _ -> 12, None in
+  let html_freq =
     if freq = 1
     then ""
     else " [" ^ string_of_int freq ^ "]" in
-  html_span ~id:key ~classe:"increment" ?title:title_opt (text ^ text_freq)
+  freq, rank, String.lowercase text, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lisql.increment Lis.index) =
+  let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
+  let sorted_index = List.sort (fun (f1,r1,t1,_) (f2,r2,t2,_) -> Pervasives.compare (f2,r1,t1) (f1,r2,t2)) enriched_index in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
-    (fun incr_freq ->
+    (fun (_freq,_rank,_text,html) ->
       Buffer.add_string buf "<li>";
-      Buffer.add_string buf (html_increment_frequency focus state incr_freq);
+      Buffer.add_string buf html;
       Buffer.add_string buf "</li>")
-    index;
+    sorted_index;
+
   Buffer.add_string buf "</ul>";
   Buffer.contents buf
 
 (* HTML of results *)
 
 let html_cell_img ?(height = 120) url =
-  let label = Lisql2nl.name_of_uri url in
+  let label = Lexicon.name_of_uri url in
   html_img ~height ~alt:label ~title:label url ^ html_open_new_window ~height:16 url
 
 let html_cell_video url mime =
@@ -233,8 +244,8 @@ let html_cell state ~(line : int) ~(column : Lisql.id) t =
 
 let html_table_of_results (state : state) ~first_rank ~focus_var results =
   let open Sparql_endpoint in
-  let focus_id = match focus_var with None -> -1 | Some v -> state#lexicon#get_var_id v in
-  let id_i_list = List.map (fun (var,i) -> (state#lexicon#get_var_id var, i)) results.vars in
+  let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
+  let id_i_list = List.map (fun (var,i) -> (state#id_labelling#get_var_id var, i)) results.vars in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"Click on this column header to hide the focus\"></th>");
   List.iter
@@ -243,7 +254,10 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	(if id = focus_id
 	 then "<th class=\"header highlighted\">"
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"Click on this column header to set the focus on it\">");
-      Buffer.add_string buf (escapeHTML (state#lexicon#get_id_label id));
+      Buffer.add_string buf
+	(html_of_nl_xml state
+	   (Lisql2nl.xml_np_label
+	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;
   Buffer.add_string buf "</tr>";

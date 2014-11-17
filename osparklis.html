@@ -62,26 +62,106 @@
 
   <div id="config-panel" style="display:none">
     <div class="heading">Configuration panel</div>
+    <button id="config-reset-button"
+	    title="Click to restore default configuration">
+      Reset
+    </button>
     <ul>
       <li>
 	<div id="config-max-results" class="config-param">
+	  Compute at most
 	  <input id="input-max-results" type="number" value="200"> <!-- Edit to change default value -->
-	  Maximum number of query results
-	  (higher values entail longer response times)
+	  query results (higher values entail longer response times)
 	</div>
       </li>
       <li>
 	<div id="config-max-classes" class="config-param">
+	  Suggest at most
 	  <input id="input-max-classes" type="number" value="200"> <!-- Edit to change default value -->
-	  Maximum number of suggested classes
-	  (higher values entail longer response times)
+	  <span class="classURI">classes</span> (higher values entail longer response times)
 	</div>
       </li>
       <li>
 	<div id="config-max-properties" class="config-param">
-	  <input id="input-max-properties" type="number" value="1000"> <!-- Edit to change default value -->
-	  Maximum number of suggested properties
-	  (higher values entail longer response times)
+	  Suggest at most
+	  <input id="input-max-properties" type="number" value="200"> <!-- Edit to change default value -->
+	  <span class="propURI">properties</span> (higher values entail longer response times)
+	</div>
+      </li>
+      <li>
+	<div id="config-label-entity" class="config-param">
+	  For <span class="URI">entity</span> labels, use property
+	  <select id="config-label-entity-select"
+		  title="Select a label property from a short list">
+	    <option value="">none</option>
+	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+	    <option value="http://purl.org/dc/terms/title">dct:title</option>
+	    <option value="other">other</option>
+	  </select>
+	  <input id="config-label-entity-input" type="url"
+		 title="Enter here the URI of the desired property"
+		 value="">
+	  and only with language (optional)
+	  <input id="config-label-entity-input-lang" type="text" size="3"
+		 title="Enter here the desired language tag"
+		 value="">
+	  (e.g., 'en' for English, 'fr' for French)
+	</div>
+      </li>
+      <li>
+	<div id="config-label-class" class="config-param">
+	  For <span class="classURI">class</span> labels, use property
+	  <select id="config-label-class-select"
+		  title="Select a label property from a short list">
+	    <option value="">none</option>
+	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+	    <option value="http://purl.org/dc/terms/title">dct:title</option>
+	    <option value="other">other</option>
+	  </select>
+	  <input id="config-label-class-input" type="url"
+		 title="Enter here the URI of the desired property"
+		 value="">
+	  and only with language (optional)
+	  <input id="config-label-class-input-lang" type="text" size="3"
+		 title="Enter here the desired language tag"
+		 value="">
+	  (e.g., 'en' for English, 'fr' for French)
+	</div>
+      </li>
+      <li>
+	<div id="config-label-property" class="config-param">
+	  For <span class="propURI">property</span> labels, use property
+	  <select id="config-label-property-select"
+		  title="Select a label property from a short list">
+	    <option value="">none</option>
+	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+	    <option value="http://purl.org/dc/terms/title">dct:title</option>
+	    <option value="other">other</option>
+	  </select>
+	  <input id="config-label-property-input" type="url"
+		 title="Enter here the URI of the desired property"
+		 value="">
+	  and only with language (optional)
+	  <input id="config-label-property-input-lang" type="text" size="3"
+		 title="Enter here the desired language tag"
+		 value="">
+	  (e.g., 'en' for English, 'fr' for French)
+	</div>
+      </li>
+      <li>
+	<div id="config-caching" class="config-param">
+	  <input id="input-caching" type="checkbox" checked> <!-- Edit to change default value -->
+	  Caching SPARQL query results (uncheck for frequently changing data)
+	  <button id="button-clear-cache"
+		  title="Click to clear the cache">
+	    Clear the cache
+	  </button>
 	</div>
       </li>
       <li>
@@ -92,6 +172,7 @@
 	</div>
       </li>
     </ul>
+    <em>Close configuration panel to apply changes.</em>
   </div>
 
   <div class="heading">Your query and its <span class="highlighted">current focus</span>
