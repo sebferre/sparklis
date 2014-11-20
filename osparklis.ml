@@ -146,6 +146,7 @@ let config =
       (Lexicon.config_entity_lexicon :> Config.input);
       (Lexicon.config_class_lexicon :> Config.input);
       (Lexicon.config_property_lexicon :> Config.input);
+      (Lisql2nl.config_lang :> Config.input);
       (Sparql_endpoint.config_caching :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
@@ -159,8 +160,8 @@ object (self)
   method if_has_changed (f : unit -> unit) : unit =
     let has_changed = List.exists (fun input -> input#has_changed) config_inputs in
     if has_changed then begin
-      List.iter (fun input -> input#reset_changed) config_inputs;
-      f ()
+      f ();
+      List.iter (fun input -> input#reset_changed) config_inputs
     end
 
   method init endpoint args =
