@@ -94,10 +94,20 @@ let log_not (e : expr) : expr =
   else "!( " ^ indent 3 e ^ " )"
 let log_and (le : expr list) : expr = 
   if List.mem log_false le then log_false
-  else "(  " ^ String.concat "\n&& " (List.map (indent 3) (List.filter ((<>) log_true) le)) ^ " )"
+  else
+    let le = List.filter ((<>) log_true) le in
+    match le with
+      | [] -> log_true
+      | [e] -> e
+      | _ -> "(  " ^ String.concat "\n&& " (List.map (indent 3) le) ^ " )"
 let log_or (le : expr list) : expr =
   if List.mem log_true le then log_true
-  else "(  " ^ String.concat "\n|| " (List.map (indent 3) (List.filter ((<>) log_false) le)) ^ " )"
+  else
+    let le = List.filter ((<>) log_false) le in
+    match le with
+      | [] -> log_false
+      | [e] -> e
+      | _ -> "(  " ^ String.concat "\n|| " (List.map (indent 3) le) ^ " )"
 
 let empty : pattern = ""
 let something s = term s ^ " a [] ."
