@@ -1,3 +1,13 @@
+.texte
+{
+display:none;
+}
+
+.tooltip
+{
+display:none;
+}
+
 header
 {
 margin:5px 0px;
@@ -57,6 +67,11 @@ color:darkred;
 .modifier
 {
 color:darkred;
+}
+
+#external-links
+{
+text-align:right;
 }
 
 #sparql-endpoint

@@ -1,5 +1,55 @@
 
 open Lisql
+open Js
+open Jsutils
+
+(* configuration : language *)
+
+let config_lang =
+  let key = "lang" in
+  let select_selector = "#lang-select" in
+  let default = "en" in
+object (self)
+  inherit Config.input
+  val mutable init_v : string = default
+  val mutable current_v : string = default
+
+  method value : string = current_v
+
+  method private set_select (v : string) : unit =
+    if v <> current_v then begin
+      jquery_select select_selector (fun select -> select##value <- string v);
+      current_v <- v;
+      has_changed <- true
+    end
+
+  method get_permalink =
+    if current_v <> init_v
+    then [(key, current_v)]
+    else []
+  method set_permalink args =
+    try self#set_select (List.assoc key args)
+    with _ -> ()
+
+  method init =
+    jquery_select select_selector (fun select ->
+      init_v <- to_string select##value;
+      current_v <- init_v;
+      jquery_all (".texte.lang-" ^ init_v) (fun elt -> elt##style##display <- string "inline");
+      let tooltip_lang_selector = ".tooltip.lang-" ^ init_v in
+      jquery_all ".tooltiped" (fun elt -> jquery_from elt tooltip_lang_selector (fun elt2 -> elt##title <- elt2##innerHTML));
+      onchange
+	(fun select ev ->
+	  let previous_v = current_v in
+	  current_v <- to_string select##value;
+	  has_changed <- true;
+	  jquery_all (".texte.lang-" ^ previous_v) (fun elt -> elt##style##display <- string "none");
+	  jquery_all (".texte.lang-" ^ current_v) (fun elt -> elt##style##display <- string "inline");
+	  let tooltip_lang_selector = ".tooltip.lang-" ^ current_v in
+	  jquery_all ".tooltiped" (fun elt -> jquery_from elt tooltip_lang_selector (fun elt2 -> elt##title <- elt2##innerHTML)))
+	select)
+  method reset = self#set_select init_v
+end
 
 (* NL generation from focus *)
 

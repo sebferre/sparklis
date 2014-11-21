@@ -101,3 +101,4 @@ object (self)
 	input)
   method reset = self#set_input init_v
 end
+

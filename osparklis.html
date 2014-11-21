@@ -13,205 +13,312 @@
 
 <body>
   <header>
-    <h2>Sparklis - <small><em>Complex queries and exploratory search for SPARQL endpoints at your fingertips!</em></small></h2>
+    <h2 class="texte lang-en">Sparklis - <small><em>Complex queries and exploratory search on SPARQL endpoints at your fingertips!</em></small></h2>
+    <h2 class="texte lang-fr">Sparklis - <small><em>Requêtes complexes et recherche exploratoire du bout des doigts!</em></small></h2>
   </header>
 
+  <div id="external-links" style="margin-left:auto;margin-right:0px">
+    <a target="_blank" href="http://youtu.be/O999FVXn8Qc">
+      <span class="texte lang-en">Demo/Tutorial</span>
+      <span class="texte lang-fr">Démo/Tutoriel</span>
+    </a>
+    &nbsp;
+    <a target="_blank" href="examples.html">
+      <span class="texte lang-en">Examples</span>
+      <span class="texte lang-fr">Exemples</span>
+    </a>
+    &nbsp;
+    <a target="_blank" href="http://tinyurl.com/kxozx9r">
+      <mark>
+	<span class="texte lang-en">Usability survey</span>
+	<span class="texte lang-fr">Enquête d'utilisabilité</span>
+      </mark>
+    </a>
+  </div>
+
   <div id="control-navig">
-    <img id="home" src="icon-home.png" height="40" alt="Home"
-	 title="Click to reset the query">
-    <img id="back" src="icon-back.png" height="40" alt="Back"
-	 title="Click to go back in navigation history">
-    <img id="forward" src="icon-forward.png" height="40" alt="Forward"
-	 title="Click to go forward in navigation history">
-    <img id="refresh" src="icon-refresh.png" height="40" alt="Refresh"
-	 title="Click to refresh the current view, e.g. after changing the configuration">
-    <span id="sparql-endpoint">
-      SPARQL endpoint: 
-      <select id="sparql-endpoint-select"
-	      title="Select a SPARQL endpoint from a short list">
-	<option value="http://lisfs2008.irisa.fr/dbpedia/sparql">Core English DBpedia</option>
-	<option value="http://dbpedia.org/sparql">DBpedia</option>
-	<option value="http://live.dbpedia.org/sparql">Live DBpedia</option>
-	<option value="http://data.nobelprize.org/sparql">Nobel prizes</option>
-	<option value="http://lod.euscreen.eu/sparql">European Television Heritage</option>
-<!--	<option value="http://bnb.data.bl.uk/sparql">British National Bibliography</option> -->
-	<option value="http://rdf.insee.fr/sparql">INSEE</option>
-	<option value="http://datos.bcn.cl/sparql">Chile government</option>
-<!--	<option value="http://data.ox.ac.uk/sparql/">University of Oxford</option> -->
-	<option value="">other</option>
-      </select>
-      <input id="sparql-endpoint-input" type="url"
-	     title="Enter here the URL of the desired SPARQL endpoint"
-	     value="http://lisfs2008.irisa.fr/dbpedia/sparql">  <!-- Edit to change default endpoint -->
-      <input id="sparql-endpoint-button" type="button" value="Go"
-	     title="Click to connect to the entered SPARQL endpoint">
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to reset the query</span>
+      <span class="tooltip lang-fr">Cliquer pour réinitialiser la requête</span>
+      <img id="home" src="icon-home.png" height="40" alt="Home">
     </span>
-    <img id="config-control" src="icon-config.png" height="40" alt="Config"
-	 title="Click to open/close configuration panel">
-    <a target="_blank" href="http://youtu.be/O999FVXn8Qc">Demo/Tutorial</a>
-    <a target="_blank" href="examples.html">Examples</a>
-    <a target="_blank" href="http://tinyurl.com/kxozx9r"><mark>Usability survey</mark></a>
-<!--
-    <button id="delete">DELETE Focus</button>
-    <button id="up">Focus UP</button>
-    <button id="down">Focus DOWN</button>
-    <button id="left">Focus LEFT</button>
-    <button id="right">Focus RIGHT</button>
--->
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to go back in navigation history</span>
+      <span class="tooltip lang-fr">Cliquer pour revenir à la requête précédente</span>
+      <img id="back" src="icon-back.png" height="40" alt="Back">
+    </span>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to go forward in navigation history</span>
+      <span class="tooltip lang-fr">Cliquer pour retourner à la requête suivante</span>
+      <img id="forward" src="icon-forward.png" height="40" alt="Forward">
+    </span>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to refresh the current view, e.g. after changing the configuration</span>
+      <span class="tooltip lang-fr">Cliquer pour rafraîchir la vue actuelle, ex. après avoir changer la configuration</span>
+      <img id="refresh" src="icon-refresh.png" height="40" alt="Refresh">
+    </span>
+    <span id="sparql-endpoint">
+      <span class="texte lang-en">SPARQL endpoint: </span>
+      <span class="texte lang-fr">Point d'accès SPARQL : </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Select a SPARQL endpoint from a short list</span>
+	<span class="tooltip lang-fr">Sélectionner un point d'accès SPARQL dans cette liste</span>
+	<select id="sparql-endpoint-select">
+	  <option value="http://lisfs2008.irisa.fr/dbpedia/sparql">Core English DBpedia</option>
+	  <option value="http://dbpedia.org/sparql">DBpedia</option>
+	  <option value="http://live.dbpedia.org/sparql">Live DBpedia</option>
+	  <option value="http://data.nobelprize.org/sparql">Nobel prizes</option>
+	  <option value="http://lod.euscreen.eu/sparql">European Television Heritage</option>
+<!--	<option value="http://bnb.data.bl.uk/sparql">British National Bibliography</option> -->
+	  <option value="http://rdf.insee.fr/sparql">INSEE</option>
+	  <option value="http://datos.bcn.cl/sparql">Chile government</option>
+<!--	<option value="http://data.ox.ac.uk/sparql/">University of Oxford</option> -->
+	  <option value="">...</option>
+	</select>
+      </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Enter here the URL of the desired SPARQL endpoint</span>
+	<span class="tooltip lang-fr">Entrer ici l'URL du point d'accès SPARQL souhaité</span>
+	<input id="sparql-endpoint-input" type="url"
+	       value="http://lisfs2008.irisa.fr/dbpedia/sparql">  <!-- Edit to change default endpoint -->
+      </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
+	<span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
+	<input id="sparql-endpoint-button" type="button" value="Go">
+      </span>
+    </span>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to open/close configuration panel</span>
+      <span class="tooltip lang-fr">Cliquer pour ouvrir/fermer le panneau de configuration</span>
+      <img id="config-control" src="icon-config.png" height="40" alt="Config">
+    </span>
+    <select id="lang-select">
+      <option value="en">English</option>
+      <option value="fr">français</option>
+    </select>
   </div>
 
   <div id="config-panel" style="display:none">
-    <div class="heading">Configuration panel</div>
-    <button id="config-reset-button"
-	    title="Click to restore default configuration">
-      Reset
-    </button>
+    <div class="heading">
+      <span class="texte lang-en">Configuration panel</span>
+      <span class="texte lang-fr">Panneau de configuration</span>
+    </div>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to restore default configuration</span>
+      <span class="tooltip lang-fr">Cliquer pour restaurer la configuration par défaut</span>
+      <button id="config-reset-button">
+	<span class="texte lang-en">Reset</span>
+	<span class="texte lang-fr">Réinitialiser</span>
+      </button>
+    </span>
     <ul>
       <li>
 	<div id="config-max-results" class="config-param">
-	  Compute at most
+	  <span class="texte lang-en">Compute at most </span>
+	  <span class="texte lang-fr">Calculer au plus </span>
 	  <input id="input-max-results" type="number" value="200"> <!-- Edit to change default value -->
-	  query results (higher values entail longer response times)
+	  <span class="texte lang-en"> query results</span>
+	  <span class="texte lang-fr"> résultats à la requête</span>
 	</div>
       </li>
       <li>
 	<div id="config-max-classes" class="config-param">
-	  Suggest at most
+	  <span class="texte lang-en">Suggest at most </span>
+	  <span class="texte lang-fr">Suggérer au plus </span>
 	  <input id="input-max-classes" type="number" value="200"> <!-- Edit to change default value -->
-	  <span class="classURI">classes</span> (higher values entail longer response times)
+	  <span class="texte lang-en"> <span class="classURI">classes</span></span>
+	  <span class="texte lang-fr"> <span class="classURI">classes</span></span>
 	</div>
       </li>
       <li>
 	<div id="config-max-properties" class="config-param">
-	  Suggest at most
+	  <span class="texte lang-en">Suggest at most </span>
+	  <span class="texte lang-fr">Suggérer au plus </span>
 	  <input id="input-max-properties" type="number" value="200"> <!-- Edit to change default value -->
-	  <span class="propURI">properties</span> (higher values entail longer response times)
+	  <span class="texte lang-en"> <span class="propURI">properties</span></span>
+	  <span class="texte lang-fr"> <span class="propURI">propriétés</span></span>
 	</div>
       </li>
       <li>
 	<div id="config-label-entity" class="config-param">
-	  For <span class="URI">entity</span> labels, use property
-	  <select id="config-label-entity-select"
-		  title="Select a label property from a short list">
-	    <option value="">none</option>
+	  <span class="texte lang-en">For <span class="URI">entity</span> labels, use property </span>
+	  <span class="texte lang-fr">Pour les étiquettes d'<span class="URI">entités</span>, utiliser la propriété </span>
+	  <select id="config-label-entity-select">
+	    <option value=""></option>
 	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 	    <option value="http://purl.org/dc/terms/title">dct:title</option>
-	    <option value="other">other</option>
+	    <option value="other">...</option>
 	  </select>
-	  <input id="config-label-entity-input" type="url"
-		 title="Enter here the URI of the desired property"
-		 value="">
-	  and only with language (optional)
-	  <input id="config-label-entity-input-lang" type="text" size="3"
-		 title="Enter here the desired language tag"
-		 value="">
-	  (e.g., 'en' for English, 'fr' for French)
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the URI of the desired property</span>
+	    <span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
+	    <input id="config-label-entity-input" type="url">
+	  </span>
+	  <span class="texte lang-en"> and only with language (optional) </span>
+	  <span class="texte lang-fr"> et seulement avec la langue (optionnel) </span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the desired language tag</span>
+	    <span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
+	  </span>
+	  <input id="config-label-entity-input-lang" type="text" size="3">
+	  <span class="texte lang-en"> (e.g., 'en' for English, 'fr' for French) </span>
+	  <span class="texte lang-fr"> (ex., 'en' pour l'anglais, 'fr' pour le français) </span>
 	</div>
       </li>
       <li>
 	<div id="config-label-class" class="config-param">
-	  For <span class="classURI">class</span> labels, use property
-	  <select id="config-label-class-select"
-		  title="Select a label property from a short list">
-	    <option value="">none</option>
+	  <span class="texte lang-en">For <span class="classURI">class</span> labels, use property</span>
+	  <span class="texte lang-fr">Pour les étiquettes de <span class="classURI">classes</span>, utiliser la propriété</span>
+	  <select id="config-label-class-select">
+	    <option value=""></option>
 	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 	    <option value="http://purl.org/dc/terms/title">dct:title</option>
-	    <option value="other">other</option>
+	    <option value="other">...</option>
 	  </select>
-	  <input id="config-label-class-input" type="url"
-		 title="Enter here the URI of the desired property"
-		 value="">
-	  and only with language (optional)
-	  <input id="config-label-class-input-lang" type="text" size="3"
-		 title="Enter here the desired language tag"
-		 value="">
-	  (e.g., 'en' for English, 'fr' for French)
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the URI of the desired property</span>
+	    <span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
+	    <input id="config-label-class-input" type="url">
+	  </span>
+	  <span class="texte lang-en">and only with language (optional)</span>
+	  <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the desired language tag</span>
+	    <span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
+	    <input id="config-label-class-input-lang" type="text" size="3">
+	  </span>
+	  <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
+	  <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
 	</div>
       </li>
       <li>
 	<div id="config-label-property" class="config-param">
-	  For <span class="propURI">property</span> labels, use property
-	  <select id="config-label-property-select"
-		  title="Select a label property from a short list">
-	    <option value="">none</option>
+	  <span class="texte lang-en">For <span class="propURI">property</span> labels, use property</span>
+	  <span class="texte lang-fr">Pour les étiquettes de <span class="propURI">propriétés</span>, utiliser la propriété </span>
+	  <select id="config-label-property-select">
+	    <option value=""></option>
 	    <option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 	    <option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 	    <option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 	    <option value="http://purl.org/dc/terms/title">dct:title</option>
-	    <option value="other">other</option>
+	    <option value="other">...</option>
 	  </select>
-	  <input id="config-label-property-input" type="url"
-		 title="Enter here the URI of the desired property"
-		 value="">
-	  and only with language (optional)
-	  <input id="config-label-property-input-lang" type="text" size="3"
-		 title="Enter here the desired language tag"
-		 value="">
-	  (e.g., 'en' for English, 'fr' for French)
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the URI of the desired property</span>
+	    <span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
+	    <input id="config-label-property-input" type="url">
+	  </span>
+	  <span class="texte lang-en">and only with language (optional)</span>
+	  <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Enter here the desired language tag</span>
+	    <span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
+	    <input id="config-label-property-input-lang" type="text" size="3">
+	  </span>
+	  <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
+	  <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
 	</div>
       </li>
       <li>
 	<div id="config-caching" class="config-param">
 	  <input id="input-caching" type="checkbox" checked> <!-- Edit to change default value -->
-	  Caching SPARQL query results (uncheck for frequently changing data)
-	  <button id="button-clear-cache"
-		  title="Click to clear the cache">
-	    Clear the cache
-	  </button>
+	  <span class="texte lang-en">Caching SPARQL query results (uncheck for frequently changing data)</span>
+	  <span class="texte lang-fr">Mettre en cache les résultats des requêtes SPARQL (décocher pour des données changeant fréquemment)</span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Click to clear the cache</span>
+	    <span class="tooltip lang-fr">Cliquer pour vider le cache</span>
+	      <button id="button-clear-cache">
+		<span class="texte lang-en">Clear the cache</span>
+		<span class="texte lang-fr">Vider le cache</span>
+	      </button>
+	    </span>
 	</div>
       </li>
       <li>
 	<div id="config-logging" class="config-param">
 	  <input id="input-logging" type="checkbox" checked> <!-- Edit to change default value -->
-	  Reporting query history for usability improvement
-	  (only client IP, session ID, and queries are reported, not query results)
+	  <span class="texte lang-en">Reporting query history for usability improvement (only client IP, session ID, and queries are reported, not query results)</span>
+	  <span class="texte lang-fr">Rapporter l'historique des requêtes à des fins d'amélioration de l'utilisabilité (seuls l'IP client, l'identifiant de session et les requêtes sont rapportées, pas les résultats des requêtes)</span>
 	</div>
       </li>
     </ul>
-    <em>Close configuration panel to apply changes.</em>
+    <em>
+      <span class="texte lang-en">Close configuration panel to apply changes.</span>
+      <span class="texte lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+    </em>
   </div>
 
-  <div class="heading">Your query and its <span class="highlighted">current focus</span>
-    <button id="permalink"
-	  title="Click to display the permanent link to the current endpoint and query">
-      permalink
-    </button>
+  <div class="heading">
+    <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
+    <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
+      <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
+      <button id="permalink">
+	permalink
+      </button>
+    </span>
   </div>
-  <div id="lisql"
-       title="Click on a query element to change focus">
-  </div>
+  <span class="tooltiped">
+    <span class="tooltip lang-en">Click on a query element to change focus</span>
+    <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
+    <div id="lisql">
+    </div>
+  </span>
 
   <div id="increments">
-    <div class="heading">Sparklis suggestions to refine your query</div>
-    <div>Current focus on <span id="increments-focus" class="highlighted">the thing</span></div>
+    <div class="heading">
+      <span class="texte lang-en">Sparklis suggestions to refine your query</span>
+      <span class="texte lang-fr">Suggestions de Sparklis pour affiner votre requête</span>
+    </div>
+    <div>
+      <span class="texte lang-en">Current focus on </span>
+      <span class="texte lang-fr">Focus actuel sur </span>
+      <span id="increments-focus" class="highlighted">the thing</span></div>
     <div class="incr-box">
       <div>
-	<select id="select-terms" class="select-incrs"
-		title="Select a filtering operator">
-	  <option value="matchesAll">matches all</option>
-	  <option value="matchesAny">matches any</option>
-	  <option value="after">after</option>
-	  <option value="before">before</option>
-	  <option value="fromTo">from to</option>
-	  <option value="higherThan">higher or equal to</option>
-	  <option value="lowerThan">lower or equal to</option>
-	  <option value="between">between</option>
-	  <option value="hasLang">has language</option>
-	  <option value="hasDatatype">has datatype</option>
-	</select>
-	<input id="pattern-terms" class="pattern-incrs" type="text"
-	       title="Input keywords to filter entities, and trailing spaces to force loading more matches">
-	<input id="button-terms" type="button" value="OK"
-	       title="Click this button to insert this filter in the query at the focus">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Select a filtering operator</span>
+	  <span class="tooltip lang-fr">Sélectionner un opérateur de filtrage</span>
+	  <select id="select-terms" class="select-incrs">
+	    <option value="matchesAll">matches all</option>
+	    <option value="matchesAny">matches any</option>
+	    <option value="after">after</option>
+	    <option value="before">before</option>
+	    <option value="fromTo">from to</option>
+	    <option value="higherThan">higher or equal to</option>
+	    <option value="lowerThan">lower or equal to</option>
+	    <option value="between">between</option>
+	    <option value="hasLang">has language</option>
+	    <option value="hasDatatype">has datatype</option>
+	  </select>
+	</span>
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Input keywords to filter entities, and trailing spaces to force loading more matches</span>
+	  <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités, et des espaces à la fin pour forcer le chargement de résultats supplémentaires</span>
+	  <input id="pattern-terms" class="pattern-incrs" type="text">
+	</span>
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Click this button to insert this filter at the query focus</span>
+	  <span class="tooltip lang-fr">Cliquer ce bouton pour insérer ce filtre au focus de la requête</span>
+	  <input id="button-terms" type="button" value="OK">
+	</span>
       </div>
-      <div id="list-terms" class="list-incrs"
-	   title="Click an entity to insert in the query at the focus">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click an entity to insert in the query at the focus</span>
+	<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
+	<div id="list-terms" class="list-incrs">
+	</div>
+      </span>
+      <div id="count-terms" class="count-incrs">
+	<span class="texte lang-en">No entity</span>
+	<span class="texte lang-fr">Aucune entité</span>
       </div>
-      <div id="count-terms" class="count-incrs">No entities</div>
     </div>
     <div class="incr-box">
       <div>
@@ -219,13 +326,22 @@
 	  <option value="matchesAll">matches all</option>
 	  <option value="matchesAny">matches any</option>
 	</select>
-	<input id="pattern-properties" class="pattern-incrs" type="text"
-	       title="Input keywords to filter concepts, and trailing spaces to force loading more matches">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Input keywords to filter concepts, and trailing spaces to force loading more matches</span>
+	  <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les concepts, et des espaces à la fin pour forcer le chargement de résultats supplémentaires</span>
+	<input id="pattern-properties" class="pattern-incrs" type="text">
+	</span>
       </div>
-      <div id="list-properties" class="list-incrs"
-	   title="Click a concept to insert in the query at the focus">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
+	<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
+	<div id="list-properties" class="list-incrs">
+	</div>
+      </span>
+      <div id="count-properties" class="count-incrs">
+	<span class="texte lang-en">No concept</span>
+	<span class="texte lang-fr">Aucun concept</span>
       </div>
-      <div id="count-properties" class="count-incrs">No concepts</div>
     </div>
     <div class="incr-box">
       <div>
@@ -233,62 +349,125 @@
 	  <option value="matchesAll">matches all</option>
 	  <option value="matchesAny">matches any</option>
 	</select>
-	<input id="pattern-modifiers" class="pattern-incrs" type="text"
-	       title="Input keywords to filter modifiers">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Input keywords to filter modifiers</span>
+	  <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les modifieurs</span>
+	  <input id="pattern-modifiers" class="pattern-incrs" type="text">
+	</span>
       </div>
-      <div id="list-modifiers" class="list-incrs"
-	   title="Click a modifier to insert in the query at the focus">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click a modifier to insert in the query at the focus</span>
+	<span class="tooltip lang-fr">Cliquer un modifieur pour l'insérer au focus de la requête</span>
+	<div id="list-modifiers" class="list-incrs">
+	</div>
+      </span>
+      <div id="count-modifiers" class="count-incrs">
+	<span class="texte lang-en">No modifier</span>
+	<span class="texte lang-fr">Aucun modifieur</span>
       </div>
-      <div id="count-modifiers" class="count-incrs">No modifiers</div>
     </div>
   </div>
 
   <div id="results">
-    <div class="heading">Results of your query</div>
-    <div id="control-results-top">
-      <img class="previous-results" src="icon-previous.png" height="25" alt="Previous"
-	   title="Click to show the previous page of results">
-      <span class="count-results">No results</span>
-      <img class="next-results" src="icon-next.png" height="25" alt="Next"
-	   title="Click to show the next page of results">
-      <select class="limit-results">
-	<option value="10">Show 10 results</option>
-	<option value="20">Show 20 results</option>
-	<option value="50">Show 50 results</option>
-	<option value="100">Show 100 results</option>
-      </select>
+    <div class="heading">
+      <span class="texte lang-en">Results of your query</span>
+      <span class="texte lang-fr">Résultats de votre requête</span>
     </div>
-    <!-- duplicated controls -->
-    <div id="list-results" title="Click an entity to insert in the query at the column's focus"></div>
-     <div id="control-results-bottom">
-      <img class="previous-results" src="icon-previous.png" height="25" alt="Previous"
-	   title="Click to show the previous page of results">
-      <span class="count-results">No results</span>
-      <img class="next-results" src="icon-next.png" height="25" alt="Next"
-	   title="Click to show the next page of results">
+    <div id="control-results-top">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to show the previous page of results</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
+	<img class="previous-results" src="icon-previous.png" height="25" alt="Previous">
+      </span>
+      <span class="count-results">
+	<span class="texte lang-en">No result</span>
+	<span class="texte lang-fr">Aucun résultat</span>
+      </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to show the next page of results</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
+	<img class="next-results" src="icon-next.png" height="25" alt="Next">
+      </span>
+      <span class="texte lang-en">Show </span>
+      <span class="texte lang-fr">Montrer </span>
       <select class="limit-results">
-	<option value="10">Show 10 results</option>
-	<option value="20">Show 20 results</option>
-	<option value="50">Show 50 results</option>
-	<option value="100">Show 100 results</option>
+	<option value="10">10</option>
+	<option value="20">20</option>
+	<option value="50">50</option>
+	<option value="100">100</option>
       </select>
+      <span class="texte lang-en"> results</span>
+      <span class="texte lang-fr"> résultats</span>
+    </div>
+
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click an entity to insert in the query at the column's focus</span>
+      <span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
+      <div id="list-results">
+      </div>
+    </span>
+
+    <!-- duplicated controls -->
+    <div id="control-results-bottom">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to show the previous page of results</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
+	<img class="previous-results" src="icon-previous.png" height="25" alt="Previous">
+      </span>
+      <span class="count-results">
+	<span class="texte lang-en">No result</span>
+	<span class="texte lang-fr">Aucun résultat</span>
+      </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to show the next page of results</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
+	<img class="next-results" src="icon-next.png" height="25" alt="Next">
+      </span>
+      <span class="texte lang-en">Show </span>
+      <span class="texte lang-fr">Montrer </span>
+      <select class="limit-results">
+	<option value="10">10</option>
+	<option value="20">20</option>
+	<option value="50">50</option>
+	<option value="100">100</option>
+      </select>
+      <span class="texte lang-en"> results</span>
+      <span class="texte lang-fr"> résultats</span>
     </div>
   </div>
 
   <div id="sparql">
-    <div class="heading">Your query in SPARQL</div>
-    <div id="sparql-query"
-	 title="This is the SPARQL version of your query">
+    <div class="heading">
+      <span class="texte lang-en">Your query in SPARQL</span>
+      <span class="texte lang-fr">Votre requête en SPARQL</span>
     </div>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">This is the SPARQL version of your query</span>
+      <span class="tooltip lang-fr">Ceci est la version SPARQL de votre requête</span>
+      <div id="sparql-query">
+      </div>
+    </span>
   </div>
 
   <footer>
-    <p>Created by <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> © 2013
+    <p>
+      <span class="texte lang-en">Created by </span>
+      <span class="texte lang-fr">Créé par </span>
+      <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> © 2013
       <a target="_blank" href="http://www.irisa.fr/LIS/"><img src="lis.png" alt="LIS team" height="40"></a>
       <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="40"></a>
       <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
     </p>
-    <p>Visit <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">my homepage</a> for more information.</p>
+    <p>
+      <span class="texte lang-en">Visit </span>
+      <span class="texte lang-fr">Visiter </span>
+      <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">
+	<span class="texte lang-en">my homepage</span>
+	<span class="texte lang-fr">ma page Web</span>
+      </a>
+      <span class="texte lang-en"> for more information.</span>
+      <span class="texte lang-fr"> pour plus d'information.</span>
+    </p>
   </footer>
 </body>
 </html>

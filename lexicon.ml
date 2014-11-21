@@ -216,6 +216,7 @@ object (self)
       self#set_select_property_lang s p l
     with _ -> ()
 
+  method property_lang : string * string = current_property, current_lang
   method value : 'lexicon = current_lexicon
 
   method init =
