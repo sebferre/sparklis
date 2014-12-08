@@ -136,7 +136,7 @@ object (self)
 
   method private init =
     begin
-      id_labelling <- Lisql2nl.id_labelling_of_focus focus;
+      id_labelling <- Lisql2nl.id_labelling_of_focus Lisql2nl.config_lang#grammar focus;
       let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus id_labelling focus in
       focus_term_list <- t_list;
       query_opt <- q_opt;

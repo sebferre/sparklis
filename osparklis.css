@@ -8,6 +8,11 @@ display:none;
 display:none;
 }
 
+.option-label
+{
+display:none;
+}
+
 header
 {
 margin:5px 0px;

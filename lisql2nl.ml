@@ -15,6 +15,10 @@ object (self)
   val mutable current_v : string = default
 
   method value : string = current_v
+  method grammar : Grammar.grammar =
+    match current_v with
+      | "fr" -> Grammar.french
+      | _ -> Grammar.english
 
   method private set_select (v : string) : unit =
     if v <> current_v then begin
@@ -35,18 +39,10 @@ object (self)
     jquery_select select_selector (fun select ->
       init_v <- to_string select##value;
       current_v <- init_v;
-      jquery_all (".texte.lang-" ^ init_v) (fun elt -> elt##style##display <- string "inline");
-      let tooltip_lang_selector = ".tooltip.lang-" ^ init_v in
-      jquery_all ".tooltiped" (fun elt -> jquery_from elt tooltip_lang_selector (fun elt2 -> elt##title <- elt2##innerHTML));
       onchange
 	(fun select ev ->
-	  let previous_v = current_v in
 	  current_v <- to_string select##value;
-	  has_changed <- true;
-	  jquery_all (".texte.lang-" ^ previous_v) (fun elt -> elt##style##display <- string "none");
-	  jquery_all (".texte.lang-" ^ current_v) (fun elt -> elt##style##display <- string "inline");
-	  let tooltip_lang_selector = ".tooltip.lang-" ^ current_v in
-	  jquery_all ".tooltiped" (fun elt -> jquery_from elt tooltip_lang_selector (fun elt2 -> elt##title <- elt2##innerHTML)))
+	  has_changed <- true)
 	select)
   method reset = self#set_select init_v
 end
@@ -65,9 +61,9 @@ type word =
   | `Op of string
   | `DummyFocus ]
 
-let word_text_content = function
-  | `Thing -> "thing"
-  | `Relation -> "relation"
+let word_text_content grammar = function
+  | `Thing -> grammar#thing
+  | `Relation -> grammar#relation
   | `Entity (uri,s) -> s
   | `Literal s -> s
   | `TypedLiteral (s, dt) -> s ^ " (" ^ dt ^ ")"
@@ -176,34 +172,40 @@ let rec word_of_term = function
   | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
-let word_of_aggreg = function
-  | NumberOf -> `Op "number"
-  | ListOf -> `Op "list"
-  | Total -> `Op "total"
-  | Average -> `Op "average"
-  | Maximum -> `Op "maximum"
-  | Minimum -> `Op "minimum"
+let string_pos_of_aggreg grammar = function
+  | NumberOf -> grammar#aggreg_number
+  | ListOf -> grammar#aggreg_list
+  | Total -> grammar#aggreg_total
+  | Average -> grammar#aggreg_average
+  | Maximum -> grammar#aggreg_maximum
+  | Minimum -> grammar#aggreg_minimum
 
-let word_of_order = function
+let word_of_aggreg grammar g =
+  let s_g, pos_g = string_pos_of_aggreg grammar g in
+  match pos_g with
+    | `Noun -> `Op s_g
+    | `Adjective -> `Op s_g
+
+let word_of_order grammar = function
   | Unordered -> `Op ""
-  | Highest -> `Op "highest"
-  | Lowest -> `Op "lowest"
+  | Highest -> `Op grammar#order_highest
+  | Lowest -> `Op grammar#order_lowest
 
-let word_of_incr = function
+let word_of_incr grammar = function
   | IncrTerm t -> word_of_term t
   | IncrId id -> `Thing
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property p)
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrIs -> `Op "is"
-  | IncrAnd -> `Op "and"
-  | IncrOr -> `Op "or"
-  | IncrMaybe -> `Op "optionally"
-  | IncrNot -> `Op "not"
-  | IncrUnselect -> `Op "any"
-  | IncrAggreg g -> word_of_aggreg g
-  | IncrOrder o -> word_of_order o
+  | IncrIs -> `Op grammar#is
+  | IncrAnd -> `Op grammar#and_
+  | IncrOr -> `Op grammar#or_
+  | IncrMaybe -> `Op grammar#optionally
+  | IncrNot -> `Op grammar#not_
+  | IncrUnselect -> `Op grammar#any
+  | IncrAggreg g -> word_of_aggreg grammar g
+  | IncrOrder o -> word_of_order grammar o
 
 
 (* verbalization of IDs *)
@@ -216,8 +218,8 @@ let var_of_uri (uri : Rdf.uri) : string =
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
 
-let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = function
-  | Is np -> labelling_s1 ~labels np (* TODO: avoid keeping np.id *)
+let rec labelling_p1 grammar ~labels : elt_p1 -> id_label list * id_labelling_list = function
+  | Is np -> labelling_s1 grammar ~labels np (* TODO: avoid keeping np.id *)
   | Type c ->
     let v, w = var_of_uri c, word_of_class c in
     [(v, `Word w)], []
@@ -229,7 +231,7 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = fun
 	| `Noun, Fwd
 	| `InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
 	| _ -> [] in
-    let ls_np, lab = labelling_s1 ~labels:ls_np np in
+    let ls_np, lab = labelling_s1 grammar ~labels:ls_np np in
     let ls =
       match synt, m with
 	| `Noun, Bwd
@@ -246,8 +248,8 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = fun
       match arg with
 	| O -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
 	| _ -> [] in
-    let ls_np1, lab1 = labelling_s1 ~labels:ls_np1 np1 in
-    let ls_np2, lab2 = labelling_s1 ~labels:ls_np2 np2 in
+    let ls_np1, lab1 = labelling_s1 grammar ~labels:ls_np1 np1 in
+    let ls_np2, lab2 = labelling_s1 grammar ~labels:ls_np2 np2 in
     let ls =
       match arg with
 	| P -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np1 @ [(v, `Word w)]
@@ -256,54 +258,51 @@ let rec labelling_p1 ~labels : elt_p1 -> id_label list * id_labelling_list = fun
   | Search _ -> [], []
   | Filter _ -> [], []
   | And ar ->
-    let lss, labs = List.split (Array.to_list (Array.map (labelling_p1 ~labels) ar)) in
+    let lss, labs = List.split (Array.to_list (Array.map (labelling_p1 grammar ~labels) ar)) in
     List.concat lss, List.concat labs
   | Or ar ->
-    let _lss, labs = List.split (Array.to_list (Array.map (labelling_p1 ~labels) ar)) in
+    let _lss, labs = List.split (Array.to_list (Array.map (labelling_p1 grammar ~labels) ar)) in
     [], List.concat labs
   | Maybe elt ->
-    let ls, lab = labelling_p1 ~labels elt in
+    let ls, lab = labelling_p1 grammar ~labels elt in
     ls, lab
   | Not elt ->
-    let _ls, lab = labelling_p1 ~labels elt in
+    let _ls, lab = labelling_p1 grammar ~labels elt in
     [], lab
   | IsThere -> [], []
-and labelling_s1 ~labels : elt_s1 -> id_label list * id_labelling_list = function
+and labelling_s1 grammar ~labels : elt_s1 -> id_label list * id_labelling_list = function
   | Det (An (id, modif, head), rel_opt) ->
     let ls_head = match head with Thing -> [] | Class c -> [(var_of_uri c, `Word (word_of_class c))] in
     let labels2 = labels @ ls_head in
-    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels:labels2 rel in
+    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 grammar ~labels:labels2 rel in
     ls_head @ ls_rel, (id, labels2 @ ls_rel) :: lab_rel
   | Det (_, rel_opt) ->
-    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 ~labels rel in
+    let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 grammar ~labels rel in
     ls_rel, lab_rel
   | AnAggreg (id, modif, g, rel_opt, np) ->
     let v, w =
-      match g with
-	| NumberOf -> "number_of", `Op "number of"
-	| ListOf -> "list_of", `Op "list of"
-	| Total -> "total", `Op "total"
-	| Average -> "average", `Op "average"
-	| Maximum -> "maximum", `Op "maximum"
-	| Minimum -> "minimum", `Op "minimum" in
-    let ls_np, lab_np = labelling_s1 ~labels np in
+      let s_g, pos_g = string_pos_of_aggreg grammar g in
+      match pos_g with
+	| `Noun -> s_g ^ "_of", `Op (s_g ^ " " ^ grammar#of_)
+	| `Adjective -> s_g, `Op s_g in
+    let ls_np, lab_np = labelling_s1 grammar ~labels np in
     let ls_g = List.map (fun (u,l) -> (v ^ "_" ^ u, `Aggreg (w,l))) (labels @ ls_np) @ [(v, `Word w)] in
     ls_np, (id, ls_g) :: lab_np
   | NAnd ar ->
-    let lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
+    let lss, labs = List.split (Array.to_list (Array.map (labelling_s1 grammar ~labels) ar)) in
     List.concat lss, List.concat labs
   | NOr ar ->
-    let _lss, labs = List.split (Array.to_list (Array.map (labelling_s1 ~labels) ar)) in
+    let _lss, labs = List.split (Array.to_list (Array.map (labelling_s1 grammar ~labels) ar)) in
     [], List.concat labs
   | NMaybe elt ->
-    let ls, lab = labelling_s1 ~labels elt in
+    let ls, lab = labelling_s1 grammar ~labels elt in
     ls, lab
   | NNot elt ->
-    let _ls, lab = labelling_s1 ~labels elt in
+    let _ls, lab = labelling_s1 grammar ~labels elt in
     [], lab
-and labelling_s : elt_s -> id_labelling_list = function
+and labelling_s grammar : elt_s -> id_labelling_list = function
   | Return np ->
-    let _ls, lab = labelling_s1 ~labels:[] np in
+    let _ls, lab = labelling_s1 grammar ~labels:[] np in
     lab
 
 class ['a ] counter =
@@ -360,8 +359,8 @@ object
       | None -> assert false
 end
 
-let id_labelling_of_focus focus : id_labelling =
-  let lab = labelling_s (elt_s_of_focus focus) in
+let id_labelling_of_focus grammar focus : id_labelling =
+  let lab = labelling_s grammar (elt_s_of_focus focus) in
   new id_labelling lab
 
 (* verbalization of focus *)
@@ -374,20 +373,20 @@ let is_suspended_focus = function
   | (_, `At) -> true
   | _ -> false
 
-let rec head_of_modif ~suspended nn rel (modif : modif_s2) : np =
+let rec head_of_modif grammar ~suspended nn rel (modif : modif_s2) : np =
   let qu, adj =
     match modif with
-      | Select, order -> qu_adj_of_order order
-      | Unselect, order -> `Any suspended, snd (qu_adj_of_order order) in
+      | Select, order -> qu_adj_of_order grammar order
+      | Unselect, order -> `Any suspended, snd (qu_adj_of_order grammar order) in
   `Qu (qu, adj, `That (nn, rel))
-and qu_adj_of_modif ~suspended modif : qu * adj =
+and qu_adj_of_modif grammar ~suspended modif : qu * adj =
   match modif with
-    | Select, order -> qu_adj_of_order order
-    | Unselect, order -> `Any suspended, snd (qu_adj_of_order order)
-and qu_adj_of_order : order -> qu * adj = function
+    | Select, order -> qu_adj_of_order grammar order
+    | Unselect, order -> `Any suspended, snd (qu_adj_of_order grammar order)
+and qu_adj_of_order grammar : order -> qu * adj = function
   | Unordered -> `A, `Nil
-  | Highest -> `The, `Order (`Op "highest-to-lowest")
-  | Lowest -> `The, `Order (`Op "lowest-to-highest")
+  | Highest -> `The, `Order (`Op grammar#order_highest)
+  | Lowest -> `The, `Order (`Op grammar#order_lowest)
 
 
 let vp_of_elt_p1_Is (np : np) = `IsNP (np, [])
@@ -414,118 +413,115 @@ let vp_of_elt_p1_Rel (p : Rdf.uri) (m : modif_p2) (np : np) =
     | Fwd -> vp_of_elt_p1_Has p np
     | Bwd -> vp_of_elt_p1_IsOf p np
 
-let vp_of_elt_p1_Triple (arg : arg) (np1 : np) (np2 : np) =
+let vp_of_elt_p1_Triple grammar (arg : arg) (np1 : np) (np2 : np) =
   match arg with
     | S -> (* has relation npp to npo / has property npp with value npo / has p npo *)
-      `HasProp (`Relation, np1, [`Prep (`Op "to", np2)])
+      `HasProp (`Relation, np1, [`Prep (`Op grammar#rel_to, np2)])
     | O -> (* has relation npp from nps / is the value of npp of nps / is the p of nps *)
-      `HasProp (`Relation, np2, [`Prep (`Op "from", np1)])
+      `HasProp (`Relation, np2, [`Prep (`Op grammar#rel_from, np1)])
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
-      `IsNP (`Qu (`A, `Nil, `That (`Relation, top_rel)), [`Prep (`Op "from", np1); `Prep (`Op "to", np2)])
+      `IsNP (`Qu (`A, `Nil, `That (`Relation, top_rel)), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)])
 
-let np_of_elt_s1_AnAggreg ~suspended (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
-  let qu, adj = qu_adj_of_modif ~suspended modif in
+let np_of_elt_s1_AnAggreg grammar ~suspended (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
+  let qu, adj = qu_adj_of_modif grammar ~suspended modif in
   let ng_aggreg =
-    match g with
-      | NumberOf -> `ThatOf (`Op "number", rel)
-      | ListOf -> `ThatOf (`Op "list", rel)
-      | Total -> `That (`Op "total", rel)
-      | Average -> `That (`Op "average", rel)
-      | Maximum -> `That (`Op "maximum", rel)
-      | Minimum -> `That (`Op "minimum", rel) in
+    let s_g, pos_g = string_pos_of_aggreg grammar g in
+    match pos_g with
+      | `Noun -> `ThatOf (`Op s_g, rel)
+      | `Adjective -> `That (`Op s_g, rel) in
   `QuAggreg (suspended, qu, adj, ng_aggreg, ng)
 
 
-let rec vp_of_elt_p1 ~id_labelling pos ctx f : vp =
+let rec vp_of_elt_p1 grammar ~id_labelling pos ctx f : vp =
   let nl =
     match f with
       | IsThere -> `Ellipsis
-      | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (IsX ctx) np)
+      | Is np -> vp_of_elt_p1_Is (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (IsX ctx) np)
       | Type c -> vp_of_elt_p1_Type c
-      | Rel (p,m,np) -> vp_of_elt_p1_Rel p m (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (RelX (p,m,ctx)) np)
+      | Rel (p,m,np) -> vp_of_elt_p1_Rel p m (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (RelX (p,m,ctx)) np)
       | Triple (arg,np1,np2) ->
-	vp_of_elt_p1_Triple arg
-	  (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
-	  (np_of_elt_s1 ~id_labelling (focus_pos_down pos) (TripleX2 (arg,np1,ctx)) np2)
-      | Search c -> vp_of_constr c
-      | Filter c -> vp_of_constr c
-      | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
-      | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
-      | Maybe elt -> `Maybe (false, vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (MaybeX ctx) elt)
-      | Not elt -> `Not (false, vp_of_elt_p1 ~id_labelling (focus_pos_down pos) (NotX ctx) elt) in
+	vp_of_elt_p1_Triple grammar arg
+	  (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (TripleX1 (arg,np2,ctx)) np1)
+	  (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (TripleX2 (arg,np1,ctx)) np2)
+      | Search c -> vp_of_constr grammar c
+      | Filter c -> vp_of_constr grammar c
+      | And ar -> `And (Array.mapi (fun i elt -> vp_of_elt_p1 grammar ~id_labelling (focus_pos_down pos) (AndX (i,ar,ctx)) elt) ar)
+      | Or ar -> `Or (None, Array.mapi (fun i elt -> vp_of_elt_p1 grammar ~id_labelling (focus_pos_down pos) (OrX (i,ar,ctx)) elt) ar)
+      | Maybe elt -> `Maybe (false, vp_of_elt_p1 grammar ~id_labelling (focus_pos_down pos) (MaybeX ctx) elt)
+      | Not elt -> `Not (false, vp_of_elt_p1 grammar ~id_labelling (focus_pos_down pos) (NotX ctx) elt) in
   `Focus ((AtP1 (f,ctx), pos), nl)
-and vp_of_constr = function
+and vp_of_constr grammar = function
   | True -> `Ellipsis
-  | MatchesAll lpat -> `VT (`Op "matches", `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat), [])
-  | MatchesAny lpat -> `VT (`Op "matches", `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat), [])
-  | After pat -> `IsPP (`Prep (`Op "after", np_of_literal pat))
-  | Before pat -> `IsPP (`Prep (`Op "before", np_of_literal pat))
-  | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op "from", np_of_literal pat1, `Op "to", np_of_literal pat2))
-  | HigherThan pat -> `IsPP (`Prep (`Op "higher or equal to", np_of_literal pat))
-  | LowerThan pat -> `IsPP (`Prep (`Op "lower or equal to", np_of_literal pat))
-  | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op "between", np_of_literal pat1, `Op "and", np_of_literal pat2))
-  | HasLang pat -> `Has (`Qu (`A, `Nil, `That (`Op "language", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
-  | HasDatatype pat -> `Has (`Qu (`A, `Nil, `That (`Op "datatype", `Ing (`Op "matching", `PN (`Literal pat, top_rel)))), [])
-and rel_of_elt_p1_opt ~id_labelling pos ctx = function
+  | MatchesAll lpat -> `VT (`Op grammar#matches, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat), [])
+  | MatchesAny lpat -> `VT (`Op grammar#matches, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat), [])
+  | After pat -> `IsPP (`Prep (`Op grammar#after, np_of_literal pat))
+  | Before pat -> `IsPP (`Prep (`Op grammar#before, np_of_literal pat))
+  | FromTo (pat1,pat2) -> `IsPP (`PrepBin (`Op grammar#interval_from, np_of_literal pat1, `Op grammar#interval_to, np_of_literal pat2))
+  | HigherThan pat -> `IsPP (`Prep (`Op grammar#higher_or_equal_to, np_of_literal pat))
+  | LowerThan pat -> `IsPP (`Prep (`Op grammar#lower_or_equal_to, np_of_literal pat))
+  | Between (pat1,pat2) -> `IsPP (`PrepBin (`Op grammar#interval_between, np_of_literal pat1, `Op grammar#interval_and, np_of_literal pat2))
+  | HasLang pat -> `Has (`Qu (`A, `Nil, `That (`Op grammar#language, `Ing (`Op grammar#matching, `PN (`Literal pat, top_rel)))), [])
+  | HasDatatype pat -> `Has (`Qu (`A, `Nil, `That (`Op grammar#datatype, `Ing (`Op grammar#matching, `PN (`Literal pat, top_rel)))), [])
+and rel_of_elt_p1_opt grammar ~id_labelling pos ctx = function
   | None -> top_rel
-  | Some rel -> `That (vp_of_elt_p1 ~id_labelling pos ctx rel)
-and np_of_elt_s1 ~id_labelling pos ctx f : np =
+  | Some rel -> `That (vp_of_elt_p1 grammar ~id_labelling pos ctx rel)
+and np_of_elt_s1 grammar ~id_labelling pos ctx f : np =
   let foc = (AtS1 (f,ctx),pos) in
   match f with
     | Det (det, rel_opt) ->
-      let nl_rel = rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
-      det_of_elt_s2 ~id_labelling foc nl_rel det
+      let nl_rel = rel_of_elt_p1_opt grammar ~id_labelling (focus_pos_down pos) (DetThatX (det,ctx)) rel_opt in
+      det_of_elt_s2 grammar ~id_labelling foc nl_rel det
     | AnAggreg (id,modif,g,rel_opt,np) ->
       let nl =
-	np_of_elt_s1_AnAggreg ~suspended:false
+	np_of_elt_s1_AnAggreg grammar ~suspended:false
 	  modif g
-	  (rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
-	  (ng_of_elt_s1 ~id_labelling (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
+	  (rel_of_elt_p1_opt grammar ~id_labelling (focus_pos_down pos) (AnAggregThatX (id,modif,g,np,ctx)) rel_opt)
+	  (ng_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np) in
       `Focus (foc, nl)
-    | NAnd ar -> `Focus (foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar))
-    | NOr ar -> `Focus (foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar))
-    | NMaybe elt -> `Focus (foc, `Maybe (false, np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NMaybeX ctx) elt))
-    | NNot elt -> `Focus (foc, `Not (false, np_of_elt_s1 ~id_labelling (focus_pos_down pos) (NNotX ctx) elt))
-and ng_of_elt_s1 ~id_labelling pos ctx f =
+    | NAnd ar -> `Focus (foc, `And (Array.mapi (fun i elt -> np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (NAndX (i,ar,ctx)) elt) ar))
+    | NOr ar -> `Focus (foc, `Or (None, Array.mapi (fun i elt -> np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (NOrX (i,ar,ctx)) elt) ar))
+    | NMaybe elt -> `Focus (foc, `Maybe (false, np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (NMaybeX ctx) elt))
+    | NNot elt -> `Focus (foc, `Not (false, np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (NNotX ctx) elt))
+and ng_of_elt_s1 grammar ~id_labelling pos ctx f =
   let foc = (AtS1 (f,ctx), pos) in
   match f with
     | Det (An (id,modif,head) as det, rel_opt) ->
-      `Focus (foc, `That (word_of_elt_head head, rel_of_elt_p1_opt ~id_labelling (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt))
+      `Focus (foc, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling (focus_pos_down pos) (DetThatX (det, ctx)) rel_opt))
     | _ -> assert false
-and det_of_elt_s2 ~id_labelling foc rel : elt_s2 -> np = function
+and det_of_elt_s2 grammar ~id_labelling foc rel : elt_s2 -> np = function
   | Term t -> `Focus (foc, `PN (word_of_term t, rel))
-  | An (id, modif, head) -> `Focus (foc, head_of_modif ~suspended:(is_suspended_focus foc) (word_of_elt_head head) rel modif)
+  | An (id, modif, head) -> `Focus (foc, head_of_modif grammar ~suspended:(is_suspended_focus foc) (word_of_elt_head head) rel modif)
   | The id -> `Focus (foc, `Ref (id_labelling#get_id_label id, rel))
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
-and s_of_elt_s ~id_labelling pos : elt_s -> s = function
+and s_of_elt_s grammar ~id_labelling pos : elt_s -> s = function
   | Return np ->
     let foc = (AtS (Return np), pos) in
-    `Focus (foc, `Return (np_of_elt_s1 ~id_labelling (focus_pos_down pos) ReturnX np))
+    `Focus (foc, `Return (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) ReturnX np))
 
 (* in *_of_ctx_*, [pos = `At] if semantically at current focus *)
-let rec s_of_ctx_p1 ~id_labelling pos f foc_nl ctx : s =
+let rec s_of_ctx_p1 grammar ~id_labelling pos f foc_nl ctx : s =
   match ctx with
     | DetThatX (det,ctx2) ->
       let f2 = Det (det, Some f) in
-      let foc2_nl2 = det_of_elt_s2 ~id_labelling (AtS1 (f2,ctx2), `Out) (`That foc_nl) det in
-      s_of_ctx_s1 ~id_labelling pos f2 foc2_nl2 ctx2
+      let foc2_nl2 = det_of_elt_s2 grammar ~id_labelling (AtS1 (f2,ctx2), `Out) (`That foc_nl) det in
+      s_of_ctx_s1 grammar ~id_labelling pos f2 foc2_nl2 ctx2
     | AnAggregThatX (id,modif,g,np,ctx2) ->
       let f2 = AnAggreg (id, modif, g, Some f, np) in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
-      let nl2 = np_of_elt_s1_AnAggreg ~suspended:false modif g
+      let nl2 = np_of_elt_s1_AnAggreg grammar ~suspended:false modif g
 	(`That foc_nl)
-	(ng_of_elt_s1 ~id_labelling `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
-      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+	(ng_of_elt_s1 grammar ~id_labelling `Out (AnAggregX (id, modif, g, Some f, ctx2)) np) in
+      s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | AndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; And ar in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
-		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 ~id_labelling `Out (AndX (j,ar,ctx2)) elt)
+		(fun j elt -> if j=i then foc_nl else vp_of_elt_p1 grammar ~id_labelling `Out (AndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | OrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = Or ar in
@@ -533,41 +529,41 @@ let rec s_of_ctx_p1 ~id_labelling pos f foc_nl ctx : s =
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
-	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 ~id_labelling `Ex (OrX (j,ar,ctx2)) elt)
+	       (fun j elt -> if j=i then foc_nl else vp_of_elt_p1 grammar ~id_labelling `Ex (OrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | MaybeX ctx2 ->
       let f2 = Maybe f in
       let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NotX ctx2 ->
       let f2 = Not f in
       let foc2 = (AtP1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
-and s_of_ctx_s1 ~id_labelling pos f foc_nl ctx =
+      s_of_ctx_p1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+and s_of_ctx_s1 grammar ~id_labelling pos f foc_nl ctx =
   match ctx with
     | IsX ctx2 ->
       let f2 = Is f in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Is foc_nl in
-      s_of_ctx_p1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | RelX (p,m,ctx2) ->
       let f2 = Rel (p,m,f) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Rel p m foc_nl in
-      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_p1 grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX1 (arg,np2,ctx2) ->
       let f2 = Triple (arg,f,np2) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_Triple arg foc_nl (np_of_elt_s1 ~id_labelling `Out (TripleX2 (arg,f,ctx2)) np2) in
-      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
+      let nl2 = vp_of_elt_p1_Triple grammar arg foc_nl (np_of_elt_s1 grammar ~id_labelling `Out (TripleX2 (arg,f,ctx2)) np2) in
+      s_of_ctx_p1 grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | TripleX2 (arg,np1,ctx2) ->
       let f2 = Triple (arg,np1,f) in
       let foc2 = (AtP1 (f2,ctx2), `Out) in
-      let nl2 = vp_of_elt_p1_Triple arg (np_of_elt_s1 ~id_labelling `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
-      s_of_ctx_p1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
+      let nl2 = vp_of_elt_p1_Triple grammar arg (np_of_elt_s1 grammar ~id_labelling `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
+      s_of_ctx_p1 grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | ReturnX ->
       let f2 = Return f in
       let foc2 = (AtS f2, `Out) in
@@ -576,18 +572,18 @@ and s_of_ctx_s1 ~id_labelling pos f foc_nl ctx =
     | AnAggregX (id,modif,g,rel_opt,ctx2) ->
       let f2 = AnAggreg (id, modif, g, rel_opt, f) in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
-      let nl2 = np_of_elt_s1_AnAggreg ~suspended:(pos = `At) (*is_suspended_focus foc*) modif g
-	(rel_of_elt_p1_opt ~id_labelling `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
+      let nl2 = np_of_elt_s1_AnAggreg grammar ~suspended:(pos = `At) (*is_suspended_focus foc*) modif g
+	(rel_of_elt_p1_opt grammar ~id_labelling `Out (AnAggregThatX (id, modif, g, f, ctx2)) rel_opt)
         ( match foc_nl with `Focus (foc, `Qu (_,_,ng)) -> `Focus (foc, ng) | `Qu (_,_,ng) -> ng | _ -> assert false )  (* TODO: what to do with hidden modif/adj *) in
-      s_of_ctx_s1 ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | NAndX (i,ar,ctx2) ->
       let f2 = ar.(i) <- f; NAnd ar in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
       let nl2 =
 	`And (Array.mapi
-		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 ~id_labelling `Out (NAndX (j,ar,ctx2)) elt)
+		(fun j elt -> if j=i then foc_nl else np_of_elt_s1 grammar ~id_labelling `Out (NAndX (j,ar,ctx2)) elt)
 		ar) in
-      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
     | NOrX (i,ar,ctx2) ->
       ar.(i) <- f;
       let f2 = NOr ar in
@@ -595,24 +591,24 @@ and s_of_ctx_s1 ~id_labelling pos f foc_nl ctx =
       let nl2 =
 	`Or (Some i,
 	     Array.mapi
-	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 ~id_labelling `Ex (NOrX (j,ar,ctx2)) elt)
+	       (fun j elt -> if j=i then foc_nl else np_of_elt_s1 grammar ~id_labelling `Ex (NOrX (j,ar,ctx2)) elt)
 	       ar) in
-      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NMaybeX ctx2 ->
       let f2 = NMaybe f in
       let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Maybe (true, foc_nl) in
-      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
    | NNotX ctx2 ->
       let f2 = NNot f in
       let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
-      s_of_ctx_s1 ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+      s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
 
-let s_of_focus ~id_labelling : focus -> s = function
-  | AtP1 (f,ctx) -> s_of_ctx_p1 ~id_labelling `At f (vp_of_elt_p1 ~id_labelling `At ctx f) ctx
-  | AtS1 (f,ctx) -> s_of_ctx_s1 ~id_labelling `At f (np_of_elt_s1 ~id_labelling `At ctx f) ctx
-  | AtS f -> s_of_elt_s ~id_labelling `Out f
+let s_of_focus grammar ~id_labelling : focus -> s = function
+  | AtP1 (f,ctx) -> s_of_ctx_p1 grammar ~id_labelling `At f (vp_of_elt_p1 grammar ~id_labelling `At ctx f) ctx
+  | AtS1 (f,ctx) -> s_of_ctx_s1 grammar ~id_labelling `At f (np_of_elt_s1 grammar ~id_labelling `At ctx f) ctx
+  | AtS f -> s_of_elt_s grammar ~id_labelling `Out f
 
 (* linguistic transformations *)
 
@@ -754,39 +750,37 @@ and node =
   | DeleteCurrentFocus
   | DeleteIncr
 
-let rec xml_text_content l =
-  String.concat " " (List.map xml_node_text_content l)
-and xml_node_text_content = function
+let rec xml_text_content grammar l =
+  String.concat " " (List.map (xml_node_text_content grammar) l)
+and xml_node_text_content grammar = function
   | Kwd s -> s
-  | Word w -> word_text_content w
-  | Suffix (x,suf) -> xml_text_content x ^ suf
-  | Enum (sep, xs) -> String.concat sep (List.map xml_text_content xs)
-  | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content xsep ^ " ") (List.map xml_text_content xs)
-  | Focus (foc,x) -> xml_text_content x
-  | Highlight x -> xml_text_content x
-  | Suspended x -> xml_text_content x
+  | Word w -> word_text_content grammar w
+  | Suffix (x,suf) -> xml_text_content grammar x ^ suf
+  | Enum (sep, xs) -> String.concat sep (List.map (xml_text_content grammar) xs)
+  | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content grammar xsep ^ " ") (List.map (xml_text_content grammar) xs)
+  | Focus (foc,x) -> xml_text_content grammar x
+  | Highlight x -> xml_text_content grammar x
+  | Suspended x -> xml_text_content grammar x
   | DeleteCurrentFocus -> ""
   | DeleteIncr -> ""
 
-let rec xml_np_label (`The (k_opt, ng) : np_label) =
-  let xml_ng = xml_ng_label ng in
+let rec xml_np_label grammar (`The (k_opt, ng) : np_label) =
+  let xml_ng = xml_ng_label grammar ng in
   let nl_rank =
     match k_opt with
       | None -> []
-      | Some k ->
-	let s_th =
-	  if k mod 10 = 1 && not (k mod 100 = 11) then "st"
-	  else if k mod 10 = 2 && not (k mod 100 = 12) then "nd"
-	  else if k mod 10 = 3 && not (k mod 100 = 13) then "rd"
-	  else "th" in
-	[Word (`Op (string_of_int k ^ s_th))] in
-  Word (`Op "the") :: nl_rank @ xml_ng
-and xml_ng_label = function
+      | Some k -> [Word (`Op (grammar#n_th k))] in
+  Word (`Op grammar#the) :: nl_rank @ xml_ng
+and xml_ng_label grammar = function
   | `Word w -> [Word w]
-  | `Gen (ng, w) -> Suffix (xml_ng_label ng, "'s") :: Word w :: [] (* TODO: avoid space before 's *)
-  | `Of (w,ng) -> Word w :: Kwd "of" :: Kwd "the" :: xml_ng_label ng
-  | `Aggreg (w,ng) -> Word w :: xml_ng_label ng
+  | `Gen (ng, w) ->
+    ( match grammar#genetive_suffix with
+      | Some suf -> Suffix (xml_ng_label grammar ng, suf) :: Word w :: []
+      | None -> xml_ng_label grammar (`Of (w,ng)) )
+  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: Kwd grammar#the :: xml_ng_label grammar ng
+  | `Aggreg (w,ng) -> Word w :: xml_ng_label grammar ng
 
+(*
 let rec xml_starts_with_vowel = function
   | [] -> false
   | x::_ -> node_starts_with_vowel x
@@ -815,23 +809,22 @@ and string_starts_with_vowel s =
     let c = Char.lowercase s.[0] in
     c = 'a' || c = 'e' || c = 'i' || c = 'o' (* || c = 'u' : 'u' is more often pronounced [y] *)
   with _ -> false
+*)
 
-let xml_a_an xml =
-  if xml_starts_with_vowel xml
-  then Kwd "an" :: xml
-  else Kwd "a" :: xml
+let xml_a_an grammar xml =
+  Kwd (grammar#a_an ~following:(xml_text_content grammar xml)) :: xml
 
 let xml_suspended susp xml =
   if susp
   then [Suspended xml]
   else xml
 
-let xml_and ar =
-  [ Coord ([Kwd "and"], Array.to_list ar) ]
-let xml_or isusp ar =
+let xml_and grammar ar =
+  [ Coord ([Kwd grammar#and_], Array.to_list ar) ]
+let xml_or grammar isusp ar =
   let susp_or = isusp <> None in
   let susp_elt i = isusp <> None && isusp <> Some i in
-  let coord = [Word (`Op "or")] in
+  let coord = [Word (`Op grammar#or_)] in
   [ Coord ((if susp_or then [Suspended coord] else coord),
 	   Array.to_list
 	     (Array.mapi
@@ -840,10 +833,10 @@ let xml_or isusp ar =
 		  then [Suspended xml_i]
 		  else xml_i)
 		ar)) ]
-let xml_maybe susp xml =
-  xml_suspended susp [Word (`Op "optionally")] @ xml
-let xml_not susp xml =
-  xml_suspended susp [Word (`Op "not")] @ xml
+let xml_maybe grammar susp xml =
+  xml_suspended susp [Word (`Op grammar#optionally)] @ xml
+let xml_not grammar susp xml =
+  xml_suspended susp [Word (`Op grammar#not_)] @ xml
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus (focus,pos) xml =
@@ -851,160 +844,166 @@ let xml_focus (focus,pos) xml =
   let xml = if pos = `At || pos = `In then [Highlight xml] else xml in
   [Focus (focus, xml)]
 
-let rec xml_s = function
-  | `Return np -> Kwd "Give" :: Kwd "me" :: xml_np np
-  | `ThereIs np -> Kwd "There" :: Kwd "is" :: xml_np np
-  | `Truth (np,vp) -> Kwd "It" :: Kwd "is" :: Kwd "true" :: Kwd "that" :: xml_np np @ xml_vp vp
-  | `Focus (foc,s) -> xml_focus foc (xml_s s)
-and xml_np = function
+let rec xml_s grammar = function
+  | `Return np -> Kwd grammar#give_me :: xml_np grammar np
+  | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar np
+  | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar np @ xml_vp grammar vp
+  | `Focus (foc,s) -> xml_focus foc (xml_s grammar s)
+and xml_np grammar = function
   | `Void -> []
-  | `PN (w,rel) -> Word w :: xml_rel rel
-  | `Ref (np_label,rel) -> xml_np_label np_label @ xml_rel rel
-  | `Qu (qu,adj,ng) -> xml_qu qu (xml_adj adj @ xml_ng ng)
-  | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu qu (xml_suspended susp (xml_adj adj @ xml_ng_aggreg ngg) @ xml_ng ng)
-  | `QuOneOf (qu,lw) -> xml_qu qu (Kwd "of" :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
-  | `And ar -> xml_and (Array.map xml_np ar)
-  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_np ar)
-  | `Maybe (susp,np) -> xml_maybe susp (xml_np np)
-  | `Not (susp,np) -> xml_not susp (xml_np np)
-  | `Focus (foc,np) -> xml_focus foc (xml_np np)
-and xml_ng = function
-  | `That (w,rel) -> Word w :: xml_rel rel
-  | `Focus (foc,ng) -> xml_focus foc (xml_ng ng)
-and xml_qu qu xml =
+  | `PN (w,rel) -> Word w :: xml_rel grammar rel
+  | `Ref (np_label,rel) -> xml_np_label grammar np_label @ xml_rel grammar rel
+  | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ng))
+  | `QuAggreg (susp, qu,adj,ngg,ng) -> xml_qu grammar qu (xml_suspended susp (xml_adj grammar adj (xml_ng_aggreg grammar ngg)) @ xml_ng grammar ng)
+  | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
+  | `And ar -> xml_and grammar (Array.map (xml_np grammar) ar)
+  | `Or (isusp,ar) -> xml_or grammar isusp (Array.map (xml_np grammar) ar)
+  | `Maybe (susp,np) -> xml_maybe grammar susp (xml_np grammar np)
+  | `Not (susp,np) -> xml_not grammar susp (xml_np grammar np)
+  | `Focus (foc,np) -> xml_focus foc (xml_np grammar np)
+and xml_ng grammar = function
+  | `That (w,rel) -> Word w :: xml_rel grammar rel
+  | `Focus (foc,ng) -> xml_focus foc (xml_ng grammar ng)
+and xml_qu grammar qu xml =
   match xml with
     | Word `Thing :: xml_rem ->
       ( match qu with
-	| `A -> Kwd "something" :: xml_rem
-	| `Any susp -> xml_suspended susp [Word (`Op "anything")] @ xml_rem
-	| `The -> Kwd "the" :: xml
-	| `All -> Kwd "everything" :: xml_rem
-	| `One -> Kwd "one" :: xml
-	| `No susp -> xml_suspended susp [Word (`Op "nothing")] @ xml_rem )
+	| `A -> Kwd grammar#something :: xml_rem
+	| `Any susp -> xml_suspended susp [Word (`Op grammar#anything)] @ xml_rem
+	| `The -> Kwd grammar#the :: xml
+	| `All -> Kwd grammar#everything :: xml_rem
+	| `One -> Kwd grammar#quantif_one :: xml
+	| `No susp -> xml_suspended susp [Word (`Op grammar#nothing)] @ xml_rem )
     | _ ->
       ( match qu with
-	| `A -> xml_a_an xml
-	| `Any susp -> xml_suspended susp [Word (`Op "any")] @ xml
-	| `The -> Kwd "the" :: xml
-	| `All -> Kwd "all" :: xml
-	| `One -> Kwd "one" :: xml
-	| `No susp -> xml_suspended susp [Word (`Op "no")] @ xml )
-and xml_adj = function
+	| `A -> xml_a_an grammar xml
+	| `Any susp -> xml_suspended susp [Word (`Op grammar#any)] @ xml
+	| `The -> Kwd grammar#the :: xml
+	| `All -> Kwd grammar#all :: xml
+	| `One -> Kwd grammar#quantif_one :: xml
+	| `No susp -> xml_suspended susp [Word (`Op grammar#no)] @ xml )
+and xml_adj grammar adj xml_ng =
+  let append xml_adj xml_ng =
+    if grammar#adjective_before_noun
+    then xml_adj @ xml_ng
+    else xml_ng @ xml_adj
+  in
+  match adj with
+    | `Nil -> xml_ng
+    | `Order w -> append [Word w] xml_ng
+    | `Aggreg (susp,adj,w) -> append (xml_suspended susp (xml_adj grammar adj [Word w])) xml_ng
+    | `Optional (susp,adj) -> append (xml_suspended susp [Word (`Op grammar#optional)]) (xml_adj grammar adj xml_ng)
+    | `Adj (adj,w) -> append (xml_adj grammar adj [Word w]) xml_ng
+and xml_ng_aggreg grammar = function
+  | `That (g,rel) -> Word g :: xml_rel grammar rel
+  | `ThatOf (g,rel) -> Word g :: xml_rel grammar rel @ [Kwd grammar#of_]
+and xml_rel grammar = function
+  | `Focus (foc1, `Maybe (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Maybe foc1 susp foc2 vp)
+  | `Focus (foc1, `Not (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Not foc1 susp foc2 vp)
   | `Nil -> []
-  | `Order w -> [Word w]
-  | `Aggreg (susp,adj,w) -> xml_suspended susp (xml_adj adj @ [Word w])
-  | `Optional (susp,adj) -> xml_suspended susp [Word (`Op "optional")] @ xml_adj adj
-  | `Adj (adj,w) -> xml_adj adj @ [Word w]
-and xml_ng_aggreg = function
-  | `That (g,rel) -> Word g :: xml_rel rel
-  | `ThatOf (g,rel) -> Word g :: xml_rel rel @ [Kwd "of"]
-and xml_rel = function
-  | `Focus (foc1, `Maybe (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd "that" :: xml_vp_mod `Maybe foc1 susp foc2 vp)
-  | `Focus (foc1, `Not (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd "that" :: xml_vp_mod `Not foc1 susp foc2 vp)
-  | `Nil -> []
-  | `That vp -> Kwd "that" :: xml_vp vp
-  | `Whose (ng,vp) -> Kwd "whose" :: xml_ng ng @ xml_vp vp
-  | `Of np -> Kwd "of" :: xml_np np
-  | `PP lpp -> xml_pp_list lpp
-  | `Ing (w,np) -> Word w :: xml_np np
-  | `And ar -> xml_and (Array.map xml_rel ar)
-  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_rel ar)
-  | `Maybe (susp,rel) -> xml_maybe susp (xml_rel rel)
-  | `Not (susp,rel) -> xml_not susp (xml_rel rel)
+  | `That vp -> Kwd grammar#relative_that :: xml_vp grammar vp
+  | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ng @ xml_vp grammar vp
+  | `Of np -> Kwd grammar#of_ :: xml_np grammar np
+  | `PP lpp -> xml_pp_list grammar lpp
+  | `Ing (w,np) -> Word w :: xml_np grammar np
+  | `And ar -> xml_and grammar (Array.map (xml_rel grammar) ar)
+  | `Or (isusp,ar) -> xml_or grammar isusp (Array.map (xml_rel grammar) ar)
+  | `Maybe (susp,rel) -> xml_maybe grammar susp (xml_rel grammar rel)
+  | `Not (susp,rel) -> xml_not grammar susp (xml_rel grammar rel)
   | `Ellipsis -> xml_ellipsis
-  | `Focus (foc,rel) -> xml_focus foc (xml_rel rel)
-and xml_vp = function
-  | `Focus (foc1, `Maybe (susp, `Focus (foc2, vp))) -> xml_focus foc1 (xml_vp_mod `Maybe foc1 susp foc2 vp)
-  | `Focus (foc1, `Not (susp, `Focus (foc2, vp))) -> xml_focus foc1 (xml_vp_mod `Not foc1 susp foc2 vp) (* negation inversion *)
-  | `IsNP (np,lpp) -> Kwd "is" :: xml_np np @ xml_pp_list lpp
-  | `IsPP pp -> Kwd "is" :: xml_pp pp
-  | `HasProp (p,np,lpp) -> Kwd "has" :: Word p :: xml_np np @ xml_pp_list lpp
-  | `Has (np,lpp) -> Kwd "has" :: xml_np np @ xml_pp_list lpp
-  | `VT (w,np,lpp) -> Word w :: xml_np np @ xml_pp_list lpp
-  | `Subject (np,vp) -> xml_np np @ xml_vp vp
-  | `And ar -> xml_and (Array.map xml_vp ar)
-  | `Or (isusp,ar) -> xml_or isusp (Array.map xml_vp ar)
-  | `Maybe (susp,vp) -> xml_maybe susp (xml_vp vp)
-  | `Not (susp,vp) -> xml_not susp (xml_vp vp)
+  | `Focus (foc,rel) -> xml_focus foc (xml_rel grammar rel)
+and xml_vp grammar = function
+  | `Focus (foc1, `Maybe (susp, `Focus (foc2, vp))) -> xml_focus foc1 (xml_vp_mod grammar `Maybe foc1 susp foc2 vp)
+  | `Focus (foc1, `Not (susp, `Focus (foc2, vp))) -> xml_focus foc1 (xml_vp_mod grammar `Not foc1 susp foc2 vp) (* negation inversion *)
+  | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar np @ xml_pp_list grammar lpp
+  | `IsPP pp -> Kwd grammar#is :: xml_pp grammar pp
+  | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar np @ xml_pp_list grammar lpp
+  | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar np @ xml_pp_list grammar lpp
+  | `VT (w,np,lpp) -> Word w :: xml_np grammar np @ xml_pp_list grammar lpp
+  | `Subject (np,vp) -> xml_np grammar np @ xml_vp grammar vp
+  | `And ar -> xml_and grammar (Array.map (xml_vp grammar) ar)
+  | `Or (isusp,ar) -> xml_or grammar isusp (Array.map (xml_vp grammar) ar)
+  | `Maybe (susp,vp) -> xml_maybe grammar susp (xml_vp grammar vp)
+  | `Not (susp,vp) -> xml_not grammar susp (xml_vp grammar vp)
   | `Ellipsis -> xml_ellipsis
-  | `Focus (foc,vp) -> xml_focus foc (xml_vp vp)
-and xml_vp_mod (op_mod : [`Not | `Maybe]) foc_mod susp_mod foc_vp vp =
+  | `Focus (foc,vp) -> xml_focus foc (xml_vp grammar vp)
+and xml_vp_mod grammar (op_mod : [`Not | `Maybe]) foc_mod susp_mod foc_vp vp =
   let f_xml_mod = match op_mod with `Maybe -> xml_maybe | `Not -> xml_not in
-  let xml_mod = xml_focus (focus_down foc_mod) (f_xml_mod susp_mod []) in
+  let xml_mod = xml_focus (focus_down foc_mod) (f_xml_mod grammar susp_mod []) in
   match op_mod, vp with
-    | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus foc_vp (Kwd "is" :: xml_mod @ xml_np np @ xml_pp_list lpp)
-    | (`Not | `Maybe), `IsPP pp -> xml_focus foc_vp (Kwd "is" :: xml_mod @ xml_pp pp)
-    | `Not, `HasProp (p,np,lpp) -> xml_focus foc_vp (Kwd "has" :: xml_mod @ Word p :: xml_np np @ xml_pp_list lpp)
-    | `Not, `Has (np,lpp) -> xml_focus foc_vp (Kwd "has" :: xml_mod @ xml_np np @ xml_pp_list lpp)
-    | _, vp -> xml_mod @ xml_focus foc_vp (xml_vp vp)
-and xml_pp_list lpp =
-  List.concat (List.map xml_pp lpp)
-and xml_pp = function
-  | `Prep (prep,np) -> Word prep :: xml_np np
-  | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np np1 @ Word prep2 :: xml_np np2
+    | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus foc_vp (Kwd grammar#is :: xml_mod @ xml_np grammar np @ xml_pp_list grammar lpp)
+    | (`Not | `Maybe), `IsPP pp -> xml_focus foc_vp (Kwd grammar#is :: xml_mod @ xml_pp grammar pp)
+    | `Not, `HasProp (p,np,lpp) -> xml_focus foc_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar np @ xml_pp_list grammar lpp)
+    | `Not, `Has (np,lpp) -> xml_focus foc_vp (Kwd grammar#has :: xml_mod @ xml_np grammar np @ xml_pp_list grammar lpp)
+    | _, vp -> xml_mod @ xml_focus foc_vp (xml_vp grammar vp)
+and xml_pp_list grammar lpp =
+  List.concat (List.map (xml_pp grammar) lpp)
+and xml_pp grammar = function
+  | `Prep (prep,np) -> Word prep :: xml_np grammar np
+  | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar np1 @ Word prep2 :: xml_np grammar np2
 
 
-let xml_incr_coordinate focus xml =
+let xml_incr_coordinate grammar focus xml =
   match focus with
     | AtS1 _ -> xml
     | AtP1 (IsThere, _) -> xml
-    | _ -> Kwd "and" :: xml
+    | _ -> Kwd grammar#and_ :: xml
 
-let xml_incr ~id_labelling (focus : focus) = function
+let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrTerm t ->
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
       | AtS1 (Det (Term t0, _), _) when t0 = t -> xml_t @ [DeleteIncr]
       | AtS1 _ -> xml_t
       | _ ->
-	xml_incr_coordinate focus
-	  (Kwd "that" :: Kwd "is" :: xml_t) )
+	xml_incr_coordinate grammar focus
+	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
   | IncrId id ->
-    let xml_id = xml_np_label (id_labelling#get_id_label id) in
+    let xml_id = xml_np_label grammar (id_labelling#get_id_label id) in
     ( match focus with
       | AtS1 _ -> xml_id
       | _ ->
-	xml_incr_coordinate focus
-	  (Kwd "that" :: Kwd "is" :: xml_id) )
+	xml_incr_coordinate grammar focus
+	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_id) )
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with
       | AtS1 (Det (An (_, _, Class c0), _), _) when c0 = c ->
-	xml_a_an xml_c @ [DeleteIncr]
-      | AtS1 _ -> xml_a_an xml_c
+	xml_a_an grammar xml_c @ [DeleteIncr]
+      | AtS1 _ -> xml_a_an grammar xml_c
       | _ ->
-	xml_incr_coordinate focus
-	  (Kwd "that" :: Kwd "is" :: xml_a_an xml_c) )
+	xml_incr_coordinate grammar focus
+	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar xml_c) )
   | IncrRel (p,Lisql.Fwd) ->
-    xml_incr_coordinate focus
-      (Kwd "that" ::
+    xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that ::
        let word, synt = word_syntagm_of_property p in
        match synt with
-	 | `Noun -> Kwd "has" :: xml_a_an [Word word]
-	 | `InvNoun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
+	 | `Noun -> Kwd grammar#has :: xml_a_an grammar [Word word]
+	 | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
 	 | `TransVerb -> Word word :: xml_ellipsis
-	 | `TransAdj -> Kwd "is" :: Word word :: xml_ellipsis)
+	 | `TransAdj -> Kwd grammar#is :: Word word :: xml_ellipsis)
   | IncrRel (p,Lisql.Bwd) ->
-    xml_incr_coordinate focus
-      (Kwd "that" ::
+    xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that ::
        let word, synt = word_syntagm_of_property p in
        match synt with
-	 | `Noun -> Kwd "is" :: Kwd "the" :: Word word :: Kwd "of" :: xml_ellipsis
-	 | `InvNoun -> Kwd "has" :: xml_a_an [Word word]
+	 | `Noun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
+	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `TransVerb -> xml_ellipsis @ Word word :: []
-	 | `TransAdj -> xml_ellipsis @ Kwd "is" :: Word word :: [])
+	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: [])
   | IncrTriple (S | O as arg) ->
-    xml_incr_coordinate focus
-      (Kwd "that" :: Kwd "has" :: Kwd "a" :: Word `Relation :: (if arg = S then Kwd "to" :: xml_ellipsis else Kwd "from" :: xml_ellipsis))
+    xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ (if arg = S then Kwd grammar#rel_to :: xml_ellipsis else Kwd grammar#rel_from :: xml_ellipsis))
   | IncrTriple P ->
-    xml_incr_coordinate focus
-      (Kwd "that" :: Kwd "is" :: Kwd "a" :: Word `Relation :: Kwd "from" :: xml_ellipsis @ Kwd "to" :: xml_ellipsis)
-  | IncrTriplify -> [Kwd "has"; Kwd "a"; Word `Relation; Kwd "from/to"]
-  | IncrIs -> xml_incr_coordinate focus (Kwd "that" :: Kwd "is" :: xml_ellipsis)
-  | IncrAnd -> Kwd "and" :: xml_ellipsis
-  | IncrOr -> Word (`Op "or") :: xml_ellipsis
-  | IncrMaybe -> xml_maybe false [Word dummy_word]
-  | IncrNot -> xml_not false [Word dummy_word]
-  | IncrUnselect -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Unselect,Unordered))
-  | IncrAggreg g -> xml_np (np_of_elt_s1_AnAggreg ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
-  | IncrOrder order -> xml_np (head_of_modif ~suspended:false dummy_word top_rel (Select,order))
+    xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
+  | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
+  | IncrIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
+  | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis
+  | IncrOr -> Word (`Op grammar#or_) :: xml_ellipsis
+  | IncrMaybe -> xml_maybe grammar false [Word dummy_word]
+  | IncrNot -> xml_not grammar false [Word dummy_word]
+  | IncrUnselect -> xml_np grammar (head_of_modif grammar ~suspended:false dummy_word top_rel (Unselect,Unordered))
+  | IncrAggreg g -> xml_np grammar (np_of_elt_s1_AnAggreg grammar ~suspended:false Lisql.factory#top_modif g top_rel dummy_ng)
+  | IncrOrder order -> xml_np grammar (head_of_modif grammar ~suspended:false dummy_word top_rel (Select,order))

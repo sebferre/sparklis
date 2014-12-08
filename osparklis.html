@@ -93,10 +93,6 @@
       <span class="tooltip lang-fr">Cliquer pour ouvrir/fermer le panneau de configuration</span>
       <img id="config-control" src="icon-config.png" height="40" alt="Config">
     </span>
-    <select id="lang-select">
-      <option value="en">English</option>
-      <option value="fr">français</option>
-    </select>
   </div>
 
   <div id="config-panel" style="display:none">
@@ -138,6 +134,16 @@
 	  <input id="input-max-properties" type="number" value="200"> <!-- Edit to change default value -->
 	  <span class="texte lang-en"> <span class="propURI">properties</span></span>
 	  <span class="texte lang-fr"> <span class="propURI">propriétés</span></span>
+	</div>
+      </li>
+      <li>
+	<div id="config-lang" class="config-param">
+	  <span class="texte lang-en">Set the page and query language as </span>
+	  <span class="texte lang-fr">Définir la langue de la page et des requêtes : </span>
+	  <select id="lang-select">
+	    <option value="en">English</option>
+	    <option value="fr">français</option>
+	  </select>
 	</div>
       </li>
       <li>
