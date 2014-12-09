@@ -23,7 +23,7 @@ object (self)
   val mutable init_v : bool = default
   val mutable current_v : bool = default
 
-  method private set_input (v : bool) : unit =
+  method set_value (v : bool) : unit =
     if v <> current_v then begin
       jquery_input input_selector (fun input -> input##checked <- bool v);
       current_v <- v;
@@ -37,7 +37,7 @@ object (self)
     then [(key, string_of_bool current_v)]
     else []
   method set_permalink args =
-    try self#set_input (bool_of_string (List.assoc key args))
+    try self#set_value (bool_of_string (List.assoc key args))
     with _ -> ()
 
   method init =
@@ -52,7 +52,7 @@ object (self)
 	    has_changed <- true
 	  end)
 	input)
-  method reset = self#set_input init_v
+  method reset = self#set_value init_v
 end
 
 class integer_input ~(key : string) ~(input_selector : string) ?min ?max ~default () =
@@ -102,3 +102,41 @@ object (self)
   method reset = self#set_input init_v
 end
 
+
+class string_input ~(key : string) ~(input_selector : string) ~default () =
+object (self)
+  inherit input
+  val mutable init_v : string = default (* default value for reset *)
+  val mutable current_v : string = default (* current value *)
+
+  method private set_input (v : string) : unit =
+    if v <> current_v then begin
+      jquery_input input_selector (fun input -> input##value <- string v);
+      current_v <- v;
+      has_changed <- true
+    end
+
+  method value : string = current_v
+
+  method get_permalink =
+    if current_v <> init_v
+    then [(key, current_v)]
+    else []
+  method set_permalink args =
+    try self#set_input (List.assoc key args)
+    with _ -> ()
+
+  method init =
+    jquery_input input_selector (fun input ->
+      init_v <- to_string input##value; (* default value from HTML *)
+      current_v <- init_v;
+      oninput
+	(fun input ev ->
+	  let v = to_string input##value in
+	  if current_v <> v then begin
+	    current_v <- v;
+	    has_changed <- true
+	  end)
+	input)
+  method reset = self#set_input init_v
+end

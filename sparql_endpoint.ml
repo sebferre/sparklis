@@ -226,6 +226,9 @@ object
     elts <- []
 end
 
+let config_proxy = new Config.boolean_input ~key:"proxy" ~input_selector:"#input-proxy" ~default:false ()
+let config_proxy_url = new Config.string_input ~key:"proxy_url" ~input_selector:"#input-proxy-url" ~default:"" ()
+
 let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#input-caching" ~default:true ()
 
 let cache =
@@ -241,18 +244,24 @@ object
   method clear = Hashtbl.clear ht
 end
 
-let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
-  match cache#lookup endpoint sparql with
+  let use_proxy = config_proxy#value in
+  let real_endpoint, real_sparql = (* use of proxy, if defined *)
+    if use_proxy
+    then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
+    else endpoint, sparql in
+  let prologue_sparql = Sparql.prologue#declarations ^ real_sparql in
+  match cache#lookup real_endpoint prologue_sparql with
     | Some res -> k1 res
     | None ->
       let fields : (string * Form.form_elt) list =
-	[("query", `String (string sparql))] in
+	[("query", `String (string prologue_sparql))] in
       let req = create () in
       pool#add_req req;
       List.iter pool#add_elt elts;
-      req##_open (Js.string "POST", Js.string endpoint, Js._true);
+      req##_open (Js.string "POST", Js.string real_endpoint, Js._true);
       req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
   (*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
       req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
@@ -296,11 +305,17 @@ let ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
 		      Firebug.console##log(string "No XML content");
 		      ()
 		    | Some results ->
-		      cache#replace endpoint sparql results;
+		      cache#replace real_endpoint prologue_sparql results;
 		      k1 results )
 		| 0 ->
-		  alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
-		  k0 code
+		  if use_proxy
+		  then begin
+		    alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
+		    k0 code end
+		  else begin
+		    config_proxy#set_value true;
+		    ajax_in elts pool endpoint sparql k1 k0
+		  end
 		| 4 ->
 		  alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
 		  k0 code

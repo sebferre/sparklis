@@ -265,7 +265,7 @@ object (self)
       k index
     in
     let sparql_term =
-      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+      (*"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^*)
 	"SELECT DISTINCT ?term WHERE { " ^
 	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
 	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
@@ -299,16 +299,16 @@ object (self)
 	  k index))
     in
     let sparql_class =
-      "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
-	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
+      (*"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
+	"PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^*)
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
-	"FILTER EXISTS { [] a ?class } " ^
+	(* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr) ^
 	" } LIMIT " ^ string_of_int config_max_classes#value in
     let sparql_prop =
-      "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
+      (*"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> " ^
         "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^
-        "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^
+        "PREFIX owl: <http://www.w3.org/2002/07/owl#> " ^*)
         "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr) ^

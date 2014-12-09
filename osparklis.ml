@@ -140,14 +140,16 @@ let compile_constr constr : Rdf.term -> bool =
 
 let config =
   let config_inputs : Config.input list =
-    [ (Lis.config_max_results :> Config.input);
+    [ (Sparql_endpoint.config_proxy :> Config.input);
+      (Sparql_endpoint.config_proxy_url :> Config.input);
+      (Sparql_endpoint.config_caching :> Config.input);
+      (Lis.config_max_results :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
       (Lexicon.config_class_lexicon :> Config.input);
       (Lexicon.config_property_lexicon :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
-      (Sparql_endpoint.config_caching :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit = List.iter (fun input -> input#set_endpoint endpoint) config_inputs
