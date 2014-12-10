@@ -152,7 +152,9 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
-  method set_endpoint (endpoint : string) : unit = List.iter (fun input -> input#set_endpoint endpoint) config_inputs
+  method set_endpoint (endpoint : string) : unit =
+    Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
+    List.iter (fun input -> input#set_endpoint endpoint) config_inputs
 
   method get_permalink : (string * string) list =
     List.concat (List.map (fun input -> input#get_permalink) config_inputs)
