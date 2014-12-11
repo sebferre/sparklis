@@ -138,7 +138,7 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 
 
 let ask (pattern : pattern) : query =
-  prologue#declarations ^ "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
+  (*prologue#declarations ^*) "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
 type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN
 type order = ASC | DESC
@@ -187,7 +187,10 @@ let select
 	     | (DESC,v) -> "DESC(" ^ var v ^ ")")
 	   ordering) in
     let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
-    prologue#declarations ^ s
+    (*prologue#declarations ^*) s
+
+let select_from_service url query =
+  "SELECT * FROM { SERVICE <" ^ url ^ "> { " ^ query ^ " }}"
 
 type formula =
   | Pattern of pattern (* binding *)

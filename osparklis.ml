@@ -140,27 +140,32 @@ let compile_constr constr : Rdf.term -> bool =
 
 let config =
   let config_inputs : Config.input list =
-    [ (Lis.config_max_results :> Config.input);
+    [ (Sparql_endpoint.config_proxy :> Config.input);
+      (Sparql_endpoint.config_proxy_url :> Config.input);
+      (Sparql_endpoint.config_caching :> Config.input);
+      (Lis.config_max_results :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
       (Lexicon.config_class_lexicon :> Config.input);
       (Lexicon.config_property_lexicon :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
-      (Sparql_endpoint.config_caching :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
-  method set_endpoint (endpoint : string) : unit = List.iter (fun input -> input#set_endpoint endpoint) config_inputs
+  method set_endpoint (endpoint : string) : unit =
+    Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
+    List.iter (fun input -> input#set_endpoint endpoint) config_inputs
 
   method get_permalink : (string * string) list =
     List.concat (List.map (fun input -> input#get_permalink) config_inputs)
   method set_permalink (args : (string * string) list) : unit =
     List.iter (fun input -> input#set_permalink args) config_inputs
 
-  method if_has_changed (f : unit -> unit) : unit =
+  method if_has_changed ~(translate : unit -> unit) ~(refresh : unit -> unit) : unit =
     let has_changed = List.exists (fun input -> input#has_changed) config_inputs in
     if has_changed then begin
-      f ();
+      if Lisql2nl.config_lang#has_changed then translate ();
+      refresh ();
       List.iter (fun input -> input#reset_changed) config_inputs
     end
 
@@ -212,7 +217,7 @@ object (self)
 	  | Some (Url.File url) -> Url.File { url with Url.fu_arguments = args } in
       ignore
 	(prompt
-	   "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
+	   Lisql2nl.config_lang#grammar#msg_permalink
 	   (Url.string_of_url permalink_url))
     with _ -> ()
 
@@ -270,15 +275,17 @@ object (self)
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
 	    (let nb = lis#results_nb in
+	     let grammar = Lisql2nl.config_lang#grammar in
+	     let s_result, s_results = grammar#result_results in
 	     if nb = 0
-	     then "No results"
+	     then grammar#no ^ " " ^ s_result
 	     else
 	       let a, b = offset+1, min nb (offset+limit) in
 	       if a = 1 && b = nb && nb < Lis.config_max_results#value then
-		 string_of_int b ^ (if b=1 then " result" else " results")
+		 string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
 	       else
-		 "Results " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " of " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
+		 s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		   " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
 	stop_links_propagation_from elt_results;
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
@@ -300,7 +307,7 @@ object (self)
 	(fun index ->
 	  elt##innerHTML <- string (html_index lis#focus html_state index);
 	  jquery_set_innerHTML "#count-terms"
-	    (html_count_unit (List.length index) 100 "entity" "entities");
+	    (html_count_unit (List.length index) 100 Lisql2nl.config_lang#grammar#entity_entities);
 	  stop_links_propagation_from elt;
 	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true
@@ -318,7 +325,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
 	jquery_set_innerHTML "#count-terms"
-	  (html_count_unit (List.length index) Lis.config_max_results#value "entity" "entities"))
+	  (html_count_unit (List.length index) Lis.config_max_results#value Lisql2nl.config_lang#grammar#entity_entities))
 
   method private refresh_property_increments_init =
     jquery "#list-properties" (fun elt ->
@@ -329,7 +336,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) 1000 "concept" "concepts")))
+	    (html_count_unit (List.length index) 1000 Lisql2nl.config_lang#grammar#concept_concepts)))
 
   method private refresh_property_increments =
     jquery "#list-properties" (fun elt ->
@@ -340,7 +347,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:true
 	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
 	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) Lis.config_max_properties#value "concept" "concepts")))
+	    (html_count_unit (List.length index) Lis.config_max_properties#value Lisql2nl.config_lang#grammar#concept_concepts)))
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
@@ -350,7 +357,7 @@ object (self)
 	navigation#update_focus ~push_in_history:true
 	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
       jquery_set_innerHTML "#count-modifiers"
-	(html_count_unit (List.length index) max_int "modifier" "modifiers"))
+	(html_count_unit (List.length index) max_int Lisql2nl.config_lang#grammar#modifier_modifiers))
 
   method refresh =
     html_state <- new Html.state lis#id_labelling;
@@ -589,6 +596,41 @@ end
 
 (* main *)
 
+let translate () =
+  firebug "Translating HTML elements";
+  (* getting current language *)
+  let lang = Lisql2nl.config_lang#value in
+  (* translating visible textual elements *)
+  jquery_all ".texte" (fun elt -> elt##style##display <- string "none");
+  jquery_all (".texte.lang-" ^ lang) (fun elt -> elt##style##display <- string "inline");
+  (* translating tooltips *)
+  let tooltip_lang_selector = ".tooltip.lang-" ^ lang in
+  jquery_all ".tooltiped" (fun elt ->
+    jquery_from elt tooltip_lang_selector (fun elt2 ->
+      elt##title <- elt2##innerHTML));
+  (* translating some select options *)
+  jquery_all ".select-incrs" (fun elt ->
+    Opt.iter (Dom_html.CoerceTo.select elt) (fun select ->
+      let options = select##options in
+      for i = 0 to options##length - 1 do
+	Opt.iter options##item(i) (fun option ->
+	  let new_text =
+	    let grammar = Lisql2nl.config_lang#grammar in
+	    match to_string option##value with
+	      | "matchesAll" -> String.concat " " [grammar#matches; grammar#all; grammar#quantif_of]
+	      | "matchesAny" -> String.concat " " [grammar#matches; grammar#quantif_one; grammar#quantif_of]
+	      | "after" -> grammar#after
+	      | "before" -> grammar#before
+	      | "fromTo" -> String.concat " " [grammar#interval_from; grammar#interval_to]
+	      | "higherThan" -> grammar#higher_or_equal_to
+	      | "lowerThan" -> grammar#lower_or_equal_to
+	      | "between" -> grammar#interval_between
+	      | "hasLang" -> String.concat " " [grammar#has_as_a; grammar#language]
+	      | "hasDatatype" -> String.concat " " [grammar#has_as_a; grammar#datatype]
+	      | _ -> to_string option##innerHTML in
+	  option##innerHTML <- string new_text)
+      done))
+
 let _ =
   Firebug.console##log(string "Starting Sparklis");
   if logging_on () then
@@ -653,7 +695,10 @@ let _ =
 	  then "block"
 	  else "none" in
 	panel##style##display <- string dis;
-	if dis = "none" then config#if_has_changed (fun () -> history#present#refresh))));
+	if dis = "none" then
+	  config#if_has_changed
+	    ~translate
+	    ~refresh:(fun () -> history#present#refresh))));
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
@@ -694,5 +739,6 @@ let _ =
 	history#present#set_limit limit));
 
     (* generating and displaying contents *)
+    translate ();
     history#present#refresh;
     bool true)

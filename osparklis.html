@@ -93,26 +93,51 @@
       <span class="tooltip lang-fr">Cliquer pour ouvrir/fermer le panneau de configuration</span>
       <img id="config-control" src="icon-config.png" height="40" alt="Config">
     </span>
-    <select id="lang-select">
-      <option value="en">English</option>
-      <option value="fr">français</option>
-    </select>
   </div>
 
   <div id="config-panel" style="display:none">
     <div class="heading">
       <span class="texte lang-en">Configuration panel</span>
       <span class="texte lang-fr">Panneau de configuration</span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to restore default configuration</span>
+	<span class="tooltip lang-fr">Cliquer pour restaurer la configuration par défaut</span>
+	<button id="config-reset-button">
+	  <span class="texte lang-en">Reset</span>
+	  <span class="texte lang-fr">Réinitialiser</span>
+	</button>
+      </span>
     </div>
-    <span class="tooltiped">
-      <span class="tooltip lang-en">Click to restore default configuration</span>
-      <span class="tooltip lang-fr">Cliquer pour restaurer la configuration par défaut</span>
-      <button id="config-reset-button">
-	<span class="texte lang-en">Reset</span>
-	<span class="texte lang-fr">Réinitialiser</span>
-      </button>
-    </span>
+    <div class="config-heading">
+      <span class="texte lang-en">Endpoint and queries:</span>
+      <span class="texte lang-fr">Points d'accès et requêtes :</span>
+    </div>
     <ul>
+      <li>
+	<div id="config-proxy" class="config-param">
+	  <input id="input-proxy" type="checkbox">
+	  <span class="texte lang-en">Use as a proxy the following endpoint </span>
+	  <span class="texte lang-fr">Utiliser comme proxy le point d'accès suivant </span>	  
+	  <input id="input-proxy-url" type="text" value="http://lisfs2008.irisa.fr/dbpedia/sparql"> <!-- Edit to change default value -->
+	  <span class="texte lang-en"> (useful to avoid cross-domain blocking by Web browsers)</span>
+	  <span class="texte lang-fr"> (utile pour éviter le blocage des requêtes cross-domain par les navigateurs)</span>
+	</div>
+      </li>
+      <li>
+	<div id="config-caching" class="config-param">
+	  <input id="input-caching" type="checkbox" checked> <!-- Edit to change default value -->
+	  <span class="texte lang-en">Caching SPARQL query results (uncheck for frequently changing data)</span>
+	  <span class="texte lang-fr">Mettre en cache les résultats des requêtes SPARQL (décocher pour des données changeant fréquemment)</span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Click to clear the cache</span>
+	    <span class="tooltip lang-fr">Cliquer pour vider le cache</span>
+	      <button id="button-clear-cache">
+		<span class="texte lang-en">Clear the cache</span>
+		<span class="texte lang-fr">Vider le cache</span>
+	      </button>
+	    </span>
+	</div>
+      </li>
       <li>
 	<div id="config-max-results" class="config-param">
 	  <span class="texte lang-en">Compute at most </span>
@@ -138,6 +163,22 @@
 	  <input id="input-max-properties" type="number" value="200"> <!-- Edit to change default value -->
 	  <span class="texte lang-en"> <span class="propURI">properties</span></span>
 	  <span class="texte lang-fr"> <span class="propURI">propriétés</span></span>
+	</div>
+      </li>
+    </ul>
+    <div class="config-heading">
+      <span class="texte lang-en">Language and labels:</span>
+      <span class="texte lang-fr">Langue et étiquettes :</span>
+    </div>
+    <ul>
+      <li>
+	<div id="config-lang" class="config-param">
+	  <span class="texte lang-en">Set the page and query language as </span>
+	  <span class="texte lang-fr">Définir la langue de la page et des requêtes : </span>
+	  <select id="lang-select">
+	    <option value="en">English</option>
+	    <option value="fr">français</option>
+	  </select>
 	</div>
       </li>
       <li>
@@ -224,21 +265,12 @@
 	  <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
 	</div>
       </li>
-      <li>
-	<div id="config-caching" class="config-param">
-	  <input id="input-caching" type="checkbox" checked> <!-- Edit to change default value -->
-	  <span class="texte lang-en">Caching SPARQL query results (uncheck for frequently changing data)</span>
-	  <span class="texte lang-fr">Mettre en cache les résultats des requêtes SPARQL (décocher pour des données changeant fréquemment)</span>
-	  <span class="tooltiped">
-	    <span class="tooltip lang-en">Click to clear the cache</span>
-	    <span class="tooltip lang-fr">Cliquer pour vider le cache</span>
-	      <button id="button-clear-cache">
-		<span class="texte lang-en">Clear the cache</span>
-		<span class="texte lang-fr">Vider le cache</span>
-	      </button>
-	    </span>
-	</div>
-      </li>
+    </ul>
+    <div class="config-heading">
+      <span class="texte lang-en">Privacy:</span>
+      <span class="texte lang-fr">Vie privée :</span>
+    </div>
+    <ul>
       <li>
 	<div id="config-logging" class="config-param">
 	  <input id="input-logging" type="checkbox" checked> <!-- Edit to change default value -->

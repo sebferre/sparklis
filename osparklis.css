@@ -8,6 +8,11 @@ display:none;
 display:none;
 }
 
+.option-label
+{
+display:none;
+}
+
 header
 {
 margin:5px 0px;
@@ -27,6 +32,10 @@ color:white;
 background-color:#c8a0c8;
 font-style:italic;
 font-weight:bold;
+}
+
+.config-heading
+{
 }
 
 .open-new-window

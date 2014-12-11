@@ -126,7 +126,9 @@ let sparql_lexicon
 		| _ -> lui)
 	    [] results.Sparql_endpoint.bindings in
 	k l_uri_info_opt)
-      (fun code -> k [])
+      (fun code ->
+	Jsutils.alert "The labels could not be retrieved. This may be because the endpoint does not support the BIND operator.";
+	k [])
   in
   new tabled_lexicon default_label bind_labels
 

@@ -79,7 +79,7 @@ let html_img ?id ?classe ~height ~alt ~title url =
     " src=\"" ^ url ^ "\" height=\"" ^ string_of_int height ^ "\" alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
 
 let html_open_new_window ~height uri =
-  html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:"Open resource in new window" "icon-open-new-window.png")
+  html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "icon-open-new-window.png")
 
 let html_delete ?id ~title () =
   html_img ?id ~height:16 ~alt:"Delete" ~title "icon-delete.png"
@@ -89,8 +89,8 @@ let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
 let html_word = function
-  | `Thing -> "thing"
-  | `Relation -> html_modifier "relation"
+  | `Thing -> Lisql2nl.config_lang#grammar#thing
+  | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
@@ -127,9 +127,9 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
     | Suspended xml ->
       html_span ~classe:"suspended" (html_of_nl_xml ~highlight state xml)
     | DeleteCurrentFocus ->
-      html_delete ~id:"delete-current-focus" ~title:"Click on this red cross to delete the current focus" ()
+      html_delete ~id:"delete-current-focus" ~title:Lisql2nl.config_lang#grammar#tooltip_delete_current_focus ()
     | DeleteIncr ->
-      html_delete ~title:"Remove this query element at the query focus" ()
+      html_delete ~title:Lisql2nl.config_lang#grammar#tooltip_remove_element_at_focus ()
 and html_highlight h xml =
   if h
   then html_span ~classe:"highlighted" xml
@@ -142,46 +142,51 @@ let html_term (t : Rdf.term) : string =
 
 let html_focus (state : state) (focus : focus) : string = 
   html_of_nl_xml state
-    (Lisql2nl.xml_s
+    (Lisql2nl.xml_s Lisql2nl.config_lang#grammar
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_focus state#id_labelling focus)))
+	  (Lisql2nl.s_of_focus Lisql2nl.config_lang#grammar state#id_labelling
+	     focus)))
 
 
 let html_id (state : state) (id : int) : string =
   html_of_nl_xml state
-    (Lisql2nl.xml_np_label
+    (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
        (state#id_labelling#get_id_label id))
 
 (* HTML of increment lists *)
 
-let html_count_unit count max unit units =
-  if count = 0 then "No " ^ unit
+let html_count_unit count max (unit,units) =
+  if count = 0 then Lisql2nl.config_lang#grammar#no ^ " " ^ unit
   else if count = 1 then "1 " ^ unit
   else if count >= max then string_of_int count ^ "+ " ^ units
   else string_of_int count ^ " " ^ units
 
 let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
   let key = state#dico_incrs#add incr in
-  let xml = Lisql2nl.xml_incr state#id_labelling focus incr in
-  let text = Lisql2nl.word_text_content (Lisql2nl.word_of_incr incr) in
+  let xml = Lisql2nl.xml_incr Lisql2nl.config_lang#grammar state#id_labelling focus incr in
+  let text =
+    Lisql2nl.word_text_content Lisql2nl.config_lang#grammar
+      (Lisql2nl.word_of_incr Lisql2nl.config_lang#grammar
+	 incr) in
   let html = html_of_nl_xml state xml in
   let rank, title_opt =
+    let grammar = Lisql2nl.config_lang#grammar in
     match incr with
       | IncrTerm _ -> 2, None
       | IncrId _ -> 1, None
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
       | IncrTriple _ -> 3, None
-      | IncrTriplify -> 6, Some "Adds a focus on the property to refine it"
+      | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property
       | IncrIs -> 7, None
       | IncrAnd -> 8, None
-      | IncrOr -> 9, Some "Insert an alternative to the current focus"
-      | IncrMaybe -> 10, Some "Make the current focus optional"
-      | IncrNot -> 11, Some "Apply negation to the current focus"
-      | IncrUnselect -> 14, Some "Hide the focus column in the table of results"
-      | IncrAggreg _ -> 15, Some "Aggregate the focus column in the table of results, for each solution on other columns"
-      | IncrOrder Highest -> 12, Some "Sort the focus column in decreasing order"
-      | IncrOrder Lowest -> 13, Some "Sort the focus column in increasing order"
+      | IncrOr -> 9, Some grammar#tooltip_or
+      | IncrMaybe -> 10, Some grammar#tooltip_optionally
+      | IncrNot -> 11, Some grammar#tooltip_not
+      | IncrUnselect -> 14, Some grammar#tooltip_any
+      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
+      | IncrOrder Highest -> 12, Some grammar#tooltip_highest
+      | IncrOrder Lowest -> 13, Some grammar#tooltip_lowest
       | IncrOrder _ -> 12, None in
   let html_freq =
     if freq = 1
@@ -247,16 +252,16 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
   let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
   let id_i_list = List.map (fun (var,i) -> (state#id_labelling#get_var_id var, i)) results.vars in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"Click on this column header to hide the focus\"></th>");
+  Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_hide_focus ^ "\"></th>");
   List.iter
     (fun (id,i) ->
       Buffer.add_string buf
 	(if id = focus_id
 	 then "<th class=\"header highlighted\">"
-	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"Click on this column header to set the focus on it\">");
+	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
-	   (Lisql2nl.xml_np_label
+	   (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
 	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;
