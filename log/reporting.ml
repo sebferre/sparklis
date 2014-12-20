@@ -40,6 +40,13 @@ let cmd_to_list command =
 
 let get_ns =
   let ht = Hashtbl.create 13 in
+  print_endline "Reading table mapping IPs to namespaces";
+  iter_lines
+    (fun line ->
+      match split_line ~bound:2 line with
+	| [ip; ns] -> Hashtbl.replace ht ip ns
+	| _ -> ())
+    "data/table_ip_namespace.txt";
   fun ip ->
     try Hashtbl.find ht ip
     with Not_found ->
@@ -48,6 +55,7 @@ let get_ns =
 	  | [] -> "unknown"
 	  | x::_ -> x in
       Hashtbl.add ht ip ns;
+      ignore (Sys.command (Printf.sprintf "echo \"%s,%s\" >> data/table_ip_namespace.txt" ip ns));
       ns;;
 
 let process_hitlog () =
