@@ -366,7 +366,7 @@ object (self)
       for i = options##length - 1 downto 0 do
 	Opt.iter options##item(i) (fun option ->
 	  let value = to_string option##value in
-	  if value = lis#endpoint || value = "" then option##selected <- true)
+	  if value = lis#endpoint || value = "" then option##selected <- bool true)
       done);
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
