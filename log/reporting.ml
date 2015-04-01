@@ -195,6 +195,9 @@ and print_uri uri =
     match Str.matched_string uri with "" -> uri | name -> name
   with _ -> uri
 
+let escape_string s =
+  Str.global_replace (Str.regexp "\"") "\\\"" s
+    
 let process_querylog () =
   let out_txt = open_out "data/querylog_processed.txt" in
   let out_ttl = open_out "data/querylog_processed.ttl" in
@@ -225,7 +228,7 @@ let process_querylog () =
 	    output_string out_ttl ":userIP \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; ";
 	    if session <> "" then begin output_string out_ttl ":sessionID \""; output_string out_ttl session; output_string out_ttl "\" ; " end;
 	    output_string out_ttl ":endpoint \""; output_string out_ttl endpoint; output_string out_ttl "\" ; ";
-	    output_string out_ttl ":query \""; output_string out_ttl s_query; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":query \""; output_string out_ttl (escape_string s_query); output_string out_ttl "\" ; ";
 	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
 	  end
 	| _ -> output_string out_txt "*** wrong format ***"))
@@ -233,7 +236,7 @@ let process_querylog () =
   print_newline ();
   close_out out_txt;
   close_out out_ttl;
-  ignore (Sys.command ("java -jar /local/ferre/soft/rdf2rdf.jar " ^ "data/querylog_processed.ttl" ^ " " ^ "data/querylog_processed.rdf"));;
+  ignore (Sys.command ("java -jar /local/ferre/soft/rdf2rdf.jar data/querylog_processed.ttl data/querylog_processed.rdf"));;
 
 let _ =
   process_hitlog ();
