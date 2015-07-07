@@ -252,7 +252,7 @@ let rec ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
     if use_proxy
     then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
     else endpoint, sparql in
-  let prologue_sparql = Sparql.prologue#declarations ^ real_sparql in
+  let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
   match cache#lookup real_endpoint prologue_sparql with
     | Some res -> k1 res
     | None ->

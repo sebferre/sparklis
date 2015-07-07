@@ -23,7 +23,16 @@ object (self)
   method reset : unit =
     cpt <- 0;
     map <- (* default namespaces (reverse order of declarations) *)
-      [("http://www.w3.org/2002/07/owl#", "owl:"); 
+      [("http://purl.org/dc/terms/", "dcterms:");
+       ("http://purl.org/dc/elements/1.1/", "dc:");
+       ("http://dbpedia.org/property/", "dbp:");
+       ("http://dbpedia.org/ontology/", "dbo:");
+       ("http://dbpedia.org/resource/", "dbr:");
+       ("http://dbpedia.org/class/yago/", "yago:");
+       ("http://xmlns.com/foaf/0.1/", "foaf:");
+       ("http://rdfs.org/ns/void#", "void:");
+       ("http://www.w3.org/2004/02/skos/core#", "skos:");
+       ("http://www.w3.org/2002/07/owl#", "owl:"); 
        ("http://www.w3.org/2000/01/rdf-schema#", "rdfs:");
        ("http://www.w3.org/1999/02/22-rdf-syntax-ns#", "rdf:");
        ("http://www.w3.org/2001/XMLSchema#", "xsd:")]
@@ -40,17 +49,21 @@ object (self)
 	    map <- (ns,prefix)::map;
 	    prefix in
 	Some (prefix ^ ln)
-  
-  method declarations : string =
-    let buf = Buffer.create 500 in
-    List.fold_right
+
+  method add_declarations_to_query (query : string) : string =
+    let buf = Buffer.create 1000 in
+    List.fold_right (* iter in reverse order *)
       (fun (ns,pre) () ->
-	Buffer.add_string buf "PREFIX ";
-	Buffer.add_string buf pre;
-	Buffer.add_string buf " <";
-	Buffer.add_string buf ns;
-	Buffer.add_string buf ">\n")
+	if Regexp.search (Regexp.regexp_string pre) query 0 <> None
+	then begin
+	  Buffer.add_string buf "PREFIX ";
+	  Buffer.add_string buf pre;
+	  Buffer.add_string buf " <";
+	  Buffer.add_string buf ns;
+	  Buffer.add_string buf ">\n"
+	end)
       map ();
+    Buffer.add_string buf query;
     Buffer.contents buf
 
 end
@@ -138,7 +151,7 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 
 
 let ask (pattern : pattern) : query =
-  (*prologue#declarations ^*) "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
+  "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
 type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN
 type order = ASC | DESC
@@ -187,7 +200,7 @@ let select
 	     | (DESC,v) -> "DESC(" ^ var v ^ ")")
 	   ordering) in
     let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
-    (*prologue#declarations ^*) s
+    s
 
 let select_from_service url query =
   "SELECT * FROM { SERVICE <" ^ url ^ "> { " ^ query ^ " }}"

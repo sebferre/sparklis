@@ -397,7 +397,7 @@ object (self)
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments ~init:false)
 	    | Some sparql ->
-	      jquery_set_innerHTML "#sparql-query" (html_pre sparql);
+	      jquery_set_innerHTML "#sparql-query" (html_pre (Sparql.prologue#add_declarations_to_query sparql));
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
