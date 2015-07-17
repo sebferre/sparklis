@@ -1,4 +1,6 @@
 
+open Common
+  
 (* LISQL representations *)
 
 (* LISQL constraints *)
@@ -15,6 +17,35 @@ type constr =
   | HasLang of string
   | HasDatatype of string
 
+let subsumed_constr c1 c2 = (* simplified definition based on 'prefix' rather than 'substring' *)
+  match c1, c2 with
+  | _, True -> true
+  | MatchesAll ls1, MatchesAll ls2 ->
+    List.for_all (fun s2 ->
+      List.exists (fun s1 ->
+	has_prefix s1 s2
+      ) ls1
+    ) ls2
+  | MatchesAny ls1, MatchesAny ls2 ->
+    List.for_all (fun s1 ->
+      List.exists (fun s2 ->
+	has_prefix s1 s2
+      ) ls2
+    ) ls1
+  | After s1, After s2 -> has_prefix s1 s2
+  | After s1, FromTo (s2,_) -> has_prefix s1 s2
+  | Before s1, Before s2 -> has_prefix s1 s2
+  | Before s1, FromTo (_,s2) -> has_prefix s1 s2
+  | FromTo (s1a,s1b), FromTo (s2a,s2b) -> has_prefix s1a s2a && has_prefix s1b s2b
+  | HigherThan s1, HigherThan s2 -> has_prefix s1 s2
+  | HigherThan s1, Between (s2,_) -> has_prefix s1 s2
+  | LowerThan s1, LowerThan s2 -> has_prefix s1 s2
+  | LowerThan s1, Between (_,s2) -> has_prefix s1 s2
+  | Between (s1a,s1b), Between (s2a,s2b) -> has_prefix s1a s2a && has_prefix s1b s2b
+  | HasLang s1, HasLang s2 -> has_prefix s1 s2
+  | HasDatatype s1, HasDatatype s2 -> has_prefix s1 s2
+  | _ -> false
+      
 (* LISQL modifiers *)
 type id = int
 type arg = S | P | O
