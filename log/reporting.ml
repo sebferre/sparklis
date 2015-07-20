@@ -208,7 +208,8 @@ let process_querylog () =
     (fun line ->
       print_string "."; flush stdout;
       ( match split_line ~bound:4 line with
-	| dt::ip_session::endpoint::query::_ ->
+      | dt::ip_session::endpoint::query::_ ->
+	(try
 	  let ip, session = split_fragment ip_session in
 	  let ast_query = Permalink.to_query query in
 	  let s_query = print_s ast_query in
@@ -227,11 +228,12 @@ let process_querylog () =
 	    output_string out_ttl ":date \""; output_string out_ttl (try String.sub dt 0 10 with _ -> ""); output_string out_ttl "\"^^xsd:date ; ";
 	    output_string out_ttl ":userIP \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; ";
 	    if session <> "" then begin output_string out_ttl ":sessionID \""; output_string out_ttl session; output_string out_ttl "\" ; " end;
-	    output_string out_ttl ":endpoint \""; output_string out_ttl endpoint; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":endpoint \""; output_string out_ttl (escape_string endpoint); output_string out_ttl "\" ; ";
 	    output_string out_ttl ":query \""; output_string out_ttl (escape_string s_query); output_string out_ttl "\" ; ";
 	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
 	  end
-	| _ -> output_string out_txt "*** wrong format ***"))
+	 with _ -> output_string out_txt ("*** wrong format *** : " ^ line ^ "\n"))
+      | _ -> output_string out_txt ("*** wrong format *** : " ^ line ^ "\n")))
     "data/querylog.txt";
   print_newline ();
   close_out out_txt;
