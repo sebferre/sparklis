@@ -248,6 +248,11 @@ object (self)
     jquery "#increments-focus" (fun elt ->
       elt##innerHTML <- string html_focus)
 
+  method private get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) =
+    let op = to_string (select##value) in
+    let pat = to_string (input##value) in
+    make_constr op pat
+
   method private refresh_constrs =
     List.iter
       (fun (sel_select, sel_input, constr) ->
@@ -301,53 +306,57 @@ object (self)
 	    Lisql.insert_term term id_focus)))
       end)
 
+  val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
+  method private refresh_term_increments_gen ajax_index max_results =
+    refreshing_terms <- true;
+    jquery_select "#select-terms" (fun select ->
+      jquery_input "#pattern-terms" (fun input ->
+	jquery "#list-terms" (fun elt_list ->
+	  (*filtering_terms <- true;*)
+	  ajax_index term_constr [elt_list]
+	    (fun index ->
+	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
+	      jquery_set_innerHTML "#count-terms"
+		(html_count_unit (List.length index) max_results Lisql2nl.config_lang#grammar#entity_entities);
+	      stop_links_propagation_from elt_list;
+	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		navigation#update_focus ~push_in_history:true
+		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+	      refreshing_terms <- false;
+	      let new_constr = self#get_constr select input in
+	      self#filter_increments elt_list new_constr;
+	      self#set_term_constr new_constr))))
   method private refresh_term_increments_init =
-    jquery "#list-terms" (fun elt ->
-      lis#ajax_index_terms_init term_constr [elt]
-	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus html_state index);
-	  jquery_set_innerHTML "#count-terms"
-	    (html_count_unit (List.length index) 100 Lisql2nl.config_lang#grammar#entity_entities);
-	  stop_links_propagation_from elt;
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))))))
-
+    self#refresh_term_increments_gen lis#ajax_index_terms_init 100
   method private refresh_term_increments =
-    lis#index_terms
-      (fun index_terms ->
-	let index = lis#index_ids @ index_terms in
-	jquery "#list-terms" (fun elt ->
-	  elt##innerHTML <- string
-	    (html_index lis#focus html_state index);
-	  stop_links_propagation_from elt;
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id)))))));
-	jquery_set_innerHTML "#count-terms"
-	  (html_count_unit (List.length index) Lis.config_max_results#value Lisql2nl.config_lang#grammar#entity_entities))
+    self#refresh_term_increments_gen
+      (fun constr elts k -> lis#index_terms (fun index_terms -> k (lis#index_ids @ index_terms)))
+      Lis.config_max_results#value
 
+  val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
+  method private refresh_property_increments_gen ajax_index max_properties =
+    refreshing_properties <- true;
+    jquery_select "#select-properties" (fun select ->
+      jquery_input "#pattern-properties" (fun input ->
+	jquery "#list-properties" (fun elt_list ->
+	  (*filtering_properties <- true;*)
+	  ajax_index property_constr elt_list
+	    (fun index ->
+	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
+	      jquery_set_innerHTML "#count-properties"
+		(html_count_unit (List.length index) max_properties Lisql2nl.config_lang#grammar#concept_concepts);
+	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		navigation#update_focus ~push_in_history:true
+		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+	      refreshing_properties <- false;
+	      let new_constr = self#get_constr select input in
+	      self#filter_increments elt_list new_constr;
+	      self#set_property_constr new_constr))))
   method private refresh_property_increments_init =
-    jquery "#list-properties" (fun elt ->
-      lis#ajax_index_properties_init property_constr elt
-	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus html_state index);
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
-	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) 1000 Lisql2nl.config_lang#grammar#concept_concepts)))
-
+    self#refresh_property_increments_gen lis#ajax_index_properties_init 1000
   method private refresh_property_increments =
-    jquery "#list-properties" (fun elt ->
-      lis#ajax_index_properties property_constr elt
-	(fun index ->
-	  elt##innerHTML <- string (html_index lis#focus html_state index);
-	  jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true
-	      (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
-	  jquery_set_innerHTML "#count-properties"
-	    (html_count_unit (List.length index) Lis.config_max_properties#value Lisql2nl.config_lang#grammar#concept_concepts)))
+    self#refresh_property_increments_gen lis#ajax_index_properties Lis.config_max_properties#value
+
 
   method private refresh_modifier_increments ~(init : bool) =
     jquery "#list-modifiers" (fun elt ->
@@ -366,7 +375,7 @@ object (self)
       for i = options##length - 1 downto 0 do
 	Opt.iter options##item(i) (fun option ->
 	  let value = to_string option##value in
-	  if value = lis#endpoint || value = "" then option##selected <- true)
+	  if value = lis#endpoint || value = "" then option##selected <- bool true)
       done);
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
@@ -397,7 +406,7 @@ object (self)
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments ~init:false)
 	    | Some sparql ->
-	      jquery_set_innerHTML "#sparql-query" (html_pre sparql);
+	      jquery_set_innerHTML "#sparql-query" (html_pre (Sparql.prologue#add_declarations_to_query sparql));
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
@@ -408,56 +417,17 @@ object (self)
 		  self#refresh_property_increments;
 		  self#refresh_modifier_increments ~init:false ))))
 
-  method is_home =
-    Lisql.is_home_focus lis#focus
-
-  method set_term_constr constr =
-    if constr <> term_constr
-    then
-      if self#is_home
-      then begin
-	term_constr <- constr;
-	self#refresh_term_increments_init end      
-      else begin
-	term_constr <- constr;
-	self#refresh
-      end
-
-  method set_property_constr constr =
-    if constr <> property_constr
-    then
-      if self#is_home
-      then begin
-	property_constr <- constr;
-	self#refresh_property_increments_init end
-      else begin
-	property_constr <- constr;
-	self#refresh_property_increments
-      end
-
-  method pattern_changed
-    ~(select : Dom_html.selectElement t)
-    ~(input : Dom_html.inputElement t)
-    ~(elt_list : Dom_html.element t)
-    (k : Lisql.constr -> unit)
-    =
-    let op = to_string (select##value) in
-    let pat = to_string (input##value) in
-    if pat = ""
-    then k Lisql.True
-    else
-    try
-      let constr = make_constr op pat in
-      let matcher = compile_constr constr in
-      let there_is_match = ref false in
-      jquery_all_from elt_list "li" (fun elt_li ->
-	jquery_from elt_li ".increment" (fun elt_incr ->
-	  let t =
-	    let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
+  method private filter_increments elt_list constr =
+    let matcher = compile_constr constr in
+    let there_is_match = ref false in
+    jquery_all_from elt_list "li" (fun elt_li ->
+      jquery_from elt_li ".increment" (fun elt_incr ->
+	let t =
+	  let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
 	      (* only works if a single element *)
-	      (fun () -> to_string (elt_incr##innerHTML))
-	      (fun elt -> to_string (elt##innerHTML)) in
-	    Rdf.PlainLiteral (s, "") in
+	    (fun () -> to_string (elt_incr##innerHTML))
+	    (fun elt -> to_string (elt##innerHTML)) in
+	  Rdf.PlainLiteral (s, "") in
 (*
 	  let t =
 	    let textContent = elt_incr##textContent in (* ##textContent only available since js_of_ocaml v2.4 *)
@@ -475,16 +445,58 @@ object (self)
 		  (fun elt -> to_string (elt##innerHTML)) in
 		Rdf.PlainLiteral (s, "") in
 *)
-	  if matcher t
-	  then begin elt_li##style##display <- string "list-item"; there_is_match := true end
-	  else elt_li##style##display <- string "none"));
+	if matcher t
+	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
+	else elt_li##style##display <- string "none"))
+
+  method is_home =
+    Lisql.is_home_focus lis#focus
+
+  method set_term_constr constr =
+    let to_refresh =
+      if constr = term_constr then false
+      else if Lisql.subsumed_constr constr term_constr then not refreshing_terms
+      else begin self#abort_all_ajax; true end in	
+    if to_refresh (* not refreshing_terms && constr <> term_constr *)
+    then begin
+      refreshing_terms <- true;
+      term_constr <- constr;
+      if self#is_home
+      then self#refresh_term_increments_init
+      else self#refresh
+    end
+
+  method set_property_constr constr =
+    let to_refresh =
+      if constr = property_constr then false
+      else if Lisql.subsumed_constr constr property_constr then not refreshing_terms
+      else begin self#abort_all_ajax; true end in	
+    if to_refresh (* not refreshing_properties && constr <> property_constr *)
+    then begin
+      refreshing_properties <- true;
+      property_constr <- constr;
+      if self#is_home
+      then self#refresh_property_increments_init
+      else self#refresh_property_increments
+    end
+
+  method pattern_changed
+    ~(select : Dom_html.selectElement t)
+    ~(input : Dom_html.inputElement t)
+    ~(elt_list : Dom_html.element t)
+    (k : Lisql.constr -> unit)
+    =
+    let new_constr = self#get_constr select input in
+    self#filter_increments elt_list new_constr;
+    k new_constr
+(*	
       let n = String.length pat in
       if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 2 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
       then begin
 	(*Firebug.console##log(string "pattern: no match, call continuation");*)
 	k constr
       end
-    with Invalid_argument msg -> ()
+*)
 
   method set_limit n =
     limit <- n;
@@ -517,6 +529,11 @@ object (self)
       self#refresh_extension
     end
 
+  method abort_all_ajax =
+    lis#abort_all_ajax;
+    refreshing_terms <- false;
+    refreshing_properties <- false
+      
   method new_place endpoint focus =
     {< lis = new Lis.place endpoint focus;
        offset = 0;
@@ -550,7 +567,7 @@ object (self)
 
   method change_endpoint url =
     Sparql.prologue#reset;
-    present#lis#abort_all_ajax;
+    present#abort_all_ajax;
     config#set_endpoint url;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
@@ -562,7 +579,7 @@ object (self)
     match f present#lis#focus with
       | None -> ()
       | Some foc ->
-	present#lis#abort_all_ajax;
+	present#abort_all_ajax;
 	let p = present#new_place present#lis#endpoint foc in
 	p#set_navigation (self :> navigation);
 	if push_in_history then self#push p else present <- p;
@@ -576,7 +593,7 @@ object (self)
     match past with
       | [] -> ()
       | p::lp ->
-	present#lis#abort_all_ajax;
+	present#abort_all_ajax;
 	future <- present::future;
 	present <- p;
 	past <- lp;
@@ -586,7 +603,7 @@ object (self)
     match future with
       | [] -> ()
       | p::lp ->
-	present#lis#abort_all_ajax;
+	present#abort_all_ajax;
 	past <- present::past;
 	present <- p;
 	future <- lp;

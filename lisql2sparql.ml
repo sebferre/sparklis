@@ -228,6 +228,13 @@ and elt_s1 state : elt_s1 -> sparql_s1 = function
   | NNot f ->
     let q = elt_s1 (Oo.copy state) f in
     (fun d -> Sparql.formula_not (q d))
+(*      
+  | NRelax f ->
+    state#set_relax true;
+    let q = elt_s1 state f in
+    state#set_relax false;
+    q
+*)
 and elt_s2 state : elt_s2 -> sparql_s2 = function
   | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
