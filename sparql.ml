@@ -143,6 +143,7 @@ let optional (p : pattern) : pattern =
   "OPTIONAL { " ^ indent 11 p ^ " }"
 let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ indent 13 p ^ " }"
 
+let subquery (q : query) : pattern = "{ " ^ indent 2 q ^ " }"
 
 let search_label (t : Rdf.term) (l : Rdf.term) : pattern =
   term t ^ " rdfs:label " ^ term l ^ " ." (* ^ sparql_constr l (HasLang "en") *)

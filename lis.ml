@@ -424,7 +424,7 @@ object (self)
 	      | AtS1 (f,ctx) ->
 		let modifs =
 		  match f with
-		    | Det (An (id, modif, head), _) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
+		    | ( Det (An _, _) | AnAggreg _ ) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
 		      (* no aggregation and modifiers on predicative S1 (S1 as P1 or aggregated S1) *)
 		      let modifs =
 			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
@@ -439,8 +439,6 @@ object (self)
 		      let modifs =
 			IncrOrder Highest :: IncrOrder Lowest :: modifs in
 		      modifs
-		    | AnAggreg (id,modif,g,rel_opt,np) ->
-		      IncrOrder Highest :: IncrOrder Lowest :: IncrUnselect :: IncrAggreg g :: []
 		    | _ -> [] in
 		let modifs =
 		  if ctx = ReturnX then

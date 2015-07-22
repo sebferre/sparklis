@@ -70,7 +70,7 @@ type elt_p1 =
   | IsThere
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
-  | AnAggreg of id * modif_s2 * aggreg * elt_p1 option * elt_s1 (* aggregation: elt_s1 must be a Det *)
+  | AnAggreg of id * modif_s2 * aggreg * elt_p1 option * elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
   | NAnd of elt_s1 array
   | NOr of elt_s1 array
   | NMaybe of elt_s1
@@ -578,8 +578,9 @@ let insert_aggreg g = function
     Some (AtS1 (AnAggreg (id, factory#top_modif, g, None, np), ctx))
   | AtS1 (Det (An _, _) as np, ctx) ->
     Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (AnAggreg (id, modif, g0, rel_opt, np), ctx) when g0 = g ->
-    Some (AtS1 (np, ctx))
+  | AtS1 ((AnAggreg (id, modif, g0, rel_opt, np) as npg), ctx) ->
+    if g0 = g then Some (AtS1 (np, ctx))
+    else Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, npg), ctx))
   | AtS1 (np, AnAggregX (_,_,g0,_,ctx)) when g0 = g ->
     Some (AtS1 (np,ctx))
   | _ -> None
