@@ -18,20 +18,20 @@ let lexicon_enqueue_term = function
 
 let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.results -> unit) : unit =
   let open Sparql_endpoint in
-  let rec aux offset limit = function
-    | [] -> []
+  let rec aux offset limit acc = function
+    | [] -> acc
     | binding::l ->
-      if offset > 0 then aux (offset-1) limit l
+      if offset > 0 then aux (offset-1) limit acc l
       else if limit > 0 then begin
 	Array.iter
 	  (function
 	    | Some t -> lexicon_enqueue_term t
 	    | None -> ())
 	  binding;
-	binding :: aux offset (limit-1) l end
-      else []
+	aux offset (limit-1) (binding :: acc) l end
+      else acc
   in
-  let partial_bindings = aux offset limit results.bindings in
+  let partial_bindings = List.rev (aux offset limit [] results.bindings) in
   Lexicon.config_class_lexicon#value#sync (fun () ->
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       k { results with bindings = partial_bindings }))
@@ -183,15 +183,17 @@ object (self)
 	      match focus_term_list with
 		| [Rdf.Var v] ->
 		  let index = index_of_results_column v results in
-		  List.fold_right
-		    (fun (t,freq) (fti,sftib) ->
-		      match t with
-			| Rdf.URI uri when String.contains uri ' ' -> (fti,sftib)
+		  let rev_fti, sftib =
+		    List.fold_left (* avoiding non recursive terminal fold_right *)
+		      (fun (rev_fti,sftib) (t,freq) ->
+			match t with
+			| Rdf.URI uri when String.contains uri ' ' -> (rev_fti,sftib)
 	                  (* URIs with spaces inside are not allowed in SPARQL queries *)
-			| Rdf.Bnode _ -> (fti,true)
+			| Rdf.Bnode _ -> (rev_fti,true)
 		          (* blank nodes are not allowed in SPARQL queries *)
-			| _ -> ((t,freq)::fti, sftib))
-		    index ([],false)
+			| _ -> ((t,freq)::rev_fti, sftib))
+		      ([],false) index in
+		  List.rev rev_fti, sftib
 		| [Rdf.Bnode _] ->
 		  Firebug.console##log(string "focus_term_list is a Bnode");
 		  [], true (* should not happen *)
