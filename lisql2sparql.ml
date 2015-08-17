@@ -1,5 +1,5 @@
 
-(*open Jsutils*)
+open Jsutils
 open Lisql
 
 (* translation from LISQL elts to SPARQL queries *)
@@ -137,6 +137,7 @@ type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
 type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
+type sparql_s = Sparql.formula
 
 
 let rec elt_p1 state : elt_p1 -> sparql_p1 = function
@@ -265,6 +266,9 @@ and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = elt_s1 state np in
     q (fun t -> Sparql.True)
+  | Seq ar ->
+    let ar_f = Array.map (fun elt -> elt_s state elt) ar in
+    Sparql.formula_and_list (Array.to_list ar_f)
 
 let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
   | (Det _ as np1) -> (* q_alt is not used in this case *)
@@ -295,7 +299,6 @@ and elt_s1_bis_and state q q_alt = function
     (fun r -> Sparql.formula_or_list [Sparql.formula_and (b1 r) (bs r);
 				      Sparql.formula_and (b1 r) (bs_alt r);
 				      Sparql.formula_and (b1_alt r) (bs r)])
-
 
 let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
@@ -346,8 +349,10 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
     ctx_p1 state
       (fun x -> b_np (fun y z -> triple_arg arg x y z))
       ctx
-  | ReturnX ->
-    q (fun t -> Sparql.True)
+  | ReturnX ctx ->
+    ctx_s state
+      (q (fun t -> Sparql.True))
+      ctx
   | AnAggregX (idg,modifg,g,relg_opt,ctx) -> (*ctx_s1 state q q_alt d ctx*)
     ( match id_opt with
       | Some id ->
@@ -378,6 +383,11 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
       ctx
   | NMaybeX ctx -> ctx_s1 state None q q_alt d ctx
   | NNotX ctx -> ctx_s1 state None q q_alt d ctx
+and ctx_s state (f : sparql_s) : ctx_s -> Sparql.formula = function
+  | Root -> f
+  | SeqX (i,ar,ctx) ->
+    let ar_f = Array.mapi (fun j elt -> if j=i then f else elt_s state elt) ar in
+    ctx_s state (Sparql.formula_and_list (Array.to_list ar_f)) ctx
 
 
 type template = ?constr:constr -> limit:int -> string
@@ -419,7 +429,7 @@ let make_select state t_list ~is_subquery dims_aggregs form =
       (fun (v,kind,at_focus) (dims,aggregs,havings,ordering) ->
 	let dims, aggregs, havings, order, v_order = (* v_order is to be used in ordering *)
 	  match state#modif v with
-	    | (Unselect, _) when not at_focus && not is_subquery -> dims, aggregs, havings, Unordered, v
+	  | (Unselect, _) when not at_focus && not is_subquery -> dims, aggregs, havings, Unordered, v
 	    | (_, order) ->
 	      match kind with
 	      | `Dim -> v::dims, aggregs, havings, order, v
@@ -491,9 +501,7 @@ let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
 	    (fun x -> t_list#add x; d x)
 	    ctx in
 	form
-      | AtS f ->
-	let form = elt_s state f in
-	form
+      | AtS (f,ctx) -> ctx_s state (elt_s state f) ctx
   in
   let t_list = t_list#result in
   let query_opt =

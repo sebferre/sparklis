@@ -52,8 +52,8 @@ let get_ns =
     with Not_found ->
       let ns =
 	match cmd_to_list ("dig -x " ^ ip ^ " +short") with
-	  | [] -> "unknown"
-	  | x::_ -> x in
+	| [] -> "unknown"
+	| x::_ -> x in
       Hashtbl.add ht ip ns;
       ignore (Sys.command (Printf.sprintf "echo \"%s,%s\" >> data/table_ip_namespace.txt" ip ns));
       ns;;
@@ -78,6 +78,7 @@ open Lisql
 
 let rec size_s = function
   | Return np -> size_s1 np
+  | Seq ar -> Array.fold_left (fun res s -> res + size_s s) 0 ar
 and size_s1 = function
   | Det (det, rel_opt) -> size_s2 det + size_p1_opt rel_opt
   | AnAggreg (idg,mg,g,relg_opt,np) -> 1 + size_modif_s2 mg + size_p1_opt relg_opt + size_s1 np
@@ -115,9 +116,77 @@ and size_p1 = function
   | Not vp -> 1 + size_p1 vp
   | IsThere -> 0
 
+type query_feature = [ `Term | `The | `Class | `ThatIs | `ThatIsA | `ThatHas | `ThatIsOf | `ThatHasARelation | `Filter | `And | `Or | `Maybe | `Not | `Aggreg of aggreg | `Any | `Order ]
+
+let string_of_feature : query_feature -> string = function
+  | `Term -> "RDF term"
+  | `The -> "anaphora"
+  | `Class -> "class"
+  | `ThatIs -> "copula"
+  | `ThatIsA -> "typing"
+  | `ThatHas -> "forward relation"
+  | `ThatIsOf -> "backward relation"
+  | `ThatHasARelation -> "undefinite relation"
+  | `Filter -> "filter"
+  | `And -> "conjunction"
+  | `Or -> "disjunction"
+  | `Maybe -> "optional"
+  | `Not -> "negation"
+  | `Aggreg g -> "aggregation"
+  | `Any -> "hidden column"
+  | `Order -> "ordering"
+  
+let rec features_s = function
+  | Return np -> features_s1 np
+  | Seq ar -> Array.fold_left (fun res s -> res @ features_s s) [] ar
+and features_s1 = function
+  | Det (det, rel_opt) -> features_s2 det @ features_p1_opt rel_opt
+  | AnAggreg (idg,mg,g,relg_opt,np) -> `Aggreg g :: features_modif_s2 mg @ features_p1_opt relg_opt @ features_s1 np
+  | NAnd ar -> `And :: Array.fold_left (fun res np -> res @ features_s1 np) [] ar
+  | NOr ar -> `Or :: Array.fold_left (fun res np -> res @ features_s1 np) [] ar
+  | NMaybe np -> `Maybe :: features_s1 np
+  | NNot np -> `Not :: features_s1 np
+and features_s2 = function
+  | Term t -> [`Term]
+  | An (id,m,head) -> features_modif_s2 m @ features_head head
+  | The id -> [`The]
+and features_head = function
+  | Thing -> []
+  | Class uri -> [`Class]
+and features_modif_s2 (project,order) = features_project project @ features_order order
+and features_project = function
+  | Unselect -> [`Any]
+  | Select -> []
+and features_order = function
+  | Unordered -> []
+  | _ -> [`Order]
+and features_p1_opt = function
+  | None -> []
+  | Some vp -> features_p1 vp
+and features_p1 = function
+  | Is np -> `ThatIs :: features_s1 np
+  | Type uri -> `ThatIsA :: []
+  | Rel (uri,Fwd,np) -> `ThatHas :: features_s1 np
+  | Rel (uri,Bwd,np) -> `ThatIsOf :: features_s1 np
+  | Triple (_,np1,np2) -> `ThatHasARelation :: features_s1 np1 @ features_s1 np2
+  | Search _ -> [`Filter]
+  | Filter _ -> [`Filter]
+  | And ar -> Array.fold_left (fun res vp -> res @ features_p1 vp) [] ar
+  | Or ar -> `Or :: Array.fold_left (fun res vp -> res @ features_p1 vp) [] ar
+  | Maybe vp -> `Maybe :: features_p1 vp
+  | Not vp -> `Not :: features_p1 vp
+  | IsThere -> []
+
+let rec undup_features = function
+  | [] -> []
+  | x::l ->
+    if List.mem x l
+    then undup_features l
+    else x :: undup_features l
 
 let rec print_s = function
   | Return np -> "Give me " ^ print_s1 np
+  | Seq ar -> print_and (Array.map print_s ar)
 and print_s1 = function
   | Det (det, rel_opt) -> print_s2 det ^ print_p1_opt rel_opt
   | AnAggreg (idg,mg,g,relg_opt,np) -> "a " ^ print_modif_s2 mg ^ print_aggreg g ^ " " ^ print_id idg ^ print_p1_opt relg_opt ^ " [" ^ print_s1 np ^ "]"
@@ -197,7 +266,12 @@ and print_uri uri =
 
 let escape_string s =
   Str.global_replace (Str.regexp "\"") "\\\"" s
-    
+
+let rec output_object_list out_ttl pr = function
+  | [] -> failwith "output_object_list: empty list"
+  | [x] -> pr x
+  | x::l -> pr x; output_string out_ttl ", "; output_object_list out_ttl pr l
+
 let process_querylog () =
   let out_txt = open_out "data/querylog_processed.txt" in
   let out_ttl = open_out "data/querylog_processed.ttl" in
@@ -214,6 +288,7 @@ let process_querylog () =
 	  let ast_query = Permalink.to_query query in
 	  let s_query = print_s ast_query in
 	  let size_query = size_s ast_query in
+	  let features_query = undup_features (features_s ast_query) in
 	  let ns_ip = get_ns ip in
 	  begin
 	    output_string out_txt dt; output_string out_txt "  ";
@@ -226,10 +301,18 @@ let process_querylog () =
 	    output_string out_ttl "[] a :Step ; ";
 	    output_string out_ttl ":timestamp \""; output_string out_ttl dt; output_string out_ttl "\"^^xsd:dateTime ; ";
 	    output_string out_ttl ":date \""; output_string out_ttl (try String.sub dt 0 10 with _ -> ""); output_string out_ttl "\"^^xsd:date ; ";
-	    output_string out_ttl ":userIP \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; ";
+	    output_string out_ttl ":userIP \""; output_string out_ttl ip; output_string out_ttl "\" ; ";
+	    if ns_ip <> "unknown" then begin output_string out_ttl ":user \""; output_string out_ttl ns_ip; output_string out_ttl "\" ; " end;
 	    if session <> "" then begin output_string out_ttl ":sessionID \""; output_string out_ttl session; output_string out_ttl "\" ; " end;
 	    output_string out_ttl ":endpoint \""; output_string out_ttl (escape_string endpoint); output_string out_ttl "\" ; ";
 	    output_string out_ttl ":query \""; output_string out_ttl (escape_string s_query); output_string out_ttl "\" ; ";
+	    if features_query <> [] then begin
+	      output_string out_ttl ":queryFeature ";
+	      output_object_list out_ttl
+		(fun x -> output_string out_ttl ("\"" ^ x ^ "\""))
+		(List.map string_of_feature features_query);
+	      output_string out_ttl " ; "
+	    end;
 	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
 	  end
 	 with _ -> output_string out_txt ("*** wrong format *** : " ^ line ^ "\n"))

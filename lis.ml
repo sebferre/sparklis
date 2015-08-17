@@ -441,7 +441,7 @@ object (self)
 		      modifs
 		    | _ -> [] in
 		let modifs =
-		  if ctx = ReturnX then
+		  if (match ctx with ReturnX _ -> true | _ -> false) then
 		    (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
 		    if is_top_s1 f
 		    then modifs

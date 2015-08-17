@@ -89,6 +89,7 @@ type s =
   [ `Return of np
   | `ThereIs of np
   | `Truth of np * vp
+  | `And of s array
   | `Focus of nl_focus * s ]
 and np =
   [ `Void
@@ -308,6 +309,9 @@ and labelling_s grammar : elt_s -> id_labelling_list = function
   | Return np ->
     let _ls, lab = labelling_s1 grammar ~labels:[] np in
     lab
+  | Seq ar ->
+    let labs = Array.to_list (Array.map (labelling_s grammar) ar) in
+    List.concat labs
 
 class ['a ] counter =
 object
@@ -508,10 +512,14 @@ and det_of_elt_s2 grammar ~id_labelling foc rel : elt_s2 -> np = function
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
-and s_of_elt_s grammar ~id_labelling pos : elt_s -> s = function
+and s_of_elt_s grammar ~id_labelling pos ctx f : s =
+  let foc = (AtS (f,ctx), pos) in
+  match f with
   | Return np ->
-    let foc = (AtS (Return np), pos) in
-    `Focus (foc, `Return (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) ReturnX np))
+    `Focus (foc, `Return (np_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (ReturnX ctx) np))
+  | Seq ar ->
+    `Focus (foc, `And (Array.mapi (fun i elt -> s_of_elt_s grammar ~id_labelling (focus_pos_down pos) (SeqX (i,ar,ctx)) elt) ar))
+    
 
 (* in *_of_ctx_*, [pos = `At] if semantically at current focus *)
 let rec s_of_ctx_p1 grammar ~id_labelling pos f foc_nl ctx : s =
@@ -578,11 +586,11 @@ and s_of_ctx_s1 grammar ~id_labelling pos f foc_nl ctx =
       let foc2 = (AtP1 (f2,ctx2), `Out) in
       let nl2 = vp_of_elt_p1_Triple grammar arg (np_of_elt_s1 grammar ~id_labelling `Out (TripleX1 (arg,f,ctx2)) np1) foc_nl in
       s_of_ctx_p1 grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
-    | ReturnX ->
+    | ReturnX ctx2 ->
       let f2 = Return f in
-      let foc2 = (AtS f2, `Out) in
+      let foc2 = (AtS (f2,ctx2), `Out) in
       let nl2 = `Return foc_nl in
-      `Focus (foc2,nl2)
+      s_of_ctx_s grammar ~id_labelling `Out f2 (`Focus (foc2,nl2)) ctx2
     | AnAggregX (id,modif,g,rel_opt,ctx2) ->
       let f2 = AnAggreg (id, modif, g, rel_opt, f) in
       let foc2 = (AtS1 (f2,ctx2), `Out) in
@@ -619,11 +627,22 @@ and s_of_ctx_s1 grammar ~id_labelling pos f foc_nl ctx =
       let foc2 = (AtS1 (f2,ctx2), `Ex) in
       let nl2 = `Not (true, foc_nl) in
       s_of_ctx_s1 grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
+and s_of_ctx_s grammar ~id_labelling pos f foc_nl ctx =
+  match ctx with
+  | Root -> foc_nl
+  | SeqX (i,ar,ctx2) ->
+    let f2 = ar.(i) <- f; Seq ar in
+    let foc2 = (AtS (f2,ctx2), `Out) in
+    let nl2 =
+      `And (Array.mapi
+	      (fun j elt -> if j=i then foc_nl else s_of_elt_s grammar ~id_labelling `Out (SeqX (j,ar,ctx2)) elt)
+	      ar) in
+    s_of_ctx_s grammar ~id_labelling pos f2 (`Focus (foc2,nl2)) ctx2
 
 let s_of_focus grammar ~id_labelling : focus -> s = function
   | AtP1 (f,ctx) -> s_of_ctx_p1 grammar ~id_labelling `At f (vp_of_elt_p1 grammar ~id_labelling `At ctx f) ctx
   | AtS1 (f,ctx) -> s_of_ctx_s1 grammar ~id_labelling `At f (np_of_elt_s1 grammar ~id_labelling `At ctx f) ctx
-  | AtS f -> s_of_elt_s grammar ~id_labelling `Out f
+  | AtS (f,ctx) -> s_of_ctx_s grammar ~id_labelling `Out f (s_of_elt_s grammar ~id_labelling `Out ctx f) ctx
 
 (* linguistic transformations *)
 
@@ -645,6 +664,7 @@ let rec map_s (transf : transf) s =
     | `Return np -> `Return (map_np transf np)
     | `ThereIs np -> `ThereIs (map_np transf np)
     | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
+    | `And ar -> `And (Array.map (map_s transf) ar)
     | `Focus (foc,s) -> `Focus (foc, map_s transf s)
 and map_np transf np =
   match transf#np np with
@@ -862,6 +882,7 @@ let rec xml_s grammar = function
   | `Return np -> Kwd grammar#give_me :: xml_np grammar np
   | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar np
   | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar np @ xml_vp grammar vp
+  | `And ar -> xml_and grammar (Array.map (xml_s grammar) ar)
   | `Focus (foc,s) -> xml_focus foc (xml_s grammar s)
 and xml_np grammar = function
   | `Void -> []

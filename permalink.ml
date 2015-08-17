@@ -35,6 +35,7 @@ let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
   | Return np -> print_un "Return" (print_s1 np)
+  | Seq ar -> print_ar print_s "Seq" ar
 and print_p1 = function
   | Is np -> print_un "Is" (print_s1 np)
   | Type c -> print_un "Type" (print_uri c)
@@ -154,7 +155,8 @@ let rec parse = parser
   | [< 'Kwd "["; version = parse_version; 'Kwd "]" ?? "missing ]"; s = parse_s ~version >] -> s
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
-  | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
+    | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
+    | [< ar = parse_ar parse_s ~version "Seq" >] -> Seq ar
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is np
   | [< c = parse_un ~version "Type" parse_uri >] -> Type c
