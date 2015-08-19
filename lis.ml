@@ -408,6 +408,29 @@ object (self)
     else ajax_extent ()
 
   method index_modifiers ~init =
+    let open Lisql in
+    let incrs =
+      if init
+      then [IncrIs]
+      else
+	let incrs =
+	  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
+	  then [IncrAggreg Total; IncrAggreg Average; IncrAggreg Maximum; IncrAggreg Minimum]
+	  else [] in
+	let incrs =
+	  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
+	  then IncrAggreg ListOf :: incrs
+	  else incrs in
+	IncrIs :: IncrTriplify ::
+	  IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
+	  IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
+	  IncrAggreg NumberOf :: incrs in
+    let valid_incrs =
+      List.filter
+	(fun incr -> Lisql.insert_increment incr focus <> None)
+	incrs in
+    List.map (fun incr -> (incr,1)) valid_incrs
+(*
     if init
     then [(Lisql.IncrIs,1)]
     else
@@ -459,5 +482,6 @@ object (self)
 		modifs
 	      | _ -> [] in
 	List.map (fun incr -> (incr,1)) modif_list
-
+*)
+	  
 end

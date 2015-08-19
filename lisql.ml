@@ -574,40 +574,64 @@ let insert_constr constr focus =
     | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search constr) focus
     | _ -> insert_elt_p1 (Filter constr) focus
 
-let insert_is focus =
-  let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
-  focus_moves [down_focus] foc_opt
+let insert_is = function
+  | AtS1 (f, IsX ctx) when is_top_s1 f -> None
+  | focus ->
+    let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
+    focus_moves [down_focus] foc_opt
 
 let insert_and = function
+(*
   | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
-  | AtP1 (f, AndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_p1 ctx2 IsThere (And ar))
-  | AtP1 (f, ctx) -> Some (append_and_p1 ctx IsThere f)
+  | AtP1 (f, AndX (i,ar,ctx)) when not (is_top_p1 f) -> ar.(i) <- f; Some (append_and_p1 ctx IsThere (And ar))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_and_p1 ctx IsThere f)
+*)
+  | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtS1 (NAnd ar, ctx) -> Some (append_and_s1 ctx factory#top_s1 (NAnd ar))
-  | AtS1 (f, NAndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_s1 ctx2 factory#top_s1 (NAnd ar))
-  | AtS1 (f, ctx) -> Some (append_and_s1 ctx factory#top_s1 f)
+  | AtS1 (f, NAndX (i,ar,ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> ar.(i) <- f; Some (append_and_s1 ctx factory#top_s1 (NAnd ar))
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_or = function
   | AtP1 (Or ar, ctx) -> Some (append_or_p1 ctx IsThere (Or ar))
-  | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_p1 ctx2 IsThere (Or ar))
-  | AtP1 (f, ctx) -> Some (append_or_p1 ctx IsThere f)
+  | AtP1 (f, OrX (i,ar,ctx2)) when not (is_top_p1 f) -> ar.(i) <- f; Some (append_or_p1 ctx2 IsThere (Or ar))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx IsThere f)
   | AtS1 (NOr ar, ctx) -> Some (append_or_s1 ctx factory#top_s1 (NOr ar))
-  | AtS1 (f, NOrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_s1 ctx2 factory#top_s1 (NOr ar))
-  | AtS1 (f, ctx) -> Some (append_or_s1 ctx factory#top_s1 f)
+  | AtS1 (f, NOrX (i,ar,ctx2)) when not (is_top_s1 f) -> ar.(i) <- f; Some (append_or_s1 ctx2 factory#top_s1 (NOr ar))
+  | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))
+  | AtP1 (f, MaybeX ctx) -> None
+  | AtP1 (Not f, ctx) -> None
+  | AtP1 (f, NotX ctx) -> None				     
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe f, ctx))
+  (*if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))*)
   | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))
+  | AtS1 (f, NMaybeX ctx) -> None
+  | AtS1 (NNot f, ctx) -> None
+  | AtS1 (f, NNotX ctx) -> None
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe f, ctx))
+  (*if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))*)
   | _ -> None
 
 let insert_not = function
   | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
+  | AtP1 (f, NotX ctx) -> None
+  | AtP1 (Maybe f, ctx) -> None
+  | AtP1 (f, MaybeX ctx) -> None
+  | AtP1 (f, ctx) ->
+    if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
   | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
+  | AtS1 (f, NNotX ctx) -> None
+  | AtS1 (NMaybe f, ctx) -> None
+  | AtS1 (f, NMaybeX ctx) -> None
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
+    if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
   | _ -> None
 
 let insert_seq = function
@@ -619,7 +643,7 @@ let insert_seq = function
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
     Some (AtS1 (AnAggreg (id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (An _, _) as np, ctx) ->
+  | AtS1 (Det (An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, np), ctx))
   | AtS1 ((AnAggreg (id, modif, g0, rel_opt, np) as npg), ctx) ->
     if g0 = g then Some (AtS1 (np, ctx))
@@ -629,7 +653,7 @@ let insert_aggreg g = function
   | _ -> None
 
 let insert_modif_transf f = function
-  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) ->
+  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (Det (An (id, modif2, head), rel_opt), ctx) in
     ( match fst modif2 with

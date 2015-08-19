@@ -299,7 +299,7 @@ object (self)
 	      Some (html_state#get_focus key)
 	    with _ -> None)));
 	jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
-	  navigation#update_focus ~push_in_history:true (fun focus ->
+	  navigation#update_focus ~push_in_history:true (fun _ ->
 	    let key = to_string (elt##id) in
 	    let _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
