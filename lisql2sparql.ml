@@ -408,7 +408,8 @@ let rec transpose_aggregation_stacks t_list var_stacks acc =
   let l2 =
     List.map
       (function
-      | `Var v -> (v,`Dim, List.mem (Rdf.Var v) t_list), `Var v
+      | `Var v -> (v,`Dim, List.mem (Rdf.Var v) t_list), `VarEcho v
+      | `VarEcho v -> (v, `Dim, false), `VarEcho v (* at_focus is not propagated to subqueries *)
       | `Aggreg (v,g,f,vi, st) -> (v, `Aggreg (g,vi,f), List.mem (Rdf.Var v) t_list), st)
       var_stacks in
   let layer, substacks = List.split l2 in

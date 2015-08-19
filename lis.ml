@@ -430,58 +430,5 @@ object (self)
 	(fun incr -> Lisql.insert_increment incr focus <> None)
 	incrs in
     List.map (fun incr -> (incr,1)) valid_incrs
-(*
-    if init
-    then [(Lisql.IncrIs,1)]
-    else
-      let modif_list =
-	let open Lisql in
-	    match focus with
-	      | AtP1 (f,ctx) ->
-		let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
-		let modifs =
-		  match f with
-		    | Rel _
-		    | Triple (S, Det (Term (Rdf.URI _), _), _)
-		    | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
-		    | _ -> modifs in
-		modifs
-	      | AtS1 (f,ctx) ->
-		let modifs =
-		  match f with
-		    | ( Det (An _, _) | AnAggreg _ ) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
-		      (* no aggregation and modifiers on predicative S1 (S1 as P1 or aggregated S1) *)
-		      let modifs =
-			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
-			else [] in
-		      let modifs =
-			if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-			then IncrAggreg ListOf :: modifs
-			else modifs in
-		      let modifs =
-			IncrUnselect :: IncrAggreg NumberOf :: modifs in
-		      let modifs =
-			IncrOrder Highest :: IncrOrder Lowest :: modifs in
-		      modifs
-		    | _ -> [] in
-		let modifs =
-		  if (match ctx with ReturnX _ -> true | _ -> false) then
-		    (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
-		    if is_top_s1 f
-		    then modifs
-		    else IncrAnd :: IncrOr :: IncrMaybe :: modifs (* needs special treatment for increments *)
-		  else if not (Lisql.is_aggregated_ctx_s1 ctx) then
-		    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs
-		  else modifs in
-		let modifs =
-		  match f with
-		    | Det (An _, _) -> IncrIs :: modifs
-		    | AnAggreg _ -> IncrIs :: modifs
-		    | _ -> modifs in
-		modifs
-	      | _ -> [] in
-	List.map (fun incr -> (incr,1)) modif_list
-*)
 	  
 end
