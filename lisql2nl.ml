@@ -732,7 +732,7 @@ let main_transf =
 object (self)
   inherit transf
   method s = function
-    | `Return (`Focus (foc, `Qu (_qu,adj, `Aggreg (susp,ngg,ng)))) -> `Return (`Focus (foc, `Qu (`The, adj, `Aggreg (susp, ngg, ng))))
+    | `Return (`Focus (foc, `Qu (`A, adj, `Aggreg (susp,ngg,ng)))) -> `Return (`Focus (foc, `Qu (`The, adj, `Aggreg (susp, ngg, ng))))
     | `Return (`Focus (foc, `PN (w, `Nil))) -> `ThereIs (`Focus (foc, `PN (w, `Nil)))
     | `Return (`Focus (foc, `PN (w, `That vp))) -> `Truth (`Focus (foc, `PN (w, `Nil)), vp)
     | nl -> nl
