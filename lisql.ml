@@ -50,7 +50,8 @@ let subsumed_constr c1 c2 = (* simplified definition based on 'prefix' rather th
 type id = int
 type arg = S | P | O
 type order = Unordered | Highest | Lowest
-type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Given (* Given is a fake aggregator to use an aggregation as dimension *)
+type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample | Given
+  (* Given is a fake aggregator to use an aggregation as dimension *)
 type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd

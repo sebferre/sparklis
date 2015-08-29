@@ -154,7 +154,7 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
-type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN | ID
+type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN | SAMPLE | ID
 type order = ASC | DESC
 
 let select
@@ -182,6 +182,7 @@ let select
 	       | AVG -> make_aggreg "AVG(" (var_numeric v) ")" vg
 	       | MAX -> make_aggreg "MAX(" (var v) ")" vg
 	       | MIN -> make_aggreg "MIN(" (var v) ")" vg
+	       | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")" vg
 	       | ID -> make_aggreg "" (var v) "" vg)
 	   aggregations) in
     let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in

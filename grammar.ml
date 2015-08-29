@@ -42,6 +42,7 @@ object
   method virtual aggreg_average : string * [`Noun | `Adjective]
   method virtual aggreg_maximum : string * [`Noun | `Adjective]
   method virtual aggreg_minimum : string * [`Noun | `Adjective]
+  method virtual aggreg_sample : string * [`Noun | `Adjective ]
   method virtual aggreg_given : string * [`Noun | `Adjective]
 
   method virtual order_highest : string
@@ -144,6 +145,7 @@ object
   method aggreg_average = "average", `Adjective
   method aggreg_maximum = "maximum", `Adjective
   method aggreg_minimum = "minimum", `Adjective
+  method aggreg_sample = "sample", `Adjective
   method aggreg_given = "given", `Adjective
 
   method order_highest = "highest-to-lowest"
@@ -236,6 +238,7 @@ object
   method aggreg_average = "moyen", `Adjective
   method aggreg_maximum = "maximum", `Adjective
   method aggreg_minimum = "minimum", `Adjective
+  method aggreg_sample = "échantillon", `Noun
   method aggreg_given = "donné", `Adjective
 
   method order_highest = "en ordre décroissant"

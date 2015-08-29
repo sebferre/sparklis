@@ -424,7 +424,7 @@ object (self)
 	IncrIs :: IncrTriplify ::
 	  IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
 	  IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	  IncrAggreg NumberOf :: IncrAggreg Given :: incrs in
+	  IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
     let valid_incrs =
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)

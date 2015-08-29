@@ -38,6 +38,7 @@ let sparql_aggreg = function
   | Average -> Sparql.AVG
   | Maximum -> Sparql.MAX
   | Minimum -> Sparql.MIN
+  | Sample -> Sparql.SAMPLE
   | Given -> Sparql.ID
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =

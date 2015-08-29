@@ -179,6 +179,7 @@ let string_pos_of_aggreg grammar = function
   | Average -> grammar#aggreg_average
   | Maximum -> grammar#aggreg_maximum
   | Minimum -> grammar#aggreg_minimum
+  | Sample -> grammar#aggreg_sample
   | Given -> grammar#aggreg_given
 
 let word_of_aggreg grammar g =
