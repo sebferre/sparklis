@@ -36,6 +36,23 @@ let cmd_to_list command =
   let (l,_) = process_output_to_list2 command in
   l;;
 
+let re_timestamp = Str.regexp "\\([0-9][0-9][0-9][0-9]\\)-\\([0-9][0-9]\\)-\\([0-9][0-9]\\)T\\([0-9][0-9]\\):\\([0-9][0-9]\\):\\([0-9][0-9]\\)"
+
+let seconds_of_timestamp dt =
+  if Str.string_match re_timestamp dt 0 then
+    ( match List.map (fun i -> int_of_string (Str.matched_group i dt)) [1;2;3;4;5;6] with
+    | [year; mon; mday; hour; min; sec] ->
+      let open Unix in
+      let tm = { tm_year = year - 1900; tm_mon = mon-1; tm_mday = mday; tm_hour = hour; tm_min = min; tm_sec = sec; tm_wday = 0; tm_yday = 0; tm_isdst = false } in
+      int_of_float (fst (mktime tm))
+    | _ -> assert false )
+  else failwith "seconds_of_timestamp: bad timestamp format"
+  
+let timestamp_diff dt1 dt2 =
+  let s1 = seconds_of_timestamp dt1 in
+  let s2 = seconds_of_timestamp dt2 in
+  s1 - s2
+    
 (* hitlog *)
 
 let get_ns =
@@ -217,6 +234,7 @@ and print_aggreg = function
   | Average -> "average"
   | Maximum -> "maximum"
   | Minimum -> "minimum"
+  | Given -> "given"
 and print_p1_opt = function
   | None -> ""
   | Some vp -> " that " ^ print_p1 vp
@@ -275,7 +293,16 @@ let rec output_object_list out_ttl pr = function
 let process_querylog () =
   let out_txt = open_out "data/querylog_processed.txt" in
   let out_ttl = open_out "data/querylog_processed.ttl" in
+  let out_dat = open_out "data/querylog_processed.dat" in (* sessions as time series *)
+  let current_session = ref ("<ip>","<session>","<endpoint>") in
+  let current_session_on = ref false in
+  let current_session_start = ref 0 in
+  let current_session_last_elapsed = ref 0 in
+  let current_session_max_size_query = ref 0 in
+  let nb_sessions = ref 0 in
   print_endline "Processing data/querylog.txt > result in data/querylog_processed.txt/.ttl";
+  ignore (Sys.command "sort -k2,1 -t , < data/querylog.txt > data/querylog_grouped.txt");
+  output_string out_txt "# session\ttimestamp\tendpoint\tquery\n";
   output_string out_ttl "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n";
   output_string out_ttl "@prefix : <http://example.com/> .\n";
   iter_lines
@@ -284,6 +311,8 @@ let process_querylog () =
       ( match split_line ~bound:4 line with
       | dt::ip_session::endpoint::query::_ ->
 	(try
+	   let seconds = seconds_of_timestamp dt in
+	  (*let days = (seconds - seconds_of_timestamp "2014-10-29T00:00:00") / 60 / 60 / 24 in*)
 	  let ip, session = split_fragment ip_session in
 	  let ast_query = Permalink.to_query query in
 	  let s_query = print_s ast_query in
@@ -291,11 +320,16 @@ let process_querylog () =
 	  let features_query = undup_features (features_s ast_query) in
 	  let ns_ip = get_ns ip in
 	  begin
-	    output_string out_txt dt; output_string out_txt "  ";
-	    output_string out_txt ns_ip; output_string out_txt "\t";
-	    if session <> "" then begin output_string out_txt session; output_string out_txt "\t" end;
-	    output_string out_txt endpoint; output_string out_txt "\t";
-	    output_string out_txt s_query; output_string out_txt "\n"
+	  (*let public_endpoint =
+	      try let _ = Str.search_forward (Str.regexp "\\(dbpedia\\|bio2rdf\\)") endpoint 0 in true
+	      with _ -> false in
+	    if public_endpoint then*)
+	      begin output_string out_txt (if session = "" then Digest.to_hex (Digest.string ip) else session); output_string out_txt "\t";
+		output_string out_txt dt; output_string out_txt "\t";
+		output_string out_txt ns_ip; output_string out_txt "\t";
+		output_string out_txt endpoint; output_string out_txt "\t";
+		output_string out_txt s_query; output_string out_txt "\n"
+	      end
 	  end;
 	  begin
 	    output_string out_ttl "[] a :Step ; ";
@@ -306,18 +340,62 @@ let process_querylog () =
 	    if session <> "" then begin output_string out_ttl ":sessionID \""; output_string out_ttl session; output_string out_ttl "\" ; " end;
 	    output_string out_ttl ":endpoint \""; output_string out_ttl (escape_string endpoint); output_string out_ttl "\" ; ";
 	    output_string out_ttl ":query \""; output_string out_ttl (escape_string s_query); output_string out_ttl "\" ; ";
-	    if features_query <> [] then begin
-	      output_string out_ttl ":queryFeature ";
-	      output_object_list out_ttl
-		(fun x -> output_string out_ttl ("\"" ^ x ^ "\""))
-		(List.map string_of_feature features_query);
-	      output_string out_ttl " ; "
-	    end;
+	    if features_query <> [] then
+	      begin
+		output_string out_ttl ":queryFeature ";
+		output_object_list out_ttl
+		  (fun x -> output_string out_ttl ("\"" ^ x ^ "\""))
+		  (List.map string_of_feature features_query);
+		output_string out_ttl " ; "
+	      end;
 	    output_string out_ttl ":querySize "; output_string out_ttl (string_of_int size_query); output_string out_ttl " .\n"
+	  end;
+	  begin
+	    if (ip,session,endpoint) <> !current_session || size_query = 0 then
+	      begin
+		current_session := (ip,session,endpoint);
+		current_session_on := (size_query = 0 (* && session <> ""*) (* && ns_ip = "nat-vpn.it.teithe.gr." *));
+		current_session_start := seconds;
+		current_session_last_elapsed := 0;
+		current_session_max_size_query := 0
+	      end;
+	    let elapsed_time = seconds - !current_session_start in
+	    let elapsed_time =
+	      let delta = elapsed_time - !current_session_last_elapsed in
+	      if delta > 60 then
+		begin (* compress lazy time *)
+		  current_session_start := seconds - 60 - !current_session_last_elapsed;
+		  !current_session_last_elapsed + 60
+		end
+		(*begin (* start a new timeseries *)
+		  current_session_on := (size_query = 0);
+		  current_session_start := dt;
+		  if !current_session_on then output_string out_dat "\n";
+		  0
+		  end*)
+	      else elapsed_time in
+	    if size_query / (elapsed_time+1) >= 1 then current_session_on := false; (* use of permalink *)
+	    if !current_session_on then
+	      begin
+		if !current_session_last_elapsed = 0 && elapsed_time <> 0 then (* first step after 0 *)
+		  begin
+		    incr nb_sessions;
+		    output_string out_dat ("\n# " ^ String.concat "\t" [dt; session; ns_ip; ip; endpoint] ^ "\n"); (* as comment *)
+		    output_string out_dat ("0\t0\t" ^ "1" (*string_of_int days*) ^ "\t\"Give me a thing\"\n") (* step 0 *)
+		  end;
+		let is_max_size_query = size_query > !current_session_max_size_query in
+		if elapsed_time <> 0 (* && is_max_query_size *) then (* for any step except 0 *)
+		  begin
+		    output_string out_dat (string_of_int elapsed_time ^ "\t" ^ string_of_int size_query ^ "\t" ^ (if is_max_size_query then "0" else "1") (*string_of_int days*) ^ "\t\"" ^ s_query ^ "\"\n")
+		  end;
+	      end;
+	    current_session_last_elapsed := elapsed_time;
+	    current_session_max_size_query := max !current_session_max_size_query size_query
 	  end
 	 with _ -> output_string out_txt ("*** wrong format *** : " ^ line ^ "\n"))
       | _ -> output_string out_txt ("*** wrong format *** : " ^ line ^ "\n")))
-    "data/querylog.txt";
+    "data/querylog_grouped.txt";
+  print_string (string_of_int !nb_sessions ^ " sessions");
   print_newline ();
   close_out out_txt;
   close_out out_ttl;
