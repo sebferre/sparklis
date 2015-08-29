@@ -38,6 +38,7 @@ let sparql_aggreg = function
   | Average -> Sparql.AVG
   | Maximum -> Sparql.MAX
   | Minimum -> Sparql.MIN
+  | Given -> Sparql.ID
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
@@ -425,26 +426,27 @@ let rec transpose_aggregation_stacks t_list var_stacks acc =
   else transpose_aggregation_stacks t_list substacks (layer::acc)
 
 let make_select state t_list ~is_subquery dims_aggregs form =
-  let dimensions, aggregations, havings, ordering =
+  let projections, aggregations, groupings, havings, ordering =
     List.fold_right
-      (fun (v,kind,at_focus) (dims,aggregs,havings,ordering) ->
-	let dims, aggregs, havings, order, v_order = (* v_order is to be used in ordering *)
+      (fun (v,kind,at_focus) (projs,aggregs,groups,havings,ordering) ->
+	let projs, aggregs, groups, havings, order, v_order = (* v_order is to be used in ordering *)
 	  match state#modif v with
-	  | (Unselect, _) when not at_focus && not is_subquery -> dims, aggregs, havings, Unordered, v
+	  | (Unselect, _) when not at_focus && not is_subquery -> projs, aggregs, groups, havings, Unordered, v
 	    | (_, order) ->
 	      match kind with
-	      | `Dim -> v::dims, aggregs, havings, order, v
-	      | `Aggreg (g,vi,f) -> dims, (sparql_aggreg g,vi,v)::aggregs, f::havings, order, v in
+	      | `Dim -> v::projs, aggregs, v::groups, havings, order, v
+	      | `Aggreg (Lisql.Given,vi,f) -> projs, (sparql_aggreg Lisql.Given,vi,v)::aggregs, vi::groups, f::havings, order, v
+	      | `Aggreg (g,vi,f) -> projs, (sparql_aggreg g,vi,v)::aggregs, groups, f::havings, order, v in
 	let ordering =
 	  match order with
 	  | Unordered -> ordering
 	  | Lowest -> (Sparql.ASC, v_order) :: ordering
 	  | Highest -> (Sparql.DESC, v_order) :: ordering in
-	dims, aggregs, havings, ordering)
-      dims_aggregs ([],[],[],[]) in
+	projs, aggregs, groups, havings, ordering)
+      dims_aggregs ([],[],[],[],[]) in
   let having = Sparql.expr_of_formula (Sparql.formula_and_list havings) in
   (fun ?(constr=True) ~limit ->
-    Sparql.select ~distinct:true ~dimensions ~aggregations ~having ~ordering ~limit
+    Sparql.select ~distinct:true ~projections ~aggregations ~groupings ~having ~ordering ~limit
       (Sparql.pattern_of_formula
 	 (match t_list with [t] -> Sparql.formula_and form (filter_constr_entity t constr) | _ -> form)))
 
@@ -520,7 +522,7 @@ let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
 	    | Rdf.Bnode _ -> Sparql.formula_and form (triple t tx)
 	    | _ -> triple t tx in
 	Some (fun ?(constr=True) ~limit ->
-	  Sparql.select ~dimensions:[x] ~limit
+	  Sparql.select ~projections:[x] ~limit
 	    (Sparql.pattern_of_formula
 	       (Sparql.formula_and form_x (filter_constr tx constr))))
       | _ -> None in

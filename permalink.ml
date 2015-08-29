@@ -82,6 +82,7 @@ and print_aggreg = function
   | Average -> print_atom "Average"
   | Maximum -> print_atom "Maximum"
   | Minimum -> print_atom "Minimum"
+  | Given -> print_atom "Given"
 and print_order = function
   | Unordered -> print_atom "Unordered"
   | Highest -> print_atom "Highest"
@@ -218,6 +219,7 @@ and parse_aggreg ~version = parser
   | [< () = parse_atom ~version "Average" >] -> Average
   | [< () = parse_atom ~version "Maximum" >] -> Maximum
   | [< () = parse_atom ~version "Minimum" >] -> Minimum
+  | [< () = parse_atom ~version "Given" >] -> Given
   | [<>] -> syntax_error "invalid aggreg"
 and parse_order ~version = parser
   | [< () = parse_atom ~version "Unordered" >] -> Unordered

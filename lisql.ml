@@ -50,7 +50,7 @@ let subsumed_constr c1 c2 = (* simplified definition based on 'prefix' rather th
 type id = int
 type arg = S | P | O
 type order = Unordered | Highest | Lowest
-type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
+type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Given (* Given is a fake aggregator to use an aggregation as dimension *)
 type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
@@ -643,7 +643,7 @@ let insert_seq = function
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
     Some (AtS1 (AnAggreg (id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
+  | AtS1 (Det (An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) && g <> Given ->
     Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, np), ctx))
   | AtS1 ((AnAggreg (id, modif, g0, rel_opt, np) as npg), ctx) ->
     if g0 = g then Some (AtS1 (np, ctx))
