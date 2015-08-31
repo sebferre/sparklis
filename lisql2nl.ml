@@ -79,7 +79,8 @@ and ng_label =
   [ `Word of word
   | `Gen of ng_label * word
   | `Of of word * ng_label
-  | `Aggreg of word * ng_label ]
+  | `AggregNoun of word * ng_label
+  | `AggregAdjective of word * ng_label ]
 
 type focus_pos = [ `In | `At | `Out | `Ex ]
 
@@ -113,8 +114,8 @@ and adj =
   | `Optional of bool * adj
   | `Adj of adj * word ]
 and ng_aggreg =
-  [ `That of word * rel
-  | `ThatOf of word * rel ]
+  [ `AdjThat of word * rel
+  | `NounThatOf of word * rel ]
 and rel =
   [ `Nil
   | `That of vp
@@ -220,6 +221,16 @@ let var_of_uri (uri : Rdf.uri) : string =
     | Some (i,res) -> Regexp.matched_string res
     | None -> "thing"
 
+let var_of_aggreg = function
+  | NumberOf -> "number_of"
+  | ListOf -> "list_of"
+  | Total -> "total"
+  | Average -> "average"
+  | Maximum -> "maximum"
+  | Minimum -> "minimum"
+  | Sample -> "sample"
+  | Given -> "given"
+
 let rec labelling_p1 grammar ~labels : elt_p1 -> id_label list * id_labelling_list = function
   | Is np -> labelling_s1 grammar ~labels np (* TODO: avoid keeping np.id *)
   | Type c ->
@@ -282,17 +293,19 @@ and labelling_s1 grammar ~labels : elt_s1 -> id_label list * id_labelling_list =
     let ls_rel, lab_rel = match rel_opt with None -> [], [] | Some rel -> labelling_p1 grammar ~labels rel in
     ls_rel, lab_rel
   | AnAggreg (id, modif, g, rel_opt, np) ->
-    let v, w =
+    let v = var_of_aggreg g in
+    let w, make_aggreg =
       let s_g, pos_g = string_pos_of_aggreg grammar g in
+      let w = `Op s_g in
       match pos_g with
-	| `Noun -> s_g ^ "_of", `Op (s_g ^ " " ^ grammar#of_)
-	| `Adjective -> s_g, `Op s_g in
+	| `Noun -> w, (fun l -> `AggregNoun (w, l))
+	| `Adjective -> w, (fun l -> `AggregAdjective (w, l)) in
     let ls_np, lab_np = labelling_s1 grammar ~labels np in
     let ls_g =
       match id_of_s1 np with
       | Some id ->
 	let l_np = try List.assoc id lab_np with _ -> [] in
-	List.map (fun (u,l) -> (v ^ "_" ^ u, `Aggreg (w,l))) l_np @ [(v, `Word w)]
+	List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) l_np @ [(v, `Word w)]
       | None -> assert false in
     ls_np, (id, ls_g) :: lab_np
   | NAnd ar ->
@@ -437,8 +450,8 @@ let np_of_elt_s1_AnAggreg grammar ~suspended (modif : modif_s2) (g : aggreg) (re
   let ng_aggreg =
     let s_g, pos_g = string_pos_of_aggreg grammar g in
     match pos_g with
-    | `Noun -> `ThatOf (`Op s_g, rel)
-    | `Adjective -> `That (`Op s_g, rel) in
+    | `Noun -> `NounThatOf (`Op s_g, rel)
+    | `Adjective -> `AdjThat (`Op s_g, rel) in
   `Qu (qu, adj, `Aggreg (suspended, ng_aggreg, ng))
 
 
@@ -502,8 +515,8 @@ and ng_of_elt_s1 grammar ~id_labelling pos ctx f =
       let ng_aggreg =
 	let s_g, pos_g = string_pos_of_aggreg grammar g in
 	match pos_g with
-	| `Noun -> `ThatOf (`Op s_g, rel)
-	| `Adjective -> `That (`Op s_g, rel) in
+	| `Noun -> `NounThatOf (`Op s_g, rel)
+	| `Adjective -> `AdjThat (`Op s_g, rel) in
       let ng = ng_of_elt_s1 grammar ~id_labelling (focus_pos_down pos) (AnAggregX (id,modif,g,rel_opt,ctx)) np in
       `Focus (foc, `Aggreg (false, ng_aggreg, ng))
     | _ -> assert false
@@ -646,6 +659,7 @@ let s_of_focus grammar ~id_labelling : focus -> s = function
   | AtS1 (f,ctx) -> s_of_ctx_s1 grammar ~id_labelling `At f (np_of_elt_s1 grammar ~id_labelling `At ctx f) ctx
   | AtS (f,ctx) -> s_of_ctx_s grammar ~id_labelling `Out f (s_of_elt_s grammar ~id_labelling `Out ctx f) ctx
 
+    
 (* linguistic transformations *)
 
 class transf =
@@ -693,8 +707,8 @@ and map_adj transf adj =
     | `Adj (adj,w) -> `Adj (map_adj transf adj, w)
 and map_ng_aggreg transf ngg =
   match transf#ng_aggreg ngg with
-    | `That (w,rel) -> `That (w, map_rel transf rel)
-    | `ThatOf (w,rel) -> `ThatOf (w, map_rel transf rel)
+    | `AdjThat (w,rel) -> `AdjThat (w, map_rel transf rel)
+    | `NounThatOf (w,rel) -> `NounThatOf (w, map_rel transf rel)
 and map_rel transf rel =
   match transf#rel rel with
     | `Nil -> `Nil
@@ -814,7 +828,11 @@ and xml_ng_label grammar = function
       | Some suf -> Suffix (xml_ng_label grammar ng, suf) :: Word w :: []
       | None -> xml_ng_label grammar (`Of (w,ng)) )
   | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: Kwd grammar#the :: xml_ng_label grammar ng
-  | `Aggreg (w,ng) -> Word w :: xml_ng_label grammar ng
+  | `AggregNoun (w,ng) -> Word w :: Kwd grammar#of_ :: xml_ng_label grammar ng
+  | `AggregAdjective (w,ng) ->
+    if grammar#adjective_before_noun
+    then Word w :: xml_ng_label grammar ng
+    else xml_ng_label grammar ng @ [Word w]
 
 (*
 let rec xml_starts_with_vowel = function
@@ -899,7 +917,8 @@ and xml_np grammar = function
   | `Focus (foc,np) -> xml_focus foc (xml_np grammar np)
 and xml_ng grammar = function
   | `That (w,rel) -> Word w :: xml_rel grammar rel
-  | `Aggreg (susp,ngg,ng) -> xml_suspended susp (xml_ng_aggreg grammar ngg) @ xml_ng grammar ng
+  | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar susp (xml_ng grammar ng) ngg
+  (*    xml_suspended susp (xml_ng_aggreg grammar ngg) @ xml_ng grammar ng*)
   | `Focus (foc,ng) -> xml_focus foc (xml_ng grammar ng)
 and xml_qu grammar qu xml =
   match xml with
@@ -931,9 +950,13 @@ and xml_adj grammar adj xml_ng =
     (*    | `Aggreg (susp,adj,w) -> append (xml_suspended susp (xml_adj grammar adj [Word w])) xml_ng *)
     | `Optional (susp,adj) -> append (xml_suspended susp [Word (`Op grammar#optional)]) (xml_adj grammar adj xml_ng)
     | `Adj (adj,w) -> append (xml_adj grammar adj [Word w]) xml_ng
-and xml_ng_aggreg grammar = function
-  | `That (g,rel) -> Word g :: xml_rel grammar rel
-  | `ThatOf (g,rel) -> Word g :: xml_rel grammar rel @ [Kwd grammar#of_]
+and xml_ng_aggreg grammar susp xml_ng = function
+  | `AdjThat (g,rel) ->
+    let xml_g_rel = Word g :: xml_rel grammar rel in
+    if grammar#adjective_before_noun
+    then xml_suspended susp xml_g_rel @ xml_ng
+    else xml_ng @ xml_suspended susp xml_g_rel
+  | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar rel @ [Kwd grammar#of_]) @ xml_ng
 and xml_rel grammar = function
   | `Focus (foc1, `Maybe (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Maybe foc1 susp foc2 vp)
   | `Focus (foc1, `Not (susp, `Focus (foc2, `That vp))) -> xml_focus foc1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Not foc1 susp foc2 vp)

@@ -201,13 +201,13 @@ object
   method has = "a"
   method has_as_a = "a pour"
   method relative_that = "qui"
-  method whose = "dont le/la"
+  method whose = "dont l'"
 
   method and_ = "et"
   method or_ = "ou"
   method not_ = "pas"
   method optionally = "optionellement"
-  method optional = "optionel"
+  method optional = "optionel(le)"
 
   method of_ = "de"
   method genetive_suffix = None
@@ -216,8 +216,8 @@ object
 
   method a_an ~following = "un(e)"
   method the = "l'"
-  method no = "aucun"
-  method any = "n'importe quel"
+  method no = "aucun(e)"
+  method any = "n'importe quel(le)"
   method all = "tous"
   method quantif_one = "un(e)"
   method quantif_of = "parmi"
@@ -234,12 +234,12 @@ object
 
   method aggreg_number = "nombre", `Noun
   method aggreg_list = "liste", `Noun
-  method aggreg_total = "total", `Adjective
-  method aggreg_average = "moyen", `Adjective
-  method aggreg_maximum = "maximum", `Adjective
-  method aggreg_minimum = "minimum", `Adjective
+  method aggreg_total = "total(e)", `Adjective
+  method aggreg_average = "moyen(ne)", `Adjective
+  method aggreg_maximum = "maximal(e)", `Adjective
+  method aggreg_minimum = "minimal(e)", `Adjective
   method aggreg_sample = "échantillon", `Noun
-  method aggreg_given = "donné", `Adjective
+  method aggreg_given = "donné(e)", `Adjective
 
   method order_highest = "en ordre décroissant"
   method order_lowest = "en ordre croissant"
@@ -249,8 +249,8 @@ object
   method before = "avant"
   method interval_from = "de"
   method interval_to = "à"
-  method higher_or_equal_to = "supérieur ou égal à"
-  method lower_or_equal_to = "inférieur ou égal à"
+  method higher_or_equal_to = "supérieur(e) ou égal à"
+  method lower_or_equal_to = "inférieur(e) ou égal à"
   method interval_between = "entre"
   method interval_and = "et"
   method language = "langage"
