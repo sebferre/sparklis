@@ -526,7 +526,7 @@ let insert_elt_s2 det focus =
 	else Some (AtS1 (Det (det, rel_opt), ctx))
       | AtS1 (AnAggreg (id,modif,g,_,np), ctx) ->
 	Some (AtS1 (AnAggreg (id, modif, g, Some (Is (Det (det, None))), np), ctx))
-      | AtS1 _ -> None (* no insertion of terms on complex NPs and aggregations *)
+      | AtS1 _ -> None (* no insertion of terms on complex NPs *)
       | _ -> None in
   match focus2_opt with
     | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel (p,m,f), ctx))
