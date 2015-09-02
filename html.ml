@@ -92,7 +92,10 @@ let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
   | `Literal s -> html_literal s
-  | `TypedLiteral (s,t) -> html_literal s ^ " (" ^ escapeHTML t ^ ")"
+  | `TypedLiteral (s,t) ->
+    if Lisql2nl.config_show_datatypes#value
+    then html_literal s ^ " (" ^ escapeHTML t ^ ")"
+    else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s

@@ -47,6 +47,8 @@ object (self)
   method reset = self#set_select init_v
 end
 
+let config_show_datatypes = new Config.boolean_input ~key:"show_datatypes" ~input_selector:"#input-show-datatypes" ~default:false ()
+  
 (* NL generation from focus *)
 
 type word =
@@ -66,7 +68,7 @@ let word_text_content grammar = function
   | `Relation -> grammar#relation
   | `Entity (uri,s) -> s
   | `Literal s -> s
-  | `TypedLiteral (s, dt) -> s ^ " (" ^ dt ^ ")"
+  | `TypedLiteral (s, dt) -> if config_show_datatypes#value then s ^ " (" ^ dt ^ ")" else s
   | `Blank id -> id
   | `Class (uri,s) -> s
   | `Prop (uri,s) -> s

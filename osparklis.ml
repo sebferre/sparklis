@@ -150,6 +150,7 @@ let config =
       (Lexicon.config_class_lexicon :> Config.input);
       (Lexicon.config_property_lexicon :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
+      (Lisql2nl.config_show_datatypes :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
