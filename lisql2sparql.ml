@@ -156,12 +156,12 @@ let rec elt_p1 state : elt_p1 -> sparql_p1 = function
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
   | Search c -> (fun x -> search_constr x c)
   | Filter c -> (fun x -> filter_constr_entity x c)
-  | And ar ->
-    let ar_d = Array.map (fun elt -> elt_p1 state elt) ar in
-    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
-  | Or ar ->
-    let ar_d = Array.map (fun elt -> elt_p1 state elt) ar in
-    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | And lr ->
+    let lr_d = List.map (fun elt -> elt_p1 state elt) lr in
+    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+  | Or lr ->
+    let lr_d = List.map (fun elt -> elt_p1 state elt) lr in
+    (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d))
   | Maybe f ->
     let d = elt_p1 state f in
     (fun x -> Sparql.formula_optional (d x))
@@ -184,12 +184,12 @@ and elt_s1_as_p1 state : elt_s1 -> sparql_p1 = function
 	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
 	elt_s1_as_p1 state np
       | _ -> assert false )
-  | NAnd ar ->
-    let ar_d = Array.map (fun elt -> elt_s1_as_p1 state elt) ar in
-    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
-  | NOr ar ->
-    let ar_d = Array.map (fun elt -> elt_s1_as_p1 state elt) ar in
-    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | NAnd lr ->
+    let lr_d = List.map (fun elt -> elt_s1_as_p1 state elt) lr in
+    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+  | NOr lr ->
+    let lr_d = List.map (fun elt -> elt_s1_as_p1 state elt) lr in
+    (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d))
   | NMaybe f ->
     let d = elt_s1_as_p1 state f in
     (fun x -> Sparql.formula_optional (d x))
@@ -223,12 +223,12 @@ and elt_s1 state : elt_s1 -> sparql_s1 = function
       elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
       elt_s1 state np
     | _ -> assert false )
-  | NAnd ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
-    (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
-  | NOr ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
-    (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
+  | NAnd lr ->
+    let lr_q = List.map (fun elt -> elt_s1 state elt) lr in
+    (fun d -> Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
+  | NOr lr ->
+    let lr_q = List.map (fun elt -> elt_s1 state elt) lr in
+    (fun d -> Sparql.formula_or_list (List.map (fun q -> q d) lr_q))
   | NMaybe f ->
     let q = elt_s1 state f in
     (fun d -> Sparql.formula_optional (q d))
@@ -268,9 +268,9 @@ and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = elt_s1 state np in
     q (fun t -> Sparql.True)
-  | Seq ar ->
-    let ar_f = Array.map (fun elt -> elt_s state elt) ar in
-    Sparql.formula_and_list (Array.to_list ar_f)
+  | Seq lr ->
+    let lr_f = List.map (fun elt -> elt_s state elt) lr in
+    Sparql.formula_and_list lr_f
 
 let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
   | (Det _ as np1) -> (* q_alt is not used in this case *)
@@ -284,10 +284,10 @@ let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_
 	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
 	(fun r -> q1 (fun x -> q (fun y -> r x y)))
       | _ -> assert false )
-  | NAnd ar -> elt_s1_bis_and state q q_alt (Array.to_list ar)
-  | NOr ar ->
-    let ar_b = Array.map (fun elt -> elt_s1_bis state q q_alt elt) ar in
-    (fun r -> Sparql.formula_or_list (Array.to_list (Array.map (fun b -> b r) ar_b)))
+  | NAnd lr -> elt_s1_bis_and state q q_alt lr
+  | NOr lr ->
+    let lr_b = List.map (fun elt -> elt_s1_bis state q q_alt elt) lr in
+    (fun r -> Sparql.formula_or_list (List.map (fun b -> b r) lr_b))
   | NMaybe np1 -> elt_s1_bis state q q_alt np1
   | NNot np1 -> elt_s1_bis state q q_alt np1
 and elt_s1_bis_and state q q_alt = function
@@ -324,13 +324,13 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
 	  (fun x -> d_np x)
 	  ctx
     | _ -> assert false )
-  | AndX (i,ar,ctx) ->
-    let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_p1 state elt) ar in
+  | AndX (ll_rr,ctx) ->
+    let lr_d = list_of_ctx d (map_ctx_list (elt_p1 state) ll_rr) in
     ctx_p1 state
-      (fun x ->	Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun x ->	Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
       ctx
   (* ignoring algebra in ctx *)
-  | OrX (i,ar,ctx) -> ctx_p1 state d ctx
+  | OrX (ll_rr,ctx) -> ctx_p1 state d ctx
   | MaybeX ctx -> ctx_p1 state d ctx
   | NotX ctx -> ctx_p1 state d ctx
 and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
@@ -366,30 +366,30 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
 	  (fun x -> d x)
 	  ctx
       | _ -> assert false)
-  | NAndX (i,ar,ctx) ->
-    let ar_q = Array.mapi (fun j elt -> if j=i then q else elt_s1 state elt) ar in
-    let ar_q_alt = let ar = Array.copy ar_q in ar.(i) <- q_alt; ar in
-    let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_s1_as_p1 state elt) ar in
+  | NAndX (ll_rr,ctx) ->
+    let lr_q = list_of_ctx q (map_ctx_list (elt_s1 state) ll_rr) in
+    let lr_q_alt = list_of_ctx q_alt (map_ctx_list (elt_s1 state) ll_rr) in
+    let lr_d = list_of_ctx d (map_ctx_list (elt_s1_as_p1 state) ll_rr) in
     ctx_s1 state None
-      (fun d ->	Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
-      (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
-      (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun d ->	Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
+      (fun d -> Sparql.formula_and_list (List.map (fun q_alt -> q_alt d) lr_q_alt))
+      (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
       ctx
   (* ignoring algebra in ctx *)
-  | NOrX (i,ar,ctx) ->
-    let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else elt_s1 state elt) ar in
+  | NOrX (ll_rr,ctx) ->
+    let lr_q_alt = list_of_ctx q_alt (map_ctx_list (elt_s1 state) ll_rr) in
     ctx_s1 state None
       q
-      (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
+      (fun d -> Sparql.formula_or_list (List.map (fun q_alt -> q_alt d) lr_q_alt))
       d
       ctx
   | NMaybeX ctx -> ctx_s1 state None q q_alt d ctx
   | NNotX ctx -> ctx_s1 state None q q_alt d ctx
 and ctx_s state (f : sparql_s) : ctx_s -> Sparql.formula = function
   | Root -> f
-  | SeqX (i,ar,ctx) ->
-    let ar_f = Array.mapi (fun j elt -> if j=i then f else elt_s state elt) ar in
-    ctx_s state (Sparql.formula_and_list (Array.to_list ar_f)) ctx
+  | SeqX (ll_rr,ctx) ->
+    let lr_f = list_of_ctx f (map_ctx_list (elt_s state) ll_rr) in
+    ctx_s state (Sparql.formula_and_list lr_f) ctx
 
 
 type template = ?constr:constr -> limit:int -> string
