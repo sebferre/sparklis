@@ -150,6 +150,7 @@ let config =
       (Lexicon.config_class_lexicon :> Config.input);
       (Lexicon.config_property_lexicon :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
+      (Lisql2nl.config_show_datatypes :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
@@ -299,11 +300,11 @@ object (self)
 	      Some (html_state#get_focus key)
 	    with _ -> None)));
 	jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
-	  navigation#update_focus ~push_in_history:true (fun focus ->
+	  navigation#update_focus ~push_in_history:true (fun current_focus ->
 	    let key = to_string (elt##id) in
 	    let _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
-	    Lisql.insert_term term id_focus)))
+	    Lisql.insert_term term id_focus )))
       end)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
@@ -686,7 +687,7 @@ let _ =
     jquery "#home" (onclick (fun elt ev -> history#home));
     jquery "#back" (onclick (fun elt ev -> history#back));
     jquery "#forward" (onclick (fun elt ev -> history#forward));
-    jquery "#refresh" (onclick (fun elt ev -> history#present#refresh));
+    jquery "#refresh" (onclick (fun elt ev -> history#update_focus ~push_in_history:false (fun focus -> Some focus)));
     jquery_select "#sparql-endpoint-select"
       (onchange (fun select ev ->
 	jquery_input "#sparql-endpoint-input" (fun input ->
@@ -715,7 +716,7 @@ let _ =
 	if dis = "none" then
 	  config#if_has_changed
 	    ~translate
-	    ~refresh:(fun () -> history#present#refresh))));
+	    ~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus)))));
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 

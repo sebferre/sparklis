@@ -143,6 +143,7 @@ let optional (p : pattern) : pattern =
   "OPTIONAL { " ^ indent 11 p ^ " }"
 let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ indent 13 p ^ " }"
 
+let subquery (q : query) : pattern = "{ " ^ indent 2 q ^ " }"
 
 let search_label (t : Rdf.term) (l : Rdf.term) : pattern =
   term t ^ " rdfs:label " ^ term l ^ " ." (* ^ sparql_constr l (HasLang "en") *)
@@ -153,23 +154,24 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
-type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN
+type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN | SAMPLE | ID
 type order = ASC | DESC
 
 let select
     ?(distinct=false)
-    ~(dimensions : Rdf.var list)
+    ~(projections : Rdf.var list)
     ?(aggregations : (aggreg * Rdf.var * Rdf.var) list = [])
+    ?(groupings : Rdf.var list = [])
     ?(having : expr = log_true)
     ?(ordering : (order * Rdf.var) list = [])
     ?(limit : int option)
     (pattern : pattern) : query =
-  if dimensions = [] && aggregations = []
+  if projections = [] && aggregations = []
   then ask pattern
   else
     let make_aggreg prefix_g expr suffix_g vg = "(" ^ prefix_g ^ expr ^ suffix_g ^ " AS " ^ var vg ^ ")" in
     let sel =
-      String.concat " " (List.map var dimensions) ^ " " ^
+      String.concat " " (List.map var projections) ^ " " ^
 	String.concat " "
 	(List.map
 	   (fun (g,v,vg) ->
@@ -179,13 +181,15 @@ let select
 	       | SUM -> make_aggreg "SUM(" (var_numeric v) ")" vg
 	       | AVG -> make_aggreg "AVG(" (var_numeric v) ")" vg
 	       | MAX -> make_aggreg "MAX(" (var v) ")" vg
-	       | MIN -> make_aggreg "MIN(" (var v) ")" vg)
+	       | MIN -> make_aggreg "MIN(" (var v) ")" vg
+	       | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")" vg
+	       | ID -> make_aggreg "" (var v) "" vg)
 	   aggregations) in
     let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in
     let s =
-      if aggregations = [] || dimensions = []
+      if groupings = [] || aggregations = []
       then s
-      else s ^ "\nGROUP BY " ^ String.concat " " (List.map var dimensions) in
+      else s ^ "\nGROUP BY " ^ String.concat " " (List.map var groupings) in
     let s =
       if having = log_true
       then s

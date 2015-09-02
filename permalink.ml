@@ -27,7 +27,7 @@ let print_un f x1 = print_nary f [x1]
 let print_bin f x1 x2 = print_nary f [x1;x2]
 let print_ter f x1 x2 x3 = print_nary f [x1;x2;x3]
 let print_list pr f lx = print_nary f (List.map pr lx)
-let print_ar pr f ar = print_nary f (List.map pr (Array.to_list ar))
+let print_lr pr f lr = print_nary f (List.map pr lr)
 
 let print_opt pr = function None -> print_atom "None" | Some x -> print_un "Some" (pr x)
 
@@ -35,6 +35,7 @@ let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
   | Return np -> print_un "Return" (print_s1 np)
+  | Seq lr -> print_lr print_s "Seq" lr
 and print_p1 = function
   | Is np -> print_un "Is" (print_s1 np)
   | Type c -> print_un "Type" (print_uri c)
@@ -42,8 +43,8 @@ and print_p1 = function
   | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | Search c -> print_un "Search" (print_constr c)
   | Filter c -> print_un "Filter" (print_constr c)
-  | And ar -> print_ar print_p1 "And" ar
-  | Or ar -> print_ar print_p1 "Or" ar
+  | And lr -> print_lr print_p1 "And" lr
+  | Or lr -> print_lr print_p1 "Or" lr
   | Maybe f -> print_un "Maybe" (print_p1 f)
   | Not f -> print_un "Not" (print_p1 f)
   | IsThere -> print_atom "IsThere"
@@ -53,8 +54,8 @@ and print_modif_p2 = function
 and print_s1 = function
   | Det (det, rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
-  | NAnd ar -> print_ar print_s1 "NAnd" ar
-  | NOr ar -> print_ar print_s1 "NOr" ar
+  | NAnd lr -> print_lr print_s1 "NAnd" lr
+  | NOr lr -> print_lr print_s1 "NOr" lr
   | NMaybe f -> print_un "NMaybe" (print_s1 f)
   | NNot f -> print_un "NNot" (print_s1 f)
 and print_s2 = function
@@ -81,6 +82,8 @@ and print_aggreg = function
   | Average -> print_atom "Average"
   | Maximum -> print_atom "Maximum"
   | Minimum -> print_atom "Minimum"
+  | Sample -> print_atom "Sample"
+  | Given -> print_atom "Given"
 and print_order = function
   | Unordered -> print_atom "Unordered"
   | Highest -> print_atom "Highest"
@@ -147,14 +150,15 @@ and parse_args_aux ps ~version = parser
   | [< 'Kwd ","; xs = parse_args ps ~version >] -> xs
   | [< 'Kwd ")" >] -> []
 
-let parse_ar ps ~version f = parser
-  | [< xs = parse_list ps ~version f >] -> Array.of_list xs
+let parse_lr ps ~version f = parser
+  | [< xs = parse_list ps ~version f >] -> xs
 
 let rec parse = parser
   | [< 'Kwd "["; version = parse_version; 'Kwd "]" ?? "missing ]"; s = parse_s ~version >] -> s
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
-  | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
+    | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
+    | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq lr
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is np
   | [< c = parse_un ~version "Type" parse_uri >] -> Type c
@@ -165,8 +169,8 @@ and parse_p1 ~version = parser
   | [< c = parse_un ~version "Search" parse_constr >] -> Search c
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter c
   | [< c = parse_un ~version "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
-  | [< ar = parse_ar parse_p1 ~version "And" >] -> And ar
-  | [< ar = parse_ar parse_p1 ~version "Or" >] -> Or ar
+  | [< lr = parse_lr parse_p1 ~version "And" >] -> And lr
+  | [< lr = parse_lr parse_p1 ~version "Or" >] -> Or lr
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
   | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
   | [< () = parse_atom ~version "IsThere" >] -> IsThere
@@ -178,8 +182,8 @@ and parse_modif_p2 ~version = parser
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg (id,modif,g,rel_opt,np)
-  | [< ar = parse_ar parse_s1 ~version "NAnd" >] -> NAnd ar
-  | [< ar = parse_ar parse_s1 ~version "NOr" >] -> NOr ar
+  | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd lr
+  | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr lr
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe f
   | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot f
   | [<>] -> syntax_error "invalid s1"
@@ -216,6 +220,8 @@ and parse_aggreg ~version = parser
   | [< () = parse_atom ~version "Average" >] -> Average
   | [< () = parse_atom ~version "Maximum" >] -> Maximum
   | [< () = parse_atom ~version "Minimum" >] -> Minimum
+  | [< () = parse_atom ~version "Sample" >] -> Sample
+  | [< () = parse_atom ~version "Given" >] -> Given
   | [<>] -> syntax_error "invalid aggreg"
 and parse_order ~version = parser
   | [< () = parse_atom ~version "Unordered" >] -> Unordered

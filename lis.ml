@@ -18,20 +18,20 @@ let lexicon_enqueue_term = function
 
 let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.results -> unit) : unit =
   let open Sparql_endpoint in
-  let rec aux offset limit = function
-    | [] -> []
+  let rec aux offset limit acc = function
+    | [] -> acc
     | binding::l ->
-      if offset > 0 then aux (offset-1) limit l
+      if offset > 0 then aux (offset-1) limit acc l
       else if limit > 0 then begin
 	Array.iter
 	  (function
 	    | Some t -> lexicon_enqueue_term t
 	    | None -> ())
 	  binding;
-	binding :: aux offset (limit-1) l end
-      else []
+	aux offset (limit-1) (binding :: acc) l end
+      else acc
   in
-  let partial_bindings = aux offset limit results.bindings in
+  let partial_bindings = List.rev (aux offset limit [] results.bindings) in
   Lexicon.config_class_lexicon#value#sync (fun () ->
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       k { results with bindings = partial_bindings }))
@@ -183,15 +183,17 @@ object (self)
 	      match focus_term_list with
 		| [Rdf.Var v] ->
 		  let index = index_of_results_column v results in
-		  List.fold_right
-		    (fun (t,freq) (fti,sftib) ->
-		      match t with
-			| Rdf.URI uri when String.contains uri ' ' -> (fti,sftib)
+		  let rev_fti, sftib =
+		    List.fold_left (* avoiding non recursive terminal fold_right *)
+		      (fun (rev_fti,sftib) (t,freq) ->
+			match t with
+			| Rdf.URI uri when String.contains uri ' ' -> (rev_fti,sftib)
 	                  (* URIs with spaces inside are not allowed in SPARQL queries *)
-			| Rdf.Bnode _ -> (fti,true)
+			| Rdf.Bnode _ -> (rev_fti,true)
 		          (* blank nodes are not allowed in SPARQL queries *)
-			| _ -> ((t,freq)::fti, sftib))
-		    index ([],false)
+			| _ -> ((t,freq)::rev_fti, sftib))
+		      ([],false) index in
+		  List.rev rev_fti, sftib
 		| [Rdf.Bnode _] ->
 		  Firebug.console##log(string "focus_term_list is a Bnode");
 		  [], true (* should not happen *)
@@ -376,17 +378,17 @@ object (self)
     let ajax_extent () =
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
-	Sparql.select ~dimensions:["class"] ~limit:config_max_classes#value
+	Sparql.select ~projections:["class"] ~limit:config_max_classes#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr))) in
       let sparql_has =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index) in
-	Sparql.select ~dimensions:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       let sparql_isof =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index) in
-	Sparql.select ~dimensions:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
@@ -406,58 +408,27 @@ object (self)
     else ajax_extent ()
 
   method index_modifiers ~init =
-    if init
-    then [(Lisql.IncrIs,1)]
-    else
-      let modif_list =
-	let open Lisql in
-	    match focus with
-	      | AtP1 (f,ctx) ->
-		let modifs = [IncrAnd; IncrOr; IncrMaybe; IncrNot] in
-		let modifs =
-		  match f with
-		    | Rel _
-		    | Triple (S, Det (Term (Rdf.URI _), _), _)
-		    | Triple (O, _, Det (Term (Rdf.URI _), _)) -> IncrTriplify :: modifs
-		    | _ -> modifs in
-		modifs
-	      | AtS1 (f,ctx) ->
-		let modifs =
-		  match f with
-		    | Det (An (id, modif, head), _) when not (Lisql.is_s1_as_p1_ctx_s1 ctx || Lisql.is_aggregated_ctx_s1 ctx) ->
-		      (* no aggregation and modifiers on predicative S1 (S1 as P1 or aggregated S1) *)
-		      let modifs =
-			if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-			then List.map (fun g -> IncrAggreg g) [Total; Average; Maximum; Minimum]
-			else [] in
-		      let modifs =
-			if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-			then IncrAggreg ListOf :: modifs
-			else modifs in
-		      let modifs =
-			IncrUnselect :: IncrAggreg NumberOf :: modifs in
-		      let modifs =
-			IncrOrder Highest :: IncrOrder Lowest :: modifs in
-		      modifs
-		    | AnAggreg (id,modif,g,rel_opt,np) ->
-		      IncrOrder Highest :: IncrOrder Lowest :: IncrUnselect :: IncrAggreg g :: []
-		    | _ -> [] in
-		let modifs =
-		  if ctx = ReturnX then
-		    (* no coordination yet, except Or, on root NP to avoid disconnected graph patterns *)
-		    if is_top_s1 f
-		    then modifs
-		    else IncrAnd :: IncrOr :: IncrMaybe :: modifs (* needs special treatment for increments *)
-		  else if not (Lisql.is_aggregated_ctx_s1 ctx) then
-		    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: modifs
-		  else modifs in
-		let modifs =
-		  match f with
-		    | Det (An _, _) -> IncrIs :: modifs
-		    | AnAggreg _ -> IncrIs :: modifs
-		    | _ -> modifs in
-		modifs
-	      | _ -> [] in
-	List.map (fun incr -> (incr,1)) modif_list
-
+    let open Lisql in
+    let incrs =
+      if init
+      then [IncrIs]
+      else
+	let incrs =
+	  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
+	  then [IncrAggreg Total; IncrAggreg Average; IncrAggreg Maximum; IncrAggreg Minimum]
+	  else [] in
+	let incrs =
+	  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
+	  then IncrAggreg ListOf :: incrs
+	  else incrs in
+	IncrIs :: IncrTriplify ::
+	  IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
+	  IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
+	  IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
+    let valid_incrs =
+      List.filter
+	(fun incr -> Lisql.insert_increment incr focus <> None)
+	incrs in
+    List.map (fun incr -> (incr,1)) valid_incrs
+	  
 end

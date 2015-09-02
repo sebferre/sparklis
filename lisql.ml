@@ -50,7 +50,8 @@ let subsumed_constr c1 c2 = (* simplified definition based on 'prefix' rather th
 type id = int
 type arg = S | P | O
 type order = Unordered | Highest | Lowest
-type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum
+type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample | Given
+  (* Given is a fake aggregator to use an aggregation as dimension *)
 type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
@@ -63,16 +64,16 @@ type elt_p1 =
   | Triple of arg * elt_s1 * elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | Search of constr
   | Filter of constr
-  | And of elt_p1 array
-  | Or of elt_p1 array
+  | And of elt_p1 list
+  | Or of elt_p1 list
   | Maybe of elt_p1
   | Not of elt_p1
   | IsThere
 and elt_s1 =
   | Det of elt_s2 * elt_p1 option
-  | AnAggreg of id * modif_s2 * aggreg * elt_p1 option * elt_s1 (* aggregation: elt_s1 must be a Det *)
-  | NAnd of elt_s1 array
-  | NOr of elt_s1 array
+  | AnAggreg of id * modif_s2 * aggreg * elt_p1 option * elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
+  | NAnd of elt_s1 list
+  | NOr of elt_s1 list
   | NMaybe of elt_s1
   | NNot of elt_s1
 and elt_s2 =
@@ -84,13 +85,30 @@ and elt_head =
   | Class of Rdf.uri
 and elt_s =
   | Return of elt_s1
+  | Seq of elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
 
+(* list context *)
+
+type 'a ctx_list = 'a list * 'a list
+      
+let list_of_ctx x (ll,rr) = List.rev ll @ x :: rr
+
+let ctx_of_list lr =
+  let rec aux ll = function
+    | [] -> []
+    | x::rr -> (x,(ll,rr))::aux (x::ll) rr
+  in
+  aux [] lr
+
+let map_ctx_list f (ll,rr) = (List.map f ll, List.map f rr)
+    
+      
 (* LISQL contexts *)
 type ctx_p1 =
   | DetThatX of elt_s2 * ctx_s1
   | AnAggregThatX of id * modif_s2 * aggreg * elt_s1 * ctx_s1
-  | AndX of int * elt_p1 array * ctx_p1
-  | OrX of int * elt_p1 array * ctx_p1
+  | AndX of elt_p1 ctx_list * ctx_p1 (* first list is reverse prefix, second list is suffix *)
+  | OrX of elt_p1 ctx_list * ctx_p1
   | MaybeX of ctx_p1
   | NotX of ctx_p1
 and ctx_s1 =
@@ -98,18 +116,21 @@ and ctx_s1 =
   | RelX of Rdf.uri * modif_p2 * ctx_p1
   | TripleX1 of arg * elt_s1 * ctx_p1 (* context on first S1 arg *)
   | TripleX2 of arg * elt_s1 * ctx_p1 (* context on second S1 arg *)
-  | ReturnX
+  | ReturnX of ctx_s
   | AnAggregX of id * modif_s2 * aggreg * elt_p1 option * ctx_s1
-  | NAndX of int * elt_s1 array * ctx_s1
-  | NOrX of int * elt_s1 array * ctx_s1
+  | NAndX of elt_s1 ctx_list * ctx_s1
+  | NOrX of elt_s1 ctx_list * ctx_s1
   | NMaybeX of ctx_s1
   | NNotX of ctx_s1
+and ctx_s =
+  | Root
+  | SeqX of elt_s ctx_list * ctx_s
 
 (* LISQL focus *)
 type focus =
   | AtP1 of elt_p1 * ctx_p1
   | AtS1 of elt_s1 * ctx_s1
-  | AtS of elt_s
+  | AtS of elt_s * ctx_s
 
 let factory =
 object (self)
@@ -122,15 +143,17 @@ object (self)
   method top_modif = (Select, Unordered)
   method top_s2 = An (self#new_id, self#top_modif, Thing)
   method top_s1 = Det (self#top_s2, None)
-  method home_focus = AtS1 (self#top_s1, ReturnX)
+  method top_s = Return self#top_s1
+  method home_focus = AtS1 (self#top_s1, ReturnX Root)
 end
 
 let is_top_p1 = function IsThere -> true | _ -> false
 let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
 let is_top_s1 = function Det (det, None) -> is_top_s2 det | _ -> false
-let is_home_focus = function AtS1 (f, ReturnX) -> is_top_s1 f | _ -> false
+let is_top_s = function Return np -> is_top_s1 np | _ -> false
+let is_home_focus = function AtS1 (f, ReturnX Root) -> is_top_s1 f | _ -> false
 
-let is_root_focus = function AtS _ -> true | _ -> false
+let is_root_focus = function AtS (_, Root) -> true | _ -> false
 
 let rec is_aggregation_focus = function
   | AtS1 (AnAggreg _, _) -> true
@@ -140,8 +163,8 @@ let rec is_aggregation_focus = function
 and is_aggregation_ctx_p1 = function
   | DetThatX (_,ctx) -> is_aggregation_ctx_s1 ctx
   | AnAggregThatX _ -> true
-  | AndX (_,_,ctx) -> is_aggregation_ctx_p1 ctx
-  | OrX (_,_,ctx) -> is_aggregation_ctx_p1 ctx
+  | AndX (_,ctx) -> is_aggregation_ctx_p1 ctx
+  | OrX (_,ctx) -> is_aggregation_ctx_p1 ctx
   | MaybeX ctx -> is_aggregation_ctx_p1 ctx
   | NotX ctx -> is_aggregation_ctx_p1 ctx
 and is_aggregation_ctx_s1 = function
@@ -149,10 +172,10 @@ and is_aggregation_ctx_s1 = function
   | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
-  | ReturnX -> false
+  | ReturnX _ -> false
   | AnAggregX _ -> false
-  | NAndX (_,_,ctx) -> is_aggregation_ctx_s1 ctx
-  | NOrX (_,_,ctx) -> is_aggregation_ctx_s1 ctx
+  | NAndX (_,ctx) -> is_aggregation_ctx_s1 ctx
+  | NOrX (_,ctx) -> is_aggregation_ctx_s1 ctx
   | NMaybeX ctx -> is_aggregation_ctx_s1 ctx
   | NNotX ctx -> is_aggregation_ctx_s1 ctx
 
@@ -171,10 +194,10 @@ and is_s1_as_p1_ctx_s1 = function
   | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
-  | ReturnX -> false
+  | ReturnX _ -> false
   | AnAggregX _ -> false
-  | NAndX (_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
-  | NOrX (_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | NAndX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | NOrX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | NMaybeX ctx -> is_s1_as_p1_ctx_s1 ctx
   | NNotX ctx -> is_s1_as_p1_ctx_s1 ctx
 
@@ -194,8 +217,8 @@ let id_of_focus = function
 let rec elt_s_of_ctx_p1 (f : elt_p1) = function
   | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det (det, Some f)) ctx
   | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_of_ctx_s1 (AnAggreg (id, modif, g, Some f, np)) ctx
-  | AndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_p1 (And ar) ctx
-  | OrX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_p1 (Or ar) ctx
+  | AndX (ll_rr,ctx) -> elt_s_of_ctx_p1 (And (list_of_ctx f ll_rr)) ctx
+  | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or (list_of_ctx f ll_rr)) ctx
   | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe f) ctx
   | NotX ctx -> elt_s_of_ctx_p1 (Not f) ctx
 and elt_s_of_ctx_s1 (f : elt_s1) = function
@@ -203,17 +226,20 @@ and elt_s_of_ctx_s1 (f : elt_s1) = function
   | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel (p,modif,f)) ctx
   | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,f,np)) ctx
   | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,np,f)) ctx
-  | ReturnX -> Return f
+  | ReturnX ctx -> elt_s_of_ctx_s (Return f) ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_of_ctx_s1 (AnAggreg (id, modif, g, rel_opt, f)) ctx
-  | NAndX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NAnd ar) ctx
-  | NOrX (i,ar,ctx) -> ar.(i) <- f; elt_s_of_ctx_s1 (NOr ar) ctx
+  | NAndX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NAnd (list_of_ctx f ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NOr (list_of_ctx f ll_rr)) ctx
   | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe f) ctx
   | NNotX ctx -> elt_s_of_ctx_s1 (NNot f) ctx
+and elt_s_of_ctx_s (f : elt_s) = function
+  | Root -> f
+  | SeqX (ll_rr,ctx) -> elt_s_of_ctx_s (Seq (list_of_ctx f ll_rr)) ctx
 
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
   | AtS1 (f,ctx) -> elt_s_of_ctx_s1 f ctx
-  | AtS f -> f
+  | AtS (f,ctx) -> elt_s_of_ctx_s f ctx
 
 (* ids retrieval *)
 
@@ -224,8 +250,8 @@ let rec ids_elt_p1 = function
   | Triple (arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
   | Search _ -> []
   | Filter _ -> []
-  | And ar -> List.concat (Array.to_list (Array.map ids_elt_p1 ar))
-  | Or ar -> List.concat (Array.to_list (Array.map ids_elt_p1 ar))
+  | And lr -> List.concat (List.map ids_elt_p1 lr)
+  | Or lr -> List.concat (List.map ids_elt_p1 lr)
   | Maybe f -> ids_elt_p1 f
   | Not f -> ids_elt_p1 f
   | IsThere -> []
@@ -235,8 +261,8 @@ and ids_elt_p1_opt = function
 and ids_elt_s1 = function
   | Det (det,rel_opt) -> ids_elt_s2 det @ ids_elt_p1_opt rel_opt
   | AnAggreg (id,modif,g,rel_opt,np) -> id :: ids_elt_p1_opt rel_opt @ ids_elt_s1 np
-  | NAnd ar -> List.concat (Array.to_list (Array.map ids_elt_s1 ar))
-  | NOr ar -> List.concat (Array.to_list (Array.map ids_elt_s1 ar))
+  | NAnd lr -> List.concat (List.map ids_elt_s1 lr)
+  | NOr lr -> List.concat (List.map ids_elt_s1 lr)
   | NMaybe f -> ids_elt_s1 f
   | NNot f -> ids_elt_s1 f
 and ids_elt_s2 = function
@@ -245,6 +271,7 @@ and ids_elt_s2 = function
   | The _ -> []
 and ids_elt_s = function
   | Return np -> ids_elt_s1 np
+  | Seq lr -> List.concat (List.map ids_elt_s lr)
 
 
 (* focus moves *)
@@ -256,33 +283,39 @@ let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
   | Triple (arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | Search _ -> None
   | Filter _ -> None
-  | And ar -> Some (AtP1 (ar.(0), AndX (0,ar,ctx)))
-  | Or ar -> Some (AtP1 (ar.(0), OrX (0,ar,ctx)))
+  | And [] -> None
+  | And (x::rr) -> Some (AtP1 (x, AndX (([],rr),ctx)))
+  | Or [] -> None
+  | Or (x::rr) -> Some (AtP1 (x, OrX (([],rr),ctx)))
   | Maybe elt -> Some (AtP1 (elt, MaybeX ctx))
   | Not elt -> Some (AtP1 (elt, NotX ctx))
   | IsThere -> None
 let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
-  | Det (det,None) -> None
-  | Det (det, Some (And ar)) -> Some (AtP1 (ar.(0), AndX (0, ar, DetThatX (det, ctx))))
+  | Det (det, Some (And (x::rr))) -> Some (AtP1 (x, AndX (([], rr), DetThatX (det, ctx))))
   | Det (det, Some rel) -> Some (AtP1 (rel, DetThatX (det,ctx)))
+  | Det (det, _) -> None
   | AnAggreg (id, modif, g, Some rel, np) -> Some (AtP1 (rel, AnAggregThatX (id, modif, g, np, ctx)))
   | AnAggreg (id, modif, g, None, np) -> Some (AtS1 (np, AnAggregX (id, modif, g, None, ctx)))
-  | NAnd ar -> Some (AtS1 (ar.(0), NAndX (0,ar,ctx)))
-  | NOr ar -> Some (AtS1 (ar.(0), NOrX (0,ar,ctx)))
+  | NAnd [] -> None
+  | NAnd (x::rr) -> Some (AtS1 (x, NAndX (([],rr),ctx)))
+  | NOr [] -> None
+  | NOr (x::rr) -> Some (AtS1 (x, NOrX (([],rr),ctx)))
   | NMaybe elt -> Some (AtS1 (elt, NMaybeX ctx))
   | NNot elt -> Some (AtS1 (elt, NNotX ctx))
-let down_s : elt_s -> focus option = function
-  | Return np -> Some (AtS1 (np,ReturnX))
+let down_s (ctx : ctx_s) : elt_s -> focus option = function
+  | Return np -> Some (AtS1 (np,ReturnX ctx))
+  | Seq [] -> None
+  | Seq (x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
 let down_focus = function
   | AtP1 (f,ctx) -> down_p1 ctx f
   | AtS1 (f,ctx) -> down_s1 ctx f
-  | AtS f -> down_s f
+  | AtS (f,ctx) -> down_s ctx f
 
 let rec up_p1 f = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
   | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (AnAggreg (id, modif, g, Some f, np), ctx))
-  | AndX (i,ar,ctx) -> ar.(i) <- f; up_p1 (And ar) ctx (* Some (AtP1 (And ar, ctx)) *)
-  | OrX (i,ar,ctx) -> ar.(i) <- f; Some (AtP1 (Or ar, ctx))
+  | AndX (ll_rr,ctx) -> up_p1 (And (list_of_ctx f ll_rr)) ctx (* Some (AtP1 (And ar, ctx)) *)
+  | OrX (ll_rr,ctx) -> Some (AtP1 (Or (list_of_ctx f ll_rr), ctx))
   | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
   | NotX ctx -> Some (AtP1 (Not f, ctx))
 let rec up_s1 f = function
@@ -290,32 +323,27 @@ let rec up_s1 f = function
   | RelX (p,m,ctx) -> Some (AtP1 (Rel (p,m,f), ctx))
   | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple (arg,f,np), ctx))
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple (arg,np,f), ctx))
-  | ReturnX -> Some (AtS (Return f))
+  | ReturnX ctx -> Some (AtS (Return f, ctx))
   | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg (id, modif, g, rel_opt, f), ctx))
-  | NAndX (i,ar,ctx) -> ar.(i) <- f; up_s1 (NAnd ar) ctx
-  | NOrX (i,ar,ctx) -> ar.(i) <- f; Some (AtS1 (NOr ar, ctx))
+  | NAndX (ll_rr,ctx) -> up_s1 (NAnd (list_of_ctx f ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr (list_of_ctx f ll_rr), ctx))
   | NMaybeX ctx -> Some (AtS1 (NMaybe f, ctx))
   | NNotX ctx -> Some (AtS1 (NNot f, ctx))
+let up_s f = function
+  | Root -> None
+  | SeqX (ll_rr,ctx) -> Some (AtS (Seq (list_of_ctx f ll_rr), ctx))
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
-  | AtS f -> None
+  | AtS (f,ctx) -> up_s f ctx
 
 let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
   | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (np, AnAggregX (id, modif, g, Some f, ctx)))
-  | AndX (i,ar,ctx) ->
-    if i < Array.length ar - 1
-    then begin
-      ar.(i) <- f;
-      Some (AtP1 (ar.(i+1), AndX (i+1, ar, ctx))) end
-    else None
-  | OrX (i,ar,ctx) ->
-    if i < Array.length ar - 1
-    then begin
-      ar.(i) <- f;
-      Some (AtP1 (ar.(i+1), OrX (i+1, ar, ctx))) end
-    else None
+  | AndX ((ll,[]),ctx) -> None
+  | AndX ((ll,x::rr),ctx) -> Some (AtP1 (x, AndX ((f::ll,rr),ctx)))
+  | OrX ((ll,[]),ctx) -> None
+  | OrX ((ll,x::rr),ctx) -> Some (AtP1 (x, OrX ((f::ll,rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
 let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
@@ -323,42 +351,30 @@ let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | RelX _ -> None
   | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
   | TripleX2 _ -> None
-  | ReturnX -> None
+  | ReturnX _ -> None
   | AnAggregX _ -> None
-  | NAndX (i,ar,ctx) ->
-    if i < Array.length ar - 1
-    then begin
-      ar.(i) <- f;
-      Some (AtS1 (ar.(i+1), NAndX (i+1, ar, ctx))) end
-    else None
-  | NOrX (i,ar,ctx) ->
-    if i < Array.length ar - 1
-    then begin
-      ar.(i) <- f;
-      Some (AtS1 (ar.(i+1), NOrX (i+1, ar, ctx))) end
-    else None
+  | NAndX ((ll,[]),ctx) -> None
+  | NAndX ((ll,x::rr),ctx) -> Some (AtS1 (x, NAndX ((f::ll,rr),ctx)))
+  | NOrX ((ll,[]),ctx) -> None
+  | NOrX ((ll,x::rr),ctx) -> Some (AtS1 (x, NOrX ((f::ll,rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
+let right_s (f : elt_s) : ctx_s -> focus option = function
+  | Root -> None
+  | SeqX ((ll,[]),ctx) -> None
+  | SeqX ((ll,x::rr),ctx) -> Some (AtS (x, SeqX ((f::ll,rr),ctx)))
 let right_focus = function
   | AtP1 (f,ctx) -> right_p1 f ctx
   | AtS1 (f,ctx) -> right_s1 f ctx
-  | AtS f -> None
+  | AtS (f,ctx) -> right_s f ctx
 
 let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
   | AnAggregThatX _ -> None
-  | AndX (i,ar,ctx) ->
-    if i > 0
-    then begin
-      ar.(i) <- f;
-      Some (AtP1 (ar.(i-1), AndX (i-1, ar, ctx))) end
-    else None
-  | OrX (i,ar,ctx) ->
-    if i > 0
-    then begin
-      ar.(i) <- f;
-      Some (AtP1 (ar.(i-1), OrX (i-1, ar, ctx))) end
-    else None
+  | AndX (([],rr),ctx) -> None
+  | AndX ((x::ll,rr),ctx) -> Some (AtP1 (x, AndX ((ll,f::rr),ctx)))
+  | OrX (([],rr),ctx) -> None
+  | OrX ((x::ll,rr),ctx) -> Some (AtP1 (x, OrX ((ll,f::rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
 let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
@@ -366,27 +382,23 @@ let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | RelX _ -> None
   | TripleX1 _ -> None
   | TripleX2 (arg,np,ctx) -> Some (AtS1 (np, TripleX1 (arg,f,ctx)))
-  | ReturnX -> None
+  | ReturnX _ -> None
   | AnAggregX (id, modif, g, None, ctx) -> None
   | AnAggregX (id, modif, g, Some rel, ctx) -> Some (AtP1 (rel, AnAggregThatX (id, modif, g, f, ctx)))
-  | NAndX (i,ar,ctx) ->
-    if i > 0
-    then begin
-      ar.(i) <- f;
-      Some (AtS1 (ar.(i-1), NAndX (i-1, ar, ctx))) end
-    else None
-  | NOrX (i,ar,ctx) ->
-    if i > 0
-    then begin
-      ar.(i) <- f;
-      Some (AtS1 (ar.(i-1), NOrX (i-1, ar, ctx))) end
-    else None
+  | NAndX (([],rr),ctx) -> None
+  | NAndX ((x::ll,rr),ctx) -> Some (AtS1 (x, NAndX ((ll,f::rr),ctx)))
+  | NOrX (([],rr),ctx) -> None
+  | NOrX ((x::ll,rr),ctx) -> Some (AtS1 (x, NOrX ((ll,f::rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
+let left_s (f : elt_s) : ctx_s -> focus option = function
+  | Root -> None
+  | SeqX (([],rr),ctx) -> None
+  | SeqX ((x::ll,rr),ctx) -> Some (AtS (x, SeqX ((ll,f::rr),ctx)))
 let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
-  | AtS f -> None
+  | AtS (f,ctx) -> left_s f ctx
 
 let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
   match steps, foc_opt with
@@ -397,7 +409,9 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 	| None -> Some foc
 	| Some foc' -> focus_moves others (Some foc') )
 
+
 (* increments *)
+(* BEWARE of arrays that must be copied if changed !! *)
 
 type increment_property_modifier
 
@@ -434,42 +448,26 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrOrder order -> None
 
 let append_and_p1 ctx elt_p1 = function
-  | And ar ->
-    let n = Array.length ar in
-    let ar2 = Array.make (n+1) elt_p1 in
-    Array.blit ar 0 ar2 0 n;
-    AtP1 (elt_p1, AndX (n, ar2, ctx))
-  | p1 ->
-    AtP1 (elt_p1, AndX (1, [|p1; elt_p1|], ctx))
+  | And lr -> AtP1 (elt_p1, AndX ((List.rev lr, []), ctx))
+  | p1 -> AtP1 (elt_p1, AndX (([p1], []), ctx))
 let append_or_p1 ctx elt_p1 = function
-  | Or ar ->
-    let n = Array.length ar in
-    let ar2 = Array.make (n+1) elt_p1 in
-    Array.blit ar 0 ar2 0 n;
-    AtP1 (elt_p1, OrX (n, ar2, ctx))
-  | p1 ->
-    AtP1 (elt_p1, OrX (1, [|p1; elt_p1|], ctx))
+  | Or lr -> AtP1 (elt_p1, OrX ((List.rev lr, []), ctx))
+  | p1 -> AtP1 (elt_p1, OrX (([p1], []), ctx))
 
 let append_and_s1 ctx elt_s1 = function
-  | NAnd ar ->
-    let n = Array.length ar in
-    let ar2 = Array.make (n+1) elt_s1 in
-    Array.blit ar 0 ar2 0 n;
-    AtS1 (elt_s1, NAndX (n, ar2, ctx))
-  | s1 ->
-    AtS1 (elt_s1, NAndX (1, [|s1; elt_s1|], ctx))
+  | NAnd lr -> AtS1 (elt_s1, NAndX ((List.rev lr, []), ctx))
+  | s1 -> AtS1 (elt_s1, NAndX (([s1], []), ctx))
 let append_or_s1 ctx elt_s1 = function
-  | NOr ar ->
-    let n = Array.length ar in
-    let ar2 = Array.make (n+1) elt_s1 in
-    Array.blit ar 0 ar2 0 n;
-    AtS1 (elt_s1, NOrX (n, ar2, ctx))
-  | s1 ->
-    AtS1 (elt_s1, NOrX (1, [|s1; elt_s1|], ctx))
+  | NOr lr -> AtS1 (elt_s1, NOrX ((List.rev lr, []), ctx))
+  | s1 -> AtS1 (elt_s1, NOrX (([s1], []), ctx))
+
+let append_seq_s ctx elt_s = function
+  | Seq lr -> AtS (elt_s, SeqX ((List.rev lr, []), ctx))
+  | s -> AtS (elt_s, SeqX (([s], []), ctx))
 
 let insert_elt_p1 elt = function
   | AtP1 (IsThere, ctx) -> Some (AtP1 (elt, ctx))
-  | AtP1 (f, AndX (i,ar,ctx)) -> ar.(i) <- f; Some (append_and_p1 ctx elt (And ar))
+  | AtP1 (f, AndX ((ll,rr),ctx)) -> Some (AtP1 (elt, AndX ((f::ll,rr),ctx)))
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
   | AtS1 (Det (det, Some rel), ctx) -> Some (append_and_p1 (DetThatX (det,ctx)) elt rel)
@@ -488,7 +486,7 @@ let insert_elt_s2 det focus =
 	else Some (AtS1 (Det (det, rel_opt), ctx))
       | AtS1 (AnAggreg (id,modif,g,_,np), ctx) ->
 	Some (AtS1 (AnAggreg (id, modif, g, Some (Is (Det (det, None))), np), ctx))
-      | AtS1 _ -> None (* no insertion of terms on complex NPs and aggregations *)
+      | AtS1 _ -> None (* no insertion of terms on complex NPs *)
       | _ -> None in
   match focus2_opt with
     | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel (p,m,f), ctx))
@@ -534,58 +532,85 @@ let insert_triplify = function
 
 let insert_constr constr focus =
   match focus with
-    | AtS1 (f, ReturnX) when is_top_s1 f -> insert_elt_p1 (Search constr) focus
+    | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search constr) focus
     | _ -> insert_elt_p1 (Filter constr) focus
 
-let insert_is focus =
-  let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
-  focus_moves [down_focus] foc_opt
+let insert_is = function
+  | AtS1 (f, IsX ctx) when is_top_s1 f -> None
+  | focus ->
+    let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
+    focus_moves [down_focus] foc_opt
 
 let insert_and = function
+(*
   | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
-  | AtP1 (f, AndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_p1 ctx2 IsThere (And ar))
-  | AtP1 (f, ctx) -> Some (append_and_p1 ctx IsThere f)
-  | AtS1 (NAnd ar, ctx) -> Some (append_and_s1 ctx factory#top_s1 (NAnd ar))
-  | AtS1 (f, NAndX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_and_s1 ctx2 factory#top_s1 (NAnd ar))
-  | AtS1 (f, ctx) -> Some (append_and_s1 ctx factory#top_s1 f)
+  | AtP1 (f, AndX (i,ar,ctx)) when not (is_top_p1 f) -> ar.(i) <- f; Some (append_and_p1 ctx IsThere (And ar))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_and_p1 ctx IsThere f)
+*)
+  | AtP1 _ -> None (* P1 conjunction is implicit *)
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (factory#top_s1, NAndX ((f::ll,rr),ctx)))
+  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_or = function
-  | AtP1 (Or ar, ctx) -> Some (append_or_p1 ctx IsThere (Or ar))
-  | AtP1 (f, OrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_p1 ctx2 IsThere (Or ar))
-  | AtP1 (f, ctx) -> Some (append_or_p1 ctx IsThere f)
-  | AtS1 (NOr ar, ctx) -> Some (append_or_s1 ctx factory#top_s1 (NOr ar))
-  | AtS1 (f, NOrX (i,ar,ctx2)) -> ar.(i) <- f; Some (append_or_s1 ctx2 factory#top_s1 (NOr ar))
-  | AtS1 (f, ctx) -> Some (append_or_s1 ctx factory#top_s1 f)
+  | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere, OrX ((f::ll,rr),ctx2)))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx IsThere f)
+  | AtS1 (f, NOrX ((ll,rr),ctx2)) when not (is_top_s1 f) -> Some (AtS1 (factory#top_s1, NOrX ((f::ll,rr),ctx2)))
+  | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_maybe = function
   | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))
+  | AtP1 (f, MaybeX ctx) -> None
+  | AtP1 (Not f, ctx) -> None
+  | AtP1 (f, NotX ctx) -> None				     
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe f, ctx))
+  (*if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))*)
   | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))
+  | AtS1 (f, NMaybeX ctx) -> None
+  | AtS1 (NNot f, ctx) -> None
+  | AtS1 (f, NNotX ctx) -> None
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe f, ctx))
+  (*if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))*)
   | _ -> None
 
 let insert_not = function
   | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, ctx) -> if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
+  | AtP1 (f, NotX ctx) -> None
+  | AtP1 (Maybe f, ctx) -> None
+  | AtP1 (f, MaybeX ctx) -> None
+  | AtP1 (f, ctx) ->
+    if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
   | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, ctx) -> if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
+  | AtS1 (f, NNotX ctx) -> None
+  | AtS1 (NMaybe f, ctx) -> None
+  | AtS1 (f, NMaybeX ctx) -> None
+  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
+    if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
+  | _ -> None
+
+let insert_seq = function
+  | AtS (f, SeqX ((ll,rr),ctx2)) -> Some (AtS (factory#top_s, SeqX ((f::ll,rr),ctx2)))
+  | AtS (f, ctx) -> Some (append_seq_s ctx factory#top_s f)
   | _ -> None
 
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
     Some (AtS1 (AnAggreg (id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (An _, _) as np, ctx) ->
+  | AtS1 (Det (An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) && g <> Given ->
     Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (AnAggreg (id, modif, g0, rel_opt, np), ctx) when g0 = g ->
-    Some (AtS1 (np, ctx))
+  | AtS1 ((AnAggreg (id, modif, g0, rel_opt, np) as npg), ctx) ->
+    if g0 = g then Some (AtS1 (np, ctx))
+    else Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, npg), ctx))
   | AtS1 (np, AnAggregX (_,_,g0,_,ctx)) when g0 = g ->
     Some (AtS1 (np,ctx))
   | _ -> None
 
 let insert_modif_transf f = function
-  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) ->
+  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (Det (An (id, modif2, head), rel_opt), ctx) in
     ( match fst modif2 with
@@ -627,6 +652,7 @@ let insert_increment incr focus =
 	  else proj, order)
 	focus
 
+	(*
 let delete_array ar i =
   let n = Array.length ar in
   if n = 1 then `Empty
@@ -638,20 +664,28 @@ let delete_array ar i =
     if i = n-1 && i > 0 (* last elt is deleted *)
     then `Array (ar2, i-1)
     else `Array (ar2, i)
+	*)
+
+let delete_list = function
+  | [], [] -> `Empty
+  | [x], [] -> `Single x
+  | [], [x] -> `Single x
+  | x::ll1, rr -> `List (x,ll1,rr)
+  | [], x::rr1 -> `List (x,[],rr1)
 
 let rec delete_ctx_p1 = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det (det,None), ctx))
   | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg (id, modif, g, None, np), ctx))
-  | AndX (i,ar,ctx) ->
-    ( match delete_array ar i with
+  | AndX (ll_rr,ctx) ->
+    ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
       | `Single elt -> Some (AtP1 (elt, ctx))
-      | `Array (ar2,i2) -> Some (AtP1 (ar2.(i2), AndX (i2,ar2,ctx))) )
-  | OrX (i,ar,ctx) ->
-    ( match delete_array ar i with
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, AndX ((ll2,rr2),ctx))) )
+  | OrX (ll_rr,ctx) ->
+    ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
       | `Single elt -> Some (AtP1 (elt, ctx))
-      | `Array (ar2, i2) -> Some (AtP1 (ar2.(i2), OrX (i2, ar2, ctx))) )
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx))) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
 and delete_ctx_s1 f_opt ctx =
@@ -663,33 +697,42 @@ and delete_ctx_s1 f_opt ctx =
       ( match f_opt with
 	| None -> delete_ctx_p1 ctx2
 	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
-    | ReturnX ->
+    | ReturnX ctx2 ->
       ( match f_opt with
-	| None -> None
+	| None -> delete_ctx_s None ctx2
 	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
-    | NAndX (i,ar,ctx2) ->
-      ( match delete_array ar i with
+    | NAndX (ll_rr,ctx2) ->
+      ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
 	| `Single elt -> Some (AtS1 (elt, ctx2))
-	| `Array (ar2,i2) -> Some (AtS1 (ar2.(i2), NAndX (i2,ar2,ctx2))) )
-    | NOrX (i,ar,ctx2) ->
-      ( match delete_array ar i with
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NAndX ((ll2,rr2),ctx2))) )
+    | NOrX (ll_rr,ctx2) ->
+      ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
 	| `Single elt -> Some (AtS1 (elt, ctx2))
-	| `Array (ar2, i2) -> Some (AtS1 (ar2.(i2), NOrX (i2, ar2, ctx2))) )
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2))) )
     | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
     | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
+and delete_ctx_s f_opt ctx =
+  match ctx with
+  | Root -> None
+  | SeqX (ll_rr,ctx2) ->
+    ( match delete_list ll_rr with
+    | `Empty -> delete_ctx_s None ctx2
+    | `Single elt -> Some (AtS (elt,ctx2))
+    | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2))) )
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
   | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
-  | AtS _ -> Some (AtS (Return factory#top_s1))
+  | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx
+(*  | AtS _ -> Some (AtS (Return factory#top_s1)) *)
 
 (* goto to query *)
 
 let focus_of_query (s : elt_s) = 
   factory#set (List.fold_left max 0 (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
-  AtS s
+  AtS (s, Root)
 
 let goto (s : elt_s) focus = Some (focus_of_query s)

@@ -1,5 +1,5 @@
 
-(*open Jsutils*)
+open Jsutils
 open Lisql
 
 (* translation from LISQL elts to SPARQL queries *)
@@ -13,7 +13,7 @@ object (self)
   method add_var v = if not (List.mem v vars) then vars <- v::vars
   method vars = List.rev vars
 
-  val h_var_aggreg : (Rdf.var, Rdf.var * modif_s2 * aggreg * Sparql.formula) Hashtbl.t = Hashtbl.create 3
+  val h_var_aggreg : (Rdf.var, Rdf.var * aggreg * Sparql.formula) Hashtbl.t = Hashtbl.create 3
   method set_aggreg v aggreg : unit =
     Hashtbl.add h_var_aggreg v aggreg
   method aggreg v =
@@ -26,6 +26,8 @@ object (self)
   method modif (v : Rdf.var) =
     try Hashtbl.find h_var_modif v
     with _ -> (Select, Unordered)
+  method project (v : Rdf.var) = fst (self#modif v)
+  method order (v : Rdf.var) = snd (self#modif v)
 
 end
 
@@ -36,6 +38,8 @@ let sparql_aggreg = function
   | Average -> Sparql.AVG
   | Maximum -> Sparql.MAX
   | Minimum -> Sparql.MIN
+  | Sample -> Sparql.SAMPLE
+  | Given -> Sparql.ID
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
@@ -135,6 +139,7 @@ type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
 type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
+type sparql_s = Sparql.formula
 
 
 let rec elt_p1 state : elt_p1 -> sparql_p1 = function
@@ -151,12 +156,12 @@ let rec elt_p1 state : elt_p1 -> sparql_p1 = function
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
   | Search c -> (fun x -> search_constr x c)
   | Filter c -> (fun x -> filter_constr_entity x c)
-  | And ar ->
-    let ar_d = Array.map (fun elt -> elt_p1 state elt) ar in
-    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
-  | Or ar ->
-    let ar_d = Array.map (fun elt -> elt_p1 state elt) ar in
-    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | And lr ->
+    let lr_d = List.map (fun elt -> elt_p1 state elt) lr in
+    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+  | Or lr ->
+    let lr_d = List.map (fun elt -> elt_p1 state elt) lr in
+    (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d))
   | Maybe f ->
     let d = elt_p1 state f in
     (fun x -> Sparql.formula_optional (d x))
@@ -174,16 +179,17 @@ and elt_s1_as_p1 state : elt_s1 -> sparql_p1 = function
     (fun x -> Sparql.formula_and (d1 x) (d2 x))
   | AnAggreg (idg,modifg,g,relg_opt,np) ->
     ( match np with
-      | Det (An (id, _modif, _head), _rel_opt) ->
+      | Det (An (id, _, _), _)
+      | AnAggreg (id, _, _, _, _) ->
 	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
 	elt_s1_as_p1 state np
       | _ -> assert false )
-  | NAnd ar ->
-    let ar_d = Array.map (fun elt -> elt_s1_as_p1 state elt) ar in
-    (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
-  | NOr ar ->
-    let ar_d = Array.map (fun elt -> elt_s1_as_p1 state elt) ar in
-    (fun x -> Sparql.formula_or_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+  | NAnd lr ->
+    let lr_d = List.map (fun elt -> elt_s1_as_p1 state elt) lr in
+    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+  | NOr lr ->
+    let lr_d = List.map (fun elt -> elt_s1_as_p1 state elt) lr in
+    (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d))
   | NMaybe f ->
     let d = elt_s1_as_p1 state f in
     (fun x -> Sparql.formula_optional (d x))
@@ -212,16 +218,17 @@ and elt_s1 state : elt_s1 -> sparql_s1 = function
     (fun d -> qu d1 d)
   | AnAggreg (idg,modifg,g,relg_opt,np) ->
     ( match np with
-      | Det (An (id, _modif, _head), _rel_opt) ->
-	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
-	elt_s1 state np
-      | _ -> assert false )
-  | NAnd ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
-    (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
-  | NOr ar ->
-    let ar_q = Array.map (fun elt -> elt_s1 state elt) ar in
-    (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
+    | Det (An (id, _, _), _)
+    | AnAggreg (id, _, _, _, _) ->
+      elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
+      elt_s1 state np
+    | _ -> assert false )
+  | NAnd lr ->
+    let lr_q = List.map (fun elt -> elt_s1 state elt) lr in
+    (fun d -> Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
+  | NOr lr ->
+    let lr_q = List.map (fun elt -> elt_s1 state elt) lr in
+    (fun d -> Sparql.formula_or_list (List.map (fun q -> q d) lr_q))
   | NMaybe f ->
     let q = elt_s1 state f in
     (fun d -> Sparql.formula_optional (q d))
@@ -255,11 +262,15 @@ and elt_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) 
 and elt_aggreg state idg modifg g (d : sparql_p1) id : unit =
   let vg = state#id_labelling#get_id_var idg in
   let v = state#id_labelling#get_id_var id in
-  state#set_aggreg v (vg, modifg, g, (d (Rdf.Var vg)))
+  state#set_aggreg v (vg, g, (d (Rdf.Var vg)));
+  state#set_modif vg modifg
 and elt_s state : elt_s -> Sparql.formula = function
   | Return np ->
     let q = elt_s1 state np in
     q (fun t -> Sparql.True)
+  | Seq lr ->
+    let lr_f = List.map (fun elt -> elt_s state elt) lr in
+    Sparql.formula_and_list lr_f
 
 let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
   | (Det _ as np1) -> (* q_alt is not used in this case *)
@@ -267,15 +278,16 @@ let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_
     (fun r -> q1 (fun x -> q (fun y -> r x y)))
   | AnAggreg (idg,modifg,g,relg_opt,np) ->
     ( match np with
-      | Det (An (id, _, _), _) ->
+    | Det (An (id, _, _), _)
+    | AnAggreg (id, _, _, _, _) ->
 	let q1 = elt_s1 state np in
 	elt_aggreg state idg modifg g (elt_p1_opt state relg_opt) id;
 	(fun r -> q1 (fun x -> q (fun y -> r x y)))
       | _ -> assert false )
-  | NAnd ar -> elt_s1_bis_and state q q_alt (Array.to_list ar)
-  | NOr ar ->
-    let ar_b = Array.map (fun elt -> elt_s1_bis state q q_alt elt) ar in
-    (fun r -> Sparql.formula_or_list (Array.to_list (Array.map (fun b -> b r) ar_b)))
+  | NAnd lr -> elt_s1_bis_and state q q_alt lr
+  | NOr lr ->
+    let lr_b = List.map (fun elt -> elt_s1_bis state q q_alt elt) lr in
+    (fun r -> Sparql.formula_or_list (List.map (fun b -> b r) lr_b))
   | NMaybe np1 -> elt_s1_bis state q q_alt np1
   | NNot np1 -> elt_s1_bis state q q_alt np1
 and elt_s1_bis_and state q q_alt = function
@@ -290,7 +302,6 @@ and elt_s1_bis_and state q q_alt = function
 				      Sparql.formula_and (b1 r) (bs_alt r);
 				      Sparql.formula_and (b1_alt r) (bs r)])
 
-
 let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
   | DetThatX (det,ctx) ->
     let q_det = elt_s2 state det in
@@ -302,7 +313,8 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
       ctx
   | AnAggregThatX (idg,modifg,g,np,ctx) ->
     ( match np with
-      | Det (An (id, _, _), _) ->
+    | Det (An (id, _, _), _)
+    | AnAggreg (id, _, _, _, _) ->
 	let q_np = elt_s1 state np in
 	let d_np = elt_s1_as_p1 state np in
 	elt_aggreg state idg modifg g d id;
@@ -311,14 +323,14 @@ let rec ctx_p1 state (d : sparql_p1) : ctx_p1 -> Sparql.formula = function
 	  (fun d2 -> Sparql.False)
 	  (fun x -> d_np x)
 	  ctx
-      | _ -> assert false )
-  | AndX (i,ar,ctx) ->
-    let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_p1 state elt) ar in
+    | _ -> assert false )
+  | AndX (ll_rr,ctx) ->
+    let lr_d = list_of_ctx d (map_ctx_list (elt_p1 state) ll_rr) in
     ctx_p1 state
-      (fun x ->	Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun x ->	Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
       ctx
   (* ignoring algebra in ctx *)
-  | OrX (i,ar,ctx) -> ctx_p1 state d ctx
+  | OrX (ll_rr,ctx) -> ctx_p1 state d ctx
   | MaybeX ctx -> ctx_p1 state d ctx
   | NotX ctx -> ctx_p1 state d ctx
 and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : sparql_p1) : ctx_s1 -> Sparql.formula = function
@@ -339,8 +351,10 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
     ctx_p1 state
       (fun x -> b_np (fun y z -> triple_arg arg x y z))
       ctx
-  | ReturnX ->
-    q (fun t -> Sparql.True)
+  | ReturnX ctx ->
+    ctx_s state
+      (q (fun t -> Sparql.True))
+      ctx
   | AnAggregX (idg,modifg,g,relg_opt,ctx) -> (*ctx_s1 state q q_alt d ctx*)
     ( match id_opt with
       | Some id ->
@@ -352,25 +366,30 @@ and ctx_s1 state (id_opt : id option) (q : sparql_s1) (q_alt : sparql_s1) (d : s
 	  (fun x -> d x)
 	  ctx
       | _ -> assert false)
-  | NAndX (i,ar,ctx) ->
-    let ar_q = Array.mapi (fun j elt -> if j=i then q else elt_s1 state elt) ar in
-    let ar_q_alt = let ar = Array.copy ar_q in ar.(i) <- q_alt; ar in
-    let ar_d = Array.mapi (fun j elt -> if j=i then d else elt_s1_as_p1 state elt) ar in
+  | NAndX (ll_rr,ctx) ->
+    let lr_q = list_of_ctx q (map_ctx_list (elt_s1 state) ll_rr) in
+    let lr_q_alt = list_of_ctx q_alt (map_ctx_list (elt_s1 state) ll_rr) in
+    let lr_d = list_of_ctx d (map_ctx_list (elt_s1_as_p1 state) ll_rr) in
     ctx_s1 state None
-      (fun d ->	Sparql.formula_and_list (Array.to_list (Array.map (fun q -> q d) ar_q)))
-      (fun d -> Sparql.formula_and_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
-      (fun x -> Sparql.formula_and_list (Array.to_list (Array.map (fun d -> d x) ar_d)))
+      (fun d ->	Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
+      (fun d -> Sparql.formula_and_list (List.map (fun q_alt -> q_alt d) lr_q_alt))
+      (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
       ctx
   (* ignoring algebra in ctx *)
-  | NOrX (i,ar,ctx) ->
-    let ar_q_alt = Array.mapi (fun j elt -> if j=i then q_alt else elt_s1 state elt) ar in
+  | NOrX (ll_rr,ctx) ->
+    let lr_q_alt = list_of_ctx q_alt (map_ctx_list (elt_s1 state) ll_rr) in
     ctx_s1 state None
       q
-      (fun d -> Sparql.formula_or_list (Array.to_list (Array.map (fun q_alt -> q_alt d) ar_q_alt)))
+      (fun d -> Sparql.formula_or_list (List.map (fun q_alt -> q_alt d) lr_q_alt))
       d
       ctx
   | NMaybeX ctx -> ctx_s1 state None q q_alt d ctx
   | NNotX ctx -> ctx_s1 state None q q_alt d ctx
+and ctx_s state (f : sparql_s) : ctx_s -> Sparql.formula = function
+  | Root -> f
+  | SeqX (ll_rr,ctx) ->
+    let lr_f = list_of_ctx f (map_ctx_list (elt_s state) ll_rr) in
+    ctx_s state (Sparql.formula_and_list lr_f) ctx
 
 
 type template = ?constr:constr -> limit:int -> string
@@ -382,6 +401,78 @@ object
   method result : Rdf.term list = res
 end
 
+let rec var_aggregation_stack state v acc =
+  match state#aggreg v with
+  | None -> acc
+  | Some (vg,g,f) -> var_aggregation_stack state vg (`Aggreg (vg,g,f,v,acc))
+
+let rec transpose_aggregation_stacks t_list var_stacks acc =
+  let l2 =
+    List.map
+      (function
+      | `Var v -> (v,`Dim, List.mem (Rdf.Var v) t_list), `VarEcho v
+      | `VarEcho v -> (v, `Dim, false), `VarEcho v (* at_focus is not propagated to subqueries *)
+      | `Aggreg (v,g,f,vi, st) -> (v, `Aggreg (g,vi,f), List.mem (Rdf.Var v) t_list), st)
+      var_stacks in
+  let layer, substacks = List.split l2 in
+  let acc =
+    if List.exists (fun (v,_,at_focus) -> at_focus) layer
+    then [] (* layers above focus are ignored *)
+    else acc in
+  if List.for_all (function (v,`Dim,_) -> true | _ -> false) layer
+  then
+    if acc = []
+    then [layer]
+    else acc (* because in that case, no additional nested query is necessary *)
+  else transpose_aggregation_stacks t_list substacks (layer::acc)
+
+let make_select state t_list ~is_subquery dims_aggregs form =
+  let projections, aggregations, groupings, havings, ordering =
+    List.fold_right
+      (fun (v,kind,at_focus) (projs,aggregs,groups,havings,ordering) ->
+	let projs, aggregs, groups, havings, order, v_order = (* v_order is to be used in ordering *)
+	  match state#modif v with
+	  | (Unselect, _) when not at_focus && not is_subquery -> projs, aggregs, groups, havings, Unordered, v
+	    | (_, order) ->
+	      match kind with
+	      | `Dim -> v::projs, aggregs, v::groups, havings, order, v
+	      | `Aggreg (Lisql.Given,vi,f) -> projs, (sparql_aggreg Lisql.Given,vi,v)::aggregs, vi::groups, f::havings, order, v
+	      | `Aggreg (g,vi,f) -> projs, (sparql_aggreg g,vi,v)::aggregs, groups, f::havings, order, v in
+	let ordering =
+	  match order with
+	  | Unordered -> ordering
+	  | Lowest -> (Sparql.ASC, v_order) :: ordering
+	  | Highest -> (Sparql.DESC, v_order) :: ordering in
+	projs, aggregs, groups, havings, ordering)
+      dims_aggregs ([],[],[],[],[]) in
+  let having = Sparql.expr_of_formula (Sparql.formula_and_list havings) in
+  (fun ?(constr=True) ~limit ->
+    Sparql.select ~distinct:true ~projections ~aggregations ~groupings ~having ~ordering ~limit
+      (Sparql.pattern_of_formula
+	 (match t_list with [t] -> Sparql.formula_and form (filter_constr_entity t constr) | _ -> form)))
+
+let make_query state t_list form =
+  let lv = state#vars in
+  let var_aggreg_stacks = List.map (fun v -> var_aggregation_stack state v (`Var v)) lv in
+  let select_layers_outward = transpose_aggregation_stacks t_list var_aggreg_stacks [] in
+  match select_layers_outward with
+  | [] -> assert false
+  | layer::layers ->
+    let depth = List.length layers in
+    let d, select_query =
+      List.fold_left
+	(fun (d,select_query) layer ->
+	  d-1,
+	  (fun ?constr ~limit ->
+	    make_select state t_list ~is_subquery:(d-1 > 0)
+	      layer
+	      (Sparql.Pattern (Sparql.subquery (select_query ?constr ~limit:(10*limit))))
+	      ?constr ~limit))
+	(depth, make_select state t_list ~is_subquery:(depth > 0) layer form)
+	layers in
+    select_query
+
+      
 let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
     : Rdf.term list * template option * template option * template option * template option =
   let state = new state id_labelling in
@@ -414,43 +505,13 @@ let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
 	    (fun x -> t_list#add x; d x)
 	    ctx in
 	form
-      | AtS f ->
-	let form = elt_s state f in
-	form
+      | AtS (f,ctx) -> ctx_s state (elt_s state f) ctx
   in
   let t_list = t_list#result in
   let query_opt =
     if form = Sparql.True
     then None
-    else
-      let lv = state#vars in
-      let dimensions, aggregations, havings, ordering =
-	List.fold_right
-	  (fun v (dims,aggregs,havings,ordering) ->
-	    let at_focus = List.mem (Rdf.Var v) t_list in (* at-focus variables must not be hidden or aggregated *)
-	    let dims, aggregs, havings, order, v_order = (* v_order is to be used in ordering *)
-	      match state#aggreg v with
-		| Some (vg, (projectg,orderg), g, f) when not at_focus ->
-		  if projectg = Unselect && not (List.mem (Rdf.Var vg) t_list)
-		  then dims, aggregs, havings, Unordered, vg
-		  else dims, (sparql_aggreg g,v,vg)::aggregs, f::havings, orderg, vg
-		| _ ->
-		  match state#modif v with
-		    | (Unselect,order) when not at_focus ->
-		      dims, aggregs, havings, Unordered, v
-		    | (_, order) -> v::dims, aggregs, havings, order, v in
-	    let ordering =
-	      match order with
-		| Unordered -> ordering
-		| Lowest -> (Sparql.ASC, v_order) :: ordering
-		| Highest -> (Sparql.DESC, v_order) :: ordering in
-	    dims, aggregs, havings, ordering)
-	  lv ([],[],[],[]) in
-      let having = Sparql.expr_of_formula (Sparql.formula_and_list havings) in
-      Some (fun ?(constr=True) ~limit ->
-	Sparql.select ~distinct:true ~dimensions ~aggregations ~having ~ordering ~limit
-	  (Sparql.pattern_of_formula
-	     (match t_list with [t] -> Sparql.formula_and form (filter_constr_entity t constr) | _ -> form))) in
+    else Some (make_query state t_list form) in
   let query_incr_opt x filter_constr triple =
     match focus, t_list with
       | AtS1 (AnAggreg _, _), _ -> None (* aggregated variable is not accessible inside pattern *)
@@ -462,7 +523,7 @@ let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
 	    | Rdf.Bnode _ -> Sparql.formula_and form (triple t tx)
 	    | _ -> triple t tx in
 	Some (fun ?(constr=True) ~limit ->
-	  Sparql.select ~dimensions:[x] ~limit
+	  Sparql.select ~projections:[x] ~limit
 	    (Sparql.pattern_of_formula
 	       (Sparql.formula_and form_x (filter_constr tx constr))))
       | _ -> None in
