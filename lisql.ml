@@ -467,7 +467,7 @@ let append_seq_s ctx elt_s = function
 
 let insert_elt_p1 elt = function
   | AtP1 (IsThere, ctx) -> Some (AtP1 (elt, ctx))
-  | AtP1 (f, AndX (ll_rr,ctx)) -> Some (append_and_p1 ctx elt (And (list_of_ctx f ll_rr)))
+  | AtP1 (f, AndX ((ll,rr),ctx)) -> Some (AtP1 (elt, AndX ((f::ll,rr),ctx)))
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (det, None), ctx) -> Some (AtP1 (elt, DetThatX (det,ctx)))
   | AtS1 (Det (det, Some rel), ctx) -> Some (append_and_p1 (DetThatX (det,ctx)) elt rel)
@@ -548,18 +548,15 @@ let insert_and = function
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_and_p1 ctx IsThere f)
 *)
   | AtP1 _ -> None (* P1 conjunction is implicit *)
-  | AtS1 (NAnd lr, ctx) -> Some (append_and_s1 ctx factory#top_s1 (NAnd lr))
-  | AtS1 (f, NAndX (ll_rr,ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 (NAnd (list_of_ctx f ll_rr)))
   | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (factory#top_s1, NAndX ((f::ll,rr),ctx)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_or = function
-  | AtP1 (Or lr, ctx) -> Some (append_or_p1 ctx IsThere (Or lr))
-  | AtP1 (f, OrX (ll_rr,ctx2)) when not (is_top_p1 f) -> Some (append_or_p1 ctx2 IsThere (Or (list_of_ctx f ll_rr)))
+  | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere, OrX ((f::ll,rr),ctx2)))
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx IsThere f)
-  | AtS1 (NOr lr, ctx) -> Some (append_or_s1 ctx factory#top_s1 (NOr lr))
-  | AtS1 (f, NOrX (ll_rr,ctx2)) when not (is_top_s1 f) -> Some (append_or_s1 ctx2 factory#top_s1 (NOr (list_of_ctx f ll_rr)))
+  | AtS1 (f, NOrX ((ll,rr),ctx2)) when not (is_top_s1 f) -> Some (AtS1 (factory#top_s1, NOrX ((f::ll,rr),ctx2)))
   | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
@@ -596,8 +593,7 @@ let insert_not = function
   | _ -> None
 
 let insert_seq = function
-  | AtS (Seq lr, ctx) -> Some (append_seq_s ctx factory#top_s (Seq lr))
-  | AtS (f, SeqX (ll_rr,ctx2)) -> Some (append_seq_s ctx2 factory#top_s (Seq (list_of_ctx f ll_rr)))
+  | AtS (f, SeqX ((ll,rr),ctx2)) -> Some (AtS (factory#top_s, SeqX ((f::ll,rr),ctx2)))
   | AtS (f, ctx) -> Some (append_seq_s ctx factory#top_s f)
   | _ -> None
 
