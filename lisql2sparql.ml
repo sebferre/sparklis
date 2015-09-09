@@ -2,6 +2,86 @@
 open Jsutils
 open Lisql
 
+(* translation from LISQL focus to LISQL semantics *)
+
+type focus_term = [ `Term of Rdf.term | `Id of id | `Undefined ]
+
+let define_focus_term (ft : focus_term) : focus_term option -> focus_term = function
+  | None -> ft
+  | Some x -> x
+
+let focus_term_s2 : elt_s2 -> focus_term = function
+  | Term t -> `Term t
+  | An (id,_,_) -> `Id id
+  | The id -> `Id id
+    
+let rec sem_p1 ft_opt f = function
+  | DetThatX (det, ctx) ->
+    let ft = define_focus_term (focus_term_s2 det) ft_opt in
+    sem_s1 (Some ft) (Det (det,Some f)) ctx
+  | AnAggregThatX (id,modif,g,np,ctx) ->
+    let ft = define_focus_term (`Id id) ft_opt in
+    sem_s1 (Some ft) (AnAggreg (id,modif,g,Some f,np)) ctx
+  | ForeachThatX (id,modif,id2,ctx) ->
+    let ft = define_focus_term (`Id id) ft_opt in
+    sem_dim ft (Foreach (id,modif,Some f,id2)) ctx
+  | TheAggregThatX (id,modif,g,id2,ctx) ->
+    let ft = define_focus_term (`Id id) ft_opt in
+    sem_aggreg ft (TheAggreg (id,modif,g,Some f,id2)) ctx
+  | AndX (ll_rr,ctx) -> sem_p1 ft_opt (And (list_of_ctx f ll_rr)) ctx
+  | OrX (ll_rr,ctx) -> sem_p1 ft_opt f ctx (* suspended *)
+  | MaybeX ctx -> sem_p1 ft_opt f ctx (* suspended *)
+  | NotX ctx -> sem_p1 ft_opt f ctx (* suspended *)
+and sem_s1 ft_opt np = function
+  | IsX ctx -> sem_p1 ft_opt (Is np) ctx
+  | RelX (p,modif,ctx) ->
+    let ft = define_focus_term `Undefined ft_opt in
+    sem_p1 (Some ft) (Rel (p,modif,np)) ctx
+  | TripleX1 (arg,np2,ctx) ->
+    let ft = define_focus_term `Undefined ft_opt in
+    sem_p1 (Some ft) (Triple (arg,np,np2)) ctx
+  | TripleX2 (arg,np2,ctx) ->
+    let ft = define_focus_term `Undefined ft_opt in
+    sem_p1 (Some ft) (Triple (arg,np2,np)) ctx
+  | ReturnX ctx ->
+    let ft = define_focus_term `Undefined ft_opt in
+    sem_s ft (Return np) ctx
+  | AnAggregX (id,modif,g,rel_opt,ctx) -> sem_s1 ft_opt np ctx (* suspended *)
+  | NAndX (ll_rr,ctx) -> sem_s1 ft_opt (NAnd (list_of_ctx np ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> sem_s1 ft_opt np ctx (* suspended *)
+  | NMaybeX ctx -> sem_s1 ft_opt np ctx (* suspended *)
+  | NNotX ctx -> sem_s1 ft_opt np ctx (* suspended *)
+and sem_dim ft dim = function
+  | SAggregForeachX (ll_rr,aggregs,ctx) -> sem_s ft (SAggreg (list_of_ctx dim ll_rr, aggregs)) ctx
+and sem_aggreg ft aggreg = function
+  | SAggregX (dims,ll_rr,ctx) -> sem_s ft (SAggreg (dims, list_of_ctx aggreg ll_rr)) ctx
+and sem_s ft s = function
+  | Root -> ft, s
+  | SeqX (ll_rr,ctx) -> sem_s ft (Seq (list_of_ctx s ll_rr)) ctx
+
+let sem_focus : focus -> focus_term * elt_s = function
+  | AtP1 (f,ctx) -> sem_p1 None f ctx
+  | AtS1 (np,ctx) ->
+    let ft_opt =
+      if is_s1_as_p1_ctx_s1 ctx
+      then None
+      else Some
+	( match np with
+	| Det (det,_) -> focus_term_s2 det
+	| AnAggreg (id,_,g,_,_) -> `Id id
+	| _ -> `Undefined ) in
+    sem_s1 ft_opt np ctx
+  | AtDim (dim,ctx) ->
+    let ft = match dim with Foreach (id,_,_,_) -> `Id id in
+    sem_dim ft dim ctx
+  | AtAggreg (aggreg,ctx) ->
+    let ft = match aggreg with TheAggreg (id,_,_,_,_) -> `Id id in
+    sem_aggreg ft aggreg ctx
+  | AtS (s,ctx) ->
+    let ft = `Undefined in
+    sem_s ft s ctx
+
+
 (* translation from LISQL elts to SPARQL queries *)
 
 (* SPARQL variable generator *)
@@ -272,6 +352,7 @@ and elt_s state : elt_s -> Sparql.formula = function
     let lr_f = List.map (fun elt -> elt_s state elt) lr in
     Sparql.formula_and_list lr_f
 
+(*
 let rec elt_s1_bis state (q : sparql_s1) (q_alt : sparql_s1) : elt_s1 -> sparql_b1 = function
   | (Det _ as np1) -> (* q_alt is not used in this case *)
     let q1 = elt_s1 state np1 in
@@ -390,16 +471,18 @@ and ctx_s state (f : sparql_s) : ctx_s -> Sparql.formula = function
   | SeqX (ll_rr,ctx) ->
     let lr_f = list_of_ctx f (map_ctx_list (elt_s state) ll_rr) in
     ctx_s state (Sparql.formula_and_list lr_f) ctx
-
+*)
 
 type template = ?constr:constr -> limit:int -> string
 
+(*
 class focus_term_list (id_labelling : Lisql2nl.id_labelling) =
 object
   val mutable res : Rdf.term list = []
   method add (t : Rdf.term) : unit = if not (List.mem t res) then res <- t::res
   method result : Rdf.term list = res
 end
+*)
 
 let rec var_aggregation_stack state v acc =
   match state#aggreg v with
@@ -475,7 +558,15 @@ let make_query state t_list form =
       
 let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
     : Rdf.term list * template option * template option * template option * template option =
+  let ft, s = sem_focus focus in
   let state = new state id_labelling in
+  let form = elt_s state s in
+  let t_list =
+    match ft with
+    | `Term t -> [t]
+    | `Id id -> [Rdf.Var (id_labelling#get_id_var id)]
+    | `Undefined -> [] in
+(*  
   let t_list = new focus_term_list id_labelling in
   let form =
     match focus with
@@ -508,6 +599,7 @@ let focus (id_labelling : Lisql2nl.id_labelling) (focus : focus)
       | AtS (f,ctx) -> ctx_s state (elt_s state f) ctx
   in
   let t_list = t_list#result in
+*)
   let query_opt =
     if form = Sparql.True
     then None
