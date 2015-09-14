@@ -31,33 +31,35 @@ let print_lr pr f lr = print_nary f (List.map pr lr)
 
 let print_opt pr = function None -> print_atom "None" | Some x -> print_un "Some" (pr x)
 
+(* printing elements: annotations are ignored *)
+  
 let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
-  | Return np -> print_un "Return" (print_s1 np)
-  | Seq lr -> print_lr print_s "Seq" lr
+  | Return (_,np) -> print_un "Return" (print_s1 np)
+  | Seq (_,lr) -> print_lr print_s "Seq" lr
 and print_p1 = function
-  | Is np -> print_un "Is" (print_s1 np)
-  | Type c -> print_un "Type" (print_uri c)
-  | Rel (p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
-  | Triple (arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
-  | Search c -> print_un "Search" (print_constr c)
-  | Filter c -> print_un "Filter" (print_constr c)
-  | And lr -> print_lr print_p1 "And" lr
-  | Or lr -> print_lr print_p1 "Or" lr
-  | Maybe f -> print_un "Maybe" (print_p1 f)
-  | Not f -> print_un "Not" (print_p1 f)
-  | IsThere -> print_atom "IsThere"
+  | Is (_,np) -> print_un "Is" (print_s1 np)
+  | Type (_,c) -> print_un "Type" (print_uri c)
+  | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
+  | Triple (_,arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
+  | Search (_,c) -> print_un "Search" (print_constr c)
+  | Filter (_,c) -> print_un "Filter" (print_constr c)
+  | And (_,lr) -> print_lr print_p1 "And" lr
+  | Or (_,lr) -> print_lr print_p1 "Or" lr
+  | Maybe (_,f) -> print_un "Maybe" (print_p1 f)
+  | Not (_,f) -> print_un "Not" (print_p1 f)
+  | IsThere _ -> print_atom "IsThere"
 and print_modif_p2 = function
   | Fwd -> print_atom "Fwd"
   | Bwd -> print_atom "Bwd"
 and print_s1 = function
-  | Det (det, rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
-  | AnAggreg (id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
-  | NAnd lr -> print_lr print_s1 "NAnd" lr
-  | NOr lr -> print_lr print_s1 "NOr" lr
-  | NMaybe f -> print_un "NMaybe" (print_s1 f)
-  | NNot f -> print_un "NNot" (print_s1 f)
+  | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
+  | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
+  | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
+  | NOr (_,lr) -> print_lr print_s1 "NOr" lr
+  | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
+  | NNot (_,f) -> print_un "NNot" (print_s1 f)
 and print_s2 = function
   | Term t -> print_un "Term" (print_term t)
   | An (id,modif,head) -> print_ter "An" (print_id id) (print_modif modif) (print_head head)
@@ -111,9 +113,9 @@ and print_uri uri = print_string uri
 and print_var v = print_string v
 and print_id id = print_int id
 
-let of_query (q : elt_s) : string = print q
+let of_query (q : 'a elt_s) : string = print q
 
-(* multi-version parsing *)
+(* multi-version parsing: unit annotations are used *)
 
 open Genlex
 
@@ -157,35 +159,35 @@ let rec parse = parser
   | [< 'Kwd "["; version = parse_version; 'Kwd "]" ?? "missing ]"; s = parse_s ~version >] -> s
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
-    | [< np = parse_un ~version "Return" parse_s1 >] -> Return np
-    | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq lr
+    | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
+    | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
 and parse_p1 ~version = parser
-  | [< np = parse_un ~version "Is" parse_s1 >] -> Is np
-  | [< c = parse_un ~version "Type" parse_uri >] -> Type c
-  | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel (p,m,np)
-  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel (p,Fwd,np) (* for backward compatibility *)
-  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel (p,Bwd,np) (* for backward compatibility *)
-  | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple (arg,np1,np2)
-  | [< c = parse_un ~version "Search" parse_constr >] -> Search c
-  | [< c = parse_un ~version "Filter" parse_constr >] -> Filter c
-  | [< c = parse_un ~version "Constr" parse_constr >] -> Filter c (* for backward compatibility *)
-  | [< lr = parse_lr parse_p1 ~version "And" >] -> And lr
-  | [< lr = parse_lr parse_p1 ~version "Or" >] -> Or lr
-  | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe f
-  | [< f = parse_un ~version "Not" parse_p1 >] -> Not f
-  | [< () = parse_atom ~version "IsThere" >] -> IsThere
+  | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
+  | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
+  | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
+  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
+  | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
+  | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
+  | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c)
+  | [< c = parse_un ~version "Constr" parse_constr >] -> Filter ((),c) (* for backward compatibility *)
+  | [< lr = parse_lr parse_p1 ~version "And" >] -> And ((),lr)
+  | [< lr = parse_lr parse_p1 ~version "Or" >] -> Or ((),lr)
+  | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe ((),f)
+  | [< f = parse_un ~version "Not" parse_p1 >] -> Not ((),f)
+  | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
 and parse_modif_p2 ~version = parser
   | [< () = parse_atom ~version "Fwd" >] -> Fwd
   | [< () = parse_atom ~version "Bwd" >] -> Bwd
   | [<>] -> syntax_error "invalid modif_p2"
 and parse_s1 ~version = parser
-  | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det (det, rel_opt)
-  | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg (id,modif,g,rel_opt,np)
-  | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd lr
-  | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr lr
-  | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe f
-  | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot f
+  | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
+  | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
+  | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
+  | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
+  | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)
+  | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot ((),f)
   | [<>] -> syntax_error "invalid s1"
 and parse_s2 ~version = parser
   | [< t = parse_un ~version "Term" parse_term >] -> Term t
@@ -253,4 +255,4 @@ and parse_uri ~version = parser [< s = parse_string ~version >] -> s
 and parse_var ~version = parser [< s = parse_string ~version >] -> s
 and parse_id ~version = parser [< i = parse_int ~version >] -> i
 
-let to_query (str : string) : elt_s = parse (lexer (Stream.of_string str))
+let to_query (str : string) : unit elt_s = parse (lexer (Stream.of_string str))

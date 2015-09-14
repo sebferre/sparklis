@@ -2,6 +2,7 @@
 open Js
 open Jsutils
 open Lisql
+open Lisql_annot
 
 (* generic dictionary with automatic generation of keys *)
 
@@ -143,12 +144,12 @@ and html_highlight h xml =
 let html_term (t : Rdf.term) : string =
   html_word (Lisql2nl.word_of_term t)
 
-let html_focus (state : state) (focus : focus) : string = 
+let html_query (state : state) (query : annot elt_s) : string = 
   html_of_nl_xml state
     (Lisql2nl.xml_s Lisql2nl.config_lang#grammar
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_focus Lisql2nl.config_lang#grammar state#id_labelling
-	     focus)))
+	  (Lisql2nl.s_of_elt_s Lisql2nl.config_lang#grammar state#id_labelling
+	     query)))
 
 
 let html_id (state : state) (id : int) : string =

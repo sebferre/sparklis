@@ -224,7 +224,7 @@ object (self)
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
-      elt##innerHTML <- string (html_focus html_state lis#focus);
+      elt##innerHTML <- string (html_query html_state lis#query);
       stop_links_propagation_from elt;
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;

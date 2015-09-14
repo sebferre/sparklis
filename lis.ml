@@ -110,16 +110,16 @@ let index_incr_of_index_term_uri (f : Rdf.uri -> Lisql.increment) (l : Rdf.term 
 
 (* LIS navigation places *)
 
-class place (endpoint : string) (foc : Lisql.focus) =
+class place (endpoint : string) (focus : Lisql.focus) =
+  let focus_term, s_annot = Lisql_annot.annot_focus focus in
 object (self)
   (* essential state *)
 
   val endpoint = endpoint
   method endpoint = endpoint
 
-  val focus = foc
   method focus = focus
-  method query = Lisql.elt_s_of_focus focus
+  method query = s_annot
 
   (* derived state *)
 
@@ -136,8 +136,8 @@ object (self)
 
   method private init =
     begin
-      id_labelling <- Lisql2nl.id_labelling_of_focus Lisql2nl.config_lang#grammar focus;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus id_labelling focus in
+      id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.s_annot id_labelling focus_term s_annot in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;

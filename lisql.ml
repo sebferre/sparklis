@@ -56,26 +56,26 @@ type project = Unselect | Select (* | Aggreg of aggreg * order *)
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
 
-(* LISQL elts *)
-type elt_p1 =
-  | Is of elt_s1
-  | Type of Rdf.uri
-  | Rel of Rdf.uri * modif_p2 * elt_s1
-  | Triple of arg * elt_s1 * elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
-  | Search of constr
-  | Filter of constr
-  | And of elt_p1 list
-  | Or of elt_p1 list
-  | Maybe of elt_p1
-  | Not of elt_p1
-  | IsThere
-and elt_s1 =
-  | Det of elt_s2 * elt_p1 option
-  | AnAggreg of id * modif_s2 * aggreg * elt_p1 option * elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
-  | NAnd of elt_s1 list
-  | NOr of elt_s1 list
-  | NMaybe of elt_s1
-  | NNot of elt_s1
+(* LISQL elts : 'a param is for element annotations (hook) *)
+type 'a elt_p1 =
+  | Is of 'a * 'a elt_s1
+  | Type of 'a * Rdf.uri
+  | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
+  | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
+  | Search of 'a * constr
+  | Filter of 'a * constr
+  | And of 'a * 'a elt_p1 list
+  | Or of 'a * 'a elt_p1 list
+  | Maybe of 'a * 'a elt_p1
+  | Not of 'a * 'a elt_p1
+  | IsThere of 'a
+and 'a elt_s1 =
+  | Det of 'a * elt_s2 * 'a elt_p1 option
+  | AnAggreg of 'a * id * modif_s2 * aggreg * 'a elt_p1 option * 'a elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
+  | NAnd of 'a * 'a elt_s1 list
+  | NOr of 'a * 'a elt_s1 list
+  | NMaybe of 'a * 'a elt_s1
+  | NNot of 'a * 'a elt_s1
 and elt_s2 =
   | Term of Rdf.term
   | An of id * modif_s2 * elt_head (* existential quantifier *)
@@ -83,67 +83,79 @@ and elt_s2 =
 and elt_head =
   | Thing
   | Class of Rdf.uri
-and elt_dim =
-  | Foreach of id * modif_s2 * elt_p1 option * id
-and elt_aggreg =
-  | TheAggreg of id * modif_s2 * aggreg * elt_p1 option * id
-and elt_s =
-  | Return of elt_s1
-  | SAggreg of elt_dim list * elt_aggreg list
-  | Seq of elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
+and 'a elt_dim =
+  | Foreach of 'a * id * modif_s2 * 'a elt_p1 option * id
+and 'a elt_aggreg =
+  | TheAggreg of 'a * id * modif_s2 * aggreg * 'a elt_p1 option * id
+and 'a elt_s =
+  | Return of 'a * 'a elt_s1
+  | SAggreg of 'a * 'a elt_dim list * 'a elt_aggreg list
+  | Seq of 'a * 'a elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
+
 
 (* list context *)
 
 type 'a ctx_list = 'a list * 'a list
       
-let list_of_ctx x (ll,rr) = List.rev ll @ x :: rr
+let list_of_ctx (x : 'a) (ll,rr : 'a ctx_list) : 'a list = List.rev ll @ x :: rr
 
-let ctx_of_list lr =
+let ctx_of_list (lr : 'a list) : ('a * 'a ctx_list) list =
   let rec aux ll = function
     | [] -> []
-    | x::rr -> (x,(ll,rr))::aux (x::ll) rr
+    | x::rr -> (x,(ll,rr)) :: aux (x::ll) rr
   in
   aux [] lr
 
-let map_ctx_list f (ll,rr) = (List.map f ll, List.map f rr)
+let ctx_of_ctx_list (x : 'a) (ll,rr : 'a ctx_list) : ('a * 'a ctx_list) ctx_list =
+  let rec aux_left rr = function
+    | [] -> []
+    | x1::ll1 -> (x1, (ll1,rr)) :: aux_left (x1::rr) ll1
+  in
+  let rec aux_right ll = function
+    | [] -> []
+    | x1::rr1 -> (x1, (ll,rr1)) :: aux_right (x1::ll) rr1
+  in
+  aux_left (x::rr) ll, aux_right (x::ll) rr
+    
+let map_ctx_list (f : 'a -> 'b) (ll,rr : 'a ctx_list) : 'b ctx_list = (List.map f ll, List.map f rr)
     
       
-(* LISQL contexts *)
+(* LISQL contexts : no annotations in contexts *)
 type ctx_p1 =
   | DetThatX of elt_s2 * ctx_s1
-  | AnAggregThatX of id * modif_s2 * aggreg * elt_s1 * ctx_s1
+  | AnAggregThatX of id * modif_s2 * aggreg * unit elt_s1 * ctx_s1
   | ForeachThatX of id * modif_s2 * id * ctx_dim
   | TheAggregThatX of id * modif_s2 * aggreg * id * ctx_aggreg
-  | AndX of elt_p1 ctx_list * ctx_p1 (* first list is reverse prefix, second list is suffix *)
-  | OrX of elt_p1 ctx_list * ctx_p1
+  | AndX of unit elt_p1 ctx_list * ctx_p1 (* first list is reverse prefix, second list is suffix *)
+  | OrX of unit elt_p1 ctx_list * ctx_p1
   | MaybeX of ctx_p1
   | NotX of ctx_p1
 and ctx_s1 =
   | IsX of ctx_p1
   | RelX of Rdf.uri * modif_p2 * ctx_p1
-  | TripleX1 of arg * elt_s1 * ctx_p1 (* context on first S1 arg *)
-  | TripleX2 of arg * elt_s1 * ctx_p1 (* context on second S1 arg *)
+  | TripleX1 of arg * unit elt_s1 * ctx_p1 (* context on first S1 arg *)
+  | TripleX2 of arg * unit elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX of ctx_s
-  | AnAggregX of id * modif_s2 * aggreg * elt_p1 option * ctx_s1
-  | NAndX of elt_s1 ctx_list * ctx_s1
-  | NOrX of elt_s1 ctx_list * ctx_s1
+  | AnAggregX of id * modif_s2 * aggreg * unit elt_p1 option * ctx_s1
+  | NAndX of unit elt_s1 ctx_list * ctx_s1
+  | NOrX of unit elt_s1 ctx_list * ctx_s1
   | NMaybeX of ctx_s1
   | NNotX of ctx_s1
 and ctx_dim =
-  | SAggregForeachX of elt_dim ctx_list * elt_aggreg list * ctx_s
+  | SAggregForeachX of unit elt_dim ctx_list * unit elt_aggreg list * ctx_s
 and ctx_aggreg =
-  | SAggregX of elt_dim list * elt_aggreg ctx_list * ctx_s
+  | SAggregX of unit elt_dim list * unit elt_aggreg ctx_list * ctx_s
 and ctx_s =
   | Root
-  | SeqX of elt_s ctx_list * ctx_s
+  | SeqX of unit elt_s ctx_list * ctx_s
 
-(* LISQL focus *)
+(* LISQL focus: no annotations in focus *)
 type focus =
-  | AtP1 of elt_p1 * ctx_p1
-  | AtS1 of elt_s1 * ctx_s1
-  | AtDim of elt_dim * ctx_dim
-  | AtAggreg of elt_aggreg * ctx_aggreg
-  | AtS of elt_s * ctx_s
+  | AtP1 of unit elt_p1 * ctx_p1
+  | AtS1 of unit elt_s1 * ctx_s1
+  | AtDim of unit elt_dim * ctx_dim
+  | AtAggreg of unit elt_aggreg * ctx_aggreg
+  | AtS of unit elt_s * ctx_s
 
 let factory =
 object (self)
@@ -152,18 +164,18 @@ object (self)
   method set n = cpt_id <- n
   method reset = cpt_id <- 0
 
-  method top_p1 = IsThere
+  method top_p1 = IsThere ()
   method top_modif = (Select, Unordered)
   method top_s2 = An (self#new_id, self#top_modif, Thing)
-  method top_s1 = Det (self#top_s2, None)
-  method top_s = Return self#top_s1
+  method top_s1 = Det ((), self#top_s2, None)
+  method top_s = Return ((), self#top_s1)
   method home_focus = AtS1 (self#top_s1, ReturnX Root)
 end
 
-let is_top_p1 = function IsThere -> true | _ -> false
+let is_top_p1 = function IsThere _ -> true | _ -> false
 let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
-let is_top_s1 = function Det (det, None) -> is_top_s2 det | _ -> false
-let is_top_s = function Return np -> is_top_s1 np | _ -> false
+let is_top_s1 = function Det (_, det, None) -> is_top_s2 det | _ -> false
+let is_top_s = function Return (_, np) -> is_top_s1 np | _ -> false
 let is_home_focus = function AtS1 (f, ReturnX Root) -> is_top_s1 f | _ -> false
 
 let is_root_focus = function AtS (_, Root) -> true | _ -> false
@@ -222,13 +234,13 @@ let id_of_s2 = function
   | An (id, _, _) -> Some id
   | _ -> None
 let id_of_s1 = function
-  | Det (det,_) -> id_of_s2 det
-  | AnAggreg (id,_,_,_,_) -> Some id
+  | Det (_,det,_) -> id_of_s2 det
+  | AnAggreg (_,id,_,_,_,_) -> Some id
   | _ -> None
 let id_of_dim = function
-  | Foreach (id,_,_,_) -> Some id
+  | Foreach (_,id,_,_,_) -> Some id
 let id_of_aggreg = function
-  | TheAggreg (id,_,_,_,_) -> Some id
+  | TheAggreg (_,id,_,_,_,_) -> Some id
 let id_of_focus = function
   | AtS1 (np,_) -> id_of_s1 np
   | AtDim (dim,_) -> id_of_dim dim
@@ -237,33 +249,33 @@ let id_of_focus = function
 
 (* extraction of LISQL s element from focus *)
 
-let rec elt_s_of_ctx_p1 (f : elt_p1) = function
-  | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det (det, Some f)) ctx
-  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_of_ctx_s1 (AnAggreg (id, modif, g, Some f, np)) ctx
-  | ForeachThatX (id,modif,id2,ctx) -> elt_s_of_ctx_dim (Foreach (id, modif, Some f, id2)) ctx
-  | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_of_ctx_aggreg (TheAggreg (id, modif, g, Some f, id2)) ctx
-  | AndX (ll_rr,ctx) -> elt_s_of_ctx_p1 (And (list_of_ctx f ll_rr)) ctx
-  | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or (list_of_ctx f ll_rr)) ctx
-  | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe f) ctx
-  | NotX ctx -> elt_s_of_ctx_p1 (Not f) ctx
-and elt_s_of_ctx_s1 (f : elt_s1) = function
-  | IsX ctx -> elt_s_of_ctx_p1 (Is f) ctx
-  | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel (p,modif,f)) ctx
-  | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,f,np)) ctx
-  | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple (arg,np,f)) ctx
-  | ReturnX ctx -> elt_s_of_ctx_s (Return f) ctx
-  | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_of_ctx_s1 (AnAggreg (id, modif, g, rel_opt, f)) ctx
-  | NAndX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NAnd (list_of_ctx f ll_rr)) ctx
-  | NOrX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NOr (list_of_ctx f ll_rr)) ctx
-  | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe f) ctx
-  | NNotX ctx -> elt_s_of_ctx_s1 (NNot f) ctx
-and elt_s_of_ctx_dim (f : elt_dim) = function
-  | SAggregForeachX (ll_rr,aggregs,ctx) -> elt_s_of_ctx_s (SAggreg (list_of_ctx f ll_rr, aggregs)) ctx
-and elt_s_of_ctx_aggreg (f : elt_aggreg) = function
-  | SAggregX (dims,ll_rr,ctx) -> elt_s_of_ctx_s (SAggreg (dims, list_of_ctx f ll_rr)) ctx
-and elt_s_of_ctx_s (f : elt_s) = function
+let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
+  | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det ((), det, Some f)) ctx
+  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_of_ctx_s1 (AnAggreg ((), id, modif, g, Some f, np)) ctx
+  | ForeachThatX (id,modif,id2,ctx) -> elt_s_of_ctx_dim (Foreach ((), id, modif, Some f, id2)) ctx
+  | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_of_ctx_aggreg (TheAggreg ((), id, modif, g, Some f, id2)) ctx
+  | AndX (ll_rr,ctx) -> elt_s_of_ctx_p1 (And ((), list_of_ctx f ll_rr)) ctx
+  | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or ((), list_of_ctx f ll_rr)) ctx
+  | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe ((),f)) ctx
+  | NotX ctx -> elt_s_of_ctx_p1 (Not ((),f)) ctx
+and elt_s_of_ctx_s1 (f : unit elt_s1) = function
+  | IsX ctx -> elt_s_of_ctx_p1 (Is ((),f)) ctx
+  | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel ((),p,modif,f)) ctx
+  | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,f,np)) ctx
+  | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,np,f)) ctx
+  | ReturnX ctx -> elt_s_of_ctx_s (Return ((),f)) ctx
+  | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_of_ctx_s1 (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
+  | NAndX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NAnd ((),list_of_ctx f ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NOr ((),list_of_ctx f ll_rr)) ctx
+  | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe ((),f)) ctx
+  | NNotX ctx -> elt_s_of_ctx_s1 (NNot ((),f)) ctx
+and elt_s_of_ctx_dim (f : unit elt_dim) = function
+  | SAggregForeachX (ll_rr,aggregs,ctx) -> elt_s_of_ctx_s (SAggreg ((), list_of_ctx f ll_rr, aggregs)) ctx
+and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
+  | SAggregX (dims,ll_rr,ctx) -> elt_s_of_ctx_s (SAggreg ((), dims, list_of_ctx f ll_rr)) ctx
+and elt_s_of_ctx_s (f : unit elt_s) = function
   | Root -> f
-  | SeqX (ll_rr,ctx) -> elt_s_of_ctx_s (Seq (list_of_ctx f ll_rr)) ctx
+  | SeqX (ll_rr,ctx) -> elt_s_of_ctx_s (Seq ((), list_of_ctx f ll_rr)) ctx
 
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
@@ -277,83 +289,83 @@ let elt_s_of_focus = function
 type id_mode = [ `Def | `Ref ]
     
 let rec ids_elt_p1 = function
-  | Is np -> ids_elt_s1 np
+  | Is (_,np) -> ids_elt_s1 np
   | Type _ -> []
-  | Rel (p,modif,np) -> ids_elt_s1 np
-  | Triple (arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
+  | Rel (_,p,modif,np) -> ids_elt_s1 np
+  | Triple (_,arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
   | Search _ -> []
   | Filter _ -> []
-  | And lr -> List.concat (List.map ids_elt_p1 lr)
-  | Or lr -> List.concat (List.map ids_elt_p1 lr)
-  | Maybe f -> ids_elt_p1 f
-  | Not f -> ids_elt_p1 f
-  | IsThere -> []
+  | And (_,lr) -> List.concat (List.map ids_elt_p1 lr)
+  | Or (_,lr) -> List.concat (List.map ids_elt_p1 lr)
+  | Maybe (_,f) -> ids_elt_p1 f
+  | Not (_,f) -> ids_elt_p1 f
+  | IsThere _ -> []
 and ids_elt_p1_opt = function
   | None -> []
   | Some f -> ids_elt_p1 f
 and ids_elt_s1 = function
-  | Det (det,rel_opt) -> ids_elt_s2 det @ ids_elt_p1_opt rel_opt
-  | AnAggreg (id,modif,g,rel_opt,np) -> (id,`Def) :: ids_elt_p1_opt rel_opt @ (match id_of_s1 np with None -> assert false | Some id2 -> (id2,`Ref) :: List.remove_assoc id2 (ids_elt_s1 np))
-  | NAnd lr -> List.concat (List.map ids_elt_s1 lr)
-  | NOr lr -> List.concat (List.map ids_elt_s1 lr)
-  | NMaybe f -> ids_elt_s1 f
-  | NNot f -> ids_elt_s1 f
+  | Det (_,det,rel_opt) -> ids_elt_s2 det @ ids_elt_p1_opt rel_opt
+  | AnAggreg (_,id,modif,g,rel_opt,np) -> (id,`Def) :: ids_elt_p1_opt rel_opt @ (match id_of_s1 np with None -> assert false | Some id2 -> (id2,`Ref) :: List.remove_assoc id2 (ids_elt_s1 np))
+  | NAnd (_,lr) -> List.concat (List.map ids_elt_s1 lr)
+  | NOr (_,lr) -> List.concat (List.map ids_elt_s1 lr)
+  | NMaybe (_,f) -> ids_elt_s1 f
+  | NNot (_,f) -> ids_elt_s1 f
 and ids_elt_s2 = function
   | Term _ -> []
   | An (id, _, _) -> [(id,`Def)]
   | The id -> [(id,`Ref)]
 and ids_elt_dim = function
-  | Foreach (id,_,_,id2) -> [(id,`Def); (id2,`Ref)]
+  | Foreach (_,id,_,_,id2) -> [(id,`Def); (id2,`Ref)]
 and ids_elt_aggreg = function
-  | TheAggreg (id,_,g,_,id2) -> [(id,`Def); (id2,`Ref)]
+  | TheAggreg (_,id,_,g,_,id2) -> [(id,`Def); (id2,`Ref)]
 and ids_elt_s = function
-  | Return np -> ids_elt_s1 np
-  | SAggreg (dims,aggregs) -> List.concat (List.map ids_elt_dim dims) @ List.concat (List.map ids_elt_aggreg aggregs)
-  | Seq lr -> List.concat (List.map ids_elt_s lr)
+  | Return (_,np) -> ids_elt_s1 np
+  | SAggreg (_,dims,aggregs) -> List.concat (List.map ids_elt_dim dims) @ List.concat (List.map ids_elt_aggreg aggregs)
+  | Seq (_,lr) -> List.concat (List.map ids_elt_s lr)
 
 let defined_ids l = List.fold_left (fun res -> function (id,`Def) -> id::res | _ -> res) [] l 
 
 (* focus moves *)
 
-let down_p1 (ctx : ctx_p1) : elt_p1 -> focus option = function
-  | Is np -> Some (AtS1 (np, IsX ctx))
+let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
+  | Is (_,np) -> Some (AtS1 (np, IsX ctx))
   | Type _ -> None
-  | Rel (p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
-  | Triple (arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
+  | Rel (_,p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
+  | Triple (_,arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | Search _ -> None
   | Filter _ -> None
-  | And [] -> None
-  | And (x::rr) -> Some (AtP1 (x, AndX (([],rr),ctx)))
-  | Or [] -> None
-  | Or (x::rr) -> Some (AtP1 (x, OrX (([],rr),ctx)))
-  | Maybe elt -> Some (AtP1 (elt, MaybeX ctx))
-  | Not elt -> Some (AtP1 (elt, NotX ctx))
-  | IsThere -> None
-let down_p1_opt (ctx : ctx_p1) : elt_p1 option -> focus option = function
-  | Some (And (x::rr)) -> Some (AtP1 (x, AndX (([],rr), ctx)))
+  | And (_,[]) -> None
+  | And (_,x::rr) -> Some (AtP1 (x, AndX (([],rr),ctx)))
+  | Or (_,[]) -> None
+  | Or (_,x::rr) -> Some (AtP1 (x, OrX (([],rr),ctx)))
+  | Maybe (_,elt) -> Some (AtP1 (elt, MaybeX ctx))
+  | Not (_,elt) -> Some (AtP1 (elt, NotX ctx))
+  | IsThere _ -> None
+let down_p1_opt (ctx : ctx_p1) : unit elt_p1 option -> focus option = function
+  | Some (And (_,x::rr)) -> Some (AtP1 (x, AndX (([],rr), ctx)))
   | Some rel -> Some (AtP1 (rel, ctx))
   | None -> None
-let down_s1 (ctx : ctx_s1) : elt_s1 -> focus option = function
-  | Det (det, rel_opt) -> down_p1_opt (DetThatX (det, ctx)) rel_opt
-  | AnAggreg (id, modif, g, Some rel, np) -> down_p1_opt (AnAggregThatX (id,modif,g,np,ctx)) (Some rel)
-  | AnAggreg (id, modif, g, None, np) -> Some (AtS1 (np, AnAggregX (id, modif, g, None, ctx)))
-  | NAnd [] -> None
-  | NAnd (x::rr) -> Some (AtS1 (x, NAndX (([],rr),ctx)))
-  | NOr [] -> None
-  | NOr (x::rr) -> Some (AtS1 (x, NOrX (([],rr),ctx)))
-  | NMaybe elt -> Some (AtS1 (elt, NMaybeX ctx))
-  | NNot elt -> Some (AtS1 (elt, NNotX ctx))
-let down_dim (ctx : ctx_dim) : elt_dim -> focus option = function
-  | Foreach (id,modif,rel_opt,id2) -> down_p1_opt (ForeachThatX (id,modif,id2,ctx)) rel_opt
-let down_aggreg (ctx : ctx_aggreg) : elt_aggreg -> focus option = function
-  | TheAggreg (id,modif,g,rel_opt,id2) -> down_p1_opt (TheAggregThatX (id,modif,g,id2,ctx)) rel_opt
-let down_s (ctx : ctx_s) : elt_s -> focus option = function
-  | Return np -> Some (AtS1 (np,ReturnX ctx))
-  | SAggreg ([],[]) -> None
-  | SAggreg ([],aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX ([], ([],aggregs), ctx)))
-  | SAggreg (dim::dims,aggregs) -> Some (AtDim (dim, SAggregForeachX (([],dims),aggregs,ctx)))
-  | Seq [] -> None
-  | Seq (x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
+let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
+  | Det (_, det, rel_opt) -> down_p1_opt (DetThatX (det, ctx)) rel_opt
+  | AnAggreg (_, id, modif, g, Some rel, np) -> down_p1_opt (AnAggregThatX (id,modif,g,np,ctx)) (Some rel)
+  | AnAggreg (_, id, modif, g, None, np) -> Some (AtS1 (np, AnAggregX (id, modif, g, None, ctx)))
+  | NAnd (_,[]) -> None
+  | NAnd (_,x::rr) -> Some (AtS1 (x, NAndX (([],rr),ctx)))
+  | NOr (_,[]) -> None
+  | NOr (_,x::rr) -> Some (AtS1 (x, NOrX (([],rr),ctx)))
+  | NMaybe (_,elt) -> Some (AtS1 (elt, NMaybeX ctx))
+  | NNot (_,elt) -> Some (AtS1 (elt, NNotX ctx))
+let down_dim (ctx : ctx_dim) : unit elt_dim -> focus option = function
+  | Foreach (_,id,modif,rel_opt,id2) -> down_p1_opt (ForeachThatX (id,modif,id2,ctx)) rel_opt
+let down_aggreg (ctx : ctx_aggreg) : unit elt_aggreg -> focus option = function
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> down_p1_opt (TheAggregThatX (id,modif,g,id2,ctx)) rel_opt
+let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
+  | Return (_,np) -> Some (AtS1 (np,ReturnX ctx))
+  | SAggreg (_,[],[]) -> None
+  | SAggreg (_,[],aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX ([], ([],aggregs), ctx)))
+  | SAggreg (_,dim::dims,aggregs) -> Some (AtDim (dim, SAggregForeachX (([],dims),aggregs,ctx)))
+  | Seq (_,[]) -> None
+  | Seq (_,x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
 let down_focus = function
   | AtP1 (f,ctx) -> down_p1 ctx f
   | AtS1 (f,ctx) -> down_s1 ctx f
@@ -362,32 +374,32 @@ let down_focus = function
   | AtS (f,ctx) -> down_s ctx f
 
 let rec up_p1 f = function
-  | DetThatX (det,ctx) -> Some (AtS1 (Det (det, Some f), ctx))
-  | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (AnAggreg (id, modif, g, Some f, np), ctx))
-  | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach (id, modif, Some f, id2), ctx))
-  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg (id,modif,g,Some f,id2), ctx))
-  | AndX (ll_rr,ctx) -> up_p1 (And (list_of_ctx f ll_rr)) ctx (* Some (AtP1 (And ar, ctx)) *)
-  | OrX (ll_rr,ctx) -> Some (AtP1 (Or (list_of_ctx f ll_rr), ctx))
-  | MaybeX ctx -> Some (AtP1 (Maybe f, ctx))
-  | NotX ctx -> Some (AtP1 (Not f, ctx))
+  | DetThatX (det,ctx) -> Some (AtS1 (Det ((), det, Some f), ctx))
+  | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, Some f, np), ctx))
+  | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach ((), id, modif, Some f, id2), ctx))
+  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,Some f,id2), ctx))
+  | AndX (ll_rr,ctx) -> up_p1 (And ((), list_of_ctx f ll_rr)) ctx (* Some (AtP1 (And ar, ctx)) *)
+  | OrX (ll_rr,ctx) -> Some (AtP1 (Or ((), list_of_ctx f ll_rr), ctx))
+  | MaybeX ctx -> Some (AtP1 (Maybe ((), f), ctx))
+  | NotX ctx -> Some (AtP1 (Not ((), f), ctx))
 let rec up_s1 f = function
-  | IsX ctx -> Some (AtP1 (Is f, ctx))
-  | RelX (p,m,ctx) -> Some (AtP1 (Rel (p,m,f), ctx))
-  | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple (arg,f,np), ctx))
-  | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple (arg,np,f), ctx))
-  | ReturnX ctx -> Some (AtS (Return f, ctx))
-  | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg (id, modif, g, rel_opt, f), ctx))
-  | NAndX (ll_rr,ctx) -> up_s1 (NAnd (list_of_ctx f ll_rr)) ctx
-  | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr (list_of_ctx f ll_rr), ctx))
-  | NMaybeX ctx -> Some (AtS1 (NMaybe f, ctx))
-  | NNotX ctx -> Some (AtS1 (NNot f, ctx))
+  | IsX ctx -> Some (AtP1 (Is ((), f), ctx))
+  | RelX (p,m,ctx) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+  | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
+  | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
+  | ReturnX ctx -> Some (AtS (Return ((),f), ctx))
+  | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, rel_opt, f), ctx))
+  | NAndX (ll_rr,ctx) -> up_s1 (NAnd ((), list_of_ctx f ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr ((), list_of_ctx f ll_rr), ctx))
+  | NMaybeX ctx -> Some (AtS1 (NMaybe ((),f), ctx))
+  | NNotX ctx -> Some (AtS1 (NNot ((),f), ctx))
 let up_dim f = function
-  | SAggregForeachX (ll_rr,aggregs,ctx) -> Some (AtS (SAggreg (list_of_ctx f ll_rr, aggregs), ctx))
+  | SAggregForeachX (ll_rr,aggregs,ctx) -> Some (AtS (SAggreg ((), list_of_ctx f ll_rr, aggregs), ctx))
 let up_aggreg f = function
-  | SAggregX (dims,ll_rr,ctx) -> Some (AtS (SAggreg (dims, list_of_ctx f ll_rr), ctx))
+  | SAggregX (dims,ll_rr,ctx) -> Some (AtS (SAggreg ((), dims, list_of_ctx f ll_rr), ctx))
 let up_s f = function
   | Root -> None
-  | SeqX (ll_rr,ctx) -> Some (AtS (Seq (list_of_ctx f ll_rr), ctx))
+  | SeqX (ll_rr,ctx) -> Some (AtS (Seq ((), list_of_ctx f ll_rr), ctx))
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
@@ -395,7 +407,7 @@ let up_focus = function
   | AtAggreg (f,ctx) -> up_aggreg f ctx
   | AtS (f,ctx) -> up_s f ctx
 
-let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
+let right_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
   | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (np, AnAggregX (id, modif, g, Some f, ctx)))
   | ForeachThatX (id,modif,id2,ctx) -> None
@@ -406,7 +418,7 @@ let right_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | OrX ((ll,x::rr),ctx) -> Some (AtP1 (x, OrX ((f::ll,rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
-let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
+let right_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
   | RelX _ -> None
   | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
@@ -419,14 +431,14 @@ let right_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | NOrX ((ll,x::rr),ctx) -> Some (AtS1 (x, NOrX ((f::ll,rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
-let right_dim (f : elt_dim) : ctx_dim -> focus option = function
+let right_dim (f : unit elt_dim) : ctx_dim -> focus option = function
   | SAggregForeachX ((ll,[]),[],ctx) -> None
   | SAggregForeachX ((ll,[]),aggreg::aggregs,ctx) -> Some (AtAggreg (aggreg, SAggregX (List.rev ll, ([],aggregs), ctx)))
   | SAggregForeachX ((ll,x::rr),aggregs,ctx) -> Some (AtDim (x, SAggregForeachX ((f::ll,rr),aggregs,ctx)))
-let right_aggreg (f : elt_aggreg) : ctx_aggreg -> focus option = function
+let right_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
   | SAggregX (dims, (ll,[]), ctx) -> None
   | SAggregX (dims, (ll,x::rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (f::ll,rr), ctx)))
-let right_s (f : elt_s) : ctx_s -> focus option = function
+let right_s (f : unit elt_s) : ctx_s -> focus option = function
   | Root -> None
   | SeqX ((ll,[]),ctx) -> None
   | SeqX ((ll,x::rr),ctx) -> Some (AtS (x, SeqX ((f::ll,rr),ctx)))
@@ -437,7 +449,7 @@ let right_focus = function
   | AtAggreg (f,ctx) -> right_aggreg f ctx    
   | AtS (f,ctx) -> right_s f ctx
 
-let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
+let left_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | DetThatX (det,ctx) -> None
   | AnAggregThatX _ -> None
   | ForeachThatX _ -> None
@@ -448,7 +460,7 @@ let left_p1 (f : elt_p1) : ctx_p1 -> focus option = function
   | OrX ((x::ll,rr),ctx) -> Some (AtP1 (x, OrX ((ll,f::rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
-let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
+let left_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
   | RelX _ -> None
   | TripleX1 _ -> None
@@ -462,17 +474,17 @@ let left_s1 (f : elt_s1) : ctx_s1 -> focus option = function
   | NOrX ((x::ll,rr),ctx) -> Some (AtS1 (x, NOrX ((ll,f::rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
-let left_dim (f : elt_dim) : ctx_dim -> focus option = function
+let left_dim (f : unit elt_dim) : ctx_dim -> focus option = function
   | SAggregForeachX (([],rr),aggregs,ctx) -> None
   | SAggregForeachX ((x::ll,rr),aggregs,ctx) -> Some (AtDim (x, SAggregForeachX ((ll,f::rr),aggregs,ctx)))
-let left_aggreg (f : elt_aggreg) : ctx_aggreg -> focus option = function
+let left_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
   | SAggregX ([], ([],rr), ctx) -> None
   | SAggregX (dims, ([],rr), ctx) ->
     ( match List.rev dims with
     | [] -> assert false
     | x::ll_dims -> Some (AtDim (x, SAggregForeachX ((ll_dims,[]), f::rr, ctx))) )
   | SAggregX (dims, (x::ll,rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (ll,f::rr), ctx)))
-let left_s (f : elt_s) : ctx_s -> focus option = function
+let left_s (f : unit elt_s) : ctx_s -> focus option = function
   | Root -> None
   | SeqX (([],rr),ctx) -> None
   | SeqX ((x::ll,rr),ctx) -> Some (AtS (x, SeqX ((ll,f::rr),ctx)))
@@ -534,55 +546,55 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrForeach id -> None
   | IncrAggregId (g,id) -> None
 
-let append_and_p1 ctx elt_p1 = function
-  | IsThere -> AtP1 (elt_p1, ctx)
-  | And lr -> AtP1 (elt_p1, AndX ((List.rev lr, []), ctx))
+let append_and_p1 ctx (elt_p1 : unit elt_p1) = function
+  | IsThere _ -> AtP1 (elt_p1, ctx)
+  | And (_,lr) -> AtP1 (elt_p1, AndX ((List.rev lr, []), ctx))
   | p1 -> AtP1 (elt_p1, AndX (([p1], []), ctx))
-let append_or_p1 ctx elt_p1 = function
-  | Or lr -> AtP1 (elt_p1, OrX ((List.rev lr, []), ctx))
+let append_or_p1 ctx (elt_p1 : unit elt_p1) = function
+  | Or (_,lr) -> AtP1 (elt_p1, OrX ((List.rev lr, []), ctx))
   | p1 -> AtP1 (elt_p1, OrX (([p1], []), ctx))
 
-let append_and_s1 ctx elt_s1 = function
-  | NAnd lr -> AtS1 (elt_s1, NAndX ((List.rev lr, []), ctx))
+let append_and_s1 ctx (elt_s1 : unit elt_s1) = function
+  | NAnd (_,lr) -> AtS1 (elt_s1, NAndX ((List.rev lr, []), ctx))
   | s1 -> AtS1 (elt_s1, NAndX (([s1], []), ctx))
-let append_or_s1 ctx elt_s1 = function
-  | NOr lr -> AtS1 (elt_s1, NOrX ((List.rev lr, []), ctx))
+let append_or_s1 ctx (elt_s1 : unit elt_s1) = function
+  | NOr (_,lr) -> AtS1 (elt_s1, NOrX ((List.rev lr, []), ctx))
   | s1 -> AtS1 (elt_s1, NOrX (([s1], []), ctx))
 
-let append_seq_s ctx elt_s = function
-  | Seq lr -> AtS (elt_s, SeqX ((List.rev lr, []), ctx))
+let append_seq_s ctx (elt_s : unit elt_s) = function
+  | Seq (_,lr) -> AtS (elt_s, SeqX ((List.rev lr, []), ctx))
   | s -> AtS (elt_s, SeqX (([s], []), ctx))
 
 let insert_elt_p1_in_rel_opt ctx elt = function
   | None -> Some (AtP1 (elt, ctx))
   | Some rel -> Some (append_and_p1 ctx elt rel)
     
-let insert_elt_p1 elt = function
+let insert_elt_p1 (elt : unit elt_p1) = function
   | AtP1 (f, AndX ((ll,rr),ctx)) -> Some (AtP1 (elt, AndX ((f::ll,rr),ctx)))
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
-  | AtS1 (Det (det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
-  | AtS1 (AnAggreg (id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
+  | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
+  | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
-  | AtDim (Foreach (id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForeachThatX (id,modif,id2,ctx)) elt rel_opt
-  | AtAggreg (TheAggreg (id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
+  | AtDim (Foreach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForeachThatX (id,modif,id2,ctx)) elt rel_opt
+  | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
   | AtS _ -> None
 
 let insert_elt_s2 det focus =
   let focus2_opt =
     match focus with
-      | AtP1 _ -> insert_elt_p1 (Is (Det (det, None))) focus
-      | AtS1 (Det (det2, rel_opt), ctx) ->
+      | AtP1 _ -> insert_elt_p1 (Is ((), Det ((), det, None))) focus
+      | AtS1 (Det (_, det2, rel_opt), ctx) ->
 	if det2 = det
-	then Some (AtS1 (Det (factory#top_s2, rel_opt), ctx))
-	else Some (AtS1 (Det (det, rel_opt), ctx))
-      | AtS1 (AnAggreg (id,modif,g,_,np), ctx) ->
-	Some (AtS1 (AnAggreg (id, modif, g, Some (Is (Det (det, None))), np), ctx))
+	then Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
+	else Some (AtS1 (Det ((), det, rel_opt), ctx))
+      | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
+	Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), Det ((), det, None))), np), ctx))
       | AtS1 _ -> None (* no insertion of terms on complex NPs *)
       | _ -> None in
   match focus2_opt with
-    | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel (p,m,f), ctx))
-    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,f,np), ctx))
-    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple (arg,np,f), ctx))
+    | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
+    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
     | other -> other
 
 let insert_term t focus =
@@ -592,44 +604,44 @@ let insert_term t focus =
 let insert_id id focus = insert_elt_s2 (The id) focus
 
 let insert_type c = function
-  | AtS1 (Det (det,rel_opt), ctx) ->
+  | AtS1 (Det (_,det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
-	Some (AtS1 (Det (An (factory#new_id, factory#top_modif, Class c), rel_opt), ctx))
+	Some (AtS1 (Det ((), An (factory#new_id, factory#top_modif, Class c), rel_opt), ctx))
       | An (id, modif, Thing) ->
-	Some (AtS1 (Det (An (id, modif, Class c), rel_opt), ctx))
+	Some (AtS1 (Det ((), An (id, modif, Class c), rel_opt), ctx))
       | An (id, modif, Class c2) when c2 = c ->
-	Some (AtS1 (Det (An (id, modif, Thing), rel_opt), ctx))
+	Some (AtS1 (Det ((), An (id, modif, Thing), rel_opt), ctx))
       | _ ->
-	let rel = match rel_opt with None -> IsThere | Some rel -> rel in
-	insert_elt_p1 (Type c) (AtP1 (rel, DetThatX (det, ctx))) )
-  | focus -> insert_elt_p1 (Type c) focus
+	let rel = match rel_opt with None -> IsThere () | Some rel -> rel in
+	insert_elt_p1 (Type ((),c)) (AtP1 (rel, DetThatX (det, ctx))) )
+  | focus -> insert_elt_p1 (Type ((),c)) focus
 
 let insert_rel p m focus =
-  let foc_opt = insert_elt_p1 (Rel (p, m, factory#top_s1)) focus in
+  let foc_opt = insert_elt_p1 (Rel ((), p, m, factory#top_s1)) focus in
   focus_moves [down_focus] foc_opt
 
 let insert_triple arg focus =
-  let foc_opt = insert_elt_p1 (Triple (arg, factory#top_s1, factory#top_s1)) focus in
+  let foc_opt = insert_elt_p1 (Triple ((), arg, factory#top_s1, factory#top_s1)) focus in
   let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
   focus_moves steps foc_opt
 
 let insert_triplify = function
-  | AtP1 (Rel (p, Fwd, np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
-  | AtP1 (Rel (p, Bwd, np), ctx) -> Some (AtS1 (Det (Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
-  | AtP1 (Triple (S, Det (Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel (p, Fwd, np), ctx))
-  | AtP1 (Triple (O, np, Det (Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel (p, Bwd, np), ctx))
+  | AtP1 (Rel (_, p, Fwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
+  | AtP1 (Rel (_, p, Bwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
+  | AtP1 (Triple (_, S, Det ((), Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel ((), p, Fwd, np), ctx))
+  | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, Bwd, np), ctx))
   | _ -> None
 
 let insert_constr constr focus =
   match focus with
-    | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search constr) focus
-    | _ -> insert_elt_p1 (Filter constr) focus
+    | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search ((),constr)) focus
+    | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
 let insert_is = function
   | AtS1 (f, IsX ctx) when is_top_s1 f -> None
   | focus ->
-    let foc_opt = insert_elt_p1 (Is factory#top_s1) focus in
+    let foc_opt = insert_elt_p1 (Is ((),factory#top_s1)) focus in
     focus_moves [down_focus] foc_opt
 
 let insert_and = function
@@ -645,42 +657,42 @@ let insert_and = function
   | _ -> None
 
 let insert_or = function
-  | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere, OrX ((f::ll,rr),ctx2)))
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx IsThere f)
+  | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere (), OrX ((f::ll,rr),ctx2)))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx (IsThere ()) f)
   | AtS1 (f, NOrX ((ll,rr),ctx2)) when not (is_top_s1 f) -> Some (AtS1 (factory#top_s1, NOrX ((f::ll,rr),ctx2)))
   | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_maybe = function
-  | AtP1 (Maybe f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, MaybeX ctx) -> None
-  | AtP1 (Not f, ctx) -> None
-  | AtP1 (f, NotX ctx) -> None				     
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe f, ctx))
+  | AtP1 (Maybe (_,f), ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (_, MaybeX ctx) -> None
+  | AtP1 (Not _, ctx) -> None
+  | AtP1 (_, NotX ctx) -> None				     
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe ((),f), ctx))
   (*if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))*)
-  | AtS1 (NMaybe f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, NMaybeX ctx) -> None
-  | AtS1 (NNot f, ctx) -> None
-  | AtS1 (f, NNotX ctx) -> None
-  | AtS1 (f, ReturnX _) -> None
-  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe f, ctx))
+  | AtS1 (NMaybe (_,f), ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (_, NMaybeX ctx) -> None
+  | AtS1 (NNot _, ctx) -> None
+  | AtS1 (_, NNotX ctx) -> None
+  | AtS1 (_, ReturnX _) -> None
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe ((),f), ctx))
   (*if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))*)
   | _ -> None
 
 let insert_not = function
-  | AtP1 (Not f, ctx) -> Some (AtP1 (f,ctx))
-  | AtP1 (f, NotX ctx) -> None
-  | AtP1 (Maybe f, ctx) -> None
-  | AtP1 (f, MaybeX ctx) -> None
+  | AtP1 (Not (_,f), ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (_, NotX ctx) -> None
+  | AtP1 (Maybe _, ctx) -> None
+  | AtP1 (_, MaybeX ctx) -> None
   | AtP1 (f, ctx) ->
-    if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not f, ctx))
-  | AtS1 (NNot f, ctx) -> Some (AtS1 (f,ctx))
-  | AtS1 (f, NNotX ctx) -> None
-  | AtS1 (NMaybe f, ctx) -> None
-  | AtS1 (f, NMaybeX ctx) -> None
-  | AtS1 (f, ReturnX _) -> None
+    if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not ((),f), ctx))
+  | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (_, NNotX ctx) -> None
+  | AtS1 (NMaybe _, ctx) -> None
+  | AtS1 (_, NMaybeX ctx) -> None
+  | AtS1 (_, ReturnX ctx) -> None
   | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
-    if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot f, ctx))
+    if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot ((),f), ctx))
   | _ -> None
 
 let insert_seq = function
@@ -689,15 +701,15 @@ let insert_seq = function
   | _ -> None
 
 let insert_modif_transf f = function
-  | AtS1 (Det (An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
+  | AtS1 (Det (_, An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
-    let foc2 = AtS1 (Det (An (id, modif2, head), rel_opt), ctx) in
+    let foc2 = AtS1 (Det ((), An (id, modif2, head), rel_opt), ctx) in
     ( match fst modif2 with
       | Unselect -> up_focus foc2 (* to enforce visible aggregation *)
       | Select -> Some foc2 )
-  | AtS1 (AnAggreg (id, modif, g, rel_opt, np), ctx) ->
+  | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) ->
     let modif2 = f modif in
-    let foc2 = AtS1 (AnAggreg (id, modif2, g, rel_opt, np), ctx) in
+    let foc2 = AtS1 (AnAggreg ((), id, modif2, g, rel_opt, np), ctx) in
     ( match fst modif2 with
       | Unselect -> up_focus foc2 (* to enforce visible unselection *)
       | Select -> Some foc2 )
@@ -705,12 +717,12 @@ let insert_modif_transf f = function
 
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
-    Some (AtS1 (AnAggreg (id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) && g <> Given ->
-    Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, np), ctx))
-  | AtS1 ((AnAggreg (id, modif, g0, rel_opt, np) as npg), ctx) ->
+    Some (AtS1 (AnAggreg ((), id, factory#top_modif, g, None, np), ctx))
+  | AtS1 (Det (_, An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) && g <> Given ->
+    Some (AtS1 (AnAggreg ((), factory#new_id, factory#top_modif, g, None, np), ctx))
+  | AtS1 ((AnAggreg (_, id, modif, g0, rel_opt, np) as npg), ctx) ->
     if g0 = g then Some (AtS1 (np, ctx))
-    else Some (AtS1 (AnAggreg (factory#new_id, factory#top_modif, g, None, npg), ctx))
+    else Some (AtS1 (AnAggreg ((), factory#new_id, factory#top_modif, g, None, npg), ctx))
   | AtS1 (np, AnAggregX (_,_,g0,_,ctx)) when g0 = g ->
     Some (AtS1 (np,ctx))
   | _ -> None
@@ -719,32 +731,32 @@ let insert_aggreg_bis g focus =
   let id2_opt =
     match focus with
     | AtS1 (np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
-    | AtDim (Foreach (id,_,_,_), _) -> Some id
-    | AtAggreg (TheAggreg (id,_,_,_,_), _) -> Some id
+    | AtDim (Foreach (_,id,_,_,_), _) -> Some id
+    | AtAggreg (TheAggreg (_,id,_,_,_,_), _) -> Some id
     | _ -> None in
   match id2_opt with
   | None -> None
   | Some id2 ->
     let s = elt_s_of_focus focus in
-    let focus2 = append_seq_s Root (SAggreg ([], [TheAggreg (factory#new_id, factory#top_modif, g, None, id2)])) s in
+    let focus2 = append_seq_s Root (SAggreg ((), [], [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)])) s in
     down_focus focus2
 
 let insert_foreach id2 = function
-  | AtS (SAggreg (dims,aggregs), ctx) ->
-    Some (AtDim (Foreach (factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((List.rev dims, []), aggregs, ctx)))
+  | AtS (SAggreg (_,dims,aggregs), ctx) ->
+    Some (AtDim (Foreach ((), factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((List.rev dims, []), aggregs, ctx)))
   | AtDim (dim, SAggregForeachX ((ll,rr), aggregs, ctx)) ->
-    Some (AtDim (Foreach (factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((dim::ll,rr), aggregs, ctx)))
+    Some (AtDim (Foreach ((), factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((dim::ll,rr), aggregs, ctx)))
   | AtAggreg (aggreg, SAggregX (dims, ll_rr, ctx)) ->
-    Some (AtDim (Foreach (factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((List.rev dims, []), list_of_ctx aggreg ll_rr, ctx)))
+    Some (AtDim (Foreach ((), factory#new_id, factory#top_modif, None, id2), SAggregForeachX ((List.rev dims, []), list_of_ctx aggreg ll_rr, ctx)))
   | _ -> None
 
 let insert_aggreg_id g id2 = function
-  | AtS (SAggreg (dims,aggregs), ctx) ->
-    Some (AtAggreg (TheAggreg (factory#new_id, factory#top_modif, g, None, id2), SAggregX (dims, (List.rev aggregs, []), ctx)))
+  | AtS (SAggreg (_,dims,aggregs), ctx) ->
+    Some (AtAggreg (TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2), SAggregX (dims, (List.rev aggregs, []), ctx)))
   | AtAggreg (aggreg, SAggregX (dims, (ll,rr), ctx)) ->
-    Some (AtAggreg (TheAggreg (factory#new_id, factory#top_modif, g, None, id2), SAggregX (dims, (aggreg::ll,rr), ctx)))
+    Some (AtAggreg (TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2), SAggregX (dims, (aggreg::ll,rr), ctx)))
   | AtDim (dim, SAggregForeachX (ll_rr, aggregs, ctx)) ->
-    Some (AtAggreg (TheAggreg (factory#new_id, factory#top_modif, g, None, id2), SAggregX (list_of_ctx dim ll_rr, (List.rev aggregs, []), ctx)))
+    Some (AtAggreg (TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2), SAggregX (list_of_ctx dim ll_rr, (List.rev aggregs, []), ctx)))
   | _ -> None
 
 
@@ -787,10 +799,10 @@ let delete_list = function
   | [], x::rr1 -> `List (x,[],rr1)
 
 let rec delete_ctx_p1 = function
-  | DetThatX (det,ctx) -> Some (AtS1 (Det (det,None), ctx))
-  | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg (id, modif, g, None, np), ctx))
-  | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach (id,modif,None,id2), ctx))
-  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg (id,modif,g,None,id2), ctx))
+  | DetThatX (det,ctx) -> Some (AtS1 (Det ((),det,None), ctx))
+  | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx))
+  | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach ((), id,modif,None,id2), ctx))
+  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx))
   | AndX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
@@ -833,7 +845,7 @@ and delete_ctx_dim ctx =
   match ctx with
   | SAggregForeachX (ll_rr,aggregs,ctx) ->
     ( match delete_list ll_rr with
-    | `Empty -> Some (AtS (SAggreg ([],aggregs), ctx))
+    | `Empty -> Some (AtS (SAggreg ((), [],aggregs), ctx))
     | `Single elt -> Some (AtDim (elt, SAggregForeachX (([],[]),aggregs,ctx)))
     | `List (elt,ll2,rr2) -> Some (AtDim (elt, SAggregForeachX ((ll2,rr2),aggregs,ctx))) )
 and delete_ctx_aggreg ctx =
@@ -861,8 +873,8 @@ let delete_focus = function
 
 (* goto to query *)
 
-let focus_of_query (s : elt_s) = 
+let focus_of_query (s : unit elt_s) = 
   factory#set (List.fold_left max 0 (defined_ids (ids_elt_s s))); (* to account for ids imported from we don't know where (ex., permalinks) *)
   AtS (s, Root)
 
-let goto (s : elt_s) focus = Some (focus_of_query s)
+let goto (s : unit elt_s) focus = Some (focus_of_query s)
