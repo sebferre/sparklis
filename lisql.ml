@@ -287,41 +287,67 @@ let elt_s_of_focus = function
 (* ids retrieval *)
 
 type id_mode = [ `Def | `Ref ]
-    
-let rec ids_elt_p1 = function
+
+module Dico (X : sig type v val merge : v -> v -> v option end) =
+struct
+  include Map.Make (struct type t = id let compare = Pervasives.compare end)
+  let union ids1 ids2 =
+    merge
+      (fun id v1_opt v2_opt ->
+	match v1_opt, v2_opt with
+	| None, None -> None
+	| Some v1, None -> Some v1
+	| None, Some v2 -> Some v2
+	| Some v1, Some v2 -> X.merge v1 v2) (* assert false)*)
+      ids1 ids2
+  let concat l = List.fold_left union empty l
+  let max_key ids = fst (max_binding ids)
+  let keys_of_val x ids = fold (fun k v res -> if v=x then k::res else res) ids []
+end
+
+module Ids = Dico (struct type v = id_mode let merge m1 m2 = Some `Ref end)
+type ids = id_mode Ids.t
+
+let rec ids_elt_p1 : 'a elt_p1 -> ids = function
   | Is (_,np) -> ids_elt_s1 np
-  | Type _ -> []
+  | Type _ -> Ids.empty
   | Rel (_,p,modif,np) -> ids_elt_s1 np
-  | Triple (_,arg,np1,np2) -> ids_elt_s1 np1 @ ids_elt_s1 np2
-  | Search _ -> []
-  | Filter _ -> []
-  | And (_,lr) -> List.concat (List.map ids_elt_p1 lr)
-  | Or (_,lr) -> List.concat (List.map ids_elt_p1 lr)
+  | Triple (_,arg,np1,np2) -> Ids.union (ids_elt_s1 np1) (ids_elt_s1 np2)
+  | Search _ -> Ids.empty
+  | Filter _ -> Ids.empty
+  | And (_,lr) -> Ids.concat (List.map ids_elt_p1 lr)
+  | Or (_,lr) -> Ids.concat (List.map ids_elt_p1 lr)
   | Maybe (_,f) -> ids_elt_p1 f
   | Not (_,f) -> ids_elt_p1 f
-  | IsThere _ -> []
-and ids_elt_p1_opt = function
-  | None -> []
+  | IsThere _ -> Ids.empty
+and ids_elt_p1_opt : 'a elt_p1 option -> ids = function
+  | None -> Ids.empty
   | Some f -> ids_elt_p1 f
 and ids_elt_s1 = function
-  | Det (_,det,rel_opt) -> ids_elt_s2 det @ ids_elt_p1_opt rel_opt
-  | AnAggreg (_,id,modif,g,rel_opt,np) -> (id,`Def) :: ids_elt_p1_opt rel_opt @ (match id_of_s1 np with None -> assert false | Some id2 -> (id2,`Ref) :: List.remove_assoc id2 (ids_elt_s1 np))
-  | NAnd (_,lr) -> List.concat (List.map ids_elt_s1 lr)
-  | NOr (_,lr) -> List.concat (List.map ids_elt_s1 lr)
+  | Det (_,det,rel_opt) -> Ids.union (ids_elt_s2 det) (ids_elt_p1_opt rel_opt)
+  | AnAggreg (_,id,modif,g,rel_opt,np) ->
+    Ids.add id `Def
+      (Ids.union
+	 (ids_elt_p1_opt rel_opt)
+	 (match id_of_s1 np with
+	 | None -> assert false
+	 | Some id2 -> Ids.add id2 `Ref (Ids.remove id2 (ids_elt_s1 np))))
+  | NAnd (_,lr) -> Ids.concat (List.map ids_elt_s1 lr)
+  | NOr (_,lr) -> Ids.concat (List.map ids_elt_s1 lr)
   | NMaybe (_,f) -> ids_elt_s1 f
   | NNot (_,f) -> ids_elt_s1 f
 and ids_elt_s2 = function
-  | Term _ -> []
-  | An (id, _, _) -> [(id,`Def)]
-  | The id -> [(id,`Ref)]
+  | Term _ -> Ids.empty
+  | An (id, _, _) -> Ids.singleton id `Def
+  | The id -> Ids.singleton id `Ref
 and ids_elt_dim = function
-  | Foreach (_,id,_,_,id2) -> [(id,`Def); (id2,`Ref)]
+  | Foreach (_,id,_,_,id2) -> Ids.add id `Def (Ids.singleton id2 `Ref)
 and ids_elt_aggreg = function
-  | TheAggreg (_,id,_,g,_,id2) -> [(id,`Def); (id2,`Ref)]
+  | TheAggreg (_,id,_,g,_,id2) -> Ids.add id `Def (Ids.singleton id2 `Ref)
 and ids_elt_s = function
   | Return (_,np) -> ids_elt_s1 np
-  | SAggreg (_,dims,aggregs) -> List.concat (List.map ids_elt_dim dims) @ List.concat (List.map ids_elt_aggreg aggregs)
-  | Seq (_,lr) -> List.concat (List.map ids_elt_s lr)
+  | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
+  | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 
 let defined_ids l = List.fold_left (fun res -> function (id,`Def) -> id::res | _ -> res) [] l 
 
@@ -651,7 +677,7 @@ let insert_and = function
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_and_p1 ctx IsThere f)
 *)
   | AtP1 _ -> None (* P1 conjunction is implicit *)
-  | AtS1 (f, ReturnX _) -> None
+  | AtS1 (f, ReturnX ctx) -> Some (AtS1 (factory#top_s1, ReturnX (SeqX (([Return ((),f)],[]), ctx))))
   | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (factory#top_s1, NAndX ((f::ll,rr),ctx)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
@@ -874,7 +900,7 @@ let delete_focus = function
 (* goto to query *)
 
 let focus_of_query (s : unit elt_s) = 
-  factory#set (List.fold_left max 0 (defined_ids (ids_elt_s s))); (* to account for ids imported from we don't know where (ex., permalinks) *)
+  factory#set (Ids.max_key (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
   AtS (s, Root)
 
 let goto (s : unit elt_s) focus = Some (focus_of_query s)

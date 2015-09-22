@@ -303,9 +303,31 @@ and form_s state : annot elt_s -> Sparql.formula = function
     let q = form_s1 state np in
     q (fun t -> Sparql.True)
   | Seq (annot,lr) ->
+    ( match annot#seq_ids with
+    | Some seq_ids ->
+      let list_defs_forms =
+	List.fold_left2
+	  (fun list_defs_forms ids_opt s ->
+	    match ids_opt with
+	    | None -> list_defs_forms
+	    | Some ids ->
+	      let refs = Ids.keys_of_val `Ref ids in
+	      let defs = Ids.keys_of_val `Def ids in
+	      let defining_defs_forms, other_defs_forms =
+		List.partition (fun (defs_i,form_i) -> List.exists (fun id -> List.mem id refs) defs_i) list_defs_forms in
+	      let defining_defs, defining_forms = List.split defining_defs_forms in
+	      let f = form_s state s in
+	      let new_defs_form = List.concat (defs::defining_defs), Sparql.formula_and_list (f::defining_forms) in
+	      new_defs_form :: other_defs_forms)
+	  [] seq_ids lr in
+      ( match list_defs_forms with
+      | (defs,form)::_ -> form (* returning most recent formula *)
+      | _ -> assert false )
+    | None -> assert false )
+(*      
     let lr_f = List.map (fun elt -> form_s state elt) lr in
     Sparql.formula_and_list lr_f
-
+*)
 
 type template = ?constr:constr -> limit:int -> string
 

@@ -94,7 +94,7 @@ and 'a nl_s =
   [ `Return of 'a np
   | `ThereIs of 'a np
   | `Truth of 'a np * 'a vp
-  | `And of 'a s list ]
+  | `Seq of 'a s list ]
 and 'a np = ('a, 'a nl_np) annotated
 and 'a nl_np =
   [ `Void
@@ -511,8 +511,19 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
   | Return (annot,np) ->
     A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
   | Seq (annot,lr) ->
-    A (annot, `And (List.map (s_of_elt_s grammar ~id_labelling) lr))
-    
+    (*
+    ( match annot#seq_ids with
+    | Some seq_ids ->
+      A (annot, `Seq (List.map2
+			(fun ids_opt x ->
+			  match ids_opt, s_of_elt_s grammar ~id_labelling x with
+			  | None, A (a, nl) -> A (a#suspended, nl)
+			  | _, s -> s)
+			seq_ids lr))
+    | None -> assert false )
+    *)
+    A (annot, `Seq (List.map (s_of_elt_s grammar ~id_labelling) lr))
+
 
 (* linguistic transformations *)
 
@@ -541,7 +552,7 @@ let rec map_s (transf : transf) s =
     | `Return np -> `Return (map_np transf np)
     | `ThereIs np -> `ThereIs (map_np transf np)
     | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
-    | `And lr -> `And (List.map (map_s transf) lr) )
+    | `Seq lr -> `Seq (List.map (map_s transf) lr) )
 and map_np transf np =
   map_annotated (transf#np np)
     ( function
@@ -713,6 +724,15 @@ let xml_suspended susp xml =
   then [Suspended xml]
   else xml
 
+let xml_seq grammar annot_opt (lr : xml list) =
+  let seq_susp : bool list =
+    match annot_opt with
+    | Some annot ->
+      ( match annot#seq_ids with
+      | Some seq_ids -> List.map (function None -> true | _ -> false) seq_ids
+      | _ -> assert false )
+    | None -> List.map (fun _ -> false) lr in
+  [ Coord ([Kwd grammar#and_], List.map2 (fun susp xml -> if susp then [Suspended xml] else xml) seq_susp lr) ]
 let xml_and grammar lr =
   [ Coord ([Kwd grammar#and_], lr) ]
 let xml_or grammar annot_opt lr =
@@ -745,13 +765,13 @@ let xml_annotated x_annot f =
   | X x -> f None x
   | A (annot,x) -> xml_focus annot (f (Some annot) x)
 
-let rec xml_s grammar s =
+let rec xml_s grammar (s : annot s) =
   xml_annotated s
     ( fun annot_opt -> function
     | `Return np -> Kwd grammar#give_me :: xml_np grammar np
     | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar np
     | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar np @ xml_vp grammar vp
-    | `And lr -> xml_and grammar (List.map (xml_s grammar) lr) )
+    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar) lr) )
 and xml_np grammar np =
   xml_annotated np
     ( fun annot_opt -> function
