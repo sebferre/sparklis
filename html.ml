@@ -154,8 +154,8 @@ let html_query (state : state) (query : annot elt_s) : string =
 
 let html_id (state : state) (id : int) : string =
   html_of_nl_xml state
-    (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
-       (state#id_labelling#get_id_label id))
+    (Lisql2nl.xml_np_id Lisql2nl.config_lang#grammar state#id_labelling
+       id)
 
 (* HTML of increment lists *)
 
@@ -176,22 +176,24 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
   let rank, title_opt =
     let grammar = Lisql2nl.config_lang#grammar in
     match incr with
-      | IncrTerm _ -> 2, None
       | IncrId _ -> 1, None
+      | IncrForeach _ -> 1, Some grammar#tooltip_foreach
+      | IncrTerm _ -> 2, None
+      | IncrTriple _ -> 3, None
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
-      | IncrTriple _ -> 3, None
       | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property
       | IncrIs -> 7, None
       | IncrAnd -> 8, None
       | IncrOr -> 9, Some grammar#tooltip_or
       | IncrMaybe -> 10, Some grammar#tooltip_optionally
       | IncrNot -> 11, Some grammar#tooltip_not
-      | IncrUnselect -> 14, Some grammar#tooltip_any
-      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
       | IncrOrder Highest -> 12, Some grammar#tooltip_highest
       | IncrOrder Lowest -> 13, Some grammar#tooltip_lowest
-      | IncrOrder _ -> 12, None in
+      | IncrOrder _ -> 12, None
+      | IncrUnselect -> 14, Some grammar#tooltip_any
+      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
+  in
   let html_freq =
     if freq = 1
     then ""
@@ -265,7 +267,7 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
-	   (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
+	   (Lisql2nl.xml_ng_label Lisql2nl.config_lang#grammar
 	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;

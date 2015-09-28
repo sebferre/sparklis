@@ -102,7 +102,7 @@ let sparql_lexicon
   let bind_labels l_uri k =
     let u, l = "u", "l" in
     let sparql =
-      Sparql.select ~projections:[u;l]
+      Sparql.select ~projections:[(`Bare,u); (`Bare,l)]
 	(Sparql.join
 	   [ Sparql.union
 	       (List.map (fun uri -> Sparql.bind (Sparql.uri uri) u) l_uri);

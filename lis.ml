@@ -134,15 +134,19 @@ object (self)
   val mutable query_prop_has_opt : Lisql2sparql.template option = None
   val mutable query_prop_isof_opt : Lisql2sparql.template option = None
 
+  val mutable available_defs : Rdf.var list = []
+    
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.s_annot id_labelling focus_term s_annot in
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, avail_defs =
+	Lisql2sparql.s_annot id_labelling focus_term s_annot in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
       query_prop_has_opt <- qph_opt;
-      query_prop_isof_opt <- qpi_opt
+      query_prop_isof_opt <- qpi_opt;
+      available_defs <- avail_defs
     end
 
   initializer self#init
@@ -378,17 +382,17 @@ object (self)
     let ajax_extent () =
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
-	Sparql.select ~projections:["class"] ~limit:config_max_classes#value
+	Sparql.select ~projections:[`Bare, "class"] ~limit:config_max_classes#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr))) in
       let sparql_has =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index) in
-	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       let sparql_isof =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index) in
-	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
@@ -421,10 +425,16 @@ object (self)
 	  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
 	  then IncrAggreg ListOf :: incrs
 	  else incrs in
-	IncrIs :: IncrTriplify ::
-	  IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
-	  IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	  IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
+	let incrs =
+	  IncrIs :: IncrTriplify ::
+	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
+	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
+	    IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
+	let incrs =
+	  List.fold_left
+	    (fun incrs v -> IncrForeach (id_labelling#get_var_id v) :: incrs)
+	    incrs available_defs in
+	incrs in
     let valid_incrs =
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)

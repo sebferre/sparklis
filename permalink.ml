@@ -37,7 +37,12 @@ let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
+  | SAggreg (_,dims,aggregs) -> print_bin "SAggreg" (print_list print_dim "Dims" dims) (print_list print_aggreg "Aggregs" aggregs)
   | Seq (_,lr) -> print_lr print_s "Seq" lr
+and print_dim = function
+  | Foreach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
+and print_aggreg = function
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_id id2]
 and print_p1 = function
   | Is (_,np) -> print_un "Is" (print_s1 np)
   | Type (_,c) -> print_un "Type" (print_uri c)
@@ -55,7 +60,7 @@ and print_modif_p2 = function
   | Bwd -> print_atom "Bwd"
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
-  | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg g; print_opt print_p1 rel_opt; print_s1 np]
+  | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
   | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
   | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
@@ -77,7 +82,7 @@ and print_project = function
   | Unselect -> print_atom "Unselect"
   | Select -> print_atom "Select"
 (*  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o) *)
-and print_aggreg = function
+and print_aggreg_op = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"
   | Total -> print_atom "Total"
@@ -136,6 +141,7 @@ let parse_atom ~version f = parser [< 'Ident id when id = f >] -> ()
 let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd ")" ?? "missing )" >] -> x1
 let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2
 let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
+let parse_quad ~version f ps1 ps2 ps3 ps4 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd "," ?? "missing ,"; x4 = ps4 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4
 let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd "," ?? "missing ,"; x4 = ps4 ~version; 'Kwd "," ?? "missing ,"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
 
 let parse_opt ps ~version = parser
@@ -160,7 +166,12 @@ let rec parse = parser
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
+    | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_dim ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((),dims,aggregs)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
+and parse_dim ~version = parser
+    | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> Foreach ((), id, modif, rel_opt, id2)
+and parse_aggreg ~version = parser
+    | [< id, modif, g, rel_opt, id2 = parse_quin ~version "TheAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_id >] -> TheAggreg ((), id, modif, g, rel_opt, id2)
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
@@ -183,7 +194,7 @@ and parse_modif_p2 ~version = parser
   | [<>] -> syntax_error "invalid modif_p2"
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
-  | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
+  | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
   | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)
@@ -213,9 +224,9 @@ and parse_modif ~version = parser
 and parse_project ~version = parser
   | [< () = parse_atom ~version "Unselect" >] -> Unselect
   | [< () = parse_atom ~version "Select" >] -> Select
-  | [< _g, _o = parse_bin ~version "Aggreg" parse_aggreg parse_order >] -> Select (* Aggreg (g,o) is lost *)
+  | [< _g, _o = parse_bin ~version "Aggreg" parse_aggreg_op parse_order >] -> Select (* Aggreg (g,o) is lost *)
   | [<>] -> syntax_error "invalid project"
-and parse_aggreg ~version = parser
+and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "NumberOf" >] -> NumberOf
   | [< () = parse_atom ~version "ListOf" >] -> ListOf
   | [< () = parse_atom ~version "Total" >] -> Total

@@ -24,6 +24,7 @@ object
 
   method virtual a_an : following:string -> string
   method virtual the : string
+  method virtual each : string
   method virtual all : string
   method virtual no : string
   method virtual any : string
@@ -33,6 +34,7 @@ object
   method virtual anything : string
   method virtual everything : string
   method virtual nothing : string
+  method virtual for_ : string
 
   method virtual n_th : int -> string
 
@@ -74,6 +76,7 @@ object
   method virtual tooltip_not : string
   method virtual tooltip_any : string
   method virtual tooltip_aggreg : string
+  method virtual tooltip_foreach : string
   method virtual tooltip_highest : string
   method virtual tooltip_lowest : string
   method virtual tooltip_header_hide_focus : string
@@ -121,6 +124,7 @@ object
     then "an"
     else "a"
   method the = "the"
+  method each = "each"
   method all = "all"
   method no = "no"
   method any = "any"
@@ -130,6 +134,7 @@ object
   method anything = "anything"
   method everything = "everything"
   method nothing = "nothing"
+  method for_ = "for"
 
   method n_th n =
     let suffix =
@@ -164,9 +169,9 @@ object
   method datatype = "datatype"
   method matching = "matching"
 
-  method give_me = "Give me"
-  method there_is = "There is"
-  method it_is_true_that = "It is true that"
+  method give_me = "give me"
+  method there_is = "there is"
+  method it_is_true_that = "it is true that"
 
   method tooltip_open_resource = "Open resource in new window"
   method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
@@ -176,7 +181,8 @@ object
   method tooltip_optionally = "Make the current focus optional"
   method tooltip_not = "Apply negation to the current focus"
   method tooltip_any = "Hide the focus column in the table of results"
-  method tooltip_aggreg = "Aggregate the focus column in the table of results, for each solution on other columns"
+  method tooltip_aggreg = "Aggregate the focus column in the table of results" (*, for each solution on other columns *)
+  method tooltip_foreach = "Compute the aggregation for each value of this entity"
   method tooltip_highest = "Sort the focus column in decreasing order"
   method tooltip_lowest = "Sort the focus column in increasing order"
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
@@ -216,6 +222,7 @@ object
 
   method a_an ~following = "un(e)"
   method the = "l'"
+  method each = "chaque"
   method no = "aucun(e)"
   method any = "n'importe quel(le)"
   method all = "tous"
@@ -225,6 +232,7 @@ object
   method anything = "n'importe quoi"
   method everything = "tout"
   method nothing = "rien"
+  method for_ = "pour"
 
   method n_th n =
     let suffix =
@@ -257,9 +265,9 @@ object
   method datatype = "type de donnée"
   method matching = "contenant"
 
-  method give_me = "Donne moi"
-  method there_is = "Il y a"
-  method it_is_true_that = "Il est vrai que"
+  method give_me = "donne moi"
+  method there_is = "il y a"
+  method it_is_true_that = "il est vrai que"
 
   method tooltip_open_resource = "Ouvrir la ressource dans une nouvelle fenêtre"
   method tooltip_delete_current_focus = "Cliquer sur la croix rouge pour supprimer le focus actuel"
@@ -269,7 +277,8 @@ object
   method tooltip_optionally = "Rendre le focus actuel optionnel"
   method tooltip_not = "Appliquer une négation au focus actuel"
   method tooltip_any = "Cacher la colonne du focus actuel dans la table des résultats"
-  method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats, pour chaque valuation des autres colonnes"
+  method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats" (* , pour chaque valuation des autres colonnes *)
+  method tooltip_foreach = "Calculer l'agrégation pour chaque valeur de cette entité"
   method tooltip_highest = "Trier la colonne du focus actuel en ordre décroissant"
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"

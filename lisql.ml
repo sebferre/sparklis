@@ -284,29 +284,30 @@ let elt_s_of_focus = function
   | AtAggreg (f,ctx) -> elt_s_of_ctx_aggreg f ctx
   | AtS (f,ctx) -> elt_s_of_ctx_s f ctx
 
-(* ids retrieval *)
+(* ids retrieval : TODO: move to [lisql_annot] to avoid multiple traversals *)
 
 type id_mode = [ `Def | `Ref ]
 
-module Dico (X : sig type v val merge : v -> v -> v option end) =
+module Ids =
 struct
-  include Map.Make (struct type t = id let compare = Pervasives.compare end)
-  let union ids1 ids2 =
-    merge
-      (fun id v1_opt v2_opt ->
-	match v1_opt, v2_opt with
-	| None, None -> None
-	| Some v1, None -> Some v1
-	| None, Some v2 -> Some v2
-	| Some v1, Some v2 -> X.merge v1 v2) (* assert false)*)
-      ids1 ids2
-  let concat l = List.fold_left union empty l
-  let max_key ids = fst (max_binding ids)
-  let keys_of_val x ids = fold (fun k v res -> if v=x then k::res else res) ids []
+  type t = (id * id_mode) list
+  let empty = []
+  let singleton id mode = [(id,mode)]
+  let add id mode ids = (id,mode)::ids
+  let remove id ids = List.filter (fun (id2,_) -> id2<>id) ids
+  let union ids1 ids2 = ids1 @ ids2
+  let concat l_ids = List.concat l_ids
+  let has_def id ids = List.exists (fun (id2,mode) -> id2=id && mode=`Def) ids
+  let defs ids = List.fold_right (fun (id,mode) defs -> if mode=`Def then id::defs else defs) ids []
+  let rec refs = function
+    | [] -> []
+    | (id,`Def)::ids -> refs ids
+    | (id,`Ref)::ids -> id :: refs (List.remove_assoc id ids)
+  let all_defined_in ids defs = List.for_all (function (id,`Ref) -> List.mem id defs | (id,`Def) -> true) ids
+  let max_id ids = List.fold_left (fun res (id,_) -> max res id) 0 ids
 end
-
-module Ids = Dico (struct type v = id_mode let merge m1 m2 = Some `Ref end)
-type ids = id_mode Ids.t
+  
+type ids = Ids.t
 
 let rec ids_elt_p1 : 'a elt_p1 -> ids = function
   | Is (_,np) -> ids_elt_s1 np
@@ -341,15 +342,16 @@ and ids_elt_s2 = function
   | An (id, _, _) -> Ids.singleton id `Def
   | The id -> Ids.singleton id `Ref
 and ids_elt_dim = function
-  | Foreach (_,id,_,_,id2) -> Ids.add id `Def (Ids.singleton id2 `Ref)
+  | Foreach (_,id,modif,rel_opt,id2) ->
+    Ids.add id `Def (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
 and ids_elt_aggreg = function
-  | TheAggreg (_,id,_,g,_,id2) -> Ids.add id `Def (Ids.singleton id2 `Ref)
+  | TheAggreg (_,id,modif,g,rel_opt,id2) ->
+    Ids.add id `Def (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
 and ids_elt_s = function
   | Return (_,np) -> ids_elt_s1 np
   | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
   | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 
-let defined_ids l = List.fold_left (fun res -> function (id,`Def) -> id::res | _ -> res) [] l 
 
 (* focus moves *)
 
@@ -726,19 +728,31 @@ let insert_seq = function
   | AtS (f, ctx) -> Some (append_seq_s ctx factory#top_s f)
   | _ -> None
 
+let out_of_unselect modif foc =
+  match fst modif with
+  | Unselect -> up_focus foc (* to enforce hidden column *)
+  | Select -> Some foc
+
 let insert_modif_transf f = function
   | AtS1 (Det (_, An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (Det ((), An (id, modif2, head), rel_opt), ctx) in
-    ( match fst modif2 with
-      | Unselect -> up_focus foc2 (* to enforce visible aggregation *)
-      | Select -> Some foc2 )
+    out_of_unselect modif2 foc2
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (AnAggreg ((), id, modif2, g, rel_opt, np), ctx) in
-    ( match fst modif2 with
-      | Unselect -> up_focus foc2 (* to enforce visible unselection *)
-      | Select -> Some foc2 )
+    out_of_unselect modif2 foc2
+  | AtDim (Foreach (_,id,modif,rel_opt,id2), ctx) ->
+    let modif2 = f modif in
+    if fst modif2 = Unselect
+    then None (* hidding dimensions is not allowed *)
+    else
+      let foc2 = AtDim (Foreach ((),id,modif2,rel_opt,id2), ctx) in
+      out_of_unselect modif2 foc2
+  | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) ->
+    let modif2 = f modif in
+    let foc2 = AtAggreg (TheAggreg ((),id,modif2,g,rel_opt,id2), ctx) in
+    out_of_unselect modif2 foc2
   | _ -> None
 
 let insert_aggreg g = function
@@ -799,7 +813,7 @@ let insert_increment incr focus =
     | IncrOr -> insert_or focus
     | IncrMaybe -> insert_maybe focus
     | IncrNot -> insert_not focus
-    | IncrAggreg g -> insert_aggreg g focus
+    | IncrAggreg g -> insert_aggreg_bis g focus
     | IncrForeach id -> insert_foreach id focus
     | IncrAggregId (g,id) -> insert_aggreg_id g id focus
     | IncrUnselect ->
@@ -900,7 +914,7 @@ let delete_focus = function
 (* goto to query *)
 
 let focus_of_query (s : unit elt_s) = 
-  factory#set (Ids.max_key (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
+  factory#set (Ids.max_id (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
   AtS (s, Root)
 
 let goto (s : unit elt_s) focus = Some (focus_of_query s)
