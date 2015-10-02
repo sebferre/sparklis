@@ -369,8 +369,9 @@ and form_s state ?(views : Sparql.view list = []) : annot elt_s -> Rdf.var list 
       fun ?limit () ->
 	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in
     available_defs, (defs,f) :: views (* adding aggregation on top of defining query *)
-  | SExpr (annot,id,expr,rel_opt) ->
+  | SExpr (annot,id,modif,expr,rel_opt) ->
     let v = state#id_labelling#get_id_var id in
+    state#set_modif v modif;
     let sparql_expr =
       match form_expr state expr with
       | "" -> "\"?\""

@@ -93,6 +93,7 @@ let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
   | `Expression -> html_modifier Lisql2nl.config_lang#grammar#expression
+  | `Value -> Lisql2nl.config_lang#grammar#value
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) ->
     if Lisql2nl.config_show_datatypes#value

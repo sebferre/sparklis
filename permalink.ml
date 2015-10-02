@@ -38,7 +38,7 @@ let rec print s =
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
   | SAggreg (_,dims,aggregs) -> print_bin "SAggreg" (print_list print_dim "Dims" dims) (print_list print_aggreg "Aggregs" aggregs)
-  | SExpr (_,id,expr,rel_opt) -> print_ter "SExpr" (print_id id) (print_expr expr) (print_opt print_p1 rel_opt)
+  | SExpr (_,id,modif,expr,rel_opt) -> print_nary "SExpr" [print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | Seq (_,lr) -> print_lr print_s "Seq" lr
 and print_dim = function
   | Foreach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
@@ -180,7 +180,7 @@ let rec parse = parser
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
     | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_dim ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((),dims,aggregs)
-    | [< id, expr, rel_opt = parse_ter ~version "SExpr" parse_id parse_expr (parse_opt parse_p1) >] -> SExpr ((), id, expr, rel_opt)
+    | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), id, modif, expr, rel_opt)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
 and parse_dim ~version = parser
     | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> Foreach ((), id, modif, rel_opt, id2)

@@ -97,7 +97,7 @@ and 'a elt_expr =
 and 'a elt_s =
   | Return of 'a * 'a elt_s1
   | SAggreg of 'a * 'a elt_dim list * 'a elt_aggreg list
-  | SExpr of 'a * id * 'a elt_expr * 'a elt_p1 option
+  | SExpr of 'a * id * modif_s2 * 'a elt_expr * 'a elt_p1 option
   | Seq of 'a * 'a elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
 
 
@@ -134,7 +134,7 @@ type ctx_p1 =
   | AnAggregThatX of id * modif_s2 * aggreg * unit elt_s1 * ctx_s1
   | ForeachThatX of id * modif_s2 * id * ctx_dim
   | TheAggregThatX of id * modif_s2 * aggreg * id * ctx_aggreg
-  | SExprThatX of id * unit elt_expr * ctx_s
+  | SExprThatX of id * modif_s2 * unit elt_expr * ctx_s
   | AndX of unit elt_p1 ctx_list * ctx_p1 (* first list is reverse prefix, second list is suffix *)
   | OrX of unit elt_p1 ctx_list * ctx_p1
   | MaybeX of ctx_p1
@@ -156,7 +156,7 @@ and ctx_aggreg =
   | SAggregX of unit elt_dim list * unit elt_aggreg ctx_list * ctx_s
 and ctx_expr =
   | ApplyX of func * unit elt_expr ctx_list * ctx_expr
-  | SExprX of id * unit elt_p1 option * ctx_s
+  | SExprX of id * modif_s2 * unit elt_p1 option * ctx_s
 and ctx_s =
   | Root
   | SeqX of unit elt_s ctx_list * ctx_s
@@ -259,7 +259,7 @@ let id_of_dim = function
 let id_of_aggreg = function
   | TheAggreg (_,id,_,_,_,_) -> Some id
 let id_of_s = function
-  | SExpr (_,id,_,_) -> Some id
+  | SExpr (_,id,_,_,_) -> Some id
   | _ -> None
 let id_of_focus = function
   | AtS1 (np,ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
@@ -275,7 +275,7 @@ let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
   | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_of_ctx_s1 (AnAggreg ((), id, modif, g, Some f, np)) ctx
   | ForeachThatX (id,modif,id2,ctx) -> elt_s_of_ctx_dim (Foreach ((), id, modif, Some f, id2)) ctx
   | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_of_ctx_aggreg (TheAggreg ((), id, modif, g, Some f, id2)) ctx
-  | SExprThatX (id,expr,ctx) -> elt_s_of_ctx_s (SExpr ((), id, expr, Some f)) ctx
+  | SExprThatX (id,modif,expr,ctx) -> elt_s_of_ctx_s (SExpr ((), id, modif, expr, Some f)) ctx
   | AndX (ll_rr,ctx) -> elt_s_of_ctx_p1 (And ((), list_of_ctx f ll_rr)) ctx
   | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or ((), list_of_ctx f ll_rr)) ctx
   | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe ((),f)) ctx
@@ -296,7 +296,7 @@ and elt_s_of_ctx_dim (f : unit elt_dim) = function
 and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
   | SAggregX (dims,ll_rr,ctx) -> elt_s_of_ctx_s (SAggreg ((), dims, list_of_ctx f ll_rr)) ctx
 and elt_s_of_ctx_expr (f : unit elt_expr) = function
-  | SExprX (id,rel_opt,ctx) -> elt_s_of_ctx_s (SExpr ((), id, f, rel_opt)) ctx
+  | SExprX (id,modif,rel_opt,ctx) -> elt_s_of_ctx_s (SExpr ((), id, modif, f, rel_opt)) ctx
   | ApplyX (func,ll_rr,ctx) -> elt_s_of_ctx_expr (Apply ((), func, list_of_ctx f ll_rr)) ctx
 and elt_s_of_ctx_s (f : unit elt_s) = function
   | Root -> f
@@ -381,7 +381,7 @@ and ids_elt_expr = function
 and ids_elt_s = function
   | Return (_,np) -> ids_elt_s1 np
   | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
-  | SExpr (_,id,expr,rel_opt) -> Ids.add id `Def (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
+  | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `Def (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
   | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 
 
@@ -433,7 +433,7 @@ let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
   | SAggreg (_,[],[]) -> None
   | SAggreg (_,[],aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX ([], ([],aggregs), ctx)))
   | SAggreg (_,dim::dims,aggregs) -> Some (AtDim (dim, SAggregForeachX (([],dims),aggregs,ctx)))
-  | SExpr (_,id,expr,rel_opt) -> Some (AtExpr (expr, SExprX (id,rel_opt,ctx)))
+  | SExpr (_,id,modif,expr,rel_opt) -> Some (AtExpr (expr, SExprX (id,modif,rel_opt,ctx)))
   | Seq (_,[]) -> None
   | Seq (_,x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
 let down_focus = function
@@ -449,7 +449,7 @@ let rec up_p1 f = function
   | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, Some f, np), ctx))
   | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach ((), id, modif, Some f, id2), ctx))
   | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,Some f,id2), ctx))
-  | SExprThatX (id,expr,ctx) -> Some (AtS (SExpr ((), id, expr, Some f), ctx))
+  | SExprThatX (id,modif,expr,ctx) -> Some (AtS (SExpr ((), id, modif, expr, Some f), ctx))
   | AndX (ll_rr,ctx) -> up_p1 (And ((), list_of_ctx f ll_rr)) ctx (* Some (AtP1 (And ar, ctx)) *)
   | OrX (ll_rr,ctx) -> Some (AtP1 (Or ((), list_of_ctx f ll_rr), ctx))
   | MaybeX ctx -> Some (AtP1 (Maybe ((), f), ctx))
@@ -470,7 +470,7 @@ let up_dim f = function
 let up_aggreg f = function
   | SAggregX (dims,ll_rr,ctx) -> Some (AtS (SAggreg ((), dims, list_of_ctx f ll_rr), ctx))
 let up_expr f = function
-  | SExprX (id,rel_opt,ctx) -> Some (AtS (SExpr ((), id, f, rel_opt), ctx))
+  | SExprX (id,modif,rel_opt,ctx) -> Some (AtS (SExpr ((), id, modif, f, rel_opt), ctx))
   | ApplyX (func,ll_rr,ctx) -> Some (AtExpr (Apply ((), func, list_of_ctx f ll_rr), ctx))
 let up_s f = function
   | Root -> None
@@ -488,7 +488,7 @@ let right_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | AnAggregThatX (id, modif, g, np, ctx) -> Some (AtS1 (np, AnAggregX (id, modif, g, Some f, ctx)))
   | ForeachThatX (id,modif,id2,ctx) -> None
   | TheAggregThatX (id,modif,g,id2,ctx) -> None
-  | SExprThatX (id,expr,ctx) -> None
+  | SExprThatX (id,modif,expr,ctx) -> None
   | AndX ((ll,[]),ctx) -> None
   | AndX ((ll,x::rr),ctx) -> Some (AtP1 (x, AndX ((f::ll,rr),ctx)))
   | OrX ((ll,[]),ctx) -> None
@@ -516,8 +516,8 @@ let right_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
   | SAggregX (dims, (ll,[]), ctx) -> None
   | SAggregX (dims, (ll,x::rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (f::ll,rr), ctx)))
 let right_expr (f : unit elt_expr) : ctx_expr -> focus option = function
-  | SExprX (id,None,ctx) -> None
-  | SExprX (id,Some rel,ctx) -> Some (AtP1 (rel, SExprThatX (id,f,ctx)))
+  | SExprX (id,modif,None,ctx) -> None
+  | SExprX (id,modif,Some rel,ctx) -> Some (AtP1 (rel, SExprThatX (id,modif,f,ctx)))
   | ApplyX (func,(ll,[]),ctx) -> None
   | ApplyX (func,(ll,x::rr),ctx) -> Some (AtExpr (x, ApplyX (func, (f::ll,rr), ctx)))
 let right_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -537,7 +537,7 @@ let left_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | AnAggregThatX _ -> None
   | ForeachThatX _ -> None
   | TheAggregThatX _ -> None
-  | SExprThatX (id,expr,ctx) -> Some (AtExpr (expr, SExprX (id, Some f, ctx)))
+  | SExprThatX (id,modif,expr,ctx) -> Some (AtExpr (expr, SExprX (id, modif, Some f, ctx)))
   | AndX (([],rr),ctx) -> None
   | AndX ((x::ll,rr),ctx) -> Some (AtP1 (x, AndX ((ll,f::rr),ctx)))
   | OrX (([],rr),ctx) -> None
@@ -569,7 +569,7 @@ let left_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
     | x::ll_dims -> Some (AtDim (x, SAggregForeachX ((ll_dims,[]), f::rr, ctx))) )
   | SAggregX (dims, (x::ll,rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (ll,f::rr), ctx)))
 let left_expr (f : unit elt_expr) : ctx_expr -> focus option = function
-  | SExprX (id,rel_opt,ctx) -> None
+  | SExprX (id,modif,rel_opt,ctx) -> None
   | ApplyX (func, ([],rr), ctx) -> None
   | ApplyX (func, (x::ll,rr), ctx) -> Some (AtExpr (x, ApplyX (func, (ll,f::rr), ctx)))
 let left_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -655,7 +655,7 @@ let insert_elt_p1 (elt : unit elt_p1) = function
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtDim (Foreach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForeachThatX (id,modif,id2,ctx)) elt rel_opt
   | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
-  | AtExpr (expr, SExprX (id,rel_opt,ctx)) -> insert_elt_p1_in_rel_opt (SExprThatX (id,expr,ctx)) elt rel_opt
+  | AtExpr (expr, SExprX (id,modif,rel_opt,ctx)) -> insert_elt_p1_in_rel_opt (SExprThatX (id,modif,expr,ctx)) elt rel_opt
   | AtExpr _ -> None (* no insertion inside expressions *)
   | AtS _ -> None
 
@@ -798,13 +798,16 @@ let insert_modif_transf f = function
     let modif2 = f modif in
     if fst modif2 = Unselect
     then None (* hidding dimensions is not allowed *)
-    else
-      let foc2 = AtDim (Foreach ((),id,modif2,rel_opt,id2), ctx) in
-      out_of_unselect modif2 foc2
+    else Some (AtDim (Foreach ((),id,modif2,rel_opt,id2), ctx))
   | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) ->
     let modif2 = f modif in
     let foc2 = AtAggreg (TheAggreg ((),id,modif2,g,rel_opt,id2), ctx) in
     out_of_unselect modif2 foc2
+  | AtExpr (expr, SExprX (id,modif,rel_opt,ctx)) ->
+    let modif2 = f modif in
+    if fst modif2 = Unselect
+    then None (* hidding expressions is not allowed *)
+    else Some (AtExpr (expr, SExprX (id,modif2,rel_opt,ctx)))
   | _ -> None
 
 let insert_aggreg g = function
@@ -858,7 +861,7 @@ let insert_func_arg func arity pos =
     | Some id ->
       let s = elt_s_of_focus focus in
       let args = if arity = 0 then [] else list_of_ctx (Var ((),id)) ll_rr in
-      let sexpr = SExpr ((), factory#new_id, Apply ((), func, args), None) in
+      let sexpr = SExpr ((), factory#new_id, factory#top_modif, Apply ((), func, args), None) in
       let focus2 = append_seq_s Root sexpr s in
       Some focus2 )
 
@@ -906,7 +909,7 @@ let rec delete_ctx_p1 = function
   | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx))
   | ForeachThatX (id,modif,id2,ctx) -> Some (AtDim (Foreach ((), id,modif,None,id2), ctx))
   | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx))
-  | SExprThatX (id,expr,ctx) -> Some (AtS (SExpr ((), id, expr, None), ctx))
+  | SExprThatX (id,modif,expr,ctx) -> Some (AtS (SExpr ((), id, modif, expr, None), ctx))
   | AndX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
@@ -954,7 +957,7 @@ and delete_ctx_dim ctx =
     | `List (elt,ll2,rr2) -> Some (AtDim (elt, SAggregForeachX ((ll2,rr2),aggregs,ctx))) )
 and delete_ctx_expr f_opt ctx =
   match ctx with
-  | SExprX (id,rel_opt,ctx2) -> delete_ctx_s ctx2
+  | SExprX (id,modif,rel_opt,ctx2) -> delete_ctx_s ctx2
   | ApplyX (func,ll_rr,ctx2) ->
     ( match f_opt with
     | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx factory#top_expr ll_rr))) ctx2
