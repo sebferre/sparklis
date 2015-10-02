@@ -38,11 +38,17 @@ let rec print s =
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
   | SAggreg (_,dims,aggregs) -> print_bin "SAggreg" (print_list print_dim "Dims" dims) (print_list print_aggreg "Aggregs" aggregs)
+  | SExpr (_,id,expr,rel_opt) -> print_ter "SExpr" (print_id id) (print_expr expr) (print_opt print_p1 rel_opt)
   | Seq (_,lr) -> print_lr print_s "Seq" lr
 and print_dim = function
   | Foreach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
 and print_aggreg = function
   | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_id id2]
+and print_expr = function
+  | Undef _ -> print_atom "Undef"
+  | Const (_,t) -> print_un "Const" (print_term t)
+  | Var (_,id) -> print_un "Var" (print_id id)
+  | Apply (_,func,args) -> print_bin "Apply" (print_func func) (print_list print_expr "Args" args)
 and print_p1 = function
   | Is (_,np) -> print_un "Is" (print_s1 np)
   | Type (_,c) -> print_un "Type" (print_uri c)
@@ -91,6 +97,13 @@ and print_aggreg_op = function
   | Minimum -> print_atom "Minimum"
   | Sample -> print_atom "Sample"
   | Given -> print_atom "Given"
+and print_func = function
+  | `Add -> print_atom "Add"
+  | `Sub -> print_atom "Sub"
+  | `Mul -> print_atom "Mul"
+  | `Div -> print_atom "Div"
+  | `Strlen -> print_atom "Strlen"
+  | `Now -> print_atom "Now"
 and print_order = function
   | Unordered -> print_atom "Unordered"
   | Highest -> print_atom "Highest"
@@ -167,11 +180,17 @@ let rec parse = parser
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
     | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_dim ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((),dims,aggregs)
+    | [< id, expr, rel_opt = parse_ter ~version "SExpr" parse_id parse_expr (parse_opt parse_p1) >] -> SExpr ((), id, expr, rel_opt)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
 and parse_dim ~version = parser
     | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> Foreach ((), id, modif, rel_opt, id2)
 and parse_aggreg ~version = parser
     | [< id, modif, g, rel_opt, id2 = parse_quin ~version "TheAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_id >] -> TheAggreg ((), id, modif, g, rel_opt, id2)
+and parse_expr ~version = parser
+    | [< _ = parse_atom "Undef" >] -> Undef ()
+    | [< t = parse_un ~version "Const" parse_term >] -> Const ((), t)
+    | [< id = parse_un ~version "Var" parse_id >] -> Var ((), id)
+    | [< func, args = parse_bin ~version "Apply" parse_func (fun ~version -> parse_list parse_expr ~version "Args") >] -> Apply ((), func, args)
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
@@ -236,6 +255,13 @@ and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "Sample" >] -> Sample
   | [< () = parse_atom ~version "Given" >] -> Given
   | [<>] -> syntax_error "invalid aggreg"
+and parse_func ~version = parser
+    | [< () = parse_atom ~version "Add" >] -> `Add
+    | [< () = parse_atom ~version "Sub" >] -> `Sub
+    | [< () = parse_atom ~version "Mul" >] -> `Mul
+    | [< () = parse_atom ~version "Div" >] -> `Div
+    | [< () = parse_atom ~version "Strlen" >] -> `Strlen
+    | [< () = parse_atom ~version "Now" >] -> `Now
 and parse_order ~version = parser
   | [< () = parse_atom ~version "Unordered" >] -> Unordered
   | [< () = parse_atom ~version "Highest" >] -> Highest

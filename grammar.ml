@@ -5,6 +5,7 @@ object
 
   method virtual thing : string
   method virtual relation : string
+  method virtual expression : string
   method virtual is : string
   method virtual has : string
   method virtual has_as_a : string
@@ -47,6 +48,9 @@ object
   method virtual aggreg_sample : string * [`Noun | `Adjective ]
   method virtual aggreg_given : string * [`Noun | `Adjective]
 
+  method virtual func_length : string
+  method virtual func_now : string
+      
   method virtual order_highest : string
   method virtual order_lowest : string
 
@@ -76,6 +80,7 @@ object
   method virtual tooltip_not : string
   method virtual tooltip_any : string
   method virtual tooltip_aggreg : string
+  method virtual tooltip_func : string
   method virtual tooltip_foreach : string
   method virtual tooltip_highest : string
   method virtual tooltip_lowest : string
@@ -97,6 +102,7 @@ object
 
   method thing = "thing"
   method relation = "relation"
+  method expression = "expression"
   method is = "is"
   method has = "has"
   method has_as_a = "has as a"
@@ -153,6 +159,9 @@ object
   method aggreg_sample = "sample", `Adjective
   method aggreg_given = "given", `Adjective
 
+  method func_length = "length"
+  method func_now = "now"
+    
   method order_highest = "highest-to-lowest"
   method order_lowest = "lowest-to-highest"
 
@@ -182,6 +191,7 @@ object
   method tooltip_not = "Apply negation to the current focus"
   method tooltip_any = "Hide the focus column in the table of results"
   method tooltip_aggreg = "Aggregate the focus column in the table of results" (*, for each solution on other columns *)
+  method tooltip_func = "Apply the function to the current focus"
   method tooltip_foreach = "Compute the aggregation for each value of this entity"
   method tooltip_highest = "Sort the focus column in decreasing order"
   method tooltip_lowest = "Sort the focus column in increasing order"
@@ -203,6 +213,7 @@ object
 
   method thing = "chose"
   method relation = "relation"
+  method expression = "expression"
   method is = "est"
   method has = "a"
   method has_as_a = "a pour"
@@ -249,6 +260,9 @@ object
   method aggreg_sample = "échantillon", `Noun
   method aggreg_given = "donné(e)", `Adjective
 
+  method func_length = "longueur"
+  method func_now = "maintenant"
+
   method order_highest = "en ordre décroissant"
   method order_lowest = "en ordre croissant"
 
@@ -278,6 +292,7 @@ object
   method tooltip_not = "Appliquer une négation au focus actuel"
   method tooltip_any = "Cacher la colonne du focus actuel dans la table des résultats"
   method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats" (* , pour chaque valuation des autres colonnes *)
+  method tooltip_func = "Appliquer cette fonction au focus actuel"
   method tooltip_foreach = "Calculer l'agrégation pour chaque valeur de cette entité"
   method tooltip_highest = "Trier la colonne du focus actuel en ordre décroissant"
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"

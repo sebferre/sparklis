@@ -111,7 +111,7 @@ let sparql_lexicon
 		  ( Sparql.triple (Rdf.Var u) (Rdf.URI property) (Rdf.Var l)
 		    :: ( match language with
 		      | None -> []
-		      | Some lang -> [Sparql.filter (Sparql.expr_comp "=" (Sparql.expr_func "lang" (Sparql.var l)) (Sparql.string lang))] ))) ]) in
+		      | Some lang -> [Sparql.filter (Sparql.expr_comp "=" (Sparql.expr_func "lang" [Sparql.var l]) (Sparql.string lang))] ))) ]) in
     let pool = new Sparql_endpoint.ajax_pool in
     Sparql_endpoint.ajax_in [] pool endpoint sparql
       (fun results ->

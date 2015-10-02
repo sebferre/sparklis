@@ -55,6 +55,7 @@ let config_show_datatypes = new Config.boolean_input ~key:"show_datatypes" ~inpu
 type word =
   [ `Thing
   | `Relation
+  | `Expression
   | `Entity of Rdf.uri * string
   | `Literal of string
   | `TypedLiteral of string * string (* lexical value, datatype/lang *)
@@ -62,11 +63,13 @@ type word =
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
   | `Op of string
+  | `Undefined
   | `DummyFocus ]
 
-let word_text_content grammar = function
+let word_text_content grammar : word -> string = function
   | `Thing -> grammar#thing
   | `Relation -> grammar#relation
+  | `Expression -> grammar#expression
   | `Entity (uri,s) -> s
   | `Literal s -> s
   | `TypedLiteral (s, dt) -> if config_show_datatypes#value then s ^ " (" ^ dt ^ ")" else s
@@ -74,10 +77,9 @@ let word_text_content grammar = function
   | `Class (uri,s) -> s
   | `Prop (uri,s) -> s
   | `Op s -> s
+  | `Undefined -> ""
   | `DummyFocus -> ""
 
-(* type np_label =
-   [ `The of int option * ng_label ] *)
 type ng_label =
   [ `Word of word
   | `Gen of ng_label * word
@@ -105,11 +107,13 @@ and 'a nl_np =
   | `And of 'a np list
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
   | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
-  | `Not of 'a np ] (* (* the bool indicates whether negation is suspended *) *)
+  | `Not of 'a np (* (* the bool indicates whether negation is suspended *) *)
+  | `Infix of string * 'a np list * 'a rel ]
 and 'a ng = ('a, 'a nl_ng) annotated
 and 'a nl_ng =
   [ `That of word * 'a rel
   | `LabelThat of ng_label * 'a rel
+  | `OfThat of word * 'a np * 'a rel
   | `Aggreg of bool * 'a ng_aggreg * 'a ng ] (* the bool indicates suspension *)
 and qu = [ `A | `Any of bool | `The | `Each | `All | `One | `No of bool ]
 and adj =
@@ -125,7 +129,7 @@ and 'a nl_rel =
   [ `Nil
   | `That of 'a vp
   | `Whose of 'a ng * 'a vp
-  | `Of of 'a np
+  (*  | `Of of 'a np *)
   | `PP of 'a pp list
   | `Ing of word * 'a np
   | `And of 'a rel list
@@ -152,14 +156,22 @@ and 'a pp =
 
 let top_rel : 'a rel = X `Nil
 let top_np : 'a np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
+let top_expr : 'a np = X (`PN (`Undefined, top_rel))
 let top_s : 'a s = X (`Return top_np)
 
 let dummy_word : word = `DummyFocus
 let dummy_ng : 'a ng = X (`That (`DummyFocus, top_rel))
+let dummy_np : 'a np = X (`PN (`DummyFocus, top_rel))
+let undefined_np : 'a np = X (`PN (`Undefined, top_rel))
 
 let np_of_word w : 'a np = X (`PN (w, top_rel))
 let np_of_literal l : 'a np = np_of_word (`Literal l)
 
+let nl_and = function
+  | [] -> assert false
+  | [x] -> x
+  | l -> X (`And l)
+  
 (* verbalization of terms, classes, properties *)
 
 let word_of_entity uri = `Entity (uri, Lexicon.config_entity_lexicon#value#info uri)
@@ -193,6 +205,14 @@ let word_of_aggreg grammar g =
     | `Noun -> `Op s_g
     | `Adjective -> `Op s_g
 
+let string_of_func grammar = function
+  | `Add -> " + "
+  | `Sub -> " - "
+  | `Mul -> " * "
+  | `Div -> " / "
+  | `Strlen -> grammar#func_length
+  | `Now -> grammar#func_now
+      
 let word_of_order grammar = function
   | Unordered -> `Op ""
   | Highest -> `Op grammar#order_highest
@@ -214,7 +234,7 @@ let word_of_incr grammar = function
   | IncrOrder o -> word_of_order grammar o
   | IncrAggreg g -> word_of_aggreg grammar g
   | IncrForeach id -> `Thing
-  | IncrAggregId (g,id) -> word_of_aggreg grammar g
+  | IncrFuncArg (func,arity,pos) -> `Op (string_of_func grammar func)
 
 (* verbalization of IDs *)
 
@@ -372,6 +392,9 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
     let lab2 = List.fold_left (fun labelling dim -> labelling_dim grammar ~labelling dim) lab1 dims in
     let lab3 = List.fold_left (fun labelling aggreg -> labelling_aggreg grammar ~labelling aggreg) lab2 aggregs in
     lab3
+  | SExpr (_,id,expr,rel_opt) ->
+    let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
+    (id, `Labels [("expr", `Word `Expression)]) :: lab_rel @ labelling
   | Seq (_, lr) ->
     List.fold_left
       (fun labelling s -> labelling_s grammar ~labelling s)
@@ -462,7 +485,7 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
   | Lowest -> `The, `Order (`Op grammar#order_lowest)
 
 let ng_of_id ~id_labelling id : annot ng =
-  X (`LabelThat (id_labelling#get_id_label id, X `Nil))
+  X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : annot rel) (ng : annot ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
@@ -477,6 +500,23 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : ann
   | None -> X nl
   | Some annot -> A (annot,nl)
 
+let syntax_of_func grammar (func : func) : [ `Infix of string | `Noun of string | `Const of string ] =
+  let s = string_of_func grammar func in
+  match func with
+  | `Add | `Sub | `Mul | `Div -> `Infix s
+  | `Strlen -> `Noun s
+  | `Now -> `Const s
+
+let np_of_apply grammar annot_opt func np_args rel =
+  let nl =
+    match syntax_of_func grammar func with
+    | `Const s -> `PN (`Op s, rel)
+    | `Noun s -> `Qu (`The, `Nil, X (`OfThat (`Op s, nl_and np_args, rel)))
+    | `Infix s -> `Infix (s, np_args, rel) in
+  match annot_opt with
+  | None -> X nl
+  | Some annot -> A (annot, nl)  
+
 
 let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
   | IsThere annot -> A (annot, `Ellipsis)
@@ -487,14 +527,14 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
     | `Noun -> A (annot, `HasProp (word, np, []))
-    | `InvNoun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`That (word, X (`Of np))))), []))
+    | `InvNoun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
     | `TransVerb -> A (annot, `VT (word, np, []))
     | `TransAdj -> A (annot, `IsPP (`Prep (word, np))) )
   | Rel (annot,p,Bwd,np) ->
     let word, synt = word_syntagm_of_property p in
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
-    | `Noun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`That (word, X (`Of np))))), []))
+    | `Noun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
     | `InvNoun -> A (annot, `HasProp (word, np, []))
     | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
@@ -571,25 +611,29 @@ and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = func
     np_of_aggreg grammar (Some annot) `The modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_id ~id_labelling id2)
+and np_of_elt_expr grammar ~id_labelling (expr : annot elt_expr) (rel_opt : annot elt_p1 option) : annot np =
+  let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
+  match expr with
+  | Undef annot -> A (annot, `PN (`Undefined, rel))
+  | Const (annot,t) -> A (annot, `PN (word_of_term t, rel))
+  | Var (annot,id) -> det_of_elt_s2 grammar ~id_labelling annot rel (The id)
+  | Apply (annot,func,args) ->
+    np_of_apply grammar (Some annot)
+      func
+      (List.map (fun arg -> np_of_elt_expr grammar ~id_labelling arg None) args)
+      rel
 and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
   | Return (annot,np) ->
     A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
   | SAggreg (annot,dims,aggregs) ->
-    let nl_s_aggregs =
-      `Return
-	( match aggregs with
-	| [] -> assert false
-	| [aggreg] -> np_of_elt_aggreg grammar ~id_labelling aggreg
-	| _ -> X (`And (List.map (np_of_elt_aggreg grammar ~id_labelling) aggregs)) ) in
+    let nl_s_aggregs = `Return (nl_and (List.map (np_of_elt_aggreg grammar ~id_labelling) aggregs)) in
     if dims = []
     then A (annot, nl_s_aggregs)
     else
-      let np_dims =
-	match dims with
-	| [] -> assert false
-	| [dim] -> np_of_elt_dim grammar ~id_labelling dim
-	| _ -> X (`And (List.map (np_of_elt_dim grammar ~id_labelling) dims)) in
+      let np_dims = nl_and (List.map (np_of_elt_dim grammar ~id_labelling) dims) in
       A (annot, `For (np_dims, X nl_s_aggregs))
+  | SExpr (annot,id,expr,rel_opt) ->
+    A (annot, `Return (np_of_elt_expr grammar ~id_labelling expr rel_opt))
   | Seq (annot,lr) ->
     A (annot, `Seq (List.map (s_of_elt_s grammar ~id_labelling) lr))
 
@@ -634,12 +678,14 @@ and map_np transf np =
     | `And (lr) -> `And (List.map (map_np transf) lr)
     | `Or (lr) -> `Or (List.map (map_np transf) lr)
     | `Maybe (np) -> `Maybe (map_np transf np)
-    | `Not (np) -> `Not (map_np transf np) )
+    | `Not (np) -> `Not (map_np transf np)
+    | `Infix (s,lnp,rel) -> `Infix (s, List.map (map_np transf) lnp, map_rel transf rel) )
 and map_ng transf ng =
   map_annotated (transf#ng ng)
     ( function
     | `That (w,rel) -> `That (w, map_rel transf rel)
     | `LabelThat (l,rel) -> `LabelThat (l, map_rel transf rel)
+    | `OfThat (w,np,rel) -> `OfThat (w, map_np transf np, map_rel transf rel)
     | `Aggreg (susp,ngg,ng) -> `Aggreg (susp, map_ng_aggreg transf ngg, map_ng transf ng) )
 and map_adj transf adj =
   match transf#adj adj with
@@ -657,7 +703,7 @@ and map_rel transf rel =
     | `Nil -> `Nil
     | `That vp -> `That (map_vp transf vp)
     | `Whose (ng,vp) -> `Whose (map_ng transf ng, map_vp transf vp)
-    | `Of np -> `Of (map_np transf np)
+    (*    | `Of np -> `Of (map_np transf np) *)
     | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
     | `Ing (w,np) -> `Ing (w, map_np transf np)
     | `And lr -> `And (List.map (map_rel transf) lr)
@@ -696,7 +742,7 @@ object (self)
       | `Return (A (a2, `PN (w, X `Nil)))
 	-> `ThereIs (A (a2, `PN (w, X `Nil)))
       | `Return (A (a2, `PN (w, X (`That vp))))
-	-> `Truth (A (a2, `PN (w, X `Nil)), vp)
+	-> `Truth (A (a2, `PN (w, top_rel)), vp)
       | nl -> nl)
   method np = function
   | A (a1, `Qu (qu, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu ((`A | `The), `Nil, X ng)), []))))))))
@@ -802,7 +848,7 @@ let xml_seq grammar annot_opt (lr : xml list) =
       | Some seq_ids -> List.map (function None -> true | _ -> false) seq_ids
       | _ -> assert false )
     | None -> List.map (fun _ -> false) lr in
-  [ Coord ([Kwd grammar#and_], List.map2 (fun susp xml -> if susp then [Suspended xml] else xml) seq_susp lr) ]
+  [ Coord ([Kwd grammar#and_], List.map2 xml_suspended seq_susp lr) ]
 let xml_and grammar lr =
   [ Coord ([Kwd grammar#and_], lr) ]
 let xml_or grammar annot_opt lr =
@@ -810,7 +856,7 @@ let xml_or grammar annot_opt lr =
 (*  let susp_or = isusp <> None in
     let susp_elt i = isusp <> None && isusp <> Some i in *)
   let coord = [Word (`Op grammar#or_)] in
-  [ Coord ((if susp_or then [Suspended coord] else coord), lr) ]
+  [ Coord (xml_suspended susp_or coord, lr) ]
 let xml_maybe grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#optionally)] @ xml
@@ -855,12 +901,14 @@ and xml_np grammar np =
     | `And lr -> xml_and grammar (List.map (xml_np grammar) lr)
     | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar) lr)
     | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar np)
-    | `Not np -> xml_not grammar annot_opt (xml_np grammar np) )
+    | `Not np -> xml_not grammar annot_opt (xml_np grammar np)
+    | `Infix (s,lnp,rel) -> Enum (s, List.map (xml_np grammar) lnp) :: xml_rel grammar rel )
 and xml_ng grammar rel =
   xml_annotated rel
     ( fun annot_opt -> function
     | `That (w,rel) -> Word w :: xml_rel grammar rel
     | `LabelThat (l,rel) -> xml_ng_label grammar l @ xml_rel grammar rel
+    | `OfThat (w,np,rel) -> Word w :: Kwd grammar#of_ :: xml_np grammar np @ xml_rel grammar rel
     | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar susp (xml_ng grammar ng) ngg )
 and xml_qu grammar qu xml =
   match xml with
@@ -909,7 +957,7 @@ and xml_rel grammar = function
       | `Nil -> []
       | `That vp -> Kwd grammar#relative_that :: xml_vp grammar vp
       | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ng @ xml_vp grammar vp
-      | `Of np -> Kwd grammar#of_ :: xml_np grammar np
+      (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar np *)
       | `PP lpp -> xml_pp_list grammar lpp
       | `Ing (w,np) -> Word w :: xml_np grammar np
       | `And lr -> xml_and grammar (List.map (xml_rel grammar) lr)
@@ -1017,4 +1065,12 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrAggreg g -> xml_np grammar (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
   | IncrOrder order -> xml_np grammar (head_of_modif grammar None dummy_word top_rel (Select,order))
   | IncrForeach id -> Word (`Op grammar#for_) :: Word (`Op grammar#each) :: xml_ng_id grammar ~id_labelling id
-  | IncrAggregId (g,id) -> xml_np grammar (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
+(*  | IncrAggregId (g,id) -> xml_np grammar (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
+  | IncrFuncArg (func,arity,pos) ->
+    xml_np grammar
+      (np_of_apply grammar None
+	 func
+	 (List.map
+	    (fun i -> if i=pos then dummy_np else undefined_np)
+	    (Common.from_to 1 arity))
+	 top_rel)

@@ -96,7 +96,8 @@ let indent : int -> string -> string =
   let re = Regexp.regexp_string "\n" in
   fun w p -> Regexp.global_replace re p ("\n" ^ String.make w ' ')
 
-let expr_func (f : string) (expr : expr) : expr = f ^ "(" ^ expr ^ ")"
+let expr_func (f : string) (l_expr : expr list) : expr = f ^ "(" ^ String.concat "," l_expr ^ ")"
+let expr_infix (op : string) (l_expr : expr list) : expr = String.concat op l_expr
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^ " " ^ relop ^ " " ^ expr2
 

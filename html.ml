@@ -92,6 +92,7 @@ let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
+  | `Expression -> html_modifier Lisql2nl.config_lang#grammar#expression
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) ->
     if Lisql2nl.config_show_datatypes#value
@@ -102,6 +103,7 @@ let html_word = function
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
   | `Op op -> html_modifier op
+  | `Undefined -> "?"
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
 let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
@@ -193,6 +195,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
       | IncrOrder _ -> 12, None
       | IncrUnselect -> 14, Some grammar#tooltip_any
       | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
+      | IncrFuncArg _ -> 16, Some grammar#tooltip_func
   in
   let html_freq =
     if freq = 1

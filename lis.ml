@@ -429,11 +429,16 @@ object (self)
 	  IncrIs :: IncrTriplify ::
 	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
 	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	    IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
+	    IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given ::
+	    incrs in
 	let incrs =
 	  List.fold_left
 	    (fun incrs v -> IncrForeach (id_labelling#get_var_id v) :: incrs)
 	    incrs available_defs in
+	let incrs =
+	  IncrFuncArg (`Add,2,1) :: IncrFuncArg (`Sub,2,1) :: IncrFuncArg (`Mul,2,1) :: IncrFuncArg (`Div,2,1) ::
+	    IncrFuncArg (`Strlen,1,1) :: IncrFuncArg (`Now,0,0) ::
+	    incrs in
 	incrs in
     let valid_incrs =
       List.filter
