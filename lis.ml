@@ -249,6 +249,12 @@ object (self)
 	    end
 	  end
 	done;
+	if Lisql.is_undef_expr_focus focus then
+	  List.iter
+	    (fun v ->
+	      let id = id_labelling#get_var_id v in
+	      ref_index := (Lisql.IncrId id, 1)::!ref_index)
+	    available_defs;
 	!ref_index
       | _ -> []
 

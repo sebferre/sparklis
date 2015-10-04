@@ -379,7 +379,9 @@ and form_s state ?(views : Sparql.view list = []) : annot elt_s -> Rdf.var list 
     let d = form_p1_opt state rel_opt in
     let form = Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
     let defs, refs, defining_views, other_views = find_defining_views state annot#ids views in
-    [], Sparql.join_views (defining_views @ [([v], (fun ?limit () -> form))]) :: other_views
+    let joined_view = Sparql.join_views defining_views in
+    Sparql.view_defs joined_view,
+    Sparql.join_views [joined_view; ([v], (fun ?limit () -> form))] :: other_views
   | Seq (annot,lr) ->
     let seq_ids = match annot#seq_ids with Some x -> x | None -> assert false in
     List.fold_left2

@@ -1017,14 +1017,14 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
       | AtS1 (Det (_, Term t0, _), _) when t0 = t -> xml_t @ [DeleteIncr]
-      | AtS1 _ -> xml_t
+      | AtS1 _ | AtExpr _ -> xml_t
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
   | IncrId id ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
-      | AtS1 _ -> xml
+      | AtS1 _ | AtExpr _ -> xml
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )

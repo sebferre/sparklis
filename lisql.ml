@@ -232,6 +232,10 @@ and is_aggregated_ctx_s1 = function
   | AnAggregX _ -> true
   | _ -> false
 
+let is_undef_expr_focus = function
+  | AtExpr (Undef_, _) -> true
+  | _ -> false
+    
 let rec is_s1_as_p1_focus = function
   | AtS1 (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | _ -> false
@@ -680,8 +684,13 @@ let insert_elt_s2 det focus =
 let insert_term t focus =
   match t with
     | Rdf.Bnode _ -> None (* blank nodes cannot be injected in queries *)
-    | _ -> insert_elt_s2 (Term t) focus
-let insert_id id focus = insert_elt_s2 (The id) focus
+    | _ ->
+      match focus with
+      | AtExpr (_,ctx) -> Some (AtExpr (Const ((),t),ctx))
+      | _ -> insert_elt_s2 (Term t) focus
+let insert_id id = function
+  | AtExpr (_,ctx) -> Some (AtExpr (Var ((),id),ctx))
+  | focus -> insert_elt_s2 (The id) focus
 
 let insert_type c = function
   | AtS1 (Det (_,det,rel_opt), ctx) ->

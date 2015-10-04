@@ -332,6 +332,8 @@ let pattern_of_formula : formula -> pattern = function
 
 type view = Rdf.var list * (?limit:int -> unit -> formula)
 
+let view_defs view = fst view
+  
 let empty_view : view = ([], (fun ?limit () -> True))
   
 let join_views (views : view list) : view =
