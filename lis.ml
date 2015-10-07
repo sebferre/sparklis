@@ -218,7 +218,7 @@ object (self)
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method index_ids =
+  method index_ids_inputs =
     match focus_term_list with
       | [focus_term] ->
 	let dim = results.Sparql_endpoint.dim in
@@ -249,12 +249,17 @@ object (self)
 	    end
 	  end
 	done;
-	if Lisql.is_undef_expr_focus focus then
+	if Lisql.is_undef_expr_focus focus then begin
 	  List.iter
 	    (fun v ->
 	      let id = id_labelling#get_var_id v in
 	      ref_index := (Lisql.IncrId id, 1)::!ref_index)
 	    available_defs;
+	  List.iter
+	    (fun typ ->
+	      ref_index := (Lisql.IncrInput ("",typ),1)::!ref_index)
+	    [`String; `Int; `Float; `Date; `DateTime; `Time; `URI]
+	end;
 	!ref_index
       | _ -> []
 

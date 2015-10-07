@@ -233,7 +233,7 @@ and is_aggregated_ctx_s1 = function
   | _ -> false
 
 let is_undef_expr_focus = function
-  | AtExpr (Undef_, _) -> true
+  | AtExpr (Undef _, _) -> true
   | _ -> false
     
 let rec is_s1_as_p1_focus = function
@@ -601,9 +601,10 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 (* increments *)
 (* BEWARE of arrays that must be copied if changed !! *)
 
-type increment_property_modifier
+type input_type =  [`String | `Int | `Float | `Date | `DateTime | `Time | `URI]
 
 type increment =
+  | IncrInput of string * input_type
   | IncrTerm of Rdf.term
   | IncrId of id
   | IncrIs
@@ -622,7 +623,30 @@ type increment =
   (*  | IncrAggregId of aggreg * id *)
   | IncrFuncArg of func * int (* arity *) * int (* arg position, starting at 1 *)
 
+      
+let check_input s = function
+  | `String -> true
+  | `Int -> Regexp.string_match (Regexp.regexp "[-+]?\\d+$") s 0 <> None
+  | `Float -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
+  | `Date -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}$") s 0 <> None
+  | `DateTime -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
+  | `Time -> Regexp.string_match (Regexp.regexp "\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
+  | `URI -> true
+
+let datatype_of_input_type = function
+  | `String -> Rdf.xsd_string
+  | `Int -> Rdf.xsd_integer
+  | `Float -> Rdf.xsd_double
+  | `Date -> Rdf.xsd_date
+  | `DateTime -> Rdf.xsd_dateTime
+  | `Time -> Rdf.xsd_time
+  | `URI -> invalid_arg "datatype_of_input_type: URI has no datatype"
+let term_of_input s = function
+  | `URI -> Rdf.URI s
+  | typ -> Rdf.TypedLiteral (s, datatype_of_input_type typ)
+
 let term_of_increment : increment -> Rdf.term option = function
+  | IncrInput (s,typ) -> Some (term_of_input s typ)
   | IncrTerm t -> Some t
   | IncrType c -> Some (Rdf.URI c)
   | IncrRel (p,m) -> Some (Rdf.URI p)
@@ -680,6 +704,11 @@ let insert_elt_s2 det focus =
     | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
     | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
     | other -> other
+
+let insert_input s typ focus =
+  match focus with
+  | AtExpr (_,ctx) -> Some (AtExpr (Const ((), term_of_input s typ), ctx))
+  | _ -> None
 
 let insert_term t focus =
   match t with
@@ -876,6 +905,7 @@ let insert_func_arg func arity pos =
 
 let insert_increment incr focus =
   match incr with
+    | IncrInput (s,typ) -> insert_input s typ focus
     | IncrTerm t -> insert_term t focus
     | IncrId id -> insert_id id focus
     | IncrType c -> insert_type c focus

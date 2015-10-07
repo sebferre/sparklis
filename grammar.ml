@@ -40,6 +40,14 @@ object
 
   method virtual n_th : int -> string
 
+  method virtual string : string
+  method virtual integer : string
+  method virtual number : string
+  method virtual date : string
+  method virtual date_and_time : string
+  method virtual time : string
+  method virtual uri : string
+    
   method virtual aggreg_number : string * [`Noun | `Adjective]
   method virtual aggreg_list : string * [`Noun | `Adjective]
   method virtual aggreg_total : string * [`Noun | `Adjective]
@@ -152,6 +160,14 @@ object
       else "th" in
     string_of_int n ^ suffix
 
+  method string = "string"
+  method integer = "integer"
+  method number = "number"
+  method date = "date"
+  method date_and_time = "date and time"
+  method time = "time"
+  method uri = "URI"
+      
   method aggreg_number = "number", `Noun
   method aggreg_list = "list", `Noun
   method aggreg_total = "total", `Adjective
@@ -253,6 +269,14 @@ object
       if n = 1 then "er"
       else "ième" in
     string_of_int n ^ suffix
+
+  method string = "chaine"
+  method integer = "entier"
+  method number = "nombre"
+  method date = "date"
+  method date_and_time = "date et heure"
+  method time = "heure"
+  method uri = "URI"
 
   method aggreg_number = "nombre", `Noun
   method aggreg_list = "liste", `Noun

@@ -192,6 +192,15 @@ let rec word_of_term = function
   | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
+let string_of_input_type grammar = function
+  | `String -> grammar#string
+  | `Int -> grammar#integer
+  | `Float -> grammar#number
+  | `Date -> grammar#date
+  | `DateTime -> grammar#date_and_time
+  | `Time -> grammar#time
+  | `URI -> grammar#uri
+    
 let string_pos_of_aggreg grammar = function
   | NumberOf -> grammar#aggreg_number
   | ListOf -> grammar#aggreg_list
@@ -222,6 +231,7 @@ let word_of_order grammar = function
   | Lowest -> `Op grammar#order_lowest
 
 let word_of_incr grammar = function
+  | IncrInput (s,typ) -> `Op (string_of_input_type grammar typ)
   | IncrTerm t -> word_of_term t
   | IncrId id -> `Thing
   | IncrType c -> word_of_class c
@@ -799,6 +809,7 @@ type xml = node list
 and node =
   | Kwd of string
   | Word of word
+  | Input of input_type
   | Suffix of xml * string (* suffix: eg. !, 's *)
   | Enum of string * xml list (* separator: eg. commas *)
   | Coord of xml * xml list (* coordination: eg. 'and' *)
@@ -813,6 +824,7 @@ let rec xml_text_content grammar l =
 and xml_node_text_content grammar = function
   | Kwd s -> s
   | Word w -> word_text_content grammar w
+  | Input typ -> ""
   | Suffix (x,suf) -> xml_text_content grammar x ^ suf
   | Enum (sep, xs) -> String.concat sep (List.map (xml_text_content grammar) xs)
   | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content grammar xsep ^ " ") (List.map (xml_text_content grammar) xs)
@@ -1013,6 +1025,10 @@ let xml_incr_coordinate grammar focus xml =
     | _ -> Kwd grammar#and_ :: xml
 
 let xml_incr grammar ~id_labelling (focus : focus) = function
+  | IncrInput (s,typ) ->
+    let xml_input = [Input typ] in
+    let kwd_type = string_of_input_type grammar typ in
+    Kwd grammar#the :: Kwd kwd_type :: xml_input
   | IncrTerm t ->
     let xml_t = [Word (word_of_term t)] in
     ( match focus with

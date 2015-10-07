@@ -7,6 +7,14 @@ let uri_has_ext uri exts =
     exts
 let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"]
 
+let xsd_string = "http://www.w3.org/2001/XMLSchema#string"
+let xsd_integer = "http://www.w3.org/2001/XMLSchema#integer"
+let xsd_double = "http://www.w3.org/2001/XMLSchema#double"
+let xsd_date = "http://www.w3.org/2001/XMLSchema#date"
+let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
+let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
+
+
 (* ------------------------- *)
 
 type var = string

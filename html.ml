@@ -107,6 +107,19 @@ let html_word = function
   | `Undefined -> "?"
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
+let html_input typ =
+  let t, hint =
+    match typ with
+    | `String -> "text", ""
+    | `Int -> "number", "0"
+    | `Float -> "number", "0.0e+0"
+    | `Date -> "text", "yyyy-mm-dd"
+    | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
+    | `Time -> "text", "hh:mm:ss"
+    | `URI -> "url", "http://"
+  in
+  "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
+
 let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
   let open Lisql2nl in
   match xml with
@@ -119,6 +132,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
   function
     | Kwd s -> s
     | Word w -> html_word w
+    | Input typ -> html_input typ
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Coord (coord,lxml) ->
@@ -181,6 +195,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
     match incr with
       | IncrId _ -> 1, None
       | IncrForeach _ -> 1, Some grammar#tooltip_foreach
+      | IncrInput _ -> 2, None
       | IncrTerm _ -> 2, None
       | IncrTriple _ -> 3, None
       | IncrType _ -> 4, None

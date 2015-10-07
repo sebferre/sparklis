@@ -309,6 +309,25 @@ object (self)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
   method private refresh_term_increments_gen ajax_index max_results =
+    let apply_incr elt =
+      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr_opt = (* retrieving input value for input increments *)
+	match incr with
+	| Lisql.IncrInput (s,typ) ->
+	  let ref_s = ref s in
+	  jquery_input_from elt ".term-input" (fun input ->
+	    ref_s := to_string input##value);
+	  let s = !ref_s in
+	  if Lisql.check_input s typ
+	  then Some (Lisql.IncrInput (s,typ))
+	  else begin alert "Invalid input"; None end
+	| _ -> Some incr in
+      match incr_opt with
+      | None -> ()
+      | Some incr ->
+	navigation#update_focus ~push_in_history:true
+	  (Lisql.insert_increment incr)
+    in
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
       jquery_input "#pattern-terms" (fun input ->
@@ -319,10 +338,14 @@ object (self)
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-terms"
 		(html_count_unit (List.length index) max_results Lisql2nl.config_lang#grammar#entity_entities);
-	      stop_links_propagation_from elt_list;
+	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		navigation#update_focus ~push_in_history:true
-		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+		apply_incr elt));
+	      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
+		Opt.iter (elt##parentNode) (fun node ->
+		  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
+		    let incr_elt = Dom_html.element dom_elt in
+		    apply_incr incr_elt))));
 	      refreshing_terms <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
@@ -331,7 +354,7 @@ object (self)
     self#refresh_term_increments_gen lis#ajax_index_terms_init 100
   method private refresh_term_increments =
     self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms (fun index_terms -> k (lis#index_ids @ index_terms)))
+      (fun constr elts k -> lis#index_terms (fun index_terms -> k (lis#index_ids_inputs @ index_terms)))
       Lis.config_max_results#value
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
@@ -704,7 +727,7 @@ let _ =
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
 	history#change_endpoint url)));
-    jquery_input "#sparql-endpoint-input" (onenter (fun input ->
+    jquery_input "#sparql-endpoint-input" (onenter (fun input ev ->
       jquery_click "#sparql-endpoint-button"));
     jquery "#config-control" (onclick (fun elt ev ->
       jquery "#config-panel" (fun panel ->
@@ -735,7 +758,7 @@ let _ =
 		(Lisql.insert_constr constr)
 	  with Invalid_argument msg ->
 	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
-    jquery_input "#pattern-terms" (onenter (fun input ->
+    jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter
       (fun (sel_select, sel_input, sel_list, k) ->

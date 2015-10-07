@@ -55,16 +55,19 @@ let onchange k elt =
 
 let onkeypress k elt =
   elt##onkeypress <- Dom.handler (fun ev -> k elt ev; bool true)
+let onkeydown k elt =
+  elt##onkeydown <- Dom.handler (fun ev -> k elt ev; bool true)
 
 let onenter k elt =
   onkeypress
-    (fun elt ev -> if ev##keyCode = 13 then begin k elt; bool true end else bool false)
+    (fun elt ev -> if ev##keyCode = 13 then begin k elt ev; bool true end else bool false)
     elt
 
-let stop_links_propagation_from elt =
-  jquery_all_from elt "a"
+let stop_propagation_from elt sel =
+  jquery_all_from elt sel
     (onclick (fun elt ev -> Dom_html.stopPropagation ev))
-    
+let stop_links_propagation_from elt = stop_propagation_from elt "a"
+
 (* prepare a string for safe insertion in HTML code *)
 let escapeHTML (str : string) : string =
   let div = Dom_html.createDiv Dom_html.document in
