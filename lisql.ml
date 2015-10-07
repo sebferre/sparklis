@@ -262,14 +262,11 @@ let id_of_dim = function
   | Foreach (_,id,_,_,_) -> Some id
 let id_of_aggreg = function
   | TheAggreg (_,id,_,_,_,_) -> Some id
-let id_of_s = function
-  | SExpr (_,id,_,_,_) -> Some id
-  | _ -> None
 let id_of_focus = function
   | AtS1 (np,ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
   | AtDim (dim,_) -> id_of_dim dim
   | AtAggreg (aggreg,_) -> id_of_aggreg aggreg
-  | AtS (s,_) -> id_of_s s
+  | AtExpr (_, SExprX (id,_,_,_)) -> Some id
   | _ -> None
 
 (* extraction of LISQL s element from focus *)
@@ -588,6 +585,25 @@ let left_focus = function
   | AtExpr (f,ctx) -> left_expr f ctx
   | AtS (f,ctx) -> left_s f ctx
 
+(* move to next undef expr if any, or to the context of the whole expr otherwise *)
+let rec next_undef_focus focus =
+  match focus with
+  | AtExpr (expr, ctx) ->
+    ( match expr with
+    | Undef _ -> Some focus
+    | Const _ -> move_seq up_focus next_undef_focus focus
+    | Var _ -> move_seq up_focus next_undef_focus focus
+    | Apply (_,func,args) ->
+      ( try
+	  let x, ll_rr =
+	    List.find (* if some argument is Undef *)
+	      (function (Undef _, ll_rr) -> true | _ -> false)
+	      (ctx_of_list args) in
+	  Some (AtExpr (x, ApplyX (func,ll_rr,ctx))) (* set focus on it *)
+	with _ -> move_seq up_focus next_undef_focus focus ) )
+  | _ -> Some focus
+
+
 let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
   match steps, foc_opt with
     | _, None -> None
@@ -707,7 +723,7 @@ let insert_elt_s2 det focus =
 
 let insert_input s typ focus =
   match focus with
-  | AtExpr (_,ctx) -> Some (AtExpr (Const ((), term_of_input s typ), ctx))
+  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((), term_of_input s typ), ctx))
   | _ -> None
 
 let insert_term t focus =
@@ -715,10 +731,10 @@ let insert_term t focus =
     | Rdf.Bnode _ -> None (* blank nodes cannot be injected in queries *)
     | _ ->
       match focus with
-      | AtExpr (_,ctx) -> Some (AtExpr (Const ((),t),ctx))
+      | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((),t),ctx))
       | _ -> insert_elt_s2 (Term t) focus
 let insert_id id = function
-  | AtExpr (_,ctx) -> Some (AtExpr (Var ((),id),ctx))
+  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id),ctx))
   | focus -> insert_elt_s2 (The id) focus
 
 let insert_type c = function
@@ -891,8 +907,8 @@ let insert_func_arg func arity pos =
     List.map (fun _ -> factory#top_expr) (Common.from_downto (pos-1) 1),
     List.map (fun _ -> factory#top_expr) (Common.from_to (pos+1) arity) in
   function
-  | AtExpr (Undef _, ctx) when arity=0 -> Some (AtExpr (Apply ((), func, []), ctx))
-  | AtExpr (expr,ctx) -> Some (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
+  | AtExpr (Undef _, ctx) when arity=0 -> next_undef_focus (AtExpr (Apply ((), func, []), ctx))
+  | AtExpr (expr,ctx) -> next_undef_focus (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
   | focus ->
     ( match id_of_focus focus with
     | None -> None
@@ -901,7 +917,7 @@ let insert_func_arg func arity pos =
       let args = if arity = 0 then [] else list_of_ctx (Var ((),id)) ll_rr in
       let sexpr = SExpr ((), factory#new_id, factory#top_modif, Apply ((), func, args), None) in
       let focus2 = append_seq_s Root sexpr s in
-      Some focus2 )
+      move_seq down_focus next_undef_focus focus2 )
 
 let insert_increment incr focus =
   match incr with
