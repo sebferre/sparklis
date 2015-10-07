@@ -55,8 +55,6 @@ let config_show_datatypes = new Config.boolean_input ~key:"show_datatypes" ~inpu
 type word =
   [ `Thing
   | `Relation
-  | `Expression
-  | `Value
   | `Entity of Rdf.uri * string
   | `Literal of string
   | `TypedLiteral of string * string (* lexical value, datatype/lang *)
@@ -70,8 +68,6 @@ type word =
 let word_text_content grammar : word -> string = function
   | `Thing -> grammar#thing
   | `Relation -> grammar#relation
-  | `Expression -> grammar#expression
-  | `Value -> grammar#value
   | `Entity (uri,s) -> s
   | `Literal s -> s
   | `TypedLiteral (s, dt) -> if config_show_datatypes#value then s ^ " (" ^ dt ^ ")" else s
@@ -84,6 +80,7 @@ let word_text_content grammar : word -> string = function
 
 type ng_label =
   [ `Word of word
+  | `Expr of annot elt_expr
   | `Gen of ng_label * word
   | `Of of word * ng_label
   | `AggregNoun of word * ng_label
@@ -407,7 +404,7 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
     lab3
   | SExpr (_,id,modif,expr,rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
-    (id, `Labels [("expr", `Word `Expression)]) :: lab_rel @ labelling
+    (id, `Labels [("expr", `Expr expr)]) :: lab_rel @ labelling
   | Seq (_, lr) ->
     List.fold_left
       (fun labelling s -> labelling_s grammar ~labelling s)
@@ -504,9 +501,10 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : ann
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
   let ng_aggreg =
     let s_g, pos_g = string_pos_of_aggreg grammar g in
-    match pos_g with
-    | `Noun -> `NounThatOf (`Op s_g, rel)
-    | `Adjective -> `AdjThat (`Op s_g, rel) in
+    match ng, pos_g with
+    | X (`LabelThat (`Expr _, _)), _
+    | _, `Noun -> `NounThatOf (`Op s_g, rel)
+    | _, `Adjective -> `AdjThat (`Op s_g, rel) in
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
   match annot_opt with
@@ -834,20 +832,6 @@ and xml_node_text_content grammar = function
   | DeleteCurrentFocus -> ""
   | DeleteIncr -> ""
 
-let rec xml_ng_label grammar = function
-  | `Word w -> [Word w]
-  | `Gen (ng, w) ->
-    ( match grammar#genetive_suffix with
-      | Some suf -> Suffix (xml_ng_label grammar ng, suf) :: Word w :: []
-      | None -> xml_ng_label grammar (`Of (w,ng)) )
-  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: Kwd grammar#the :: xml_ng_label grammar ng
-  | `AggregNoun (w,ng) -> Word w :: Kwd grammar#of_ :: xml_ng_label grammar ng
-  | `AggregAdjective (w,ng) ->
-    if grammar#adjective_before_noun
-    then Word w :: xml_ng_label grammar ng
-    else xml_ng_label grammar ng @ [Word w]
-  | `Alias id -> assert false
-  | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ng
 
 
 let xml_a_an grammar xml =
@@ -899,35 +883,35 @@ let xml_annotated x_annot f =
   | X x -> f None x
   | A (annot,x) -> xml_focus annot (f (Some annot) x)
 
-let rec xml_s grammar (s : annot s) =
+let rec xml_s grammar ~id_labelling (s : annot s) =
   xml_annotated s
     ( fun annot_opt -> function
-    | `Return np -> Kwd grammar#give_me :: xml_np grammar np
-    | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar np
-    | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar np @ xml_vp grammar vp
-    | `For (np,s) -> [Enum (", ", [Kwd grammar#for_ :: xml_np grammar np;
-				   xml_s grammar s])]
-    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar) lr) )
-and xml_np grammar np =
+    | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
+    | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
+    | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+    | `For (np,s) -> [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
+				   xml_s grammar ~id_labelling s])]
+    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr) )
+and xml_np grammar ~id_labelling np =
   xml_annotated np
     ( fun annot_opt -> function
     | `Void -> []
-    | `PN (w,rel) -> Word w :: xml_rel grammar rel
-    (*    | `Ref (np_label,rel) -> xml_np_label grammar np_label @ xml_rel grammar rel *)
-    | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ng))
+    | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
+    (*    | `Ref (np_label,rel) -> xml_np_label grammar ~id_labelling np_label @ xml_rel grammar ~id_labelling rel *)
+    | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
     | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
-    | `And lr -> xml_and grammar (List.map (xml_np grammar) lr)
-    | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar) lr)
-    | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar np)
-    | `Not np -> xml_not grammar annot_opt (xml_np grammar np)
-    | `Infix (adj,s,lnp,rel) -> xml_adj grammar adj (Enum (s, List.map (xml_np grammar) lnp) :: xml_rel grammar rel) )
-and xml_ng grammar rel =
+    | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
+    | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
+    | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
+    | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
+    | `Infix (adj,s,lnp,rel) -> xml_adj grammar adj (Enum (s, List.map (xml_np grammar ~id_labelling) lnp) :: xml_rel grammar ~id_labelling rel) )
+and xml_ng grammar ~id_labelling rel =
   xml_annotated rel
     ( fun annot_opt -> function
-    | `That (w,rel) -> Word w :: xml_rel grammar rel
-    | `LabelThat (l,rel) -> xml_ng_label grammar l @ xml_rel grammar rel
-    | `OfThat (w,np,rel) -> Word w :: Kwd grammar#of_ :: xml_np grammar np @ xml_rel grammar rel
-    | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar susp (xml_ng grammar ng) ngg )
+    | `That (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
+    | `LabelThat (l,rel) -> xml_ng_label grammar ~id_labelling l @ xml_rel grammar ~id_labelling rel
+    | `OfThat (w,np,rel) -> Word w :: Kwd grammar#of_ :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
+    | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg )
 and xml_qu grammar qu xml =
   match xml with
     | Word `Thing :: xml_rem ->
@@ -959,63 +943,80 @@ and xml_adj grammar adj xml_ng =
     | `Order w -> append [Word w] xml_ng
     | `Optional (susp,adj) -> append (xml_suspended susp [Word (`Op grammar#optional)]) (xml_adj grammar adj xml_ng)
     | `Adj (adj,w) -> append (xml_adj grammar adj [Word w]) xml_ng
-and xml_ng_aggreg grammar susp xml_ng = function
+and xml_ng_aggreg grammar ~id_labelling susp xml_ng = function
   | `AdjThat (g,rel) ->
-    let xml_g_rel = Word g :: xml_rel grammar rel in
+    let xml_g_rel = Word g :: xml_rel grammar ~id_labelling rel in
     if grammar#adjective_before_noun
     then xml_suspended susp xml_g_rel @ xml_ng
     else xml_ng @ xml_suspended susp xml_g_rel
-  | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar rel @ [Kwd grammar#of_]) @ xml_ng
-and xml_rel grammar = function
-  | A (a1, `Maybe (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Maybe a1 a2 vp)
-  | A (a1, `Not (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar `Not a1 a2 vp)
+  | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar ~id_labelling rel @ [Kwd grammar#of_]) @ xml_ng
+and xml_rel grammar ~id_labelling = function
+  | A (a1, `Maybe (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
+  | A (a1, `Not (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Not a1 a2 vp)
   | rel ->
     xml_annotated rel
       (fun annot_opt -> function
       | `Nil -> []
-      | `That vp -> Kwd grammar#relative_that :: xml_vp grammar vp
-      | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ng @ xml_vp grammar vp
-      (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar np *)
-      | `PP lpp -> xml_pp_list grammar lpp
-      | `Ing (w,np) -> Word w :: xml_np grammar np
-      | `And lr -> xml_and grammar (List.map (xml_rel grammar) lr)
-      | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar) lr)
-      | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar rel)
-      | `Not rel -> xml_not grammar annot_opt (xml_rel grammar rel)
+      | `That vp -> Kwd grammar#relative_that :: xml_vp grammar ~id_labelling vp
+      | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
+      (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
+      | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
+      | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
+      | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
+      | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
+      | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar ~id_labelling rel)
+      | `Not rel -> xml_not grammar annot_opt (xml_rel grammar ~id_labelling rel)
       | `Ellipsis -> xml_ellipsis )
-and xml_vp grammar = function
-  | A (a1, `Maybe (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar `Maybe a1 a2 vp)
-  | A (a1, `Not (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar `Not a1 a2 vp) (* negation inversion *)
+and xml_vp grammar ~id_labelling = function
+  | A (a1, `Maybe (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
+  | A (a1, `Not (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Not a1 a2 vp) (* negation inversion *)
   | vp ->
     xml_annotated vp
       (fun annot_opt -> function
-      | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar np @ xml_pp_list grammar lpp
-      | `IsPP pp -> Kwd grammar#is :: xml_pp grammar pp
-      | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar np @ xml_pp_list grammar lpp
-      | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar np @ xml_pp_list grammar lpp
-      | `VT (w,np,lpp) -> Word w :: xml_np grammar np @ xml_pp_list grammar lpp
-      | `Subject (np,vp) -> xml_np grammar np @ xml_vp grammar vp
-      | `And lr -> xml_and grammar (List.map (xml_vp grammar) lr)
-      | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar) lr)
-      | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar vp)
-      | `Not vp -> xml_not grammar annot_opt (xml_vp grammar vp)
+      | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `IsPP pp -> Kwd grammar#is :: xml_pp grammar ~id_labelling pp
+      | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+      | `And lr -> xml_and grammar (List.map (xml_vp grammar ~id_labelling) lr)
+      | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
+      | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar ~id_labelling vp)
+      | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
       | `Ellipsis -> xml_ellipsis )
-and xml_vp_mod grammar (op_mod : [`Not | `Maybe]) annot_mod annot_vp vp =
+and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_vp vp =
   let f_xml_mod = match op_mod with `Maybe -> xml_maybe | `Not -> xml_not in
   let xml_mod = xml_focus (annot_mod#down) (f_xml_mod grammar (Some annot_mod) []) in
   match op_mod, vp with
-    | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_np grammar np @ xml_pp_list grammar lpp)
-    | (`Not | `Maybe), `IsPP pp -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_pp grammar pp)
-    | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar np @ xml_pp_list grammar lpp)
-    | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar np @ xml_pp_list grammar lpp)
-    | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar (X vp))
-and xml_pp_list grammar lpp =
-  List.concat (List.map (xml_pp grammar) lpp)
-and xml_pp grammar = function
-  | `Prep (prep,np) -> Word prep :: xml_np grammar np
-  | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar np1 @ Word prep2 :: xml_np grammar np2
+    | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
+    | (`Not | `Maybe), `IsPP pp -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_pp grammar ~id_labelling pp)
+    | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
+    | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
+    | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling (X vp))
+and xml_pp_list grammar ~id_labelling lpp =
+  List.concat (List.map (xml_pp grammar ~id_labelling) lpp)
+and xml_pp grammar ~id_labelling = function
+  | `Prep (prep,np) -> Word prep :: xml_np grammar ~id_labelling np
+  | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
+and xml_ng_label grammar ~id_labelling = function
+  | `Word w -> [Word w]
+  | `Expr expr ->
+    let np = np_of_elt_expr grammar ~id_labelling top_adj top_rel expr in
+    xml_np grammar ~id_labelling np
+  | `Gen (ng, w) ->
+    ( match grammar#genetive_suffix with
+      | Some suf -> Suffix (xml_ng_label grammar ~id_labelling ng, suf) :: Word w :: []
+      | None -> xml_ng_label grammar ~id_labelling (`Of (w,ng)) )
+  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: Kwd grammar#the :: xml_ng_label grammar ~id_labelling ng
+  | `AggregNoun (w,ng) -> Word w :: Kwd grammar#of_ :: xml_ng_label grammar ~id_labelling ng
+  | `AggregAdjective (w,ng) ->
+    if grammar#adjective_before_noun
+    then Word w :: xml_ng_label grammar ~id_labelling ng
+    else xml_ng_label grammar ~id_labelling ng @ [Word w]
+  | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
 
-let xml_ng_id grammar ~id_labelling id = xml_ng_label grammar (id_labelling#get_id_label id)
+    
+let xml_ng_id grammar ~id_labelling id = xml_ng_label grammar ~id_labelling (id_labelling#get_id_label id)
 let xml_np_id grammar ~id_labelling id = Word (`Op grammar#the) :: xml_ng_id grammar ~id_labelling id
 
 let xml_incr_coordinate grammar focus xml =
@@ -1083,13 +1084,13 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrOr -> Word (`Op grammar#or_) :: xml_ellipsis
   | IncrMaybe -> xml_maybe grammar None [Word dummy_word]
   | IncrNot -> xml_not grammar None [Word dummy_word]
-  | IncrUnselect -> xml_np grammar (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
-  | IncrAggreg g -> xml_np grammar (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
-  | IncrOrder order -> xml_np grammar (head_of_modif grammar None dummy_word top_rel (Select,order))
+  | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
+  | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
+  | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Select,order))
   | IncrForeach id -> Word (`Op grammar#for_) :: Word (`Op grammar#each) :: xml_ng_id grammar ~id_labelling id
-(*  | IncrAggregId (g,id) -> xml_np grammar (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
+(*  | IncrAggregId (g,id) -> xml_np grammar ~id_labelling (np_of_aggreg grammar ~id_labelling None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
   | IncrFuncArg (func,arity,pos) ->
-    xml_np grammar
+    xml_np grammar ~id_labelling
       (np_of_apply grammar None
 	 top_adj
 	 func

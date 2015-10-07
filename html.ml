@@ -92,8 +92,6 @@ let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
-  | `Expression -> html_modifier Lisql2nl.config_lang#grammar#expression
-  | `Value -> Lisql2nl.config_lang#grammar#value
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) ->
     if Lisql2nl.config_show_datatypes#value
@@ -161,11 +159,13 @@ and html_highlight h xml =
 let html_term (t : Rdf.term) : string =
   html_word (Lisql2nl.word_of_term t)
 
-let html_query (state : state) (query : annot elt_s) : string = 
+let html_query (state : state) (query : annot elt_s) : string =
+  let grammar = Lisql2nl.config_lang#grammar in
+  let id_labelling = state#id_labelling in
   html_of_nl_xml state
-    (Lisql2nl.xml_s Lisql2nl.config_lang#grammar
+    (Lisql2nl.xml_s grammar ~id_labelling
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_elt_s Lisql2nl.config_lang#grammar state#id_labelling
+	  (Lisql2nl.s_of_elt_s grammar ~id_labelling
 	     query)))
 
 
@@ -286,7 +286,9 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
-	   (Lisql2nl.xml_ng_label Lisql2nl.config_lang#grammar
+	   (Lisql2nl.xml_ng_label
+	      Lisql2nl.config_lang#grammar
+	      ~id_labelling:(state#id_labelling)
 	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;
