@@ -391,7 +391,11 @@ and labelling_aggreg_op grammar g ls =
     let w = `Op s_g in
     match pos_g with
     | `Noun -> w, (fun l -> `AggregNoun (w, l))
-    | `Adjective -> w, (fun l -> `AggregAdjective (w, l)) in
+    | `Adjective -> w,
+      (fun l ->
+	match l with
+	| `Expr _ -> `AggregNoun (w,l)
+	| _ -> `AggregAdjective (w, l)) in
   List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
@@ -410,7 +414,17 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
       (fun labelling s -> labelling_s grammar ~labelling s)
       labelling lr
 
-      
+let rec size_ng_label = function
+  | `Word w -> 1
+  | `Expr _ -> 1
+  | `Gen (l,w) -> size_ng_label l + 1
+  | `Of (w,l) -> 1 + size_ng_label l
+  | `AggregNoun (w,l) -> size_ng_label l
+  | `AggregAdjective (w,l) -> size_ng_label l
+     (* not favoring 'the average' w.r.t. 'the average <prop>' *)
+  | `Nth (k,l) -> 1 + size_ng_label l
+
+
 class ['a ] counter =
 object
   val mutable key_cpt = []
@@ -432,20 +446,36 @@ object (self)
   val label_counter : ng_label counter = new counter
   val mutable id_list : (id * [`Label of Rdf.var * (ng_label * int) | `Alias of id]) list = []
   initializer
+    let lab_rank =
+      List.map
+	(function
+	| (id, `Alias id2) -> (id, `Alias id2)
+	| (id, `Labels ls) ->
+	  let ls = Common.list_to_set ls in (* removing duplicates *)
+	  let ls = if ls = [] then [("thing", `Word `Thing)] else ls in (* default label *)
+	  let ls_rank =
+	    List.map
+	      (fun (var_prefix, ng) ->
+		let k = label_counter#rank ng in
+		var_prefix, (ng, k))
+	      ls in
+	  (id, `Labels ls_rank))
+	lab in
     id_list <- List.map
       (function
       | (id, `Alias id2) -> (id, `Alias id2)
-      | (id, `Labels ls) ->
-	let ls = Common.list_to_set ls in (* removing duplicates *)
-	let ls = if ls = [] then [("thing", `Word `Thing)] else ls in (* default label *)
-	let vss =
-	  List.map
-	    (fun (var_prefix, ng) ->
-	      let k = label_counter#rank ng in
-	      var_prefix, (ng, k))
-	    ls in
-	(id, `Label (List.hd vss)))
-      lab
+      | (id, `Labels ls_rank) ->
+	let _, _, best_label =
+	  List.fold_left
+	    (fun (best_count,best_size,best_label) (_,(ng,_) as label) ->
+	      let count = label_counter#count ng in
+	      let size = size_ng_label ng in
+	      if count < best_count then (count,size,label)
+	      else if count = best_count && size < best_size then (count,size,label)
+	      else (best_count,best_size,best_label))
+	    (max_int,max_int,List.hd ls_rank) ls_rank in
+	(id, `Label best_label))
+      lab_rank
 
   method private get_id_var_label (id : id) : Rdf.var * (ng_label * int) =
     try match List.assoc id id_list with
