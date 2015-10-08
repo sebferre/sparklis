@@ -45,15 +45,15 @@ object
   method virtual date_and_time : string
   method virtual time : string
   method virtual uri : string
-    
-  method virtual aggreg_number : string * [`Noun | `Adjective]
-  method virtual aggreg_list : string * [`Noun | `Adjective]
-  method virtual aggreg_total : string * [`Noun | `Adjective]
-  method virtual aggreg_average : string * [`Noun | `Adjective]
-  method virtual aggreg_maximum : string * [`Noun | `Adjective]
-  method virtual aggreg_minimum : string * [`Noun | `Adjective]
-  method virtual aggreg_sample : string * [`Noun | `Adjective ]
-  method virtual aggreg_given : string * [`Noun | `Adjective]
+
+  (* aggregations: (noun, adjective option), adjective is prefered *) 
+  method virtual aggreg_number : string * string option
+  method virtual aggreg_list : string * string option
+  method virtual aggreg_total : string * string option
+  method virtual aggreg_average : string * string option
+  method virtual aggreg_maximum : string * string option
+  method virtual aggreg_minimum : string * string option
+  method virtual aggreg_sample : string * string option
 
   method virtual func_length : string
   method virtual func_now : string
@@ -164,14 +164,13 @@ object
   method time = "time"
   method uri = "URI"
       
-  method aggreg_number = "number", `Noun
-  method aggreg_list = "list", `Noun
-  method aggreg_total = "total", `Adjective
-  method aggreg_average = "average", `Adjective
-  method aggreg_maximum = "maximum", `Adjective
-  method aggreg_minimum = "minimum", `Adjective
-  method aggreg_sample = "sample", `Adjective
-  method aggreg_given = "given", `Adjective
+  method aggreg_number = "number", None
+  method aggreg_list = "list", None
+  method aggreg_total = "sum", Some "total"
+  method aggreg_average = "average", Some "average"
+  method aggreg_maximum = "maximum", Some "maximal"
+  method aggreg_minimum = "minimum", Some "minimal"
+  method aggreg_sample = "sample", Some "sample"
 
   method func_length = "length"
   method func_now = "now"
@@ -272,14 +271,13 @@ object
   method time = "heure"
   method uri = "URI"
 
-  method aggreg_number = "nombre", `Noun
-  method aggreg_list = "liste", `Noun
-  method aggreg_total = "total(e)", `Adjective
-  method aggreg_average = "moyen(ne)", `Adjective
-  method aggreg_maximum = "maximal(e)", `Adjective
-  method aggreg_minimum = "minimal(e)", `Adjective
-  method aggreg_sample = "échantillon", `Noun
-  method aggreg_given = "donné(e)", `Adjective
+  method aggreg_number = "nombre", None
+  method aggreg_list = "liste", None
+  method aggreg_total = "somme", Some "total(e)"
+  method aggreg_average = "moyenne", Some "moyen(ne)"
+  method aggreg_maximum = "maximum", Some "maximal(e)"
+  method aggreg_minimum = "minimum", Some "minimal(e)"
+  method aggreg_sample = "échantillon", None
 
   method func_length = "longueur"
   method func_now = "maintenant"

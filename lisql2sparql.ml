@@ -41,7 +41,6 @@ let sparql_aggreg = function
   | Maximum -> Sparql.MAX
   | Minimum -> Sparql.MIN
   | Sample -> Sparql.SAMPLE
-  | Given -> Sparql.ID
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)

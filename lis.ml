@@ -440,7 +440,7 @@ object (self)
 	  IncrIs :: IncrTriplify ::
 	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
 	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	    IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given ::
+	    IncrAggreg NumberOf :: IncrAggreg Sample ::
 	    incrs in
 	let incrs =
 	  List.fold_left

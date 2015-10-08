@@ -96,7 +96,6 @@ and print_aggreg_op = function
   | Maximum -> print_atom "Maximum"
   | Minimum -> print_atom "Minimum"
   | Sample -> print_atom "Sample"
-  | Given -> print_atom "Given"
 and print_func = function
   | `Add -> print_atom "Add"
   | `Sub -> print_atom "Sub"
@@ -253,7 +252,6 @@ and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "Maximum" >] -> Maximum
   | [< () = parse_atom ~version "Minimum" >] -> Minimum
   | [< () = parse_atom ~version "Sample" >] -> Sample
-  | [< () = parse_atom ~version "Given" >] -> Given
   | [<>] -> syntax_error "invalid aggreg"
 and parse_func ~version = parser
     | [< () = parse_atom ~version "Add" >] -> `Add

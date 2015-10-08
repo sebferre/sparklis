@@ -54,8 +54,7 @@ type order = Unordered | Highest | Lowest
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
 
-type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample | Given
-(* Given is a fake aggregator to use an aggregation as dimension *)
+type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample
 type func = [ `Add | `Sub | `Mul | `Div | `Strlen | `Now ]
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
@@ -867,7 +866,7 @@ let insert_modif_transf f = function
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
     Some (AtS1 (AnAggreg ((), id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (_, An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) && g <> Given ->
+  | AtS1 (Det (_, An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     Some (AtS1 (AnAggreg ((), factory#new_id, factory#top_modif, g, None, np), ctx))
   | AtS1 ((AnAggreg (_, id, modif, g0, rel_opt, np) as npg), ctx) ->
     if g0 = g then Some (AtS1 (np, ctx))

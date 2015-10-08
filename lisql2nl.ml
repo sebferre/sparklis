@@ -198,7 +198,7 @@ let string_of_input_type grammar = function
   | `Time -> grammar#time
   | `URI -> grammar#uri
     
-let string_pos_of_aggreg grammar = function
+let noun_adj_opt_of_aggreg grammar = function
   | NumberOf -> grammar#aggreg_number
   | ListOf -> grammar#aggreg_list
   | Total -> grammar#aggreg_total
@@ -206,13 +206,12 @@ let string_pos_of_aggreg grammar = function
   | Maximum -> grammar#aggreg_maximum
   | Minimum -> grammar#aggreg_minimum
   | Sample -> grammar#aggreg_sample
-  | Given -> grammar#aggreg_given
 
 let word_of_aggreg grammar g =
-  let s_g, pos_g = string_pos_of_aggreg grammar g in
-  match pos_g with
-    | `Noun -> `Op s_g
-    | `Adjective -> `Op s_g
+  let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+  match adj_opt with
+    | None -> `Op noun
+    | Some adj -> `Op adj
 
 let string_of_func grammar = function
   | `Add -> " + "
@@ -221,7 +220,7 @@ let string_of_func grammar = function
   | `Div -> " / "
   | `Strlen -> grammar#func_length
   | `Now -> grammar#func_now
-      
+
 let word_of_order grammar = function
   | Unordered -> `Op ""
   | Highest -> `Op grammar#order_highest
@@ -271,7 +270,6 @@ let var_of_aggreg = function
   | Maximum -> "maximum"
   | Minimum -> "minimum"
   | Sample -> "sample"
-  | Given -> "given"
 
 let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling_list = function
   | Is (_,np) -> labelling_s1 grammar ~labels np (* TODO: avoid keeping np.id *)
@@ -386,16 +384,16 @@ and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = f
     (id, `Labels ls_g) :: lab_rel @ labelling
 and labelling_aggreg_op grammar g ls =
   let v = var_of_aggreg g in
-  let w, make_aggreg =
-    let s_g, pos_g = string_pos_of_aggreg grammar g in
-    let w = `Op s_g in
-    match pos_g with
-    | `Noun -> w, (fun l -> `AggregNoun (w, l))
-    | `Adjective -> w,
+  let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+  let w = `Op noun in
+  let make_aggreg =
+    match adj_opt with
+    | None -> (fun l -> `AggregNoun (`Op noun, l))
+    | Some adj ->
       (fun l ->
 	match l with
-	| `Expr _ -> `AggregNoun (w,l)
-	| _ -> `AggregAdjective (w, l)) in
+	| `Expr _ -> `AggregNoun (`Op noun, l)
+	| _ -> `AggregAdjective (`Op adj, l)) in
   List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
@@ -530,11 +528,11 @@ let ng_of_id ~id_labelling id : annot ng =
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : annot rel) (ng : annot ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
   let ng_aggreg =
-    let s_g, pos_g = string_pos_of_aggreg grammar g in
-    match ng, pos_g with
+    let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+    match ng, adj_opt with
     | X (`LabelThat (`Expr _, _)), _
-    | _, `Noun -> `NounThatOf (`Op s_g, rel)
-    | _, `Adjective -> `AdjThat (`Op s_g, rel) in
+    | _, None -> `NounThatOf (`Op noun, rel)
+    | _, Some adj -> `AdjThat (`Op adj, rel) in
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
   match annot_opt with
@@ -629,10 +627,10 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let ng_aggreg =
-      let s_g, pos_g = string_pos_of_aggreg grammar g in
-      match pos_g with
-      | `Noun -> `NounThatOf (`Op s_g, rel)
-      | `Adjective -> `AdjThat (`Op s_g, rel) in
+      let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+      match adj_opt with
+      | None -> `NounThatOf (`Op noun, rel)
+      | Some adj -> `AdjThat (`Op adj, rel) in
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
     A (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
