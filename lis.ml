@@ -447,9 +447,45 @@ object (self)
 	    (fun incrs v -> IncrForeach (id_labelling#get_var_id v) :: incrs)
 	    incrs available_defs in
 	let incrs =
-	  IncrFuncArg (`Add,2,1) :: IncrFuncArg (`Sub,2,1) :: IncrFuncArg (`Mul,2,1) :: IncrFuncArg (`Div,2,1) ::
-	    IncrFuncArg (`Strlen,1,1) :: IncrFuncArg (`Now,0,0) ::
-	    incrs in
+	  List.fold_left
+	    (fun incrs (func,arity,pos) -> IncrFuncArg (func,arity,pos) :: incrs)
+	    incrs
+	    [ `Str, 1, 1;
+	      `Lang, 1, 1;
+	      `Datatype, 1, 1;
+	      `IRI, 1, 1;
+	      `STRDT, 1, 1;
+	      `STRLANG, 1, 1;
+	      `Strlen, 1, 1;
+	      `Substr2, 2, 1;
+	      `Substr3, 3, 1;
+	      `Strbefore, 2, 1;
+	      `Strafter, 2, 1;
+	      `Concat, 2, 1;
+	      `Concat, 2, 2;
+	      `UCase, 1, 1;
+	      `LCase, 1, 1;
+	      `Encode_for_URI, 1, 1;
+	      `Replace, 3, 1;
+	      `Add, 2, 1;
+	      `Sub, 2, 1;
+	      `Mul, 2, 1;
+	      `Div, 2, 1;
+	      `Neg, 1, 1;
+	      `Abs, 1, 1;
+	      `Round, 1, 1;
+	      `Ceil, 1, 1;
+	      `Floor, 1, 1;
+	      `Random2, 2, 1;
+	      `Random2, 2, 2;
+	      `Year, 1, 1;
+	      `Month, 1, 1;
+	      `Day, 1, 1;
+	      `Hours, 1, 1;
+	      `Minutes, 1, 1;
+	      `Seconds, 1, 1;
+	      `NOW, 0, 0;
+	    ] in
 	incrs in
     let valid_incrs =
       List.filter

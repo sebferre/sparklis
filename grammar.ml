@@ -1,4 +1,11 @@
 
+type func_syntax =
+[ `Noun of string
+| `Prefix of string
+| `Infix of string
+| `Brackets of string * string
+| `Pattern of [`Kwd of string | `Func of string | `Arg of int] list ]
+
 class virtual grammar =
 object
   method virtual adjective_before_noun : bool
@@ -55,8 +62,7 @@ object
   method virtual aggreg_minimum : string * string option
   method virtual aggreg_sample : string * string option
 
-  method virtual func_length : string
-  method virtual func_now : string
+  method virtual func_syntax : Lisql.func -> func_syntax
       
   method virtual order_highest : string
   method virtual order_lowest : string
@@ -172,9 +178,41 @@ object
   method aggreg_minimum = "minimum", Some "minimal"
   method aggreg_sample = "sample", Some "sample"
 
-  method func_length = "length"
-  method func_now = "now"
-    
+  method func_syntax = function
+  | `Str -> `Noun "string"
+  | `Lang -> `Noun "language"
+  | `Datatype -> `Noun "datatype"
+  | `IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
+  | `STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
+  | `STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
+  | `Strlen -> `Noun "length"
+  | `Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
+  | `Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
+  | `Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
+  | `Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
+  | `Concat -> `Infix " ++ "
+  | `UCase -> `Noun "uppercase"
+  | `LCase -> `Noun "lowercase"
+  | `Encode_for_URI -> `Noun "URI encoding"
+  | `Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
+  | `Add -> `Infix " + "
+  | `Sub -> `Infix " - "
+  | `Mul -> `Infix " * "
+  | `Div -> `Infix " / "
+  | `Neg -> `Prefix "- "
+  | `Abs -> `Brackets ("|","|")
+  | `Round -> `Noun "rounding"
+  | `Ceil -> `Noun "ceiling"
+  | `Floor -> `Noun "floor"
+  | `Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
+  | `Year -> `Noun "year"
+  | `Month -> `Noun "month"
+  | `Day -> `Noun "day"
+  | `Hours -> `Noun "hours"
+  | `Minutes -> `Noun "minutes"
+  | `Seconds -> `Noun "seconds"
+  | `NOW -> `Pattern [`Func "now"]
+ 
   method order_highest = "highest-to-lowest"
   method order_lowest = "lowest-to-highest"
 
@@ -279,8 +317,40 @@ object
   method aggreg_minimum = "minimum", Some "minimal(e)"
   method aggreg_sample = "échantillon", None
 
-  method func_length = "longueur"
-  method func_now = "maintenant"
+  method func_syntax = function
+  | `Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]
+  | `Lang -> `Pattern [`Kwd "la"; `Func "langue"; `Kwd "de"; `Arg 1]
+  | `Datatype -> `Pattern [`Kwd "le"; `Func "type"; `Kwd "de"; `Arg 1]
+  | `IRI -> `Pattern [`Kwd "l'"; `Func "IRI"; `Arg 1]
+  | `STRDT -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de";  `Func "type"; `Arg 2]
+  | `STRLANG -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de"; `Func "langue"; `Arg 2]
+  | `Strlen -> `Pattern [`Kwd "la"; `Func "longueur"; `Kwd "de"; `Arg 1]
+  | `Substr2 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2]
+  | `Substr3 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2; `Kwd "et de longueur"; `Arg 3]
+  | `Strbefore -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "avant"; `Arg 2]
+  | `Strafter -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "après"; `Arg 2]
+  | `Concat -> `Infix " ++ "
+  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "majuscules"]
+  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minuscules"]
+  | `Encode_for_URI -> `Pattern [`Kwd "l'"; `Func "encodage URI"; `Kwd "de"; `Arg 1]
+  | `Replace -> `Pattern [`Kwd "le"; `Func "remplacement"; `Kwd "dans"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "par"; `Arg 3]
+  | `Add -> `Infix " + "
+  | `Sub -> `Infix " - "
+  | `Mul -> `Infix " * "
+  | `Div -> `Infix " / "
+  | `Neg -> `Prefix "- "
+  | `Abs -> `Brackets ("|","|")
+  | `Round -> `Pattern [`Kwd "l'"; `Func "arrondi"; `Kwd "de"; `Arg 1]
+  | `Ceil -> `Pattern [`Kwd "la"; `Func "partie entière par excès"; `Kwd "de"; `Arg 1]
+  | `Floor -> `Pattern [`Kwd "la"; `Func "partie entière par défaut"; `Kwd "de"; `Arg 1]
+  | `Random2 -> `Pattern [`Kwd "un"; `Func "nombre aléatoire"; `Kwd "entre"; `Arg 1; `Kwd "et"; `Arg 2]
+  | `Year -> `Pattern [`Kwd "l'"; `Func "année"; `Kwd "de"; `Arg 1]
+  | `Month -> `Pattern [`Kwd "le"; `Func "mois"; `Kwd "de"; `Arg 1]
+  | `Day -> `Pattern [`Kwd "le"; `Func "jour"; `Kwd "de"; `Arg 1]
+  | `Hours -> `Pattern [`Kwd "les"; `Func "heures"; `Kwd "de"; `Arg 1]
+  | `Minutes -> `Pattern [`Kwd "les"; `Func "minutes"; `Kwd "de"; `Arg 1]
+  | `Seconds -> `Pattern [`Kwd "les"; `Func "secondes"; `Kwd "de"; `Arg 1]
+  | `NOW -> `Pattern [`Func "maintenant"]
 
   method order_highest = "en ordre décroissant"
   method order_lowest = "en ordre croissant"

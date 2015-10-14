@@ -135,6 +135,55 @@ let triple_arg arg x y z =
       | P -> Sparql.triple y x z
       | O -> Sparql.triple y z x )
 
+let rec expr_apply func args =
+  match func with
+  | `Add -> Sparql.expr_infix "+" args
+  | `Sub -> Sparql.expr_infix "-" args
+  | `Mul -> Sparql.expr_infix "*" args
+  | `Div -> Sparql.expr_infix "/" args
+  | `Random2 ->
+    ( match args with
+    | [arg1; arg2] ->
+      Sparql.expr_infix "+"
+	[arg1;
+	 Sparql.expr_infix "*"
+	   [Sparql.expr_func "RAND" [];
+	    Sparql.expr_infix "-" [arg2; arg1]]]
+    | _ -> assert false )
+  | func -> Sparql.expr_func (name_func func) args
+and name_func = function
+  | `Str -> "str"
+  | `Lang -> "lang"
+  | `Datatype -> "datatype"
+  | `IRI -> "IRI"
+  | `STRDT -> "STRDT"
+  | `STRLANG -> "STRLANG"
+  | `Strlen -> "strlen"
+  | `Substr2 -> "substr"
+  | `Substr3 -> "substr"
+  | `Strbefore -> "strbefore"
+  | `Strafter -> "strafter"
+  | `Concat -> "concat"
+  | `UCase -> "ucase"
+  | `LCase -> "lcase"
+  | `Encode_for_URI -> "encode_for_uri"
+  | `Replace -> "replace"
+  | `Add | `Sub | `Mul | `Div -> invalid_arg "Lisql2sparql.name_func"
+  | `Neg -> "-"
+  | `Abs -> "abs"
+  | `Round -> "round"
+  | `Ceil -> "ceil"
+  | `Floor -> "floor"
+  | `Random2 -> invalid_arg "Lisql2sparql.name_func"
+  | `Year -> "year"
+  | `Month -> "month"
+  | `Day -> "day"
+  | `Hours -> "hours"
+  | `Minutes -> "minutes"
+  | `Seconds -> "seconds"
+  | `NOW -> "NOW"
+
+    
 type sparql_p1 = Rdf.term -> Sparql.formula
 type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
@@ -324,13 +373,7 @@ and form_expr state : annot elt_expr -> Sparql.expr = function
       | `Above (true, Some pos) -> form_expr state (List.nth args (pos-1))
       | _ ->
 	let sparql_args = List.map (fun arg -> form_expr state arg) args in
-	( match func with
-	| `Add -> Sparql.expr_infix "+" sparql_args
-	| `Sub -> Sparql.expr_infix "-" sparql_args
-	| `Mul -> Sparql.expr_infix "*" sparql_args
-	| `Div -> Sparql.expr_infix "/" sparql_args
-	| `Strlen -> Sparql.expr_func "strlen" sparql_args
-	| `Now -> Sparql.expr_func "now" [] ) )
+	expr_apply func sparql_args )
 and find_defining_views state (ids : ids) (views : Sparql.view list) : Rdf.var list * Rdf.var list * Sparql.view list * Sparql.view list =
   let refs = List.map state#id_labelling#get_id_var (Ids.refs ids) in
   let defs = List.map state#id_labelling#get_id_var (Ids.defs ids) in

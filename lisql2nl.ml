@@ -61,6 +61,7 @@ type word =
   | `Blank of string
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
+  | `Func of string
   | `Op of string
   | `Undefined
   | `DummyFocus ]
@@ -74,6 +75,7 @@ let word_text_content grammar : word -> string = function
   | `Blank id -> id
   | `Class (uri,s) -> s
   | `Prop (uri,s) -> s
+  | `Func s -> s
   | `Op s -> s
   | `Undefined -> ""
   | `DummyFocus -> ""
@@ -103,7 +105,7 @@ and 'a nl_np =
   (*  | `Ref of np_label * 'a rel (* TODO: replace by Qu _, with np_label as ng *) *)
   | `Qu of qu * adj * 'a ng
   | `QuOneOf of qu * word list
-  | `Infix of adj * string * 'a np list * 'a rel
+  | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
   | `And of 'a np list
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
   | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
@@ -210,16 +212,23 @@ let noun_adj_opt_of_aggreg grammar = function
 let word_of_aggreg grammar g =
   let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
   match adj_opt with
-    | None -> `Op noun
-    | Some adj -> `Op adj
+    | None -> `Func noun
+    | Some adj -> `Func adj
 
-let string_of_func grammar = function
-  | `Add -> " + "
-  | `Sub -> " - "
-  | `Mul -> " * "
-  | `Div -> " / "
-  | `Strlen -> grammar#func_length
-  | `Now -> grammar#func_now
+let string_of_func grammar func =
+  match grammar#func_syntax func with
+  | `Noun s -> s
+  | `Prefix s -> s
+  | `Infix s -> s
+  | `Brackets (s1,s2) -> String.concat " " [s1;s2]
+  | `Pattern l ->
+    String.concat " "
+      (List.map
+	 (function
+	 | `Kwd s -> s
+	 | `Func s -> s
+	 | `Arg i -> "_")
+	 l)
 
 let word_of_order grammar = function
   | Unordered -> `Op ""
@@ -385,15 +394,15 @@ and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = f
 and labelling_aggreg_op grammar g ls =
   let v = var_of_aggreg g in
   let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
-  let w = `Op noun in
+  let w = `Func noun in
   let make_aggreg =
     match adj_opt with
-    | None -> (fun l -> `AggregNoun (`Op noun, l))
+    | None -> (fun l -> `AggregNoun (`Func noun, l))
     | Some adj ->
       (fun l ->
 	match l with
-	| `Expr _ -> `AggregNoun (`Op noun, l)
-	| _ -> `AggregAdjective (`Op adj, l)) in
+	| `Expr _ -> `AggregNoun (`Func noun, l)
+	| _ -> `AggregAdjective (`Func adj, l)) in
   List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
@@ -531,27 +540,34 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : ann
     let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
     match ng, adj_opt with
     | X (`LabelThat (`Expr _, _)), _
-    | _, None -> `NounThatOf (`Op noun, rel)
-    | _, Some adj -> `AdjThat (`Op adj, rel) in
+    | _, None -> `NounThatOf (`Func noun, rel)
+    | _, Some adj -> `AdjThat (`Func adj, rel) in
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
   match annot_opt with
   | None -> X nl
   | Some annot -> A (annot,nl)
 
-let syntax_of_func grammar (func : func) : [ `Infix of string | `Noun of string | `Const of string ] =
+(*    
+let syntax_of_func grammar (func : func)
+    : [ `Infix of string | `Noun of string | `Const of string ] =
   let s = string_of_func grammar func in
   match func with
   | `Add | `Sub | `Mul | `Div -> `Infix s
   | `Strlen -> `Noun s
-  | `Now -> `Const s
-
+  | `NOW -> `Const s
+  | _ -> failwith "TODO"
+*)
+    
 let np_of_apply grammar annot_opt adj func (np_args : annot np list) (rel : annot rel) : annot np =
+  let nl = `Expr (adj, grammar#func_syntax func, np_args, rel) in
+(*
   let nl =
     match syntax_of_func grammar func with
     | `Const s -> `PN (`Op s, rel)
     | `Noun s -> `Qu (`The, adj, X (`OfThat (`Op s, nl_and np_args, rel)))
     | `Infix s -> `Infix (adj, s, np_args, rel) in
+*)
   match annot_opt with
   | None -> X nl
   | Some annot -> A (annot, nl)
@@ -629,8 +645,8 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
     let ng_aggreg =
       let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
       match adj_opt with
-      | None -> `NounThatOf (`Op noun, rel)
-      | Some adj -> `AdjThat (`Op adj, rel) in
+      | None -> `NounThatOf (`Func noun, rel)
+      | Some adj -> `AdjThat (`Func adj, rel) in
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
     A (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
@@ -721,7 +737,7 @@ and map_np transf np =
     | `Or (lr) -> `Or (List.map (map_np transf) lr)
     | `Maybe (np) -> `Maybe (map_np transf np)
     | `Not (np) -> `Not (map_np transf np)
-    | `Infix (adj,s,lnp,rel) -> `Infix (map_adj transf adj, s, List.map (map_np transf) lnp, map_rel transf rel) )
+    | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel) )
 and map_ng transf ng =
   map_annotated (transf#ng ng)
     ( function
@@ -932,7 +948,21 @@ and xml_np grammar ~id_labelling np =
     | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
     | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
     | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
-    | `Infix (adj,s,lnp,rel) -> xml_adj grammar adj (Enum (s, List.map (xml_np grammar ~id_labelling) lnp) :: xml_rel grammar ~id_labelling rel) )
+    | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel) )
+and xml_expr grammar syntax lnp =
+  match syntax with
+  | `Noun s -> Kwd grammar#the :: Word (`Func s) :: Kwd grammar#of_ :: List.concat lnp
+  | `Prefix s -> Word (`Func s) :: List.concat lnp
+  | `Infix s -> [Enum (s, lnp)]
+  | `Brackets (s1,s2) -> Kwd s1 :: List.concat lnp @ [Kwd s2]
+  | `Pattern l ->
+    List.concat
+      (List.map
+	 (function
+	 | `Kwd s -> [Kwd s]
+	 | `Func s -> [Word (`Func s)]
+	 | `Arg i -> (try List.nth lnp (i-1) with _ -> [Word `Undefined]))
+	 l)
 and xml_ng grammar ~id_labelling rel =
   xml_annotated rel
     ( fun annot_opt -> function

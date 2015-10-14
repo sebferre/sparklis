@@ -10,6 +10,51 @@ type version =  (* must be extended whenever abstract syntax changes *)
 
 let current_version = VId (* must be changed whenever abstract syntax changes *)
 
+(* shared by printing and parsing *)
+
+let list_func_atom =
+  [ `Str, "Str";
+    `Lang, "Lang";
+    `Datatype, "Dataype";
+    `IRI, "IRI";
+    `STRDT, "STRDT";
+    `STRLANG, "STRLANG";
+    `Strlen, "Strlen";
+    `Substr2, "Substr2";
+    `Substr3, "Substr3";
+    `Strbefore, "Strbefore";
+    `Strafter, "Strafter";
+    `Concat, "Concat";
+    `UCase, "UCase";
+    `LCase, "LCase";
+    `Encode_for_URI, "Encore_for_URI";
+    `Replace, "Replace";
+    `Add, "Add";
+    `Sub, "Sub";
+    `Mul, "Mul";
+    `Div, "Div";
+    `Neg, "Neg";
+    `Abs, "Abs";
+    `Round, "Round";
+    `Ceil, "Ceil";
+    `Floor, "Floor";
+    `Random2, "Random2";
+    `Year, "Year";
+    `Month, "Month";
+    `Day, "Day";
+    `Hours, "Hours";
+    `Minutes, "Minutes";
+    `Seconds, "Seconds";
+    `NOW, "NOW" ]
+
+let atom_of_func func =
+  try List.assoc func list_func_atom
+  with _ -> invalid_arg "Permalink.atom_of_func"
+let func_of_atom atom =
+  try fst (List.find (fun (_,a) -> a=atom) list_func_atom)
+  with _ -> invalid_arg "Permalink.func_of_atom"
+
+
 (* current-version printing *)
 
 let print_version = function
@@ -97,12 +142,7 @@ and print_aggreg_op = function
   | Minimum -> print_atom "Minimum"
   | Sample -> print_atom "Sample"
 and print_func = function
-  | `Add -> print_atom "Add"
-  | `Sub -> print_atom "Sub"
-  | `Mul -> print_atom "Mul"
-  | `Div -> print_atom "Div"
-  | `Strlen -> print_atom "Strlen"
-  | `Now -> print_atom "Now"
+  | func -> print_atom (atom_of_func func)
 and print_order = function
   | Unordered -> print_atom "Unordered"
   | Highest -> print_atom "Highest"
@@ -254,12 +294,8 @@ and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "Sample" >] -> Sample
   | [<>] -> syntax_error "invalid aggreg"
 and parse_func ~version = parser
-    | [< () = parse_atom ~version "Add" >] -> `Add
-    | [< () = parse_atom ~version "Sub" >] -> `Sub
-    | [< () = parse_atom ~version "Mul" >] -> `Mul
-    | [< () = parse_atom ~version "Div" >] -> `Div
-    | [< () = parse_atom ~version "Strlen" >] -> `Strlen
-    | [< () = parse_atom ~version "Now" >] -> `Now
+    | [< 'Ident atom >] -> func_of_atom atom
+    | [<>] -> syntax_error "invalid func"
 and parse_order ~version = parser
   | [< () = parse_atom ~version "Unordered" >] -> Unordered
   | [< () = parse_atom ~version "Highest" >] -> Highest

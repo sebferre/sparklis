@@ -55,7 +55,15 @@ type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
 
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample
-type func = [ `Add | `Sub | `Mul | `Div | `Strlen | `Now ]
+type func =
+[ `Str | `Lang | `Datatype
+| `IRI | `STRDT | `STRLANG
+| `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
+| `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
+| `Add | `Sub | `Mul | `Div | `Neg
+| `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
+| `Year | `Month | `Day | `Hours | `Minutes | `Seconds | `NOW ]
+(* missing: timezone, hash functions, BNODE *)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
 type 'a elt_p1 =
@@ -906,7 +914,7 @@ let insert_func_arg func arity pos =
     List.map (fun _ -> factory#top_expr) (Common.from_downto (pos-1) 1),
     List.map (fun _ -> factory#top_expr) (Common.from_to (pos+1) arity) in
   function
-  | AtExpr (Undef _, ctx) when arity=0 -> next_undef_focus (AtExpr (Apply ((), func, []), ctx))
+  | AtExpr (_, ctx) when arity=0 -> next_undef_focus (AtExpr (Apply ((), func, []), ctx))
   | AtExpr (expr,ctx) -> next_undef_focus (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
   | focus ->
     ( match id_of_focus focus with

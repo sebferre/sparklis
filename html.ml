@@ -87,6 +87,7 @@ let html_delete ?id ~title () =
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
+let html_function f = html_span ~classe:"function" (escapeHTML f)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
 let html_word = function
@@ -101,8 +102,9 @@ let html_word = function
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
+  | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
-  | `Undefined -> "?"
+  | `Undefined -> "___"
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
 let html_input typ =
