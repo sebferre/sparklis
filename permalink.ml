@@ -39,12 +39,15 @@ let list_func_atom =
     `Ceil, "Ceil";
     `Floor, "Floor";
     `Random2, "Random2";
+    `Date, "Date";
+    `Time, "Time";
     `Year, "Year";
     `Month, "Month";
     `Day, "Day";
     `Hours, "Hours";
     `Minutes, "Minutes";
     `Seconds, "Seconds";
+    `TODAY, "TODAY";
     `NOW, "NOW" ]
 
 let atom_of_func func =

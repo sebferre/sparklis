@@ -107,16 +107,17 @@ let html_word = function
   | `Undefined -> "___"
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
-let html_input typ =
+let html_input dt =
   let t, hint =
-    match typ with
+    match dt with
+    | `IRI -> "url", "http://"
     | `String -> "text", ""
-    | `Int -> "number", "0"
-    | `Float -> "number", "0.0e+0"
+    | `Numeric -> "number", "0.0e+0"
+    | `Integer -> "number", "0"
     | `Date -> "text", "yyyy-mm-dd"
-    | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
     | `Time -> "text", "hh:mm:ss"
-    | `URI -> "url", "http://"
+    | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
+  (*    | `Time -> "text", "hh:mm:ss" *)
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
@@ -132,7 +133,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
   function
     | Kwd s -> s
     | Word w -> html_word w
-    | Input typ -> html_input typ
+    | Input dt -> html_input dt
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Coord (coord,lxml) ->

@@ -49,8 +49,8 @@ object
   method virtual integer : string
   method virtual number : string
   method virtual date : string
-  method virtual date_and_time : string
   method virtual time : string
+  method virtual date_and_time : string
   method virtual uri : string
 
   (* aggregations: (noun, adjective option), adjective is prefered *) 
@@ -166,8 +166,8 @@ object
   method integer = "integer"
   method number = "number"
   method date = "date"
-  method date_and_time = "date and time"
   method time = "time"
+  method date_and_time = "date and time"
   method uri = "URI"
       
   method aggreg_number = "number", None
@@ -205,12 +205,15 @@ object
   | `Ceil -> `Noun "ceiling"
   | `Floor -> `Noun "floor"
   | `Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
+  | `Date -> `Noun "date"
+  | `Time -> `Noun "time"
   | `Year -> `Noun "year"
   | `Month -> `Noun "month"
   | `Day -> `Noun "day"
   | `Hours -> `Noun "hours"
   | `Minutes -> `Noun "minutes"
   | `Seconds -> `Noun "seconds"
+  | `TODAY -> `Pattern [`Func "today"]
   | `NOW -> `Pattern [`Func "now"]
  
   method order_highest = "highest-to-lowest"
@@ -305,8 +308,8 @@ object
   method integer = "entier"
   method number = "nombre"
   method date = "date"
-  method date_and_time = "date et heure"
   method time = "heure"
+  method date_and_time = "date et heure"
   method uri = "URI"
 
   method aggreg_number = "nombre", None
@@ -344,12 +347,15 @@ object
   | `Ceil -> `Pattern [`Kwd "la"; `Func "partie entière par excès"; `Kwd "de"; `Arg 1]
   | `Floor -> `Pattern [`Kwd "la"; `Func "partie entière par défaut"; `Kwd "de"; `Arg 1]
   | `Random2 -> `Pattern [`Kwd "un"; `Func "nombre aléatoire"; `Kwd "entre"; `Arg 1; `Kwd "et"; `Arg 2]
+  | `Date -> `Pattern [`Kwd "la"; `Func "date"; `Kwd "de"; `Arg 1]
+  | `Time -> `Pattern [`Kwd "l'"; `Func "heure"; `Kwd "de"; `Arg 1]
   | `Year -> `Pattern [`Kwd "l'"; `Func "année"; `Kwd "de"; `Arg 1]
   | `Month -> `Pattern [`Kwd "le"; `Func "mois"; `Kwd "de"; `Arg 1]
   | `Day -> `Pattern [`Kwd "le"; `Func "jour"; `Kwd "de"; `Arg 1]
   | `Hours -> `Pattern [`Kwd "les"; `Func "heures"; `Kwd "de"; `Arg 1]
   | `Minutes -> `Pattern [`Kwd "les"; `Func "minutes"; `Kwd "de"; `Arg 1]
   | `Seconds -> `Pattern [`Kwd "les"; `Func "secondes"; `Kwd "de"; `Arg 1]
+  | `TODAY -> `Pattern [`Func "aujourd'hui"]
   | `NOW -> `Pattern [`Func "maintenant"]
 
   method order_highest = "en ordre décroissant"

@@ -128,7 +128,7 @@ object (self)
 
   val mutable focus_term_list : Rdf.term list = []
   method focus_term_list = focus_term_list
-
+    
   val mutable query_opt : Lisql2sparql.template option = None
   val mutable query_class_opt : Lisql2sparql.template option = None
   val mutable query_prop_has_opt : Lisql2sparql.template option = None
@@ -151,17 +151,18 @@ object (self)
 
   initializer self#init
 
-  val mutable results = Sparql_endpoint.empty_results
-  val mutable focus_term_index : (Rdf.term * int) list = []
-  val mutable some_focus_term_is_blank : bool = false
-
-
   (* utilities *)
 
   val ajax_pool = new Sparql_endpoint.ajax_pool
   method abort_all_ajax = ajax_pool#abort_all
 
   (* SPARQL query and results *)
+
+  val mutable results = Sparql_endpoint.empty_results
+  val mutable results_typing : Lisql_type.datatype list array = [||]
+  val mutable focus_type_constraints : Lisql_type.focus_type_constraints = (None,None)
+  val mutable focus_term_index : (Rdf.term * int) list = []
+  val mutable some_focus_term_is_blank : bool = false
 
   method ajax_sparql_results term_constr elts (k : string option -> unit) =
     match query_opt with
@@ -183,6 +184,17 @@ object (self)
 	Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
+	    results_typing <- Lisql_type.of_sparql_results res;
+	    focus_type_constraints <- Lisql_type.of_focus
+	      (fun id ->
+		let v = id_labelling#get_id_var id in
+		let l =
+		  try
+		    let i = List.assoc v results.Sparql_endpoint.vars in
+		    results_typing.(i)
+		  with Not_found -> Jsutils.firebug ("No datatype for id #" ^ string_of_int id); [] in
+		Some l)
+	      focus;
 	    let fti, sftib =
 	      match focus_term_list with
 		| [Rdf.Var v] ->
@@ -256,9 +268,10 @@ object (self)
 	      ref_index := (Lisql.IncrId id, 1)::!ref_index)
 	    available_defs;
 	  List.iter
-	    (fun typ ->
-	      ref_index := (Lisql.IncrInput ("",typ),1)::!ref_index)
-	    [`String; `Int; `Float; `Date; `DateTime; `Time; `URI]
+	    (fun (dt : Lisql.input_type) ->
+	      if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
+	      then ref_index := (Lisql.IncrInput ("",dt),1)::!ref_index)
+	    [`IRI; `String; `Numeric; `Integer; `Date; `Time; `DateTime]
 	end;
 	!ref_index
       | _ -> []
@@ -448,7 +461,10 @@ object (self)
 	    incrs available_defs in
 	let incrs =
 	  List.fold_left
-	    (fun incrs (func,arity,pos) -> IncrFuncArg (func,arity,pos) :: incrs)
+	    (fun incrs (func,arity,pos) ->
+	      if Lisql_type.is_insertable_func_pos func pos focus_type_constraints
+	      then IncrFuncArg (func,arity,pos) :: incrs
+	      else incrs)
 	    incrs
 	    [ `Str, 1, 1;
 	      `Lang, 1, 1;
@@ -468,9 +484,13 @@ object (self)
 	      `Encode_for_URI, 1, 1;
 	      `Replace, 3, 1;
 	      `Add, 2, 1;
+	      `Add, 2, 2;
 	      `Sub, 2, 1;
+	      `Sub, 2, 2;
 	      `Mul, 2, 1;
+	      `Mul, 2, 2;
 	      `Div, 2, 1;
+	      `Div, 2, 2;
 	      `Neg, 1, 1;
 	      `Abs, 1, 1;
 	      `Round, 1, 1;
@@ -478,12 +498,15 @@ object (self)
 	      `Floor, 1, 1;
 	      `Random2, 2, 1;
 	      `Random2, 2, 2;
+	      `Date, 1, 1;
+	      `Time, 1, 1;
 	      `Year, 1, 1;
 	      `Month, 1, 1;
 	      `Day, 1, 1;
 	      `Hours, 1, 1;
 	      `Minutes, 1, 1;
 	      `Seconds, 1, 1;
+	      `TODAY, 0, 0;
 	      `NOW, 0, 0;
 	    ] in
 	incrs in

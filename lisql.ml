@@ -62,7 +62,7 @@ type func =
 | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
 | `Add | `Sub | `Mul | `Div | `Neg
 | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
-| `Year | `Month | `Day | `Hours | `Minutes | `Seconds | `NOW ]
+| `Date | `Time | `Year | `Month | `Day | `Hours | `Minutes | `Seconds | `TODAY | `NOW ]
 (* missing: timezone, hash functions, BNODE *)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
@@ -622,9 +622,9 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 
 
 (* increments *)
-(* BEWARE of arrays that must be copied if changed !! *)
 
-type input_type =  [`String | `Int | `Float | `Date | `DateTime | `Time | `URI]
+type input_type =  [`IRI | `String | `Numeric | `Integer | `Date | `Time | `DateTime]
+(* a sub-type of Sparql.datatype *)
 
 type increment =
   | IncrInput of string * input_type
@@ -648,28 +648,29 @@ type increment =
 
       
 let check_input s = function
+  | `IRI -> true
   | `String -> true
-  | `Int -> Regexp.string_match (Regexp.regexp "[-+]?\\d+$") s 0 <> None
-  | `Float -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
+  | `Numeric -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
+  (*  | `Decimal -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d* )?$") s 0 <> None *)
+  | `Integer -> Regexp.string_match (Regexp.regexp "[-+]?\\d+$") s 0 <> None
   | `Date -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}$") s 0 <> None
-  | `DateTime -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
   | `Time -> Regexp.string_match (Regexp.regexp "\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
-  | `URI -> true
+  | `DateTime -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
 
 let datatype_of_input_type = function
+  | `IRI -> invalid_arg "datatype_of_input_type: URI has no datatype"
   | `String -> Rdf.xsd_string
-  | `Int -> Rdf.xsd_integer
-  | `Float -> Rdf.xsd_double
+  | `Numeric -> Rdf.xsd_double
+  | `Integer -> Rdf.xsd_integer
   | `Date -> Rdf.xsd_date
-  | `DateTime -> Rdf.xsd_dateTime
   | `Time -> Rdf.xsd_time
-  | `URI -> invalid_arg "datatype_of_input_type: URI has no datatype"
+  | `DateTime -> Rdf.xsd_dateTime
 let term_of_input s = function
-  | `URI -> Rdf.URI s
+  | `IRI -> Rdf.URI s
   | typ -> Rdf.TypedLiteral (s, datatype_of_input_type typ)
 
 let term_of_increment : increment -> Rdf.term option = function
-  | IncrInput (s,typ) -> Some (term_of_input s typ)
+  | IncrInput (s,dt) -> Some (term_of_input s dt)
   | IncrTerm t -> Some t
   | IncrType c -> Some (Rdf.URI c)
   | IncrRel (p,m) -> Some (Rdf.URI p)
@@ -928,7 +929,7 @@ let insert_func_arg func arity pos =
 
 let insert_increment incr focus =
   match incr with
-    | IncrInput (s,typ) -> insert_input s typ focus
+    | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
     | IncrId id -> insert_id id focus
     | IncrType c -> insert_type c focus

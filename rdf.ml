@@ -9,6 +9,7 @@ let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PN
 
 let xsd_string = "http://www.w3.org/2001/XMLSchema#string"
 let xsd_integer = "http://www.w3.org/2001/XMLSchema#integer"
+let xsd_decimal = "http://www.w3.org/2001/XMLSchema#decimal"
 let xsd_double = "http://www.w3.org/2001/XMLSchema#double"
 let xsd_date = "http://www.w3.org/2001/XMLSchema#date"
 let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"

@@ -313,13 +313,13 @@ object (self)
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       let incr_opt = (* retrieving input value for input increments *)
 	match incr with
-	| Lisql.IncrInput (s,typ) ->
+	| Lisql.IncrInput (s,dt) ->
 	  let ref_s = ref s in
 	  jquery_input_from elt ".term-input" (fun input ->
 	    ref_s := to_string input##value);
 	  let s = !ref_s in
-	  if Lisql.check_input s typ
-	  then Some (Lisql.IncrInput (s,typ))
+	  if Lisql.check_input s dt
+	  then Some (Lisql.IncrInput (s,dt))
 	  else begin alert "Invalid input"; None end
 	| _ -> Some incr in
       match incr_opt with

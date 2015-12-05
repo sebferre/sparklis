@@ -192,13 +192,14 @@ let rec word_of_term = function
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
 let string_of_input_type grammar = function
+  | `IRI -> grammar#uri
   | `String -> grammar#string
-  | `Int -> grammar#integer
-  | `Float -> grammar#number
+  | `Numeric -> grammar#number
+  | `Integer -> grammar#integer
   | `Date -> grammar#date
-  | `DateTime -> grammar#date_and_time
   | `Time -> grammar#time
-  | `URI -> grammar#uri
+  | `DateTime -> grammar#date_and_time
+(*  | `Time -> grammar#time *)
     
 let noun_adj_opt_of_aggreg grammar = function
   | NumberOf -> grammar#aggreg_number
@@ -236,7 +237,7 @@ let word_of_order grammar = function
   | Lowest -> `Op grammar#order_lowest
 
 let word_of_incr grammar = function
-  | IncrInput (s,typ) -> `Op (string_of_input_type grammar typ)
+  | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
   | IncrId id -> `Thing
   | IncrType c -> word_of_class c

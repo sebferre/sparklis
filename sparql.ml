@@ -362,4 +362,3 @@ let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
       ?limit
       (pattern_of_formula form)
 
-    

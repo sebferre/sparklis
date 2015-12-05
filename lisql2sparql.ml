@@ -141,6 +141,9 @@ let rec expr_apply func args =
   | `Sub -> Sparql.expr_infix "-" args
   | `Mul -> Sparql.expr_infix "*" args
   | `Div -> Sparql.expr_infix "/" args
+  | `Round ->
+    Sparql.expr_func "xsd:integer"
+      [Sparql.expr_func "round" args]
   | `Random2 ->
     ( match args with
     | [arg1; arg2] ->
@@ -149,6 +152,10 @@ let rec expr_apply func args =
 	 Sparql.expr_infix "*"
 	   [Sparql.expr_func "RAND" [];
 	    Sparql.expr_infix "-" [arg2; arg1]]]
+    | _ -> assert false )
+  | `TODAY ->
+    ( match args with
+    | [] -> Sparql.expr_func "xsd:date" [Sparql.expr_func "NOW" []]
     | _ -> assert false )
   | func -> Sparql.expr_func (name_func func) args
 and name_func = function
@@ -174,13 +181,16 @@ and name_func = function
   | `Round -> "round"
   | `Ceil -> "ceil"
   | `Floor -> "floor"
-  | `Random2 -> invalid_arg "Lisql2sparql.name_func"
+  | `Random2 -> invalid_arg "Lisql2sparql.name_func: Random2"
+  | `Date -> "xsd:date"
+  | `Time -> "xsd:time"
   | `Year -> "year"
   | `Month -> "month"
   | `Day -> "day"
   | `Hours -> "hours"
   | `Minutes -> "minutes"
   | `Seconds -> "seconds"
+  | `TODAY -> invalid_arg "Lisql2sparql.name_func: TODAY"
   | `NOW -> "NOW"
 
     
