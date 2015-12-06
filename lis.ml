@@ -441,24 +441,30 @@ object (self)
       if init
       then [IncrIs]
       else
-	let incrs =
-	  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-	  then [IncrAggreg Total; IncrAggreg Average; IncrAggreg Maximum; IncrAggreg Minimum]
-	  else [] in
-	let incrs =
-	  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-	  then IncrAggreg ListOf :: incrs
-	  else incrs in
+	let incrs = [] in
 	let incrs =
 	  IncrIs :: IncrTriplify ::
 	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
 	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	    IncrAggreg NumberOf :: IncrAggreg Sample ::
 	    incrs in
 	let incrs =
 	  List.fold_left
 	    (fun incrs v -> IncrForeach (id_labelling#get_var_id v) :: incrs)
 	    incrs available_defs in
+	let incrs =
+	  List.fold_left
+	    (fun incrs aggreg ->
+	      if Lisql_type.is_insertable_aggreg aggreg focus_type_constraints
+	      then IncrAggreg aggreg :: incrs
+	      else incrs)
+	    incrs
+	    [ Lisql.NumberOf;
+	      Lisql.ListOf;
+	      Lisql.Total;
+	      Lisql.Average;
+	      Lisql.Maximum;
+	      Lisql.Minimum;
+	      Lisql.Sample ] in
 	let incrs =
 	  List.fold_left
 	    (fun incrs (func,arity,pos) ->

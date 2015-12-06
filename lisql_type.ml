@@ -85,6 +85,18 @@ let of_sparql_results (results : Sparql_endpoint.results) : datatype list array 
   typing
     
 open Lisql
+
+let of_aggreg_pos (aggreg : aggreg) (pos : int) : datatype =
+  match aggreg, pos with
+  | NumberOf, 0 -> `Integer
+  | NumberOf, 1 -> `IRI_Literal
+  | ListOf, 0 -> `String
+  | ListOf, 1 -> `Literal
+  | (Total | Average), (0 | 1) -> `Numeric
+  | (Maximum | Minimum), 0 -> `Literal
+  | (Maximum | Minimum), 1 -> `Literal
+  | Sample, (0 | 1) -> `IRI_Literal
+  | _ -> invalid_arg "Lisql_type.of_aggreg_pos"
     
 let of_func_pos (func : func) (pos : int) : datatype =
   match func, pos with
@@ -153,21 +165,30 @@ let of_focus env : focus -> focus_type_constraints = function
     | None -> (None, None)
     | Some id -> (env id, None)
 
-
-let is_insertable_func_pos func pos (ldt_opt, dt_opt) =
-  let arg_type = of_func_pos func pos in
-  let res_type = of_func_pos func 0 in
+let is_insertable (dt_arg_opt, dt_res) (ldt_opt, dt_opt) =
   let arg_ok =
-    match ldt_opt with
-    | None -> true
-    | Some ldt -> List.exists (fun dt -> compatible_with dt arg_type) ldt in
+    match dt_arg_opt, ldt_opt with
+    | _, None -> true
+    | None, Some ldt -> false
+    | Some dt_arg, Some ldt ->
+      List.exists (fun dt -> compatible_with dt dt_arg) ldt in
   let res_ok =
     match dt_opt with
     | None -> true
-    | Some dt -> compatible_with res_type dt in
+    | Some dt -> compatible_with dt_res dt in
   arg_ok && res_ok
 
-let is_insertable_input input_dt (ldt_opt, dt_opt) =
-  match dt_opt with
-  | None -> true
-  | Some dt -> compatible_with input_dt dt
+let is_insertable_aggreg aggreg focus_type_constraints =
+  is_insertable
+    (Some (of_aggreg_pos aggreg 1), of_aggreg_pos aggreg 0)
+    focus_type_constraints
+      
+let is_insertable_func_pos func pos focus_type_constraints =
+  is_insertable
+    (Some (of_func_pos func pos), of_func_pos func 0)
+    focus_type_constraints
+
+let is_insertable_input input_dt focus_type_constraints =
+  is_insertable
+    (None, input_dt)
+    focus_type_constraints
