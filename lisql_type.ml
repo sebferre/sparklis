@@ -113,6 +113,9 @@ let of_func_pos (func : func) (pos : int) : datatype =
   | (`UCase | `LCase | `Encode_for_URI), (0 | 1) -> `StringLiteral
   | `Replace, (0 | 1) -> `StringLiteral
   | `Replace, (2 | 3) -> `String
+  | `Integer, 0 -> `Integer
+  | `Double, 0 -> `Float
+  | (`Integer | `Double), 1 -> `Literal
   | (`Add | `Sub | `Mul | `Div | `Neg | `Abs), _ -> `Numeric
   | (`Round | `Ceil | `Floor), 0 -> `Integer
   | (`Round | `Ceil | `Floor), 1 -> `Float

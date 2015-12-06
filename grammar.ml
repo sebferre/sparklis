@@ -195,6 +195,8 @@ object
   | `LCase -> `Noun "lowercase"
   | `Encode_for_URI -> `Noun "URI encoding"
   | `Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
+  | `Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
+  | `Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "number"]
   | `Add -> `Infix " + "
   | `Sub -> `Infix " - "
   | `Mul -> `Infix " * "
@@ -337,6 +339,8 @@ object
   | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minuscules"]
   | `Encode_for_URI -> `Pattern [`Kwd "l'"; `Func "encodage URI"; `Kwd "de"; `Arg 1]
   | `Replace -> `Pattern [`Kwd "le"; `Func "remplacement"; `Kwd "dans"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "par"; `Arg 3]
+  | `Integer -> `Pattern [`Arg 1; `Kwd "comme"; `Func "entier"]
+  | `Double -> `Pattern [`Arg 1; `Kwd "comme"; `Func "nombre"]
   | `Add -> `Infix " + "
   | `Sub -> `Infix " - "
   | `Mul -> `Infix " * "

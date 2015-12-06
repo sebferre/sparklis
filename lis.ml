@@ -263,7 +263,7 @@ object (self)
 	done;
 	if Lisql.is_undef_expr_focus focus then begin
 	  List.iter
-	    (fun v ->
+	    (fun v -> (* TODO: filter according to empirical type *)
 	      let id = id_labelling#get_var_id v in
 	      ref_index := (Lisql.IncrId id, 1)::!ref_index)
 	    available_defs;
@@ -483,6 +483,8 @@ object (self)
 	      `LCase, 1, 1;
 	      `Encode_for_URI, 1, 1;
 	      `Replace, 3, 1;
+	      `Integer, 1, 1;
+	      `Double, 1, 1;
 	      `Add, 2, 1;
 	      `Add, 2, 2;
 	      `Sub, 2, 1;

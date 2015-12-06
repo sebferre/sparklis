@@ -141,9 +141,6 @@ let rec expr_apply func args =
   | `Sub -> Sparql.expr_infix "-" args
   | `Mul -> Sparql.expr_infix "*" args
   | `Div -> Sparql.expr_infix "/" args
-  | `Round ->
-    Sparql.expr_func "xsd:integer"
-      [Sparql.expr_func "round" args]
   | `Random2 ->
     ( match args with
     | [arg1; arg2] ->
@@ -175,6 +172,8 @@ and name_func = function
   | `LCase -> "lcase"
   | `Encode_for_URI -> "encode_for_uri"
   | `Replace -> "replace"
+  | `Integer -> "xsd:integer"
+  | `Double -> "xsd:double"
   | `Add | `Sub | `Mul | `Div -> invalid_arg "Lisql2sparql.name_func"
   | `Neg -> "-"
   | `Abs -> "abs"

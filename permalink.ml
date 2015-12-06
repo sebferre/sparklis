@@ -29,6 +29,8 @@ let list_func_atom =
     `LCase, "LCase";
     `Encode_for_URI, "Encore_for_URI";
     `Replace, "Replace";
+    `Integer, "Integer";
+    `Double, "Double";
     `Add, "Add";
     `Sub, "Sub";
     `Mul, "Mul";

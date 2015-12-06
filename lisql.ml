@@ -56,13 +56,17 @@ type modif_p2 = Fwd | Bwd
 
 type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample
 type func =
-[ `Str | `Lang | `Datatype
+[ `Str
+| `Lang | `Datatype
 | `IRI | `STRDT | `STRLANG
 | `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
 | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
+| `Integer | `Double
 | `Add | `Sub | `Mul | `Div | `Neg
 | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
-| `Date | `Time | `Year | `Month | `Day | `Hours | `Minutes | `Seconds | `TODAY | `NOW ]
+| `Date | `Time
+| `Year | `Month | `Day | `Hours | `Minutes | `Seconds
+| `TODAY | `NOW ]
 (* missing: timezone, hash functions, BNODE *)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
