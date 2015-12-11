@@ -15,6 +15,15 @@ install:
 	cp *.jpg /local/ferre/web/ferre/sparklis
 	cp examples.html /local/ferre/web/ferre/sparklis
 
+install-dev:
+	cp osparklis.html /local/ferre/web/ferre/sparklis-dev
+	cp osparklis.html /local/ferre/web/ferre/sparklis-dev/index.html
+	cp osparklis.css /local/ferre/web/ferre/sparklis-dev
+	cp osparklis.js /local/ferre/web/ferre/sparklis-dev
+	cp *.png /local/ferre/web/ferre/sparklis-dev
+	cp *.jpg /local/ferre/web/ferre/sparklis-dev
+	cp examples.html /local/ferre/web/ferre/sparklis-dev
+
 clean:
 	rm -f *.cm[ioax]
 
