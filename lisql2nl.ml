@@ -934,8 +934,9 @@ let rec xml_s grammar ~id_labelling (s : annot s) =
     | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
     | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
     | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
-    | `For (np,s) -> [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
-				   xml_s grammar ~id_labelling s])]
+    | `For (np,s) -> Kwd grammar#for_ :: xml_np grammar ~id_labelling np @ Coord ([], [xml_s grammar ~id_labelling s]) :: []    
+      (* [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
+	 xml_s grammar ~id_labelling s])] *)
     | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr) )
 and xml_np grammar ~id_labelling np =
   xml_annotated np
