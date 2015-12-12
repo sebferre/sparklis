@@ -690,20 +690,22 @@ let insert_elt_p1 (elt : unit elt_p1) = function
 let insert_elt_s2 det focus =
   let focus2_opt =
     match focus with
-      | AtP1 _ -> insert_elt_p1 (Is ((), Det ((), det, None))) focus
-      | AtS1 (Det (_, det2, rel_opt), ctx) ->
-	if det2 = det
-	then Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
-	else Some (AtS1 (Det ((), det, rel_opt), ctx))
-      | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
-	Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), Det ((), det, None))), np), ctx))
-      | AtS1 _ -> None (* no insertion of terms on complex NPs *)
-      | _ -> None in
+    | AtP1 _
+    | AtDim _
+    | AtAggreg _ -> insert_elt_p1 (Is ((), Det ((), det, None))) focus
+    | AtS1 (Det (_, det2, rel_opt), ctx) ->
+      if det2 = det
+      then Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
+      else Some (AtS1 (Det ((), det, rel_opt), ctx))
+    | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
+      Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), Det ((), det, None))), np), ctx))
+    | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+    | _ -> None in
   match focus2_opt with
-    | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
-    | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
-    | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
-    | other -> other
+  | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+  | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
+  | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
+  | other -> other
 
 let insert_input s typ focus =
   match focus with
