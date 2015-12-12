@@ -165,6 +165,15 @@ object (self)
   val mutable focus_term_index : (Rdf.term * int) list = []
   val mutable some_focus_term_is_blank : bool = false
 
+  method id_typing (id : Lisql.id) : Lisql_type.datatype list =
+    let v = id_labelling#get_id_var id in
+    try
+      let i = List.assoc v results.Sparql_endpoint.vars in
+      results_typing.(i)
+    with Not_found ->
+      Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
+      []
+    
   method ajax_sparql_results term_constr elts (k : string option -> unit) =
     match query_opt with
       | None ->
@@ -187,14 +196,7 @@ object (self)
 	    results <- res;
 	    results_typing <- Lisql_type.of_sparql_results res;
 	    focus_type_constraints <- Lisql_type.of_focus
-	      (fun id ->
-		let v = id_labelling#get_id_var id in
-		let l =
-		  try
-		    let i = List.assoc v results.Sparql_endpoint.vars in
-		    results_typing.(i)
-		  with Not_found -> Jsutils.firebug ("No datatype for id #" ^ string_of_int id); [] in
-		Some l)
+	      (fun id -> Some (self#id_typing id))
 	      focus;
 	    let fti, sftib =
 	      match focus_term_list with
@@ -231,7 +233,7 @@ object (self)
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method index_ids_inputs =
+  method index_ids =
     match focus_term_list with
       | [term] ->
 	let index =
@@ -274,13 +276,16 @@ object (self)
 	    List.fold_left
 	      (fun index v -> (* TODO: filter according to empirical type *)
 		let id = id_labelling#get_var_id v in
-		(Lisql.IncrId id, 1)::index)
+		let ldt = self#id_typing id in
+		if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt
+		then (Lisql.IncrId id, 1)::index
+		else index)
 	      index available_defs
 	  else index in
 	index
       | _ -> []
 
-  method index_terms (k : Lisql.increment index -> unit) =
+  method index_terms_inputs (k : Lisql.increment index -> unit) =
     let incr_index =
       List.rev_map
 	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, freq))

@@ -394,7 +394,7 @@ object (self)
     self#refresh_term_increments_gen lis#ajax_index_terms_init 100
   method private refresh_term_increments =
     self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms (fun index_terms -> k (lis#index_ids_inputs @ index_terms)))
+      (fun constr elts k -> lis#index_terms_inputs (fun index_terms_inputs -> k (lis#index_ids @ index_terms_inputs)))
       Lis.config_max_results#value
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
