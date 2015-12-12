@@ -245,11 +245,15 @@ let id_of_dim = function
   | Foreach (_,id,_,_,_) -> Some id
 let id_of_aggreg = function
   | TheAggreg (_,id,_,_,_,_) -> Some id
+let id_of_s = function
+  | SExpr (_,id,_,_,_) -> Some id
+  | _ -> None
 let id_of_focus = function
   | AtS1 (np,ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
   | AtDim (dim,_) -> id_of_dim dim
   | AtAggreg (aggreg,_) -> id_of_aggreg aggreg
   | AtExpr (_, SExprX (id,_,_,_)) -> Some id
+  | AtS (s,_) -> id_of_s s
   | _ -> None
 
 (* extraction of LISQL s element from focus *)
@@ -848,6 +852,11 @@ let insert_modif_transf f = function
     if fst modif2 = Unselect
     then None (* hidding expressions is not allowed *)
     else Some (AtExpr (expr, SExprX (id,modif2,rel_opt,ctx)))
+  | AtS (SExpr (_,id,modif,expr,rel_opt),ctx) ->
+    let modif2 = f modif in
+    if fst modif2 = Unselect
+    then None  (* hidding expressions is not allowed *)
+    else Some (AtS (SExpr ((), id, modif2, expr, rel_opt), ctx))
   | _ -> None
 
 let insert_aggreg g = function

@@ -112,6 +112,7 @@ let index_incr_of_index_term_uri (f : Rdf.uri -> Lisql.increment) (l : Rdf.term 
 
 class place (endpoint : string) (focus : Lisql.focus) =
   let focus_term, s_annot = Lisql_annot.annot_focus focus in
+  let focus_no_incr = match focus_term with `IdNoIncr _ -> true | _ -> false in
 object (self)
   (* essential state *)
 
@@ -232,48 +233,51 @@ object (self)
 
   method index_ids_inputs =
     match focus_term_list with
-      | [focus_term] ->
-	let dim = results.Sparql_endpoint.dim in
-	let vars = results.Sparql_endpoint.vars in
-	let freqs = Array.make dim 0 in
-	List.iter
-	  (fun binding ->
-	    let t_focus_opt =
-	      match focus_term with
-		| Rdf.Var v -> binding.(List.assoc v vars)
-		| t -> Some t in
-	    Array.iteri
-	      (fun i t_opt ->
-		match t_opt, t_focus_opt with
-		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		  | _ -> ())
-	      binding)
-	  results.Sparql_endpoint.bindings;
-	let ref_index = ref [] in
-	for i = dim-1 downto 0 do
-	  if freqs.(i) <> 0 then begin
-	    let v = try Common.list_rev_assoc i vars with _ -> assert false in
-	    if focus_term <> (Rdf.Var v) then begin
-	      try
+      | [term] ->
+	let index =
+	  if not focus_no_incr
+	  then begin
+	    let dim = results.Sparql_endpoint.dim in
+	    let vars = results.Sparql_endpoint.vars in
+	    let freqs = Array.make dim 0 in
+	    List.iter
+	      (fun binding ->
+		let t_focus_opt =
+		  match term with
+		  | Rdf.Var v -> binding.(List.assoc v vars)
+		  | _ -> Some term in
+		Array.iteri
+		  (fun i t_opt ->
+		    match t_opt, t_focus_opt with
+		    | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		    | _ -> ())
+		  binding)
+	      results.Sparql_endpoint.bindings;
+	    List.fold_left
+	      (fun index i ->
+		if freqs.(i) <> 0
+		then
+		  let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		  if term <> (Rdf.Var v)
+		  then begin
+		    try
+		      let id = id_labelling#get_var_id v in
+		      (Lisql.IncrId id, freqs.(i))::index
+		    with _ -> index end (* ex: aggregation variables *)
+		  else index
+		else index)
+	      [] (Common.from_downto (dim-1) 0) end
+	  else [] in
+	let index =
+	  if Lisql.is_undef_expr_focus focus
+	  then
+	    List.fold_left
+	      (fun index v -> (* TODO: filter according to empirical type *)
 		let id = id_labelling#get_var_id v in
-		ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
-	      with _ -> () (* ex: aggregation variables *)
-	    end
-	  end
-	done;
-	if Lisql.is_undef_expr_focus focus then begin
-	  List.iter
-	    (fun v -> (* TODO: filter according to empirical type *)
-	      let id = id_labelling#get_var_id v in
-	      ref_index := (Lisql.IncrId id, 1)::!ref_index)
-	    available_defs;
-	  List.iter
-	    (fun (dt : Lisql.input_type) ->
-	      if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
-	      then ref_index := (Lisql.IncrInput ("",dt),1)::!ref_index)
-	    [`IRI; `String; `Numeric; `Integer; `Date; `Time; `DateTime]
-	end;
-	!ref_index
+		(Lisql.IncrId id, 1)::index)
+	      index available_defs
+	  else index in
+	index
       | _ -> []
 
   method index_terms (k : Lisql.increment index -> unit) =
@@ -281,6 +285,16 @@ object (self)
       List.rev_map
 	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, freq))
 	focus_term_index in
+    let incr_index =
+      if Lisql.is_undef_expr_focus focus
+      then
+	List.fold_left
+	  (fun incr_index (dt : Lisql.input_type) ->
+	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
+	    then (Lisql.IncrInput ("",dt),1) :: incr_index
+	    else incr_index)
+	  incr_index [`IRI; `String; `Numeric; `Integer; `Date; `Time; `DateTime]
+      else incr_index in
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	k incr_index))
@@ -428,7 +442,7 @@ object (self)
 	  | _ -> assert false)
 	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
     in
-    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
+    if focus_no_incr (*Lisql.is_aggregation_focus focus*) then k [] (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index = [] then
       if some_focus_term_is_blank
       then ajax_intent ()

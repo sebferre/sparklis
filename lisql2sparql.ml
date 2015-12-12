@@ -607,7 +607,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     else Some (make_query state t_list view) in
   let query_incr_opt x filter_constr triple =
     match ft, t_list with
-      | `IdNoIncr _, _ -> None (* no increments for this focus term (aggregations) *)
+      | `IdNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
       | _, [t] ->
 	let tx = Rdf.Var x in
 	Some (fun ?(constr=True) ~limit ->
