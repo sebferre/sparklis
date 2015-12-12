@@ -282,7 +282,7 @@ let var_of_aggreg = function
   | Sample -> "sample"
 
 let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling_list = function
-  | Is (_,np) -> labelling_s1 grammar ~labels np (* TODO: avoid keeping np.id *)
+  | Is (_,np) -> labelling_s1 ~as_p1:true grammar ~labels np (* TODO: avoid keeping np.id *)
   | Type (_,c) ->
     let v, w = var_of_uri c, word_of_class c in
     [(v, `Word w)], []
@@ -294,7 +294,7 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
 	| `Noun, Fwd
 	| `InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
 	| _ -> [] in
-    let ls_np, lab = labelling_s1 grammar ~labels:ls_np np in
+    let ls_np, lab = labelling_s1 ~as_p1:false grammar ~labels:ls_np np in
     let ls =
       match synt, m with
 	| `Noun, Bwd
@@ -311,8 +311,8 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
       match arg with
 	| O -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
 	| _ -> [] in
-    let ls_np1, lab1 = labelling_s1 grammar ~labels:ls_np1 np1 in
-    let ls_np2, lab2 = labelling_s1 grammar ~labels:ls_np2 np2 in
+    let ls_np1, lab1 = labelling_s1 ~as_p1:false grammar ~labels:ls_np1 np1 in
+    let ls_np2, lab2 = labelling_s1 ~as_p1:false grammar ~labels:ls_np2 np2 in
     let ls =
       match arg with
 	| P -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np1 @ [(v, `Word w)]
@@ -336,12 +336,12 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
 and labelling_p1_opt grammar ~labels : 'a elt_p1 option -> id_label list * id_labelling_list = function
   | None -> [], []
   | Some rel -> labelling_p1 grammar ~labels rel
-and labelling_s1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_list = function
+and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_list = function
   | Det (_, An (id, modif, head), rel_opt) ->
     let ls_head = match head with Thing -> [] | Class c -> [(var_of_uri c, `Word (word_of_class c))] in
     let labels2 = labels @ ls_head in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:labels2 rel_opt in
-    ls_head @ ls_rel, (id, `Labels (labels2 @ ls_rel)) :: lab_rel
+    ls_head @ ls_rel, if as_p1 then lab_rel else (id, `Labels (labels2 @ ls_rel)) :: lab_rel
   | Det (_, _, rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels rel_opt in
     ls_rel, lab_rel
@@ -362,7 +362,7 @@ and labelling_s1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_lis
 	List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) l_np @ [(v, `Word w)]
       | None -> assert false in
 *)
-    let ls_np, lab_np = labelling_s1 grammar ~labels np in
+    let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels np in
     let l_np =
       match id_of_s1 np with
       | Some id -> get_id_labelling id lab_np
@@ -370,16 +370,16 @@ and labelling_s1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_lis
     let ls_g = labelling_aggreg_op grammar g l_np in
     ls_np, (id, `Labels ls_g) :: lab_np
   | NAnd (_, lr) ->
-    let lss, labs = List.split (List.map (labelling_s1 grammar ~labels) lr) in
+    let lss, labs = List.split (List.map (labelling_s1 ~as_p1 grammar ~labels) lr) in
     List.concat lss, List.concat labs
   | NOr (_, lr) ->
-    let _lss, labs = List.split (List.map (labelling_s1 grammar ~labels) lr) in
+    let _lss, labs = List.split (List.map (labelling_s1 ~as_p1 grammar ~labels) lr) in
     [], List.concat labs
   | NMaybe (_, elt) ->
-    let ls, lab = labelling_s1 grammar ~labels elt in
+    let ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     ls, lab
   | NNot (_, elt) ->
-    let _ls, lab = labelling_s1 grammar ~labels elt in
+    let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
 and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
   | Foreach (_, id, modif, rel_opt, id2) ->
@@ -407,7 +407,7 @@ and labelling_aggreg_op grammar g ls =
   List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
-    let _ls, lab = labelling_s1 grammar ~labels:[] np in
+    let _ls, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
     labelling @ lab
   | SAggreg (_,dims,aggregs) ->
     let lab1 = labelling in
