@@ -509,7 +509,7 @@ object (self)
 end
 
 let id_labelling_of_s_annot grammar s_annot : id_labelling =
-  let lab = labelling_s grammar s_annot (*elt_s_of_focus focus*) in
+  let lab = labelling_s grammar s_annot in
   new id_labelling lab
 
 (* verbalization of focus *)
@@ -1074,10 +1074,13 @@ and xml_ng_label grammar ~id_labelling = function
     then Word w :: xml_ng_label grammar ~id_labelling ng
     else xml_ng_label grammar ~id_labelling ng @ [Word w]
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
+and xml_np_label grammar ~id_labelling ng =
+  match ng with
+  | `Expr _ | `Nth (_, `Expr _) -> xml_ng_label grammar ~id_labelling ng
+  | _ -> Word (`Op grammar#the) :: xml_ng_label grammar ~id_labelling ng
 
-    
 let xml_ng_id grammar ~id_labelling id = xml_ng_label grammar ~id_labelling (id_labelling#get_id_label id)
-let xml_np_id grammar ~id_labelling id = Word (`Op grammar#the) :: xml_ng_id grammar ~id_labelling id
+let xml_np_id grammar ~id_labelling id = xml_np_label grammar ~id_labelling (id_labelling#get_id_label id)
 
 let xml_incr_coordinate grammar focus xml =
   match focus with
