@@ -335,7 +335,7 @@ type view = Rdf.var list * (?limit:int -> unit -> formula)
 let view_defs view = fst view
   
 let empty_view : view = ([], (fun ?limit () -> True))
-  
+
 let join_views (views : view list) : view =
   let list_defs, list_form = List.split views in
   List.concat list_defs,
@@ -348,7 +348,7 @@ let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
   | Subquery sq ->
     select
       ?distinct
-      ~projections:(List.filter (fun (_,v) -> List.mem v lv) sq.projections)
+      ~projections:sq.projections (*List.filter (fun (_,v) -> List.mem v lv) sq.projections*)
       ~groupings:sq.groupings
       ~having:sq.having
       ?ordering

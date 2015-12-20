@@ -12,6 +12,7 @@ object
 
   method virtual thing : string
   method virtual relation : string
+  method virtual value_ : string
   method virtual is : string
   method virtual has : string
   method virtual has_as_a : string
@@ -115,6 +116,7 @@ object
 
   method thing = "thing"
   method relation = "relation"
+  method value_ = "value"
   method is = "is"
   method has = "has"
   method has_as_a = "has as a"
@@ -269,6 +271,7 @@ object
 
   method thing = "chose"
   method relation = "relation"
+  method value_ = "valeur"
   method is = "est"
   method has = "a"
   method has_as_a = "a pour"

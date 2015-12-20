@@ -383,43 +383,14 @@ and form_expr state : annot elt_expr -> Sparql.expr = function
       | _ ->
 	let sparql_args = List.map (fun arg -> form_expr state arg) args in
 	expr_apply func sparql_args )
-and find_defining_views state (ids : ids) (views : Sparql.view list) : Rdf.var list * Rdf.var list * Sparql.view list * Sparql.view list =
-  let refs = List.map state#id_labelling#get_id_var (Ids.refs ids) in
-  let defs = List.map state#id_labelling#get_id_var (Ids.defs ids) in
-  let defining_views, other_views =
-    List.partition
-      (fun (defs_i,form_i) -> List.exists (fun id -> List.mem id refs) defs_i)
-      views in
-  defs, refs, defining_views, other_views
-and form_s state ?(views : Sparql.view list = []) : annot elt_s -> Rdf.var list (* available defs *) * Sparql.view list = function
+and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view * Sparql.view =
+  let ids2vars ids = List.map state#id_labelling#get_id_var ids in
+  match s with
   | Return (annot,np) ->
-    let defs, refs, defining_views, other_views = find_defining_views state annot#ids views in
+    let defs = Ids.defs annot#ids in
+    let lv = ids2vars defs in
     let form = form_s1 state np (fun t -> Sparql.True) in
-    [], Sparql.join_views (defining_views @ [(defs, (fun ?limit () -> form))]) :: other_views
-  | SAggreg (annot,dims,aggregs) ->
-    let defs, refs, defining_views, other_views = find_defining_views state annot#ids views in
-    let (aggregated_defs, aggregated_f) = Sparql.join_views defining_views in
-    let available_defs = List.filter (fun v -> not (List.mem v refs)) aggregated_defs in
-    let l_dims = List.map (form_dim state) dims in
-    let l_aggregs = List.map (form_aggreg state) aggregs in
-    let projections_dims = List.map (fun (proj,_,_) -> proj) l_dims in
-    let projections_aggregs = List.map fst l_aggregs in
-    let groupings_dims = List.map (fun (_,group,_) -> group) l_dims in
-    let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
-    let havings_aggregs = List.map snd l_aggregs in
-    let f_aggreg =
-      fun ?limit () ->
-	Sparql.Subquery
-	  { Sparql.projections = projections_dims @ projections_aggregs;
-	    pattern = Sparql.pattern_of_formula (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) ());
-	    groupings = groupings_dims;
-	    having = Sparql.log_and havings_aggregs;
-	    limit;
-	  } in
-    let f =
-      fun ?limit () ->
-	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in
-    available_defs, (defs,f) :: views (* adding aggregation on top of defining query *)
+    Atom (defs,-1), (lv, (fun ?limit () -> form))
   | SExpr (annot,id,modif,expr,rel_opt) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
@@ -429,146 +400,45 @@ and form_s state ?(views : Sparql.view list = []) : annot elt_s -> Rdf.var list 
       | s -> s in
     let d = form_p1_opt state rel_opt in
     let form = Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
-    let defs, refs, defining_views, other_views = find_defining_views state annot#ids views in
-    let joined_view = Sparql.join_views defining_views in
-    Sparql.view_defs joined_view,
-    Sparql.join_views [joined_view; ([v], (fun ?limit () -> form))] :: other_views
-  | Seq (annot,lr) ->
-    let seq_ids = match annot#seq_ids with Some x -> x | None -> assert false in
-    List.fold_left2
-      (fun (available_defs,views) ids_opt s ->
-	if ids_opt = None
-	then (available_defs,views)
-	else form_s state ~views s)
-      ([],views) seq_ids lr
-
-(* 
-and form_s state ?(defining : Lisql.id list * Sparql.formula = [], Sparql.True) ?(defs : Lisql.id list = []) : annot elt_s -> bool * Sparql.formula =
-  let defining_defs, defining_form = defining in
-  function
-  | Return (annot,np) ->
-    let q = form_s1 state np in
-    let f = q (fun t -> Sparql.True) in
-    true, (defining_defs @ defs, Sparql.formula_and defining_form f) (* extending defining query *)
+    Unit, ([v], (fun ?limit () -> form))
   | SAggreg (annot,dims,aggregs) ->
+    let aggregated_defs, aggregated_f = aggregated_view in
     let l_dims = List.map (form_dim state) dims in
     let l_aggregs = List.map (form_aggreg state) aggregs in
     let projections_dims = List.map (fun (proj,_,_) -> proj) l_dims in
     let projections_aggregs = List.map fst l_aggregs in
-    let groupings = List.map (fun (_,group,_) -> group) l_dims in
-    let havings_dims = List.map (fun (_,_,hav) -> hav) l_dims in
+    let projections = projections_dims @ projections_aggregs in
+    let groupings_dims = List.map (fun (_,group,_) -> group) l_dims in
+    let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
     let havings_aggregs = List.map snd l_aggregs in
-    let f = Sparql.Subquery
-      { projections = projections_dims @ projections_aggregs;
-	pattern = Sparql.pattern_of_formula defining_form;
-	groupings;
-	having = Sparql.log_and (havings_dims @ havings_aggregs);
-      } in
-    false, (defs, f) (* adding aggregation on top of defining query *)
+    let f_aggreg =
+      fun ?limit () ->
+	Sparql.Subquery
+	  { Sparql.projections = projections;
+	    pattern = Sparql.pattern_of_formula (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) ());
+	    groupings = groupings_dims;
+	    having = Sparql.log_and havings_aggregs;
+	    limit;
+	  } in
+    let f =
+      fun ?limit () ->
+	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in
+    let lv = List.map snd projections in
+    Unit, (lv, f)
   | Seq (annot,lr) ->
-    ( match annot#seq_ids with
-    | Some seq_ids ->
-      let list_defs_form =
-	List.fold_left2
-	  (fun list_defs_form ids_opt s ->
-	    match ids_opt with
-	    | None -> list_defs_form
-	    | Some ids ->
-	      let refs = Ids.keys_of_val `Ref ids in
-	      let defs = Ids.keys_of_val `Def ids in
-	      let list_defining_defs_form, list_other_defs_form =
-		List.partition (fun (defs_i,form_i) -> List.exists (fun id -> List.mem id refs) defs_i) list_defs_form in
-	      let list_defining_defs, list_defining_form = List.split defining_defs_forms in
-	      let defining_defs_form = List.concat list_defining_defs, Sparql.formula_and_list list_defining_form in
-	      let new_defs_form, replace = form_s state ~defining:defining_defs_form ~defs s in
-	      (*let new_defs_form = List.concat (defs::defining_defs), Sparql.formula_and_list (f::defining_forms) in *)
-	      new_defs_form :: (if replace then other_defs_forms else list_defs_form))
-	  [] seq_ids lr in
-      ( match list_defs_forms with
-      | (defs,form)::_ -> true, (defs,form) (* returning most recent formula *)
-      | _ -> assert false )
-    | None -> assert false )
-*)
-(*      
-    let lr_f = List.map (fun elt -> form_s state elt) lr in
-    Sparql.formula_and_list lr_f
-*)
+    let seq_view = match annot#seq_view with Some v -> v | None -> assert false in
+    seq_view, form_seq_view state lr seq_view
+and form_seq_view state (lr : annot elt_s list) : view -> Sparql.view = function
+  | Unit -> Sparql.empty_view
+  | Atom (_defs, sid) -> snd (form_s state (List.nth lr sid))
+  | Join (_defs, lv) -> Sparql.join_views (List.map (form_seq_view state lr) lv)
+  | Aggreg (_defs,_refs,sid,v) ->
+    let aggregated_view = form_seq_view state lr v in
+    snd (form_s state ~aggregated_view (List.nth lr sid))
+
 
 type template = ?constr:constr -> limit:int -> string
 
-(*  
-let rec var_aggregation_stack state v acc =
-  match state#aggreg v with
-  | None -> acc
-  | Some (vg,g,f) -> var_aggregation_stack state vg (`Aggreg (vg,g,f,v,acc))
-
-let rec transpose_aggregation_stacks t_list var_stacks acc =
-  let l2 =
-    List.map
-      (function
-      | `Var v -> (v,`Dim, List.mem (Rdf.Var v) t_list), `VarEcho v
-      | `VarEcho v -> (v, `Dim, false), `VarEcho v (* at_focus is not propagated to subqueries *)
-      | `Aggreg (v,g,f,vi, st) -> (v, `Aggreg (g,vi,f), List.mem (Rdf.Var v) t_list), st)
-      var_stacks in
-  let layer, substacks = List.split l2 in
-  let acc =
-    if List.exists (fun (v,_,at_focus) -> at_focus) layer
-    then [] (* layers above focus are ignored *)
-    else acc in
-  if List.for_all (function (v,`Dim,_) -> true | _ -> false) layer
-  then
-    if acc = []
-    then [layer]
-    else acc (* because in that case, no additional nested query is necessary *)
-  else transpose_aggregation_stacks t_list substacks (layer::acc)
-
-let make_select state t_list ~is_subquery dims_aggregs form =
-  let projections, groupings, havings, ordering =
-    List.fold_right
-      (fun (v,kind,at_focus) (projs,groups,havings,ordering) ->
-	let projs, groups, havings, order, v_order = (* v_order is to be used in ordering *)
-	  match state#modif v with
-	  | (Unselect, _) when not at_focus && not is_subquery -> projs, groups, havings, Unordered, v
-	    | (_, order) ->
-	      match kind with
-	      | `Dim -> (`Bare, v)::projs, v::groups, havings, order, v
-	      | `Aggreg (Lisql.Given,vi,f) -> (`Aggreg (sparql_aggreg Lisql.Given,vi),v)::projs, vi::groups, f::havings, order, v
-	      | `Aggreg (g,vi,f) -> (`Aggreg (sparql_aggreg g,vi),v)::projs, groups, f::havings, order, v in
-	let ordering =
-	  match order with
-	  | Unordered -> ordering
-	  | Lowest -> (Sparql.ASC, v_order) :: ordering
-	  | Highest -> (Sparql.DESC, v_order) :: ordering in
-	projs, groups, havings, ordering)
-      dims_aggregs ([],[],[],[]) in
-  let having = Sparql.expr_of_formula (Sparql.formula_and_list havings) in
-  (fun ?(constr=True) ~limit ->
-    Sparql.select ~distinct:true ~projections ~groupings ~having ~ordering ~limit
-      (Sparql.pattern_of_formula
-	 (match t_list with [t] -> Sparql.formula_and form (filter_constr_entity t constr) | _ -> form)))
-
-let make_query state t_list form =
-  let lv = state#vars in
-  let var_aggreg_stacks = List.map (fun v -> var_aggregation_stack state v (`Var v)) lv in
-  let select_layers_outward = transpose_aggregation_stacks t_list var_aggreg_stacks [] in
-  match select_layers_outward with
-  | [] -> assert false
-  | layer::layers ->
-    let depth = List.length layers in
-    let d, select_query =
-      List.fold_left
-	(fun (d,select_query) layer ->
-	  d-1,
-	  (fun ?constr ~limit ->
-	    make_select state t_list ~is_subquery:(d-1 > 0)
-	      layer
-	      (Sparql.Pattern (Sparql.subquery (select_query ?constr ~limit:(10*limit))))
-	      ?constr ~limit))
-	(depth, make_select state t_list ~is_subquery:(depth > 0) layer form)
-	layers in
-    select_query
-*)
-      
 let make_query state t_list (defs, f : Sparql.view) : template =
   let visible_defs =
     List.filter
@@ -592,10 +462,9 @@ let make_query state t_list (defs, f : Sparql.view) : template =
 
       
 let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s)
-    : Rdf.term list * template option * template option * template option * template option * Rdf.var list =
+    : Rdf.term list * template option * template option * template option * template option * view =
   let state = new state id_labelling in
-  let available_defs, views = form_s state s_annot in
-  let (defs, f as view) = try List.hd views with _ -> Sparql.empty_view in
+  let annot_view, (defs, f as view) = form_s state s_annot in
   let t_list =
     match ft with
     | `Term t -> [t]
@@ -623,4 +492,4 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
   let query_class_opt = query_incr_opt "class" filter_constr_class (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Rdf.Bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple (Rdf.Bnode "") tp t)) in
-  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt, available_defs
+  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt, annot_view

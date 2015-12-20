@@ -401,9 +401,9 @@ and labelling_aggreg_op grammar g ls =
     | None -> (fun l -> `AggregNoun (`Func noun, l))
     | Some adj ->
       (fun l ->
-	match l with
+	(*match l with
 	| `Expr _ -> `AggregNoun (`Func noun, l)
-	| _ -> `AggregAdjective (`Func adj, l)) in
+	  | _ ->*) `AggregAdjective (`Func adj, l)) in
   List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
@@ -540,7 +540,7 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : ann
   let ng_aggreg =
     let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
     match ng, adj_opt with
-    | X (`LabelThat (`Expr _, _)), _
+    (*| X (`LabelThat (`Expr _, _)), _*)
     | _, None -> `NounThatOf (`Func noun, rel)
     | _, Some adj -> `AdjThat (`Func adj, rel) in
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
@@ -891,8 +891,8 @@ let xml_seq grammar annot_opt (lr : xml list) =
   let seq_susp : bool list =
     match annot_opt with
     | Some annot ->
-      ( match annot#seq_ids with
-      | Some seq_ids -> List.map (function None -> true | _ -> false) seq_ids
+      ( match annot#seq_view with
+      | Some seq_view -> List.map (fun sid -> not (sid_in_view sid seq_view)) (Common.from_to 0 (List.length lr - 1))
       | _ -> assert false )
     | None -> List.map (fun _ -> false) lr in
   [ Coord ([Kwd grammar#and_], List.map2 xml_suspended seq_susp lr) ]
@@ -900,8 +900,6 @@ let xml_and grammar lr =
   [ Coord ([Kwd grammar#and_], lr) ]
 let xml_or grammar annot_opt lr =
   let susp_or = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
-(*  let susp_or = isusp <> None in
-    let susp_elt i = isusp <> None && isusp <> Some i in *)
   let coord = [Word (`Op grammar#or_)] in
   [ Coord (xml_suspended susp_or coord, lr) ]
 let xml_maybe grammar annot_opt xml =
@@ -1060,14 +1058,13 @@ and xml_pp grammar ~id_labelling = function
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label grammar ~id_labelling = function
   | `Word w -> [Word w]
-  | `Expr expr ->
-    let np = np_of_elt_expr grammar ~id_labelling top_adj top_rel expr in
-    xml_np grammar ~id_labelling np
+  | `Expr expr -> Kwd grammar#value_ :: Kwd grammar#of_ :: xml_np_label grammar ~id_labelling (`Expr expr)
+  | `Nth (k, `Expr expr) -> xml_ng_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | `Gen (ng, w) ->
     ( match grammar#genetive_suffix with
       | Some suf -> Suffix (xml_ng_label grammar ~id_labelling ng, suf) :: Word w :: []
       | None -> xml_ng_label grammar ~id_labelling (`Of (w,ng)) )
-  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: Kwd grammar#the :: xml_ng_label grammar ~id_labelling ng
+  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: xml_np_label grammar ~id_labelling ng
   | `AggregNoun (w,ng) -> Word w :: Kwd grammar#of_ :: xml_ng_label grammar ~id_labelling ng
   | `AggregAdjective (w,ng) ->
     if grammar#adjective_before_noun
@@ -1076,7 +1073,10 @@ and xml_ng_label grammar ~id_labelling = function
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
 and xml_np_label grammar ~id_labelling ng =
   match ng with
-  | `Expr _ | `Nth (_, `Expr _) -> xml_ng_label grammar ~id_labelling ng
+  | `Expr expr ->
+    let np = np_of_elt_expr grammar ~id_labelling top_adj top_rel expr in
+    xml_np grammar ~id_labelling np
+  | `Nth (k, `Expr expr) -> xml_np_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | _ -> Word (`Op grammar#the) :: xml_ng_label grammar ~id_labelling ng
 
 let xml_ng_id grammar ~id_labelling id = xml_ng_label grammar ~id_labelling (id_labelling#get_id_label id)

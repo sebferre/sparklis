@@ -135,19 +135,19 @@ object (self)
   val mutable query_prop_has_opt : Lisql2sparql.template option = None
   val mutable query_prop_isof_opt : Lisql2sparql.template option = None
 
-  val mutable available_defs : Rdf.var list = []
+  val mutable view : Lisql_annot.view = Lisql_annot.Unit
     
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, avail_defs =
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, annot_view =
 	Lisql2sparql.s_annot id_labelling focus_term s_annot in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
       query_prop_has_opt <- qph_opt;
       query_prop_isof_opt <- qpi_opt;
-      available_defs <- avail_defs
+      view <- annot_view
     end
 
   initializer self#init
@@ -274,13 +274,13 @@ object (self)
 	  if Lisql.is_undef_expr_focus focus
 	  then
 	    List.fold_left
-	      (fun index v -> (* TODO: filter according to empirical type *)
-		let id = id_labelling#get_var_id v in
+	      (fun index id -> (* TODO: filter according to empirical type *)
+		(*let id = id_labelling#get_var_id v in*)
 		let ldt = self#id_typing id in
 		if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt
 		then (Lisql.IncrId id, 1)::index
 		else index)
-	      index available_defs
+	      index (Lisql_annot.view_defs view)
 	  else index in
 	index
       | _ -> []
@@ -468,8 +468,8 @@ object (self)
 	    incrs in
 	let incrs =
 	  List.fold_left
-	    (fun incrs v -> IncrForeach (id_labelling#get_var_id v) :: incrs)
-	    incrs available_defs in
+	    (fun incrs id -> IncrForeach id :: incrs)
+	    incrs (Lisql_annot.view_available_dims view) in
 	let incrs =
 	  List.fold_left
 	    (fun incrs aggreg ->

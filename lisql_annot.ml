@@ -17,11 +17,73 @@ let focus_term_s2 : elt_s2 -> focus_term = function
   | An (id,_,_) -> `IdIncr id
   | The id -> `IdIncr id
 
-(* ids and dependencies *)
 
-type seq_ids = ids option list
-    
-let seq_ids_of_list_focus x (ll,rr) =
+(* ids and views *)
+
+type sid = int (* sentence id, position in seq list *)
+type view =
+| Unit
+| Atom of id list * sid
+| Join of id list * view list
+| Aggreg of id list * id list * sid * view
+
+let view_defs = function
+  | Unit -> []
+  | Atom (defs,_) -> defs
+  | Join (defs,_) -> defs
+  | Aggreg (defs,refs,_,_) -> defs
+
+let rec view_available_dims = function
+  | Unit -> []
+  | Atom (defs,_) -> []
+  | Join (defs,_) -> []
+  | Aggreg (defs,refs,sid,v) -> List.filter (fun id -> not (List.mem id refs)) (view_defs v)
+
+let rec sid_in_view sid = function
+  | Unit -> false
+  | Atom (_,sid1) -> sid1 = sid
+  | Join (_,lv) -> List.exists (fun v -> sid_in_view sid v) lv
+  | Aggreg (_,_,sid1,v) -> sid1 = sid || sid_in_view sid v
+
+let rec top_sid_in_view sid = function
+  | Unit -> false
+  | Atom (_, sid1) -> sid1 = sid
+  | Join (_,lv) -> List.exists (fun v -> top_sid_in_view sid v) lv
+  | Aggreg (_,_,sid1,_) -> sid1 = sid
+
+let join_views = function
+  | [] -> Unit
+  | [v] -> v
+  | lv -> Join (List.concat (List.map view_defs lv), lv)
+
+
+let rec views_of_seq (views : view list) (sid : sid) : unit elt_s list -> view list = function
+  | [] -> views
+  | s::ls -> views_of_seq (views_of_elt_s views sid s) (sid+1) ls
+and views_of_elt_s views sid s =
+  let ids = ids_elt_s s in
+  let defs, refs, defining_views, other_views = defining_views ids views in
+  match s with
+  | Return _ | SExpr _ ->
+    join_views (defining_views @ [Atom (defs, sid)]) :: other_views
+  | SAggreg _ ->
+    let aggregated_view = Aggreg (defs, refs, sid, join_views defining_views) in
+    aggregated_view :: views
+  | Seq _ -> assert false (* Seq's are not nested *)
+and defining_views ids views : id list * id list * view list * view list =
+  let defs, refs = Ids.defs ids, Ids.refs ids in
+  let defining_views, other_views =
+    List.partition
+      (fun v -> List.exists (fun id -> List.mem id refs) (view_defs v))
+      views in
+  (* selecting only first defining view *)
+  (*let defining_views, other_views = (* TODO: handle cartesian products *)
+    match defining_views with
+    | [] -> [], other_views
+    | v::lv -> [v], lv@other_views in*)
+  defs, refs, defining_views, other_views
+	
+let view_of_list_focus x (ll,rr) =
   (* computing ids for each element of the list context *)
   let x_ids = ids_elt_s x in
   let ll_ids = List.map ids_elt_s ll in
@@ -45,22 +107,13 @@ let seq_ids_of_list_focus x (ll,rr) =
 	then (Ids.defs ids @ defs, y::rev_rr)
 	else (defs, rev_rr))
       (defs,[]) rr rr_ids in
-  (* computing ids_opt to reflect suspension of unused sentences for focus *)
-  let _, rev_ll_ids_opt =
-    List.fold_left
-      (fun (refs, rev_ll) (y,ids) ->
-	let def_refs, undef_refs = List.partition (fun rid -> Ids.has_def rid ids) refs in
-	if def_refs = [] (* sentence x2 is not useful *)
-	then refs, None::rev_ll
-	else (undef_refs @ Ids.refs ids), Some ids::rev_ll)
-      (Ids.refs x_ids, []) ll_y_ids in
-  let rr_ids_opt = List.rev_map (fun _ -> None) rev_rr in
-  (* final results *)
-  let seq_ids_opt = rev_ll_ids_opt @ Some x_ids :: rr_ids_opt in
   let ll_rr = List.map fst ll_y_ids, List.rev rev_rr in
-  ll_rr, seq_ids_opt
+  (* computing views *)
+  let views = views_of_seq [] 0 (list_of_ctx x ll_rr) in
+  let selected_view = try List.find (top_sid_in_view (List.length (fst ll_rr))) views with _ -> assert false in
+  ll_rr, selected_view
 
-
+  
 (* focus positions *)
     
 type focus_pos =
@@ -79,7 +132,7 @@ let focus_pos_down = function
     
 (* annotations *)
 
-class annot ~focus_pos ~focus ?(ids : ids = Ids.empty) ?(seq_ids : seq_ids option) ?(defined : bool = false) () =
+class annot ~focus_pos ~focus ?(ids : ids = Ids.empty) ?(seq_view : view option) ?(defined : bool = false) () =
 object (self)
   val focus_pos : focus_pos = focus_pos
   val focus : focus = focus
@@ -87,7 +140,7 @@ object (self)
   method focus = focus
   method focus_pos = focus_pos
   method ids = ids
-  method seq_ids = seq_ids
+  method seq_view = seq_view
   method defined = defined
   
   method is_at_focus : bool = (focus_pos = `At)
@@ -203,13 +256,13 @@ and annot_elt_s pos s ctx =
 					snd (annot_elt_expr pos_down expr (SExprX (id,modif,rel_opt,ctx))),
 					annot_elt_p1_opt pos_down rel_opt (SExprThatX (id,modif,expr,ctx)))
   | Seq (_,lr) ->
-    let lr, seq_ids =
+    let lr, seq_view =
       match List.rev lr with
-      | [] -> [], []
+      | [] -> [], Unit
       | x::ll ->
-	let ll_rr, seq_ids = seq_ids_of_list_focus x (ll,[]) in
-	list_of_ctx x ll_rr, seq_ids in
-    let annot = new annot ~focus_pos:pos ~focus:(AtS (s,ctx)) ~ids ~seq_ids () in
+	let ll_rr, seq_view = view_of_list_focus x (ll,[]) in
+	list_of_ctx x ll_rr, seq_view in
+    let annot = new annot ~focus_pos:pos ~focus:(AtS (s,ctx)) ~ids ~seq_view () in
     Seq (annot,
 	 List.map
 	   (fun (x,ll_rr) -> annot_elt_s pos_down x (SeqX (ll_rr,ctx)))
@@ -392,10 +445,9 @@ and annot_ctx_expr defined x_annot x = function
 and annot_ctx_s ft x_annot x = function
   | Root -> ft, x_annot
   | SeqX (ll_rr,ctx) ->
-    (* filter [rr] to remove not well-founded elements, to cope with deletions *)
-    let ll_rr, seq_ids = seq_ids_of_list_focus x ll_rr in
+    let ll_rr, seq_view = view_of_list_focus x ll_rr in
     let f = Seq ((), list_of_ctx x ll_rr) in
-    let annot = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~seq_ids () in
+    let annot = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~seq_view () in
     annot_ctx_s ft
       (Seq (annot,
 	    list_of_ctx x_annot
