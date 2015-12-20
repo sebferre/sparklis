@@ -483,6 +483,6 @@ let annot_focus : focus -> focus_term * annot elt_s = function
     let defined, expr_annot = annot_elt_expr `At expr ctx in
     annot_ctx_expr defined expr_annot expr ctx
   | AtS (s,ctx) ->
-    let ft = match s with SExpr (_,id,_,_,_) -> `IdNoIncr id | _ -> `Undefined in
+    let ft = `Undefined in
     let s_annot = annot_elt_s `At s ctx in
     annot_ctx_s ft s_annot s ctx

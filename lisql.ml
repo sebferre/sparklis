@@ -588,6 +588,7 @@ let rec next_undef_focus focus =
 	      (ctx_of_list args) in
 	  Some (AtExpr (x, ApplyX (func,ll_rr,ctx))) (* set focus on it *)
 	with _ -> move_seq up_focus next_undef_focus focus ) )
+  | AtS (SExpr _,_) -> down_focus focus
   | _ -> Some focus
 
 

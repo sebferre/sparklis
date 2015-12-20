@@ -128,9 +128,8 @@ let of_func_pos (func : func) (pos : int) : datatype =
   | `Integer, 0 -> `Integer
   | `Double, 0 -> `Float
   | (`Integer | `Double), 1 -> `Literal
-  | (`Add | `Sub | `Mul | `Div | `Neg | `Abs), _ -> `Numeric
-  | (`Round | `Ceil | `Floor), 0 -> `Integer
-  | (`Round | `Ceil | `Floor), 1 -> `Float
+  | (`Add | `Sub | `Mul | `Div | `Neg | `Abs), _ -> `Numeric (* TODO: all preserve integerness, except div *)
+  | (`Round | `Ceil | `Floor), (0 | 1) -> `Numeric
   | `Random2, (0 | 1 | 2) -> `Float
   | `Date, 0 -> `Date
   | `Date, 1 -> `DateTime
