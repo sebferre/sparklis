@@ -394,12 +394,13 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
   | SExpr (annot,id,modif,expr,rel_opt) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
-    let sparql_expr =
-      match form_expr state expr with
-      | "" -> "\"?\""
-      | s -> s in
-    let d = form_p1_opt state rel_opt in
-    let form = Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
+    let sparql_expr = form_expr state expr in
+    let form =
+      if sparql_expr = ""
+      then Sparql.True
+      else
+	let d = form_p1_opt state rel_opt in
+	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
     Unit, ([v], (fun ?limit () -> form))
   | SAggreg (annot,dims,aggregs) ->
     let aggregated_defs, aggregated_f = aggregated_view in
