@@ -9,8 +9,8 @@ type datatype =
 | `Literal (* any kind of literal *)
 | `StringLiteral (* plain literal or xsd:string *)
 | `String (* xsd:string *)
-| `Numeric (* `Float or `Integer *)
-| `Float (* xsd:decimal, xsd:float or xsd:double *)
+| `Float (* xsd:float or xsd:double *)
+| `Decimal (* xsd:decimal *)
 | `Integer (* xsd:integer *)
 | `Date
 | `Time
@@ -28,15 +28,15 @@ let inheritance : (datatype * datatype list) list =
       | `Literal -> aux `IRI_Literal
       | `StringLiteral -> aux `Literal
       | `String -> aux `StringLiteral
-      | `Numeric -> aux `Literal
-      | `Float -> aux `Numeric
-      | `Integer -> aux `Numeric
+      | `Float -> aux `Literal
+      | `Decimal -> aux `Float
+      | `Integer -> aux `Decimal
       | `Date -> aux `Literal
       | `Time -> aux `Literal
       | `DateTime -> aux `Date
   in
   List.map (fun dt -> (dt, aux dt))
-    [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String; `Numeric; `Float; `Integer; `Date; `Time; `DateTime]
+    [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String; `Float; `Decimal; `Integer; `Date; `Time; `DateTime]
 
 let compatible_with dt1 dt2 =
   List.mem dt2 (List.assoc dt1 inheritance)
@@ -53,11 +53,13 @@ let of_term : Rdf.term -> datatype = function
   | Rdf.URI _ -> `IRI
   | Rdf.Number (_,_,dt) ->
     if dt = Rdf.xsd_integer then `Integer
+    else if dt = Rdf.xsd_decimal then `Decimal
     else `Float
   | Rdf.TypedLiteral (_,dt) ->
     if dt = Rdf.xsd_string then `String
     else if dt = Rdf.xsd_integer then `Integer
-    else if List.mem dt [Rdf.xsd_double; Rdf.xsd_decimal] (* or parses as float *) then `Float
+    else if dt = Rdf.xsd_decimal then `Decimal
+    else if dt = Rdf.xsd_double (* or parses as float *) then `Float
     else if dt = Rdf.xsd_date then `Date
     else if dt = Rdf.xsd_time then `Time
     else if dt = Rdf.xsd_dateTime then `DateTime
@@ -86,75 +88,123 @@ let of_sparql_results (results : Sparql_endpoint.results) : datatype list array 
     
 open Lisql
 
-let of_aggreg_pos (aggreg : aggreg) (pos : int) : datatype =
-  match aggreg, pos with
-  | NumberOf, 0 -> `Integer
-  | NumberOf, 1 -> `IRI_Literal
-  | ListOf, 0 -> `String
-  | ListOf, 1 -> `Literal
-  | (Total | Average), (0 | 1) -> `Numeric
-  | (Maximum | Minimum), 0 -> `Literal
-  | (Maximum | Minimum), 1 -> `Literal
-  | Sample, (0 | 1) -> `IRI_Literal
-  | _ -> invalid_arg "Lisql_type.of_aggreg_pos"
-    
-let of_func_pos (func : func) (pos : int) : datatype =
-  match func, pos with
-  | `Str, 0 -> `String
-  | `Str, 1 -> `IRI_Literal
-  | `Lang, 0 -> `String
-  | `Lang, 1 -> `StringLiteral
-  | `Datatype, 0 -> `IRI
-  | `Datatype, 1 -> `Literal
-  | `IRI, 0 -> `IRI
-  | `IRI, 1 -> `IRI_Literal
-  | `STRDT, 0 -> `Literal
-  | `STRDT, 1 -> `String
-  | `STRDT, 2 -> `IRI
-  | `STRLANG, 0 -> `Literal
-  | `STRLANG, (1 | 2) -> `String
-  | `Strlen, 0 -> `Integer
-  | `Strlen, 1 -> `StringLiteral
-  | `Substr2, (0 | 1) -> `StringLiteral
-  | `Substr2, 2 -> `Integer
-  | `Substr3, (0 | 1) -> `StringLiteral
-  | `Substr3, (2 | 3) -> `Integer
-  | `Strbefore, (0 | 1 | 2) -> `StringLiteral
-  | `Strafter, (0 | 1 | 2) -> `StringLiteral
-  | `Concat, _ -> `StringLiteral
-  | (`UCase | `LCase | `Encode_for_URI), (0 | 1) -> `StringLiteral
-  | `Replace, (0 | 1) -> `StringLiteral
-  | `Replace, (2 | 3) -> `String
-  | `Integer, 0 -> `Integer
-  | `Double, 0 -> `Float
-  | (`Integer | `Double), 1 -> `Literal
-  | (`Add | `Sub | `Mul | `Div | `Neg | `Abs), _ -> `Numeric (* TODO: all preserve integerness, except div *)
-  | (`Round | `Ceil | `Floor), (0 | 1) -> `Numeric
-  | `Random2, (0 | 1 | 2) -> `Float
-  | `Date, 0 -> `Date
-  | `Date, 1 -> `DateTime
-  | `Time, 0 -> `Time
-  | `Time, 1 -> `DateTime
-  | (`Year | `Month | `Day | `Hours | `Minutes), 0 -> `Integer
-  | `Seconds, 0 -> `Float
-  | (`Year | `Month | `Day), 1 -> `Date
-  | (`Hours | `Minutes | `Seconds), 1 -> `DateTime
-  | `TODAY, 0 -> `Date
-  | `NOW, 0 -> `DateTime
-  | _ -> invalid_arg "Lisql_type.of_func_arg"
+let aggreg_signature : aggreg -> datatype * datatype = function
+  | NumberOf -> `IRI_Literal, `Integer
+  | ListOf -> `Literal, `String
+  | Total
+  | Average -> `Float, `Float
+  | Minimum
+  | Maximum -> `Literal, `Literal
+  | Sample -> `IRI_Literal, `IRI_Literal
 
-let of_elt_expr (env : id -> datatype list option) : 'a elt_expr -> datatype list option = function
+let func_signatures : func -> (datatype list * datatype) list = function
+  | `Str -> [ [`IRI_Literal], `String ]
+  | `Lang -> [ [`StringLiteral], `String ]
+  | `Datatype -> [ [`Literal], `IRI ]
+  | `IRI -> [ [`IRI_Literal], `IRI ]
+  | `STRDT -> [ [`String; `IRI], `Literal ]
+  | `STRLANG -> [ [`String; `String], `Literal ]
+  | `Strlen -> [ [`StringLiteral], `Integer ]
+  | `Substr2 -> [ [`StringLiteral; `Integer], `StringLiteral ]
+  | `Substr3 -> [ [`StringLiteral; `Integer; `Integer], `StringLiteral ]
+  | `Strbefore
+  | `Strafter
+  | `Concat -> [ [`StringLiteral; `StringLiteral], `StringLiteral ]
+  | `UCase
+  | `LCase
+  | `Encode_for_URI -> [ [`StringLiteral], `StringLiteral ]
+  | `Replace -> [ [`StringLiteral; `String; `String], `StringLiteral ]
+  | `Integer -> [ [`Literal], `Integer ]
+  | `Double -> [ [`Literal], `Float ]
+  | `Add
+  | `Sub
+  | `Mul -> [ [`Integer; `Integer], `Integer;
+	      [`Decimal; `Decimal], `Decimal;
+	      [`Float; `Float], `Float ]
+  | `Div -> [ [`Decimal; `Decimal], `Decimal;
+	      [`Float; `Float], `Float ]
+  | `Neg
+  | `Abs
+  | `Round
+  | `Ceil
+  | `Floor -> [ [`Integer], `Integer;
+		[`Decimal], `Decimal;
+		[`Float], `Float ]
+  | `Random2 -> [ [`Float; `Float], `Float ]
+  | `Date -> [ [`DateTime], `Date ]
+  | `Time -> [ [`DateTime], `Time ]
+  | `Year
+  | `Month
+  | `Day -> [ [`Date], `Integer ]
+  | `Hours
+  | `Minutes -> [ [`DateTime], `Integer ]
+  | `Seconds -> [ [`DateTime], `Float ]
+  | `TODAY -> [ [], `Date]
+  | `NOW -> [ [], `DateTime]
+
+
+exception TypeError
+    
+let of_func_res func (args_typing : datatype option list) : datatype (* raise TypeError *) =
+  let func_sigs = func_signatures func in
+  try
+    let func_sig =
+      List.find
+	(fun (params,_) ->
+	  List.for_all2
+	    (fun arg param ->
+	      match arg with
+	      | None -> true
+	      | Some dt -> compatible_with dt param)
+	    args_typing params)
+	func_sigs in (* priority to most specific signatures *)
+    snd (func_sig)
+  with _ -> raise TypeError
+
+let of_func_param func pos (res_typing : datatype option) : datatype (* raise TypeError *) =
+  let func_sigs = func_signatures func in
+  try
+    let func_sig =
+      List.find
+	(fun (_,ret) ->
+	  match res_typing with
+	  | None -> true
+	  | Some dt -> compatible_with ret dt)
+	(List.rev func_sigs) in (* priority to most general signatures *)
+    List.nth (fst func_sig) (pos-1)
+  with _ -> raise TypeError
+
+
+let rec of_elt_expr (env : id -> datatype list option) : 'a elt_expr -> datatype list option (* raise TypeError *) = function
   | Undef _ -> None
   | Const (_,t) -> Some [of_term t]
   | Var (_,id) -> env id
-  | Apply (_,func,args) -> Some [of_func_pos func 0]
+  | Apply (_,func,args) ->
+    let args_typings =
+      List.fold_right
+	(fun arg typing ->
+	  match of_elt_expr env arg with
+	  | None -> List.map (fun t -> None::t) typing
+	  | Some dts -> List.concat (List.map (fun t -> List.map (fun dt -> Some dt::t) dts) typing))
+	args [[]] in
+    Some
+      (List.fold_left
+	 (fun dts args_typing ->
+	   try
+	     let dt = of_func_res func args_typing in
+	     if List.mem dt dts
+	     then dts
+	     else dt::dts
+	   with _ -> dts)
+	 [] args_typings)
 
-let of_ctx_expr : ctx_expr -> datatype option = function
+let rec of_ctx_expr : ctx_expr -> datatype option (* raise TypeError *) = function
   | SExprX _ -> None
   | ApplyX (func,ll_rr,ctx) ->
     let pos = 1 + List.length (fst ll_rr) in
-    Some (of_func_pos func pos)
-      
+    let ctx_dt_opt = of_ctx_expr ctx in
+    Some (of_func_param func pos ctx_dt_opt)
+
 type focus_type_constraints = datatype list option * datatype option
 
 let of_focus env : focus -> focus_type_constraints = function
@@ -178,16 +228,20 @@ let is_insertable (dt_arg_opt, dt_res) (ldt_opt, dt_opt) =
   arg_ok && res_ok
 
 let is_insertable_aggreg aggreg focus_type_constraints =
-  is_insertable
-    (Some (of_aggreg_pos aggreg 1), of_aggreg_pos aggreg 0)
-    focus_type_constraints
-      
-let is_insertable_func_pos func pos focus_type_constraints =
-  is_insertable
-    (Some (of_func_pos func pos), of_func_pos func 0)
-    focus_type_constraints
+  let param_dt, res_dt = aggreg_signature aggreg in
+  is_insertable (Some param_dt, res_dt) focus_type_constraints
 
 let is_insertable_input input_dt focus_type_constraints =
   is_insertable
     (None, input_dt)
     focus_type_constraints
+
+
+let is_insertable_func_pos func pos (ldt_opt, dt_opt) =
+  try
+    let param_dt = of_func_param func pos dt_opt in
+    match ldt_opt with
+    | None -> true
+    | Some ldt -> List.exists (fun dt -> compatible_with dt param_dt) ldt
+  with _ -> false
+    

@@ -604,7 +604,7 @@ let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus opti
 
 (* increments *)
 
-type input_type =  [`IRI | `String | `Numeric | `Integer | `Date | `Time | `DateTime]
+type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
 (* a sub-type of Sparql.datatype *)
 
 type increment =
@@ -631,7 +631,7 @@ type increment =
 let check_input s = function
   | `IRI -> true
   | `String -> true
-  | `Numeric -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
+  | `Float -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
   (*  | `Decimal -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d* )?$") s 0 <> None *)
   | `Integer -> Regexp.string_match (Regexp.regexp "[-+]?\\d+$") s 0 <> None
   | `Date -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}$") s 0 <> None
@@ -641,7 +641,7 @@ let check_input s = function
 let datatype_of_input_type = function
   | `IRI -> invalid_arg "datatype_of_input_type: URI has no datatype"
   | `String -> Rdf.xsd_string
-  | `Numeric -> Rdf.xsd_double
+  | `Float -> Rdf.xsd_double
   | `Integer -> Rdf.xsd_integer
   | `Date -> Rdf.xsd_date
   | `Time -> Rdf.xsd_time

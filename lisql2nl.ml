@@ -194,7 +194,7 @@ let rec word_of_term = function
 let string_of_input_type grammar = function
   | `IRI -> grammar#uri
   | `String -> grammar#string
-  | `Numeric -> grammar#number
+  | `Float -> grammar#number
   | `Integer -> grammar#integer
   | `Date -> grammar#date
   | `Time -> grammar#time

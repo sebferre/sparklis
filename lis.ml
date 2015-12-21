@@ -298,7 +298,7 @@ object (self)
 	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
 	    then (Lisql.IncrInput ("",dt),1) :: incr_index
 	    else incr_index)
-	  incr_index [`IRI; `String; `Numeric; `Integer; `Date; `Time; `DateTime]
+	  incr_index [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime]
       else incr_index in
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       Lexicon.config_class_lexicon#value#sync (fun () ->

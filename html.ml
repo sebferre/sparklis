@@ -112,7 +112,7 @@ let html_input dt =
     match dt with
     | `IRI -> "url", "http://"
     | `String -> "text", ""
-    | `Numeric -> "number", "0.0e+0"
+    | `Float -> "number", "0.0e+0"
     | `Integer -> "number", "0"
     | `Date -> "text", "yyyy-mm-dd"
     | `Time -> "text", "hh:mm:ss"
