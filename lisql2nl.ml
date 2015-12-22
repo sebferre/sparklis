@@ -485,21 +485,25 @@ object (self)
 	(id, `Label best_label))
       lab_rank
 
-  method private get_id_var_label (id : id) : Rdf.var * (ng_label * int) =
+  method private get_id_var_label (id : id) : (Rdf.var * (ng_label * int)) * id =
     try match List.assoc id id_list with
-    | `Label (v,ng_k) -> (v,ng_k)
-    | `Alias id2 -> self#get_id_var_label id2
+    | `Label (v,ng_k) -> (v,ng_k), id
+    | `Alias id2 -> fst (self#get_id_var_label id2), id2
     with Not_found -> assert false
       
   method get_id_label (id : id) : ng_label (* string *) =
-    let _, (ng, k) = self#get_id_var_label id in
+    let (_, (ng, k)), _ = self#get_id_var_label id in
     let n = label_counter#count ng in
     if n = 1
     then ng
     else `Nth (k, ng)
 
   method get_id_var (id : id) : string =
-    let prefix = try fst (self#get_id_var_label id) with _ -> "thing" in
+    let prefix, id =
+      try
+	let (prefix,_), id = self#get_id_var_label id in
+	prefix, id
+      with _ -> "thing", id in
     prefix ^ "_" ^ string_of_int id
 
   method get_var_id (v : string) : id =

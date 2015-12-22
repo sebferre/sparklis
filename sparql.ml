@@ -179,7 +179,12 @@ let projection_def : projection_def -> expr = function
 let projection (def,v : projection) : selector =
   match def with
   | `Bare -> (var v)
-  | _ -> "(" ^ projection_def def ^ " AS " ^ var v ^ ")"
+  | _ ->
+    let s_def = projection_def def in
+    let s_var = var v in
+    if s_def = s_var
+    then s_var
+    else "(" ^ s_def ^ " AS " ^ s_var ^ ")"
 
 let select
     ?(distinct=false)
@@ -338,7 +343,7 @@ let empty_view : view = ([], (fun ?limit () -> True))
 
 let join_views (views : view list) : view =
   let list_defs, list_form = List.split views in
-  List.concat list_defs,
+  Common.list_to_set (List.concat list_defs),
   (fun ?limit () ->
     formula_and_list
       (List.map (fun f -> f ?limit ()) list_form))

@@ -59,30 +59,40 @@ let join_views = function
 
 let rec views_of_seq (views : view list) (sid : sid) : unit elt_s list -> view list = function
   | [] -> views
-  | s::ls -> views_of_seq (views_of_elt_s views sid s) (sid+1) ls
-and views_of_elt_s views sid s =
-  let ids = ids_elt_s s in
-  let defs, refs, defining_views, other_views = defining_views ids views in
-  match s with
-  | Return _ | SExpr _ ->
-    join_views (defining_views @ [Atom (defs, sid)]) :: other_views
-  | SAggreg _ ->
-    let aggregated_view = Aggreg (defs, refs, sid, join_views defining_views) in
-    aggregated_view :: views
-  | Seq _ -> assert false (* Seq's are not nested *)
-and defining_views ids views : id list * id list * view list * view list =
-  let defs, refs = Ids.defs ids, Ids.refs ids in
-  let defining_views, other_views =
-    List.partition
-      (fun v -> List.exists (fun id -> List.mem id refs) (view_defs v))
-      views in
-  (* selecting only first defining view *)
-  (*let defining_views, other_views = (* TODO: handle cartesian products *)
-    match defining_views with
-    | [] -> [], other_views
-    | v::lv -> [v], lv@other_views in*)
-  defs, refs, defining_views, other_views
-	
+  | s::ls ->
+    let ids = ids_elt_s s in
+    let defs, refs = Ids.defs ids, Ids.refs ids in
+    match s with
+    | Return _ -> (* TODO: handle Return's depending on other sentences *)
+      views_of_seq (Atom (defs, sid) :: views) (sid+1) ls
+    | SExpr _ ->
+      let views =
+	List.fold_right
+	  (fun view views ->
+	    let v_defs = view_defs view in
+	    if List.for_all
+	      (fun ref_id -> List.mem ref_id v_defs)
+	      refs
+	    then join_views [view; Atom (defs, sid)]::views
+	    else view::views)
+	  views [] in
+      views_of_seq views (sid+1) ls
+    | SAggreg _ ->
+      let views =
+	List.fold_right
+	  (fun view views ->
+	    let v_defs = view_defs view in
+	    if List.for_all
+	      (fun ref_id -> List.mem ref_id v_defs)
+	      refs
+	    then
+	      let aggregation_view = Aggreg (defs, refs, sid, view) in
+	      aggregation_view::join_views [view; aggregation_view]::views
+	    else view::views)
+	  views [] in
+      views_of_seq views (sid+1) ls
+    | Seq _ -> assert false
+      
 let view_of_list_focus x (ll,rr) =
   (* computing ids for each element of the list context *)
   let x_ids = ids_elt_s x in
