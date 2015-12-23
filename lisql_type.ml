@@ -147,16 +147,13 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `And
   | `Or -> [ [`Boolean; `Boolean], `Boolean ]
   | `Not -> [ [`Boolean], `Boolean ]
-  | `EQ | `NEQ (*-> [ [`Term; `Term], `Boolean ]*)
+  | `EQ | `NEQ
   | `GEQ | `GT
-  | `LEQ | `LT -> [ [`Integer; `Integer], `Boolean;
-		    [`Decimal; `Decimal], `Boolean;
-		    [`Float; `Float], `Boolean;
+  | `LEQ | `LT -> [ [`Float; `Float], `Boolean;
 		    [`StringLiteral; `StringLiteral], `Boolean;
 		    [`DateTime; `DateTime], `Boolean;
 		    [`Date; `Date], `Boolean;
-		    [`Boolean; `Boolean], `Boolean;
-		    [`Literal; `Literal], `Boolean ]
+		    [`Boolean; `Boolean], `Boolean ]
   | `BOUND -> [ [`Term], `Boolean ] (* should be `Var instead of `Term *)
   | `IF ->
     List.map (fun dt -> [`Boolean; dt; dt], dt)
@@ -179,90 +176,81 @@ let is_predicate (func : func) : bool =
   List.for_all
     (fun (_,dt) -> dt = `Boolean)
     (func_signatures func)
-    
+
+(* type constraints *)
+
+type type_constraint = datatype list option (* list of possible types or anything *)
+
+let check_input_constraint constr dt_input =
+  match constr with
+  | None -> true
+  | Some ldt -> List.exists (fun dt -> compatible_with dt dt_input) ldt
+let check_output_constraint constr dt_output =
+  match constr with
+  | None -> true
+  | Some ldt -> List.exists (fun dt -> compatible_with dt_output dt) ldt
+
+let compatible_func_signatures func input_constr_list output_constr =
+  List.filter
+    (fun (input_dt_list,output_dt) ->
+      check_output_constraint output_constr output_dt
+      && List.for_all2 check_input_constraint input_constr_list input_dt_list)
+    (func_signatures func)
+
+type focus_type_constraints = { input_constr : type_constraint;
+				output_constr : type_constraint }
+
+let default_focus_type_constraints = { input_constr = None; output_constr = None }
+  
 exception TypeError
-    
-let of_func_res func (args_typing : datatype option list) : datatype (* raise TypeError *) =
-  let func_sigs = func_signatures func in
-  try
-    let func_sig =
-      List.find
-	(fun (params,_) ->
-	  List.for_all2
-	    (fun arg param ->
-	      match arg with
-	      | None -> true
-	      | Some dt -> compatible_with dt param)
-	    args_typing params)
-	func_sigs in (* priority to most specific signatures *)
-    snd (func_sig)
-  with _ -> raise TypeError
 
-let of_func_param func pos (res_typing : datatype option) : datatype (* raise TypeError *) =
-  let func_sigs = func_signatures func in
-  try
-    let func_sig =
-      List.find
-	(fun (_,ret) ->
-	  match res_typing with
-	  | None -> true
-	  | Some dt -> compatible_with ret dt)
-	(List.rev func_sigs) in (* priority to most general signatures *)
-    List.nth (fst func_sig) (pos-1)
-  with _ -> raise TypeError
-
-
-let rec of_elt_expr (env : id -> datatype list option) : 'a elt_expr -> datatype list option (* raise TypeError *) = function
+let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_constraint (* raise TypeError *) = function
   | Undef _ -> None
   | Const (_,t) -> Some [of_term t]
   | Var (_,id) -> env id
   | Apply (_,func,args) ->
-    let args_typings =
-      List.fold_right
-	(fun arg typing ->
-	  match of_elt_expr env arg with
-	  | None -> List.map (fun t -> None::t) typing
-	  | Some dts -> List.concat (List.map (fun t -> List.map (fun dt -> Some dt::t) dts) typing))
-	args [[]] in
-    Some
-      (List.fold_left
-	 (fun dts args_typing ->
-	   try
-	     let dt = of_func_res func args_typing in
-	     if List.mem dt dts
-	     then dts
-	     else dt::dts
-	   with _ -> dts)
-	 [] args_typings)
+    let output_constr = None in
+    let input_constr_list = List.map (constr_of_elt_expr env) args in
+    let comp_sigs = compatible_func_signatures func input_constr_list output_constr in
+    if comp_sigs = []
+    then raise TypeError
+    else Some (Common.list_to_set (List.map snd comp_sigs))
 
-let rec of_ctx_expr : ctx_expr -> datatype option (* raise TypeError *) = function
+let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_constraint (* raise TypeError *) = function
   | SExprX _ -> None
-  | SFilterX _ -> Some `Boolean
+  | SFilterX _ -> Some [`Boolean]
   | ApplyX (func,ll_rr,ctx) ->
     let pos = 1 + List.length (fst ll_rr) in
-    let ctx_dt_opt = of_ctx_expr ctx in
-    Some (of_func_param func pos ctx_dt_opt)
-
-type focus_type_constraints = datatype list option * datatype option
+    let output_constr = constr_of_ctx_expr env ctx in
+    let input_constr_list =
+      list_of_ctx None (map_ctx_list (constr_of_elt_expr env) ll_rr) in
+    let comp_sigs = compatible_func_signatures func input_constr_list output_constr in
+    if comp_sigs = []
+    then raise TypeError
+    else
+      Some
+	(Common.list_to_set
+	   (List.map
+	      (fun (input_dt_list,_) -> List.nth input_dt_list (pos-1))
+	      comp_sigs))
 
 let of_focus env : focus -> focus_type_constraints = function
-  | AtExpr (expr,ctx) -> (of_elt_expr env expr, of_ctx_expr ctx)
+  | AtExpr (expr,ctx) -> { input_constr = constr_of_elt_expr env expr;
+			   output_constr = constr_of_ctx_expr env ctx }
   | focus ->
     match id_of_focus focus with
-    | None -> (None, None)
-    | Some id -> (env id, None)
+    | None -> { input_constr = None; output_constr = None }
+    | Some id -> { input_constr = env id; output_constr = None }
 
-let is_insertable (dt_arg_opt, dt_res) (ldt_opt, dt_opt) =
+(* insertability of elements based on constraints *)
+
+let is_insertable (dt_arg_opt, dt_res) focus_constr =
   let arg_ok =
-    match dt_arg_opt, ldt_opt with
-    | _, None -> true
-    | None, Some ldt -> false
-    | Some dt_arg, Some ldt ->
-      List.exists (fun dt -> compatible_with dt dt_arg) ldt in
-  let res_ok =
-    match dt_opt with
+    match dt_arg_opt with
     | None -> true
-    | Some dt -> compatible_with dt_res dt in
+    | Some dt_arg -> check_input_constraint focus_constr.input_constr dt_arg in
+  let res_ok =
+    check_output_constraint focus_constr.output_constr dt_res in
   arg_ok && res_ok
 
 let is_insertable_aggreg aggreg focus_type_constraints =
@@ -274,12 +262,14 @@ let is_insertable_input input_dt focus_type_constraints =
     (None, input_dt)
     focus_type_constraints
 
-
-let is_insertable_func_pos func pos (ldt_opt, dt_opt) =
-  try
-    let param_dt = of_func_param func pos dt_opt in
-    match ldt_opt with
-    | None -> true
-    | Some ldt -> List.exists (fun dt -> compatible_with dt param_dt) ldt
-  with _ -> false
-    
+let is_insertable_func_pos func pos focus_type_constraints =
+  List.exists
+    (fun (ldt_params, dt_res) ->
+      try
+	let dt_arg_opt =
+	  if pos=0
+	  then None
+	  else Some (List.nth ldt_params (pos-1)) in
+	is_insertable (dt_arg_opt,dt_res) focus_type_constraints
+      with _ -> assert false)
+    (func_signatures func)

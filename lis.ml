@@ -161,7 +161,7 @@ object (self)
 
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
-  val mutable focus_type_constraints : Lisql_type.focus_type_constraints = (None,None)
+  val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
   val mutable focus_term_index : (Rdf.term * int) list = []
   val mutable some_focus_term_is_blank : bool = false
 
