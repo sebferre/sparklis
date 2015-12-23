@@ -96,6 +96,7 @@ and 'a nl_s =
   [ `Return of 'a np
   | `ThereIs of 'a np
   | `Truth of 'a np * 'a vp
+  | `Where of 'a np (* when expr np acts as a sentence *)
   | `For of 'a np * 'a s
   | `Seq of 'a s list ]
 and 'a np = ('a, 'a nl_np) annotated
@@ -253,7 +254,7 @@ let word_of_incr grammar = function
   | IncrOrder o -> word_of_order grammar o
   | IncrAggreg g -> word_of_aggreg grammar g
   | IncrForeach id -> `Thing
-  | IncrFuncArg (func,arity,pos) -> `Op (string_of_func grammar func)
+  | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
 
 (* verbalization of IDs *)
 
@@ -417,6 +418,8 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
   | SExpr (_,id,modif,expr,rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
     (id, `Labels [("expr", `Expr expr)]) :: lab_rel @ labelling
+  | SFilter (_,id,expr) ->
+    (id, `Labels [("expr", `Expr expr)]) :: labelling
   | Seq (_, lr) ->
     List.fold_left
       (fun labelling s -> labelling_s grammar ~labelling s)
@@ -566,17 +569,9 @@ let syntax_of_func grammar (func : func)
     
 let np_of_apply grammar annot_opt adj func (np_args : annot np list) (rel : annot rel) : annot np =
   let nl = `Expr (adj, grammar#func_syntax func, np_args, rel) in
-(*
-  let nl =
-    match syntax_of_func grammar func with
-    | `Const s -> `PN (`Op s, rel)
-    | `Noun s -> `Qu (`The, adj, X (`OfThat (`Op s, nl_and np_args, rel)))
-    | `Infix s -> `Infix (adj, s, np_args, rel) in
-*)
   match annot_opt with
   | None -> X nl
   | Some annot -> A (annot, nl)
-
 
 let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
   | IsThere annot -> A (annot, `Ellipsis)
@@ -682,6 +677,8 @@ and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = 
       func
       (List.map (fun arg -> np_of_elt_expr grammar ~id_labelling top_adj top_rel arg) args)
       rel
+and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> annot nl_s = function
+  | expr -> `Where (np_of_elt_expr grammar ~id_labelling top_adj top_rel expr)
 and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
   | Return (annot,np) ->
     A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
@@ -697,6 +694,9 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let np = np_of_elt_expr grammar ~id_labelling adj rel expr in
     A (annot, `Return np)
+  | SFilter (annot,id,expr) ->
+    let s = s_of_elt_expr grammar ~id_labelling expr in
+    A (annot, s)
   | Seq (annot,lr) ->
     A (annot, `Seq (List.map (s_of_elt_s grammar ~id_labelling) lr))
 
@@ -728,6 +728,7 @@ let rec map_s (transf : transf) s =
     | `Return np -> `Return (map_np transf np)
     | `ThereIs np -> `ThereIs (map_np transf np)
     | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
+    | `Where np -> `Where (map_np transf np)
     | `For (np,s) -> `For (map_np transf np, map_s transf s)
     | `Seq lr -> `Seq (List.map (map_s transf) lr) )
 and map_np transf np =
@@ -936,6 +937,7 @@ let rec xml_s grammar ~id_labelling (s : annot s) =
     | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
     | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
     | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+    | `Where np -> Kwd grammar#where :: xml_np grammar ~id_labelling np
     | `For (np,s) -> Kwd grammar#for_ :: xml_np grammar ~id_labelling np @ Coord ([], [xml_s grammar ~id_labelling s]) :: []    
       (* [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
 	 xml_s grammar ~id_labelling s])] *)
@@ -1156,7 +1158,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Select,order))
   | IncrForeach id -> Word (`Op grammar#for_) :: Word (`Op grammar#each) :: xml_ng_id grammar ~id_labelling id
 (*  | IncrAggregId (g,id) -> xml_np grammar ~id_labelling (np_of_aggreg grammar ~id_labelling None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
-  | IncrFuncArg (func,arity,pos) ->
+  | IncrFuncArg (is_pred,func,arity,pos) ->
     xml_np grammar ~id_labelling
       (np_of_apply grammar None
 	 top_adj

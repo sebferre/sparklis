@@ -488,7 +488,9 @@ object (self)
 	  List.fold_left
 	    (fun incrs (func,arity,pos) ->
 	      if Lisql_type.is_insertable_func_pos func pos focus_type_constraints
-	      then IncrFuncArg (func,arity,pos) :: incrs
+	      then
+		let is_pred = Lisql_type.is_predicate func in
+		IncrFuncArg (is_pred,func,arity,pos) :: incrs
 	      else incrs)
 	    incrs
 	    [ `Str, 1, 1;
@@ -535,6 +537,28 @@ object (self)
 	      `Seconds, 1, 1;
 	      `TODAY, 0, 0;
 	      `NOW, 0, 0;
+	      `And, 2, 1;
+	      `And, 2, 2;
+	      `Or, 2, 1;
+	      `Or, 2, 2;
+	      `Not, 1, 1;
+	      `EQ, 2, 1;
+	      `NEQ, 2, 1;
+	      `GT, 2, 1;
+	      `GEQ, 2, 1;
+	      `LT, 2, 1;
+	      `LEQ, 2, 1;
+	      `BOUND, 1, 1;
+	      `IF, 3, 2;
+	      `IsIRI, 1, 1;
+	      `IsBlank, 1, 1;
+	      `IsLiteral, 1, 1;
+	      `IsNumeric, 1, 1;
+	      `StrStarts, 2, 1;
+	      `StrEnds, 2, 1;
+	      `Contains, 2, 1;
+	      `LangMatches, 2, 1;
+	      `REGEX, 2, 1;
 	    ] in
 	incrs in
     let valid_incrs =

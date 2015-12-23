@@ -14,6 +14,7 @@ let xsd_double = "http://www.w3.org/2001/XMLSchema#double"
 let xsd_date = "http://www.w3.org/2001/XMLSchema#date"
 let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
+let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
 
 (* ------------------------- *)

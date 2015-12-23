@@ -15,6 +15,7 @@ type datatype =
 | `Date
 | `Time
 | `DateTime
+| `Boolean
 ]
 
 let inheritance : (datatype * datatype list) list =
@@ -34,9 +35,10 @@ let inheritance : (datatype * datatype list) list =
       | `Date -> aux `Literal
       | `Time -> aux `Literal
       | `DateTime -> aux `Date
+      | `Boolean -> aux `Literal
   in
   List.map (fun dt -> (dt, aux dt))
-    [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String; `Float; `Decimal; `Integer; `Date; `Time; `DateTime]
+    [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String; `Float; `Decimal; `Integer; `Date; `Time; `DateTime; `Boolean]
 
 let compatible_with dt1 dt2 =
   List.mem dt2 (List.assoc dt1 inheritance)
@@ -63,6 +65,7 @@ let of_term : Rdf.term -> datatype = function
     else if dt = Rdf.xsd_date then `Date
     else if dt = Rdf.xsd_time then `Time
     else if dt = Rdf.xsd_dateTime then `DateTime
+    else if dt = Rdf.xsd_boolean then `Boolean
     else `Literal
   | Rdf.PlainLiteral (_,lang) ->
     if lang="" then `String
@@ -141,8 +144,42 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `Seconds -> [ [`DateTime], `Float ]
   | `TODAY -> [ [], `Date]
   | `NOW -> [ [], `DateTime]
+  | `And
+  | `Or -> [ [`Boolean; `Boolean], `Boolean ]
+  | `Not -> [ [`Boolean], `Boolean ]
+  | `EQ | `NEQ (*-> [ [`Term; `Term], `Boolean ]*)
+  | `GEQ | `GT
+  | `LEQ | `LT -> [ [`Integer; `Integer], `Boolean;
+		    [`Decimal; `Decimal], `Boolean;
+		    [`Float; `Float], `Boolean;
+		    [`StringLiteral; `StringLiteral], `Boolean;
+		    [`DateTime; `DateTime], `Boolean;
+		    [`Date; `Date], `Boolean;
+		    [`Boolean; `Boolean], `Boolean;
+		    [`Literal; `Literal], `Boolean ]
+  | `BOUND -> [ [`Term], `Boolean ] (* should be `Var instead of `Term *)
+  | `IF ->
+    List.map (fun dt -> [`Boolean; dt; dt], dt)
+      [`Integer; `Decimal; `Float;
+       `String; `StringLiteral;
+       `DateTime; `Date; `Boolean;
+       `Literal; `Term]
+  | `IsIRI
+  | `IsBlank
+  | `IsLiteral
+  | `IsNumeric -> [ [`Term], `Boolean ]
+  | `StrStarts
+  | `StrEnds
+  | `Contains
+  | `LangMatches
+  | `REGEX -> [ [`StringLiteral; `StringLiteral], `Boolean ]
 
 
+let is_predicate (func : func) : bool =
+  List.for_all
+    (fun (_,dt) -> dt = `Boolean)
+    (func_signatures func)
+    
 exception TypeError
     
 let of_func_res func (args_typing : datatype option list) : datatype (* raise TypeError *) =
@@ -200,6 +237,7 @@ let rec of_elt_expr (env : id -> datatype list option) : 'a elt_expr -> datatype
 
 let rec of_ctx_expr : ctx_expr -> datatype option (* raise TypeError *) = function
   | SExprX _ -> None
+  | SFilterX _ -> Some `Boolean
   | ApplyX (func,ll_rr,ctx) ->
     let pos = 1 + List.length (fst ll_rr) in
     let ctx_dt_opt = of_ctx_expr ctx in

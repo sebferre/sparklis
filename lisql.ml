@@ -38,7 +38,12 @@ type func =
 | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
 | `Date | `Time
 | `Year | `Month | `Day | `Hours | `Minutes | `Seconds
-| `TODAY | `NOW ]
+| `TODAY | `NOW
+| `And | `Or | `Not
+| `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ
+| `BOUND | `IF
+| `IsIRI | `IsBlank | `IsLiteral | `IsNumeric
+| `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX ]
 (* missing: timezone, hash functions, BNODE *)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
@@ -81,6 +86,7 @@ and 'a elt_s =
   | Return of 'a * 'a elt_s1
   | SAggreg of 'a * 'a elt_dim list * 'a elt_aggreg list
   | SExpr of 'a * id * modif_s2 * 'a elt_expr * 'a elt_p1 option
+  | SFilter of 'a * id * 'a elt_expr (* Boolean expr *)
   | Seq of 'a * 'a elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
 
 
@@ -140,6 +146,7 @@ and ctx_aggreg =
 and ctx_expr =
   | ApplyX of func * unit elt_expr ctx_list * ctx_expr
   | SExprX of id * modif_s2 * unit elt_p1 option * ctx_s
+  | SFilterX of id * ctx_s
 and ctx_s =
   | Root
   | SeqX of unit elt_s ctx_list * ctx_s
@@ -253,6 +260,7 @@ let id_of_focus = function
   | AtDim (dim,_) -> id_of_dim dim
   | AtAggreg (aggreg,_) -> id_of_aggreg aggreg
   | AtExpr (_, SExprX (id,_,_,_)) -> Some id
+  | AtExpr (_, SFilterX (id,_)) -> Some id
   | AtS (s,_) -> id_of_s s
   | _ -> None
 
@@ -285,6 +293,7 @@ and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
   | SAggregX (dims,ll_rr,ctx) -> elt_s_of_ctx_s (SAggreg ((), dims, list_of_ctx f ll_rr)) ctx
 and elt_s_of_ctx_expr (f : unit elt_expr) = function
   | SExprX (id,modif,rel_opt,ctx) -> elt_s_of_ctx_s (SExpr ((), id, modif, f, rel_opt)) ctx
+  | SFilterX (id,ctx) -> elt_s_of_ctx_s (SFilter ((), id, f)) ctx
   | ApplyX (func,ll_rr,ctx) -> elt_s_of_ctx_expr (Apply ((), func, list_of_ctx f ll_rr)) ctx
 and elt_s_of_ctx_s (f : unit elt_s) = function
   | Root -> f
@@ -370,6 +379,7 @@ and ids_elt_s = function
   | Return (_,np) -> ids_elt_s1 np
   | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
   | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `Def (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
+  | SFilter (_,id,expr) -> Ids.add id `Def (ids_elt_expr expr)
   | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 
 
@@ -422,6 +432,7 @@ let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
   | SAggreg (_,[],aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX ([], ([],aggregs), ctx)))
   | SAggreg (_,dim::dims,aggregs) -> Some (AtDim (dim, SAggregForeachX (([],dims),aggregs,ctx)))
   | SExpr (_,id,modif,expr,rel_opt) -> Some (AtExpr (expr, SExprX (id,modif,rel_opt,ctx)))
+  | SFilter (_,id,expr) -> Some (AtExpr (expr, SFilterX (id,ctx)))
   | Seq (_,[]) -> None
   | Seq (_,x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
 let down_focus = function
@@ -459,6 +470,7 @@ let up_aggreg f = function
   | SAggregX (dims,ll_rr,ctx) -> Some (AtS (SAggreg ((), dims, list_of_ctx f ll_rr), ctx))
 let up_expr f = function
   | SExprX (id,modif,rel_opt,ctx) -> Some (AtS (SExpr ((), id, modif, f, rel_opt), ctx))
+  | SFilterX (id,ctx) -> Some (AtS (SFilter ((), id, f), ctx))
   | ApplyX (func,ll_rr,ctx) -> Some (AtExpr (Apply ((), func, list_of_ctx f ll_rr), ctx))
 let up_s f = function
   | Root -> None
@@ -506,6 +518,7 @@ let right_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
 let right_expr (f : unit elt_expr) : ctx_expr -> focus option = function
   | SExprX (id,modif,None,ctx) -> None
   | SExprX (id,modif,Some rel,ctx) -> Some (AtP1 (rel, SExprThatX (id,modif,f,ctx)))
+  | SFilterX (id,ctx) -> None
   | ApplyX (func,(ll,[]),ctx) -> None
   | ApplyX (func,(ll,x::rr),ctx) -> Some (AtExpr (x, ApplyX (func, (f::ll,rr), ctx)))
 let right_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -558,6 +571,7 @@ let left_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
   | SAggregX (dims, (x::ll,rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (ll,f::rr), ctx)))
 let left_expr (f : unit elt_expr) : ctx_expr -> focus option = function
   | SExprX (id,modif,rel_opt,ctx) -> None
+  | SFilterX (id,ctx) -> None
   | ApplyX (func, ([],rr), ctx) -> None
   | ApplyX (func, (x::ll,rr), ctx) -> Some (AtExpr (x, ApplyX (func, (ll,f::rr), ctx)))
 let left_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -589,6 +603,7 @@ let rec next_undef_focus focus =
 	  Some (AtExpr (x, ApplyX (func,ll_rr,ctx))) (* set focus on it *)
 	with _ -> move_seq up_focus next_undef_focus focus ) )
   | AtS (SExpr _,_) -> down_focus focus
+  | AtS (SFilter _,_) -> down_focus focus
   | _ -> Some focus
 
 
@@ -625,7 +640,7 @@ type increment =
   | IncrAggreg of aggreg
   | IncrForeach of id
   (*  | IncrAggregId of aggreg * id *)
-  | IncrFuncArg of func * int (* arity *) * int (* arg position, starting at 1 *)
+  | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *)
 
       
 let check_input s = function
@@ -898,21 +913,26 @@ let insert_aggreg_id g id2 = function
     Some (AtAggreg (TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2), SAggregX (list_of_ctx dim ll_rr, (List.rev aggregs, []), ctx)))
   | _ -> None
 
-let insert_func_arg func arity pos =
+let insert_func_arg is_pred func arity pos =
   let ll_rr =
     List.map (fun _ -> factory#top_expr) (Common.from_downto (pos-1) 1),
     List.map (fun _ -> factory#top_expr) (Common.from_to (pos+1) arity) in
   function
   | AtExpr (_, ctx) when arity=0 -> next_undef_focus (AtExpr (Apply ((), func, []), ctx))
-  | AtExpr (expr,ctx) -> next_undef_focus (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
+  | AtExpr (expr,ctx) when (match ctx with SExprX _ -> not is_pred | _ -> true) ->
+    next_undef_focus (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
   | focus ->
     ( match id_of_focus focus with
     | None -> None
     | Some id ->
       let s = elt_s_of_focus focus in
       let args = if arity = 0 then [] else list_of_ctx (Var ((),id)) ll_rr in
-      let sexpr = SExpr ((), factory#new_id, factory#top_modif, Apply ((), func, args), None) in
-      let focus2 = append_seq_s Root sexpr s in
+      let s2 =
+	let expr = Apply ((), func, args) in
+	if is_pred
+	then SFilter ((), factory#new_id, expr)
+	else SExpr ((), factory#new_id, factory#top_modif, Apply ((), func, args), None) in
+      let focus2 = append_seq_s Root s2 s in
       move_seq down_focus next_undef_focus focus2 )
 
 let insert_increment incr focus =
@@ -945,7 +965,7 @@ let insert_increment incr focus =
     | IncrAggreg g -> insert_aggreg_bis g focus
     | IncrForeach id -> insert_foreach id focus
     (*    | IncrAggregId (g,id) -> insert_aggreg_id g id focus *)
-    | IncrFuncArg (func,arity,pos) -> insert_func_arg func arity pos focus
+    | IncrFuncArg (is_pred,func,arity,pos) -> insert_func_arg is_pred func arity pos focus
 
       
 let delete_list = function
@@ -1009,6 +1029,7 @@ and delete_ctx_dim ctx =
 and delete_ctx_expr f_opt ctx =
   match ctx with
   | SExprX (id,modif,rel_opt,ctx2) -> delete_ctx_s ctx2
+  | SFilterX (id,ctx2) -> delete_ctx_s ctx2
   | ApplyX (func,ll_rr,ctx2) ->
     ( match f_opt with
     | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx factory#top_expr ll_rr))) ctx2

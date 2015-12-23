@@ -84,6 +84,7 @@ object
   method virtual give_me : string
   method virtual there_is : string
   method virtual it_is_true_that : string
+  method virtual where : string
 
   method virtual tooltip_open_resource : string
   method virtual tooltip_delete_current_focus : string
@@ -219,6 +220,26 @@ object
   | `Seconds -> `Noun "seconds"
   | `TODAY -> `Pattern [`Func "today"]
   | `NOW -> `Pattern [`Func "now"]
+  | `And -> `Infix " and "
+  | `Or -> `Infix " or "
+  | `Not -> `Prefix "it is not true that "
+  | `EQ -> `Infix " = "
+  | `NEQ -> `Infix " ≠ "
+  | `GT -> `Infix " > "
+  | `GEQ -> `Infix " ≥ "
+  | `LT -> `Infix " < "
+  | `LEQ -> `Infix " ≤ "
+  | `BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
+  | `IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
+  | `IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
+  | `IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
+  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
+  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
+  | `StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
+  | `StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
+  | `Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
+  | `REGEX -> `Pattern [`Arg 1; `Func "matches as regexp"; `Arg 2]
+  | `LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
  
   method order_highest = "highest-to-lowest"
   method order_lowest = "lowest-to-highest"
@@ -239,6 +260,7 @@ object
   method give_me = "give me"
   method there_is = "there is"
   method it_is_true_that = "it is true that"
+  method where = "where"
 
   method tooltip_open_resource = "Open resource in new window"
   method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
@@ -364,7 +386,27 @@ object
   | `Seconds -> `Pattern [`Kwd "les"; `Func "secondes"; `Kwd "de"; `Arg 1]
   | `TODAY -> `Pattern [`Func "aujourd'hui"]
   | `NOW -> `Pattern [`Func "maintenant"]
-
+  | `And -> `Infix " et "
+  | `Or -> `Infix " ou "
+  | `Not -> `Prefix "il n'est pas vrai que "
+  | `EQ -> `Infix " = "
+  | `NEQ -> `Infix " ≠ "
+  | `GT -> `Infix " > "
+  | `GEQ -> `Infix " ≥ "
+  | `LT -> `Infix " < "
+  | `LEQ -> `Infix " ≤ "
+  | `BOUND -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "valeur"]
+  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "sinon"; `Arg 3]
+  | `IsIRI -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "une"; `Func "IRI"]
+  | `IsBlank -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "noeud anonyme"]
+  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "litéral"]
+  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "nombre"]
+  | `StrStarts -> `Pattern [`Arg 1; `Func "commence par"; `Arg 2]
+  | `StrEnds -> `Pattern [`Arg 1; `Func "finit par"; `Arg 2]
+  | `Contains -> `Pattern [`Arg 1; `Func "contient"; `Arg 2]
+  | `REGEX -> `Pattern [`Arg 1; `Func "matche la regexp"; `Arg 2]
+  | `LangMatches -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "langue"; `Kwd "qui"; `Func "matche"; `Arg 2]
+ 
   method order_highest = "en ordre décroissant"
   method order_lowest = "en ordre croissant"
 
@@ -384,6 +426,7 @@ object
   method give_me = "donne moi"
   method there_is = "il y a"
   method it_is_true_that = "il est vrai que"
+  method where = "où"
 
   method tooltip_open_resource = "Ouvrir la ressource dans une nouvelle fenêtre"
   method tooltip_delete_current_focus = "Cliquer sur la croix rouge pour supprimer le focus actuel"

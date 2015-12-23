@@ -154,6 +154,14 @@ let rec expr_apply func args =
     ( match args with
     | [] -> Sparql.expr_func "xsd:date" [Sparql.expr_func "NOW" []]
     | _ -> assert false )
+  | `And -> Sparql.expr_infix " && " args
+  | `Or -> Sparql.expr_infix " || " args
+  | `EQ -> Sparql.expr_infix " = " args
+  | `NEQ -> Sparql.expr_infix " != " args
+  | `GT -> Sparql.expr_infix " > " args
+  | `GEQ -> Sparql.expr_infix " >= " args
+  | `LT -> Sparql.expr_infix " < " args
+  | `LEQ -> Sparql.expr_infix " <= " args
   | func -> Sparql.expr_func (name_func func) args
 and name_func = function
   | `Str -> "str"
@@ -191,6 +199,19 @@ and name_func = function
   | `Seconds -> "seconds"
   | `TODAY -> invalid_arg "Lisql2sparql.name_func: TODAY"
   | `NOW -> "NOW"
+  | `And | `Or | `Not
+  | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ -> invalid_arg "Lisql2sparql.name_func"
+  | `BOUND -> "BOUND"
+  | `IF -> "IF"
+  | `IsIRI -> "IsIRI"
+  | `IsBlank -> "IsBlank"
+  | `IsLiteral -> "IsLiteral"
+  | `IsNumeric -> "IsNumeric"
+  | `StrStarts -> "strstarts"
+  | `StrEnds -> "strends"
+  | `Contains -> "contains"
+  | `REGEX -> "REGEX"
+  | `LangMatches -> "langMatches"
 
     
 type sparql_p1 = Rdf.term -> Sparql.formula
@@ -402,6 +423,18 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
 	let d = form_p1_opt state rel_opt in
 	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
     Unit, ([v], (fun ?limit () -> form))
+  | SFilter (annot,id,expr) ->
+    let v = state#id_labelling#get_id_var id in
+    let sparql_expr = form_expr state expr in
+    let lv, form =
+      match annot#focus_pos with
+      | `Above _ -> [v], Sparql.Pattern (Sparql.bind sparql_expr v)
+      | _ -> [], Sparql.Filter sparql_expr in
+    let form =
+      if sparql_expr = ""
+      then Sparql.True
+      else form in
+    Unit, (lv, (fun ?limit () -> form))
   | SAggreg (annot,dims,aggregs) ->
     let aggregated_defs, aggregated_f = aggregated_view in
     let l_dims = List.map (form_dim state) dims in

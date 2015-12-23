@@ -65,7 +65,7 @@ let rec views_of_seq (views : view list) (sid : sid) : unit elt_s list -> view l
     match s with
     | Return _ -> (* TODO: handle Return's depending on other sentences *)
       views_of_seq (Atom (defs, sid) :: views) (sid+1) ls
-    | SExpr _ ->
+    | SExpr _ | SFilter _ ->
       let views =
 	List.fold_right
 	  (fun view views ->
@@ -253,18 +253,24 @@ and annot_elt_s pos s ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtS (s,ctx)) ~ids () in
   let pos_down = focus_pos_down pos in
   match s with
-  | Return (_,np) -> Return (annot,
-			     annot_elt_s1 pos_down np (ReturnX ctx))
-  | SAggreg (_,dims,aggregs) -> SAggreg (annot,
-					 List.map
-					   (fun (x,ll_rr) -> annot_elt_dim pos_down x (SAggregForeachX (ll_rr,aggregs,ctx)))
-					   (ctx_of_list dims),
-					 List.map
-					   (fun (x,ll_rr) -> annot_elt_aggreg pos_down x (SAggregX (dims,ll_rr,ctx)))
-					   (ctx_of_list aggregs))
-  | SExpr (_,id,modif,expr,rel_opt) -> SExpr (annot, id,modif,
-					snd (annot_elt_expr pos_down expr (SExprX (id,modif,rel_opt,ctx))),
-					annot_elt_p1_opt pos_down rel_opt (SExprThatX (id,modif,expr,ctx)))
+  | Return (_,np) ->
+    Return (annot,
+	    annot_elt_s1 pos_down np (ReturnX ctx))
+  | SAggreg (_,dims,aggregs) ->
+    SAggreg (annot,
+	     List.map
+	       (fun (x,ll_rr) -> annot_elt_dim pos_down x (SAggregForeachX (ll_rr,aggregs,ctx)))
+	       (ctx_of_list dims),
+	     List.map
+	       (fun (x,ll_rr) -> annot_elt_aggreg pos_down x (SAggregX (dims,ll_rr,ctx)))
+	       (ctx_of_list aggregs))
+  | SExpr (_,id,modif,expr,rel_opt) ->
+    SExpr (annot, id,modif,
+	   snd (annot_elt_expr pos_down expr (SExprX (id,modif,rel_opt,ctx))),
+	   annot_elt_p1_opt pos_down rel_opt (SExprThatX (id,modif,expr,ctx)))
+  | SFilter (_,id,expr) ->
+    SFilter (annot, id,
+	     snd (annot_elt_expr pos_down expr (SFilterX (id,ctx))))
   | Seq (_,lr) ->
     let lr, seq_view =
       match List.rev lr with
@@ -442,6 +448,11 @@ and annot_ctx_expr defined x_annot x = function
     let annot = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids:(ids_elt_s f) () in
     let ft = `IdNoIncr id in
     annot_ctx_s ft (SExpr (annot, id, modif, x_annot, annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (id,modif,x,ctx)))) f ctx
+  | SFilterX (id,ctx) ->
+    let f = SFilter ((),id,x) in
+    let annot = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids:(ids_elt_s f) () in
+    let ft = `IdNoIncr id in
+    annot_ctx_s ft (SFilter (annot, id, x_annot)) f ctx
   | ApplyX (func,ll_rr,ctx) ->
     let f = Apply ((), func, list_of_ctx x ll_rr) in
     let annot = new annot ~focus_pos:(`Above (true, Some (1 + List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~defined () in
