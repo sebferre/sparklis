@@ -1,4 +1,4 @@
 #!/usr/bin/csh
-scp web-lis@www:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/hits.txt data/
-scp web-lis@www:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/hitlog.txt data/
-scp web-lis@www:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/querylog.txt data/
+scp web-lis@www.irisa.fr:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/hits.txt data/
+scp web-lis@www.irisa.fr:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/hitlog.txt data/
+scp web-lis@www.irisa.fr:/home/web/apache/sites/www.irisa.fr/htdocs/LIS/ferre/sparklis/log/querylog.txt data/
