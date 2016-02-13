@@ -115,7 +115,7 @@ and print_s = function
 and print_dim = function
   | Foreach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
 and print_aggreg = function
-  | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_id id2]
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_id id2]
 and print_expr = function
   | Undef _ -> print_atom "Undef"
   | Const (_,t) -> print_un "Const" (print_term t)
@@ -218,10 +218,10 @@ let parse_string ~version = parser [< 'String s >] -> s
 let parse_atom ~version f = parser [< 'Ident id when id = f >] -> ()
 
 let parse_un ~version f ps1 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd ")" ?? "missing )" >] -> x1
-let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2
-let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
-let parse_quad ~version f ps1 ps2 ps3 ps4 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd "," ?? "missing ,"; x4 = ps4 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4
-let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing ,"; x2 = ps2 ~version; 'Kwd "," ?? "missing ,"; x3 = ps3 ~version; 'Kwd "," ?? "missing ,"; x4 = ps4 ~version; 'Kwd "," ?? "missing ,"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
+let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/2"; x2 = ps2 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2
+let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/3"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/3"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
+let parse_quad ~version f ps1 ps2 ps3 ps4 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/4"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/4"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/4"; x4 = ps4 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4
+let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/5"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/5"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/5"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/5"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
 
 let parse_opt ps ~version = parser
   | [< () = parse_atom ~version "None" >] -> None
@@ -232,9 +232,9 @@ let rec parse_list ps ~version f = parser
   | [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; args = parse_args ps ~version >] -> args
 and parse_args ps ~version = parser
   | [< x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
-  | [< >] -> []
+  | [< 'Kwd ")" >] -> []
 and parse_args_aux ps ~version = parser
-  | [< 'Kwd ","; xs = parse_args ps ~version >] -> xs
+  | [< 'Kwd ","; x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
   | [< 'Kwd ")" >] -> []
 
 let parse_lr ps ~version f = parser
