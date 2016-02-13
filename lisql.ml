@@ -333,10 +333,10 @@ end
 type ids = Ids.t
 
 let rec ids_elt_p1 : 'a elt_p1 -> ids = function
-  | Is (_,np) -> ids_elt_s1 np
+  | Is (_,np) -> ids_elt_s1 ~as_p1:true np
   | Type _ -> Ids.empty
-  | Rel (_,p,modif,np) -> ids_elt_s1 np
-  | Triple (_,arg,np1,np2) -> Ids.union (ids_elt_s1 np1) (ids_elt_s1 np2)
+  | Rel (_,p,modif,np) -> ids_elt_s1 ~as_p1:false np
+  | Triple (_,arg,np1,np2) -> Ids.union (ids_elt_s1 ~as_p1:false np1) (ids_elt_s1 ~as_p1:false np2)
   | Search _ -> Ids.empty
   | Filter _ -> Ids.empty
   | And (_,lr) -> Ids.concat (List.map ids_elt_p1 lr)
@@ -347,22 +347,22 @@ let rec ids_elt_p1 : 'a elt_p1 -> ids = function
 and ids_elt_p1_opt : 'a elt_p1 option -> ids = function
   | None -> Ids.empty
   | Some f -> ids_elt_p1 f
-and ids_elt_s1 = function
-  | Det (_,det,rel_opt) -> Ids.union (ids_elt_s2 det) (ids_elt_p1_opt rel_opt)
+and ids_elt_s1 ~as_p1 = function
+  | Det (_,det,rel_opt) -> Ids.union (ids_elt_s2 ~as_p1 det) (ids_elt_p1_opt rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) ->
     Ids.add id `Def
       (Ids.union
 	 (ids_elt_p1_opt rel_opt)
 	 (match id_of_s1 np with
 	 | None -> assert false
-	 | Some id2 -> Ids.add id2 `Ref (Ids.remove id2 (ids_elt_s1 np))))
-  | NAnd (_,lr) -> Ids.concat (List.map ids_elt_s1 lr)
-  | NOr (_,lr) -> Ids.concat (List.map ids_elt_s1 lr)
-  | NMaybe (_,f) -> ids_elt_s1 f
-  | NNot (_,f) -> ids_elt_s1 f
-and ids_elt_s2 = function
+	 | Some id2 -> Ids.add id2 `Ref (Ids.remove id2 (ids_elt_s1 ~as_p1:true np))))
+  | NAnd (_,lr) -> Ids.concat (List.map (ids_elt_s1 ~as_p1) lr)
+  | NOr (_,lr) -> Ids.concat (List.map (ids_elt_s1 ~as_p1) lr)
+  | NMaybe (_,f) -> ids_elt_s1 ~as_p1 f
+  | NNot (_,f) -> ids_elt_s1 ~as_p1 f
+and ids_elt_s2 ~as_p1 = function
   | Term _ -> Ids.empty
-  | An (id, _, _) -> Ids.singleton id `Def
+  | An (id, _, _) -> if as_p1 then Ids.empty else Ids.singleton id `Def
   | The id -> Ids.singleton id `Ref
 and ids_elt_dim = function
   | Foreach (_,id,modif,rel_opt,id2) ->
@@ -376,7 +376,7 @@ and ids_elt_expr = function
   | Var (_,id) -> Ids.singleton id `Ref
   | Apply (_,func,lr) -> Ids.concat (List.map ids_elt_expr lr)
 and ids_elt_s = function
-  | Return (_,np) -> ids_elt_s1 np
+  | Return (_,np) -> ids_elt_s1 ~as_p1:false np
   | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
   | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `Def (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
   | SFilter (_,id,expr) -> Ids.add id `Def (ids_elt_expr expr)
