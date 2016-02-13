@@ -283,7 +283,7 @@ let var_of_aggreg = function
   | Sample -> "sample"
 
 let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling_list = function
-  | Is (_,np) -> labelling_s1 ~as_p1:true grammar ~labels np (* TODO: avoid keeping np.id *)
+  | Is (_,np) -> labelling_s1 ~as_p1:true grammar ~labels np
   | Type (_,c) ->
     let v, w = var_of_uri c, word_of_class c in
     [(v, `Word w)], []
@@ -495,11 +495,13 @@ object (self)
     with Not_found -> assert false
       
   method get_id_label (id : id) : ng_label (* string *) =
-    let (_, (ng, k)), _ = self#get_id_var_label id in
-    let n = label_counter#count ng in
-    if n = 1
-    then ng
-    else `Nth (k, ng)
+    try
+      let (_, (ng, k)), _ = self#get_id_var_label id in
+      let n = label_counter#count ng in
+      if n = 1
+      then ng
+      else `Nth (k, ng)
+    with _ -> failwith ("Lisql2nl.get_id_label: undefined label for id=" ^ string_of_int id)
 
   method get_id_var (id : id) : string =
     let prefix, id =
