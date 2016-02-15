@@ -110,16 +110,17 @@ let index_incr_of_index_term_uri (f : Rdf.uri -> Lisql.increment) (l : Rdf.term 
 
 (* LIS navigation places *)
 
-class place (endpoint : string) (foc : Lisql.focus) =
+class place (endpoint : string) (focus : Lisql.focus) =
+  let focus_term, s_annot = Lisql_annot.annot_focus focus in
+  let focus_no_incr = match focus_term with `IdNoIncr _ -> true | _ -> false in
 object (self)
   (* essential state *)
 
   val endpoint = endpoint
   method endpoint = endpoint
 
-  val focus = foc
   method focus = focus
-  method query = Lisql.elt_s_of_focus focus
+  method query = s_annot
 
   (* derived state *)
 
@@ -128,29 +129,28 @@ object (self)
 
   val mutable focus_term_list : Rdf.term list = []
   method focus_term_list = focus_term_list
-
+    
   val mutable query_opt : Lisql2sparql.template option = None
   val mutable query_class_opt : Lisql2sparql.template option = None
   val mutable query_prop_has_opt : Lisql2sparql.template option = None
   val mutable query_prop_isof_opt : Lisql2sparql.template option = None
 
+  val mutable view : Lisql_annot.view = Lisql_annot.Unit
+    
   method private init =
     begin
-      id_labelling <- Lisql2nl.id_labelling_of_focus Lisql2nl.config_lang#grammar focus;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt = Lisql2sparql.focus id_labelling focus in
+      id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, annot_view =
+	Lisql2sparql.s_annot id_labelling focus_term s_annot in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
       query_prop_has_opt <- qph_opt;
-      query_prop_isof_opt <- qpi_opt
+      query_prop_isof_opt <- qpi_opt;
+      view <- annot_view
     end
 
   initializer self#init
-
-  val mutable results = Sparql_endpoint.empty_results
-  val mutable focus_term_index : (Rdf.term * int) list = []
-  val mutable some_focus_term_is_blank : bool = false
-
 
   (* utilities *)
 
@@ -159,6 +159,21 @@ object (self)
 
   (* SPARQL query and results *)
 
+  val mutable results = Sparql_endpoint.empty_results
+  val mutable results_typing : Lisql_type.datatype list array = [||]
+  val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
+  val mutable focus_term_index : (Rdf.term * int) list = []
+  val mutable some_focus_term_is_blank : bool = false
+
+  method id_typing (id : Lisql.id) : Lisql_type.datatype list =
+    let v = id_labelling#get_id_var id in
+    try
+      let i = List.assoc v results.Sparql_endpoint.vars in
+      results_typing.(i)
+    with Not_found ->
+      Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
+      []
+    
   method ajax_sparql_results term_constr elts (k : string option -> unit) =
     match query_opt with
       | None ->
@@ -179,6 +194,10 @@ object (self)
 	Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
+	    results_typing <- Lisql_type.of_sparql_results res;
+	    focus_type_constraints <- Lisql_type.of_focus
+	      (fun id -> Some (self#id_typing id))
+	      focus;
 	    let fti, sftib =
 	      match focus_term_list with
 		| [Rdf.Var v] ->
@@ -216,43 +235,71 @@ object (self)
 
   method index_ids =
     match focus_term_list with
-      | [focus_term] ->
-	let dim = results.Sparql_endpoint.dim in
-	let vars = results.Sparql_endpoint.vars in
-	let freqs = Array.make dim 0 in
-	List.iter
-	  (fun binding ->
-	    let t_focus_opt =
-	      match focus_term with
-		| Rdf.Var v -> binding.(List.assoc v vars)
-		| t -> Some t in
-	    Array.iteri
-	      (fun i t_opt ->
-		match t_opt, t_focus_opt with
-		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		  | _ -> ())
-	      binding)
-	  results.Sparql_endpoint.bindings;
-	let ref_index = ref [] in
-	for i = dim-1 downto 0 do
-	  if freqs.(i) <> 0 then begin
-	    let v = try Common.list_rev_assoc i vars with _ -> assert false in
-	    if focus_term <> (Rdf.Var v) then begin
-	      try
-		let id = id_labelling#get_var_id v in
-		ref_index := (Lisql.IncrId id, freqs.(i))::!ref_index
-	      with _ -> () (* ex: aggregation variables *)
-	    end
-	  end
-	done;
-	!ref_index
+      | [term] ->
+	let index =
+	  if not focus_no_incr
+	  then begin
+	    let dim = results.Sparql_endpoint.dim in
+	    let vars = results.Sparql_endpoint.vars in
+	    let freqs = Array.make dim 0 in
+	    List.iter
+	      (fun binding ->
+		let t_focus_opt =
+		  match term with
+		  | Rdf.Var v -> binding.(List.assoc v vars)
+		  | _ -> Some term in
+		Array.iteri
+		  (fun i t_opt ->
+		    match t_opt, t_focus_opt with
+		    | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		    | _ -> ())
+		  binding)
+	      results.Sparql_endpoint.bindings;
+	    List.fold_left
+	      (fun index i ->
+		if freqs.(i) <> 0
+		then
+		  let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		  if term <> (Rdf.Var v)
+		  then begin
+		    try
+		      let id = id_labelling#get_var_id v in
+		      (Lisql.IncrId id, freqs.(i))::index
+		    with _ -> index end (* ex: aggregation variables *)
+		  else index
+		else index)
+	      [] (Common.from_downto (dim-1) 0) end
+	  else [] in
+	let index =
+	  if Lisql.is_undef_expr_focus focus
+	  then
+	    List.fold_left
+	      (fun index id -> (* TODO: filter according to empirical type *)
+		(*let id = id_labelling#get_var_id v in*)
+		let ldt = self#id_typing id in
+		if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt
+		then (Lisql.IncrId id, 1)::index
+		else index)
+	      index (Lisql_annot.view_defs view)
+	  else index in
+	index
       | _ -> []
 
-  method index_terms (k : Lisql.increment index -> unit) =
+  method index_terms_inputs (k : Lisql.increment index -> unit) =
     let incr_index =
       List.rev_map
 	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, freq))
 	focus_term_index in
+    let incr_index =
+      if Lisql.is_undef_expr_focus focus
+      then
+	List.fold_left
+	  (fun incr_index (dt : Lisql.input_type) ->
+	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
+	    then (Lisql.IncrInput ("",dt),1) :: incr_index
+	    else incr_index)
+	  incr_index [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime]
+      else incr_index in
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	k incr_index))
@@ -378,17 +425,17 @@ object (self)
     let ajax_extent () =
       let sparql_a =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.rdf_type t (Rdf.Var "class")) focus_term_index) in
-	Sparql.select ~projections:["class"] ~limit:config_max_classes#value
+	Sparql.select ~projections:[`Bare, "class"] ~limit:config_max_classes#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr))) in
       let sparql_has =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple t (Rdf.Var "prop") (Rdf.Bnode "")) focus_term_index) in
-	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       let sparql_isof =
 	let gp = Sparql.union (List.map (fun (t,_) -> Sparql.triple (Rdf.Bnode "") (Rdf.Var "prop") t) focus_term_index) in
-	Sparql.select ~projections:["prop"] ~limit:config_max_properties#value
+	Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
@@ -400,7 +447,7 @@ object (self)
 	  | _ -> assert false)
 	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
     in
-    if Lisql.is_aggregation_focus focus then k [] (* only constraints on aggregations (HAVING clause) *)
+    if focus_no_incr (*Lisql.is_aggregation_focus focus*) then k [] (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index = [] then
       if some_focus_term_is_blank
       then ajax_intent ()
@@ -413,18 +460,107 @@ object (self)
       if init
       then [IncrIs]
       else
+	let incrs = [] in
 	let incrs =
-	  if List.exists (function (Rdf.Number _, _) -> true | _ -> false) focus_term_index
-	  then [IncrAggreg Total; IncrAggreg Average; IncrAggreg Maximum; IncrAggreg Minimum]
-	  else [] in
+	  IncrIs :: IncrTriplify ::
+	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
+	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
+	    incrs in
 	let incrs =
-	  if List.exists (function (Rdf.Number _, _) | (Rdf.PlainLiteral _, _) | (Rdf.TypedLiteral _, _) -> true | _ -> false) focus_term_index
-	  then IncrAggreg ListOf :: incrs
-	  else incrs in
-	IncrIs :: IncrTriplify ::
-	  IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
-	  IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
-	  IncrAggreg NumberOf :: IncrAggreg Sample :: IncrAggreg Given :: incrs in
+	  List.fold_left
+	    (fun incrs id -> IncrForeach id :: incrs)
+	    incrs (Lisql_annot.view_available_dims view) in
+	let incrs =
+	  List.fold_left
+	    (fun incrs aggreg ->
+	      if Lisql_type.is_insertable_aggreg aggreg focus_type_constraints
+	      then IncrAggreg aggreg :: incrs
+	      else incrs)
+	    incrs
+	    [ Lisql.NumberOf;
+	      Lisql.ListOf;
+	      Lisql.Total;
+	      Lisql.Average;
+	      Lisql.Maximum;
+	      Lisql.Minimum;
+	      Lisql.Sample ] in
+	let incrs =
+	  List.fold_left
+	    (fun incrs (func,arity,pos) ->
+	      if Lisql_type.is_insertable_func_pos func pos focus_type_constraints
+	      then
+		let is_pred = Lisql_type.is_predicate func in
+		IncrFuncArg (is_pred,func,arity,pos) :: incrs
+	      else incrs)
+	    incrs
+	    [ `Str, 1, 1;
+	      `Lang, 1, 1;
+	      `Datatype, 1, 1;
+	      `IRI, 1, 1;
+	      `STRDT, 1, 1;
+	      `STRLANG, 1, 1;
+	      `Strlen, 1, 1;
+	      `Substr2, 2, 1;
+	      `Substr3, 3, 1;
+	      `Strbefore, 2, 1;
+	      `Strafter, 2, 1;
+	      `Concat, 2, 1;
+	      `Concat, 2, 2;
+	      `UCase, 1, 1;
+	      `LCase, 1, 1;
+	      `Encode_for_URI, 1, 1;
+	      `Replace, 3, 1;
+	      `Integer, 1, 1;
+	      `Double, 1, 1;
+	      `Add, 2, 1;
+	      `Add, 2, 2;
+	      `Sub, 2, 1;
+	      `Sub, 2, 2;
+	      `Mul, 2, 1;
+	      `Mul, 2, 2;
+	      `Div, 2, 1;
+	      `Div, 2, 2;
+	      `Neg, 1, 1;
+	      `Abs, 1, 1;
+	      `Round, 1, 1;
+	      `Ceil, 1, 1;
+	      `Floor, 1, 1;
+	      `Random2, 2, 1;
+	      `Random2, 2, 2;
+	      `Date, 1, 1;
+	      `Time, 1, 1;
+	      `Year, 1, 1;
+	      `Month, 1, 1;
+	      `Day, 1, 1;
+	      `Hours, 1, 1;
+	      `Minutes, 1, 1;
+	      `Seconds, 1, 1;
+	      `TODAY, 0, 0;
+	      `NOW, 0, 0;
+	      `And, 2, 1;
+	      `And, 2, 2;
+	      `Or, 2, 1;
+	      `Or, 2, 2;
+	      `Not, 1, 1;
+	      `EQ, 2, 1;
+	      `NEQ, 2, 1;
+	      `GT, 2, 1;
+	      `GEQ, 2, 1;
+	      `LT, 2, 1;
+	      `LEQ, 2, 1;
+	      `BOUND, 1, 1;
+	      `IF, 3, 2;
+	      `IsIRI, 1, 1;
+	      `IsBlank, 1, 1;
+	      `IsLiteral, 1, 1;
+	      `IsNumeric, 1, 1;
+	      `StrStarts, 2, 1;
+	      `StrEnds, 2, 1;
+	      `Contains, 2, 1;
+	      `LangMatches, 2, 1;
+	      `REGEX, 2, 1;
+	    ] in
+	incrs in
     let valid_incrs =
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)

@@ -2,6 +2,7 @@
 open Js
 open Jsutils
 open Lisql
+open Lisql_annot
 
 (* generic dictionary with automatic generation of keys *)
 
@@ -86,6 +87,7 @@ let html_delete ?id ~title () =
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
+let html_function f = html_span ~classe:"function" (escapeHTML f)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
 let html_word = function
@@ -100,21 +102,53 @@ let html_word = function
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
+  | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
+  | `Undefined -> "___"
   | `DummyFocus -> html_span ~classe:"highlighted" "___"
 
+let html_input dt =
+  let t, hint =
+    match dt with
+    | `IRI -> "url", "http://"
+    | `String -> "text", ""
+    | `Float -> "number", "0.0e+0"
+    | `Integer -> "number", "0"
+    | `Date -> "text", "yyyy-mm-dd"
+    | `Time -> "text", "hh:mm:ss"
+    | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
+  (*    | `Time -> "text", "hh:mm:ss" *)
+  in
+  "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
+
+let append_node_to_xml node xml =
+  List.rev (node :: List.rev xml)
+let append_node_to_xml_list node lxml =
+  match List.rev lxml with
+  | [] -> [[node]]
+  | last::rest -> List.rev (append_node_to_xml node last :: rest)
+    
 let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
   let open Lisql2nl in
   match xml with
-    | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
-    | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
-    | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
-    | [] -> ""
+  | Enum (sep,lxml) :: DeleteCurrentFocus :: xml ->
+    html_of_nl_xml ~highlight state (Enum (sep, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
+  | Coord (coord,lxml) :: DeleteCurrentFocus :: xml ->
+    html_of_nl_xml ~highlight state (Coord (coord, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
+  | Focus (foc,xml1) :: DeleteCurrentFocus :: xml ->
+    html_of_nl_xml ~highlight state (Focus (foc, append_node_to_xml DeleteCurrentFocus xml1) :: xml)
+  | Highlight xml1 :: DeleteCurrentFocus :: xml ->
+    html_of_nl_xml ~highlight state (Highlight (append_node_to_xml DeleteCurrentFocus xml1) :: xml)
+  | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
+  | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
+  | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
+  | [] -> ""
 and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
     | Kwd s -> s
     | Word w -> html_word w
+    | Input dt -> html_input dt
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Coord (coord,lxml) ->
@@ -143,18 +177,20 @@ and html_highlight h xml =
 let html_term (t : Rdf.term) : string =
   html_word (Lisql2nl.word_of_term t)
 
-let html_focus (state : state) (focus : focus) : string = 
+let html_query (state : state) (query : annot elt_s) : string =
+  let grammar = Lisql2nl.config_lang#grammar in
+  let id_labelling = state#id_labelling in
   html_of_nl_xml state
-    (Lisql2nl.xml_s Lisql2nl.config_lang#grammar
+    (Lisql2nl.xml_s grammar ~id_labelling
        (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_focus Lisql2nl.config_lang#grammar state#id_labelling
-	     focus)))
+	  (Lisql2nl.s_of_elt_s grammar ~id_labelling
+	     query)))
 
 
 let html_id (state : state) (id : int) : string =
   html_of_nl_xml state
-    (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
-       (state#id_labelling#get_id_label id))
+    (Lisql2nl.xml_np_id Lisql2nl.config_lang#grammar state#id_labelling
+       id)
 
 (* HTML of increment lists *)
 
@@ -171,40 +207,56 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
     Lisql2nl.word_text_content Lisql2nl.config_lang#grammar
       (Lisql2nl.word_of_incr Lisql2nl.config_lang#grammar
 	 incr) in
+  let text = String.lowercase text in
+  let words = Regexp.split (Regexp.regexp "[- ,;:.()]+") text in
   let html = html_of_nl_xml state xml in
   let rank, title_opt =
     let grammar = Lisql2nl.config_lang#grammar in
     match incr with
-      | IncrTerm _ -> 2, None
       | IncrId _ -> 1, None
+      | IncrForeach _ -> 1, Some grammar#tooltip_foreach
+      | IncrInput _ -> 2, None
+      | IncrTerm _ -> 2, None
+      | IncrTriple _ -> 3, None
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
-      | IncrTriple _ -> 3, None
       | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property
       | IncrIs -> 7, None
       | IncrAnd -> 8, None
       | IncrOr -> 9, Some grammar#tooltip_or
       | IncrMaybe -> 10, Some grammar#tooltip_optionally
       | IncrNot -> 11, Some grammar#tooltip_not
-      | IncrUnselect -> 14, Some grammar#tooltip_any
-      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
       | IncrOrder Highest -> 12, Some grammar#tooltip_highest
       | IncrOrder Lowest -> 13, Some grammar#tooltip_lowest
-      | IncrOrder _ -> 12, None in
+      | IncrOrder _ -> 12, None
+      | IncrUnselect -> 14, Some grammar#tooltip_any
+      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
+      | IncrFuncArg _ -> 16, Some grammar#tooltip_func
+  in
   let html_freq =
     if freq = 1
     then ""
     else " [" ^ string_of_int freq ^ "]" in
-  freq, rank, String.lowercase text, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  freq, rank, words, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lisql.increment Lis.index) =
   let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
-  let sorted_index = List.sort (fun (f1,r1,t1,_) (f2,r2,t2,_) -> Pervasives.compare (f2,r1,t1) (f1,r2,t2)) enriched_index in
+  let sorted_index =
+    List.sort
+      (fun (f1,r1,lw1,_) (f2,r2,lw2,_) ->
+	let c = Pervasives.compare (f2,r1) (f1,r2) in
+	if c <> 0
+	then c
+	else
+	  if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
+	  else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
+	  else Pervasives.compare lw1 lw2)
+      enriched_index in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
-    (fun (_freq,_rank,_text,html) ->
+    (fun (_freq,_rank,_words,html) ->
       Buffer.add_string buf "<li>";
       Buffer.add_string buf html;
       Buffer.add_string buf "</li>")
@@ -264,7 +316,9 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
-	   (Lisql2nl.xml_np_label Lisql2nl.config_lang#grammar
+	   (Lisql2nl.xml_ng_label
+	      Lisql2nl.config_lang#grammar
+	      ~id_labelling:(state#id_labelling)
 	      (state#id_labelling#get_id_label id)));
       Buffer.add_string buf "</th>")
     id_i_list;

@@ -1,6 +1,16 @@
 
 (* common utilities *)
 
+let rec from_to a b =
+  if a <= b
+  then a :: from_to (a+1) b
+  else []
+
+let rec from_downto a b =
+  if a >= b
+  then a :: from_downto (a-1) b
+  else []
+    
 let list_rev_assoc y l = fst (List.find (fun (x1,y1) -> y1=y) l)
 
 let unsome = function

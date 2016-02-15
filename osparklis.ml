@@ -30,111 +30,151 @@ let string_is_float =
 let make_constr op pat =
   let open Lisql in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-  if lpat = []
-  then True
-  else
-    match op, lpat with
-      | "matchesAll", _ -> MatchesAll lpat
-      | "matchesAny", _ -> MatchesAny lpat
-      | "after", pat::_ -> After pat
-      | "before", pat::_ -> Before pat
-      | "fromTo", pat1::[] -> After pat1
-      | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
-      | "higherThan", pat::_ ->
-	if string_is_float pat 
-	then HigherThan pat
-	else invalid_arg "a numeric value is expected"
-      | "lowerThan", pat::_ ->
-	if string_is_float pat
-	then LowerThan pat
-	else invalid_arg "a numeric value is expected"
-      | "between", pat::[] ->
-	if string_is_float pat
-	then HigherThan pat
-	else invalid_arg "a numeric value is expected"
-      | "between", pat1::pat2::_ ->
-	if string_is_float pat1 && string_is_float pat2
-	then Between (pat1, pat2)
-	else invalid_arg "two numeric values are expected"
-      | "hasLang", pat::_ -> HasLang pat
-      | "hasDatatype", pat::_ -> HasDatatype pat
-      | _ -> True
+  match op, lpat with
+  | "matchesAll", _ -> MatchesAll lpat
+  | "matchesAny", _ -> MatchesAny lpat
+  | "after", [] -> After ""
+  | "after", pat::_ -> After pat
+  | "before", [] -> Before ""
+  | "before", pat::_ -> Before pat
+  | "fromTo", [] -> FromTo ("","")
+  | "fromTo", pat1::[] -> FromTo (pat1, "")
+  | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
+  | "higherThan", [] -> HigherThan ""
+  | "higherThan", pat::_ ->
+    if string_is_float pat 
+    then HigherThan pat
+    else invalid_arg "a numeric value is expected"
+  | "lowerThan", [] -> LowerThan ""
+  | "lowerThan", pat::_ ->
+    if string_is_float pat
+    then LowerThan pat
+    else invalid_arg "a numeric value is expected"
+  | "between", [] -> Between ("","")
+  | "between", pat::[] ->
+    if string_is_float pat
+    then Between (pat, "") (* HigherThan pat *)
+    else invalid_arg "a numeric value is expected"
+  | "between", pat1::pat2::_ ->
+    if string_is_float pat1 && string_is_float pat2
+    then Between (pat1, pat2)
+    else invalid_arg "two numeric values are expected"
+  | "hasLang", [] -> HasLang ""
+  | "hasLang", pat::_ -> HasLang pat
+  | "hasDatatype", [] -> HasDatatype ""
+  | "hasDatatype", pat::_ -> HasDatatype pat
+  | _ -> assert false
+
+let norm_constr = (* normalizing for empty patterns "" *)
+  (* must be called for any semantic use of constraints *)
+  let open Lisql in
+  function
+  | MatchesAll [] -> True
+  | MatchesAny [] -> True
+  | After "" -> True
+  | Before "" -> True
+  | FromTo ("","") -> True
+  | FromTo ("",b) -> Before b
+  | FromTo (a,"") -> After a
+  | HigherThan "" -> True
+  | LowerThan "" -> True
+  | Between ("","") -> True
+  | Between ("",b) -> LowerThan b
+  | Between (a,"") -> HigherThan a
+  | HasLang "" -> True
+  | HasDatatype "" -> True
+  | c -> c
 
 let operator_of_constr =
   let open Lisql in
-      function
-	| True -> "matchesAll"
-	| MatchesAll _ -> "matchesAll"
-	| MatchesAny _ -> "matchesAny"
-	| After _ -> "after"
-	| Before _ -> "before"
-	| FromTo _ -> "fromTo"
-	| HigherThan _ -> "higherThan"
-	| LowerThan _ -> "lowerThan"
-	| Between _ -> "between"
-	| HasLang _ -> "hasLang"
-	| HasDatatype _ -> "hasDatatype"
+  function
+  | True -> "matchesAll"
+  | MatchesAll _ -> "matchesAll"
+  | MatchesAny _ -> "matchesAny"
+  | After _ -> "after"
+  | Before _ -> "before"
+  | FromTo _ -> "fromTo"
+  | HigherThan _ -> "higherThan"
+  | LowerThan _ -> "lowerThan"
+  | Between _ -> "between"
+  | HasLang _ -> "hasLang"
+  | HasDatatype _ -> "hasDatatype"
 
 let pattern_of_constr =
   let open Lisql in
-      function
-	| True -> ""
-	| MatchesAll lpat -> String.concat " " lpat
-	| MatchesAny lpat -> String.concat " " lpat
-	| After pat -> pat
-	| Before pat -> pat
-	| FromTo (pat1,pat2) -> pat1 ^ " " ^ pat2
-	| HigherThan pat -> pat
-	| LowerThan pat -> pat
-	| Between (pat1,pat2) -> pat1 ^ " " ^ pat2
-	| HasLang pat -> pat
-	| HasDatatype pat -> pat
+  function
+  | True -> ""
+  | MatchesAll lpat -> String.concat " " lpat
+  | MatchesAny lpat -> String.concat " " lpat
+  | After pat -> pat
+  | Before pat -> pat
+  | FromTo (pat1,"") -> pat1
+  | FromTo (pat1,pat2) -> pat1 ^ " " ^ pat2
+  | HigherThan pat -> pat
+  | LowerThan pat -> pat
+  | Between (pat1,"") -> pat1
+  | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
+  | HasLang pat -> pat
+  | HasDatatype pat -> pat
 
 (* constraint compilation *)
 
-let compile_constr constr : Rdf.term -> bool =
-  let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i" in
-  let matches s re = Regexp.search re s 0 <> None in
-  let leq t pat = try (Rdf.float_of_term t) <= (float_of_string pat) with _ -> false in
-  let geq t pat = try (Rdf.float_of_term t) >= (float_of_string pat) with _ -> false in
+let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
+let matches s re = Regexp.search re s 0 <> None
+let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
+
+let compile_constr constr : string -> bool =
   let open Lisql in
-  match constr with
-    | True -> (fun t -> true)
-    | MatchesAll lpat ->
-      let lre = List.map regexp_of_pat lpat in
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	List.for_all (fun re -> matches s re) lre)
-    | MatchesAny lpat ->
-      let lre = List.map regexp_of_pat lpat in
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	List.exists (fun re -> matches s re) lre)
-    | After pat ->
-      (fun t -> (Rdf.string_of_term t) >= pat)
-    | Before pat ->
-      (fun t -> (Rdf.string_of_term t) <= pat)
-    | FromTo (pat1,pat2) ->
-      (fun t ->
-	let s = Rdf.string_of_term t in
-	pat1 <= s && s <= pat2)
-    | HigherThan pat ->
-      (fun t -> geq t pat)
-    | LowerThan pat ->
-      (fun t -> leq t pat)
-    | Between (pat1,pat2) ->
-      (fun t -> geq t pat1 && leq t pat2)
-    | HasLang pat ->
-      let re = regexp_of_pat pat in
-      (function
-	| Rdf.PlainLiteral (s,lang) -> matches lang re
-	| _ -> false)
-    | HasDatatype pat ->
-      let re = regexp_of_pat pat in
-      (function
-	| Rdf.Number (_,s,dt)
-	| Rdf.TypedLiteral (s,dt) -> matches dt re
-	| _ -> false)
+  match norm_constr constr with
+  | True -> (fun s -> true)
+  | MatchesAll lpat ->
+    let lre = List.map regexp_of_pat lpat in
+    (fun s -> List.for_all (fun re -> matches s re) lre)
+  | MatchesAny lpat ->
+    let lre = List.map regexp_of_pat lpat in
+    (fun s -> List.exists (fun re -> matches s re) lre)
+  | After pat -> (fun s -> s >= pat)
+  | Before pat -> (fun s -> s <= pat)
+  | FromTo (pat1,pat2) -> (fun s -> pat1 <= s && s <= pat2)
+  | HigherThan pat -> (fun s -> leq pat s)
+  | LowerThan pat -> (fun s -> leq s pat)
+  | Between (pat1,pat2) -> (fun s -> leq pat1 s && leq s pat2)
+  | HasLang pat ->
+    let re = regexp_of_pat pat in
+    (fun s_lang -> matches s_lang re)
+  | HasDatatype pat ->
+    let re = regexp_of_pat pat in
+    (fun s_dt -> matches s_dt re)
+      
+(* constraint subsumption *)
+
+let subsumed_constr constr1 constr2 : bool =
+  (* must avoid to return true when false, but can return false when true *)
+  let open Lisql in
+  match constr1, constr2 with
+  | _, True -> true
+  | MatchesAll ls1, MatchesAll ls2 ->
+    List.for_all (fun s2 ->
+      List.exists (fun s1 ->
+	Common.has_prefix s1 s2 (* 'has_prefix' used as an approximation of 'contains' *)
+      ) ls1
+    ) ls2
+  | MatchesAny ls1, MatchesAny ls2 ->
+    List.for_all (fun s1 ->
+      List.exists (fun s2 ->
+	Common.has_prefix s1 s2
+      ) ls2
+    ) ls1
+  | After s1, After s2 -> s2 <= s1
+  | Before s1, Before s2 -> s1 <= s2
+  | FromTo (s1a,s1b), FromTo (s2a,s2b) -> (s2a="" || s2a <= s1a) && (s2b="" || s1b <= s2b)
+  | HigherThan s1, HigherThan s2 -> leq s2 s1
+  | LowerThan s1, LowerThan s2 -> leq s1 s2
+  | Between (s1a,s1b), Between (s2a,s2b) -> (s2a="" || leq s2a s1a) && (s2b="" || leq s1b s2b)
+  | HasLang s1, HasLang s2 -> Common.has_prefix s1 s2
+  | HasDatatype s1, HasDatatype s2 -> Common.has_prefix s1 s2
+  | _ -> false
+
 
 (* configuration *)
 
@@ -224,7 +264,7 @@ object (self)
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
-      elt##innerHTML <- string (html_focus html_state lis#focus);
+      elt##innerHTML <- string (html_query html_state lis#query);
       stop_links_propagation_from elt;
       jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
 	Dom_html.stopPropagation ev;
@@ -309,20 +349,43 @@ object (self)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
   method private refresh_term_increments_gen ajax_index max_results =
+    let apply_incr elt =
+      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr_opt = (* retrieving input value for input increments *)
+	match incr with
+	| Lisql.IncrInput (s,dt) ->
+	  let ref_s = ref s in
+	  jquery_input_from elt ".term-input" (fun input ->
+	    ref_s := to_string input##value);
+	  let s = !ref_s in
+	  if Lisql.check_input s dt
+	  then Some (Lisql.IncrInput (s,dt))
+	  else begin alert "Invalid input"; None end
+	| _ -> Some incr in
+      match incr_opt with
+      | None -> ()
+      | Some incr ->
+	navigation#update_focus ~push_in_history:true
+	  (Lisql.insert_increment incr)
+    in
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
       jquery_input "#pattern-terms" (fun input ->
 	jquery "#list-terms" (fun elt_list ->
 	  (*filtering_terms <- true;*)
-	  ajax_index term_constr [elt_list]
+	  ajax_index (norm_constr term_constr) [elt_list]
 	    (fun index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-terms"
 		(html_count_unit (List.length index) max_results Lisql2nl.config_lang#grammar#entity_entities);
-	      stop_links_propagation_from elt_list;
+	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		navigation#update_focus ~push_in_history:true
-		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+		apply_incr elt));
+	      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
+		Opt.iter (elt##parentNode) (fun node ->
+		  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
+		    let incr_elt = Dom_html.element dom_elt in
+		    apply_incr incr_elt))));
 	      refreshing_terms <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
@@ -331,7 +394,7 @@ object (self)
     self#refresh_term_increments_gen lis#ajax_index_terms_init 100
   method private refresh_term_increments =
     self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms (fun index_terms -> k (lis#index_ids @ index_terms)))
+      (fun constr elts k -> lis#index_terms_inputs (fun index_terms_inputs -> k (lis#index_ids @ index_terms_inputs)))
       Lis.config_max_results#value
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
@@ -341,7 +404,7 @@ object (self)
       jquery_input "#pattern-properties" (fun input ->
 	jquery "#list-properties" (fun elt_list ->
 	  (*filtering_properties <- true;*)
-	  ajax_index property_constr elt_list
+	  ajax_index (norm_constr property_constr) elt_list
 	    (fun index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-properties"
@@ -387,7 +450,7 @@ object (self)
 	( match lis#focus_term_list with
 	  | [] -> elt_incrs##style##display <- string "none"
 	  | _::_ -> elt_incrs##style##display <- string "block" );
-	lis#ajax_sparql_results term_constr [elt_incrs; elt_res]
+	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  (function
 	    | None ->
 	      jquery_set_innerHTML "#sparql-query" "";
@@ -423,12 +486,20 @@ object (self)
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
       jquery_from elt_li ".increment" (fun elt_incr ->
-	let t =
+	let str =
+	  match constr with
+	  | Lisql.HasLang _ | Lisql.HasDatatype _ -> to_string elt_incr##innerHTML (* TODO: extract proper lang/datatype part *)
+	  | _ ->
+	    Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
+	      (fun () -> to_string elt_incr##innerHTML)
+	      (fun elt -> to_string elt##innerHTML) in
+(*	  
 	  let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
 	      (* only works if a single element *)
 	    (fun () -> to_string (elt_incr##innerHTML))
 	    (fun elt -> to_string (elt##innerHTML)) in
 	  Rdf.PlainLiteral (s, "") in
+*)
 (*
 	  let t =
 	    let textContent = elt_incr##textContent in (* ##textContent only available since js_of_ocaml v2.4 *)
@@ -446,7 +517,7 @@ object (self)
 		  (fun elt -> to_string (elt##innerHTML)) in
 		Rdf.PlainLiteral (s, "") in
 *)
-	if matcher t
+	if matcher str
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"))
 
@@ -456,7 +527,7 @@ object (self)
   method set_term_constr constr =
     let to_refresh =
       if constr = term_constr then false
-      else if Lisql.subsumed_constr constr term_constr then not refreshing_terms
+      else if subsumed_constr constr term_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_terms && constr <> term_constr *)
     then begin
@@ -470,7 +541,7 @@ object (self)
   method set_property_constr constr =
     let to_refresh =
       if constr = property_constr then false
-      else if Lisql.subsumed_constr constr property_constr then not refreshing_terms
+      else if subsumed_constr constr property_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_properties && constr <> property_constr *)
     then begin
@@ -704,7 +775,7 @@ let _ =
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
 	history#change_endpoint url)));
-    jquery_input "#sparql-endpoint-input" (onenter (fun input ->
+    jquery_input "#sparql-endpoint-input" (onenter (fun input ev ->
       jquery_click "#sparql-endpoint-button"));
     jquery "#config-control" (onclick (fun elt ev ->
       jquery "#config-panel" (fun panel ->
@@ -726,16 +797,16 @@ let _ =
 	  let op = to_string (select##value) in
 	  let pat = to_string (input##value) in
 	  try
-	    let constr = make_constr op pat in
+	    let constr = norm_constr (make_constr op pat) in
 	    if constr = Lisql.True
 	    then
-	      Dom_html.window##alert(string "Invalid filter")
+	      Dom_html.window##alert(string "Empty filter")
 	    else
 	      history#update_focus ~push_in_history:true
 		(Lisql.insert_constr constr)
 	  with Invalid_argument msg ->
 	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
-    jquery_input "#pattern-terms" (onenter (fun input ->
+    jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter
       (fun (sel_select, sel_input, sel_list, k) ->

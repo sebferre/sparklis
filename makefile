@@ -1,5 +1,5 @@
 
-OBJ=common.cmo jsutils.cmo config.cmo rdf.cmo sparql.cmo sparql_endpoint.cmo lisql.cmo permalink.cmo lexicon.cmo grammar.cmo lisql2nl.cmo lisql2sparql.cmo lis.cmo html.cmo
+OBJ=common.cmo jsutils.cmo config.cmo rdf.cmo sparql.cmo sparql_endpoint.cmo lisql.cmo permalink.cmo lisql_annot.cmo lexicon.cmo grammar.cmo lisql2nl.cmo lisql2sparql.cmo lisql_type.cmo lis.cmo html.cmo
 
 osparklis: $(OBJ)
 	ocamlfind ocamlc -package js_of_ocaml -package js_of_ocaml.syntax -syntax camlp4o -linkpkg -o osparklis.byte $(OBJ) osparklis.ml
@@ -14,6 +14,15 @@ install:
 	cp *.png /local/ferre/web/ferre/sparklis
 	cp *.jpg /local/ferre/web/ferre/sparklis
 	cp examples.html /local/ferre/web/ferre/sparklis
+
+install-dev:
+	cp osparklis.html /local/ferre/web/ferre/sparklis-dev
+	cp osparklis.html /local/ferre/web/ferre/sparklis-dev/index.html
+	cp osparklis.css /local/ferre/web/ferre/sparklis-dev
+	cp osparklis.js /local/ferre/web/ferre/sparklis-dev
+	cp *.png /local/ferre/web/ferre/sparklis-dev
+	cp *.jpg /local/ferre/web/ferre/sparklis-dev
+	cp examples.html /local/ferre/web/ferre/sparklis-dev
 
 clean:
 	rm -f *.cm[ioax]

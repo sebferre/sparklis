@@ -2,6 +2,7 @@
 type term = string
 type expr = string
 type pattern = string
+type selector = string
 type query = string
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
@@ -95,7 +96,8 @@ let indent : int -> string -> string =
   let re = Regexp.regexp_string "\n" in
   fun w p -> Regexp.global_replace re p ("\n" ^ String.make w ' ')
 
-let expr_func (f : string) (expr : expr) : expr = f ^ "(" ^ expr ^ ")"
+let expr_func (f : string) (l_expr : expr list) : expr = f ^ "(" ^ String.concat "," l_expr ^ ")"
+let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^ String.concat op l_expr ^ ")"
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^ " " ^ relop ^ " " ^ expr2
 
@@ -157,37 +159,48 @@ let ask (pattern : pattern) : query =
 type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN | SAMPLE | ID
 type order = ASC | DESC
 
+type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * Rdf.var]
+type projection = projection_def * Rdf.var
+
+let projection_def : projection_def -> expr = function
+  | `Bare -> ""
+  | `Expr e -> e
+  | `Aggreg (g,v) ->
+    let make_aggreg prefix_g expr suffix_g = prefix_g ^ expr ^ suffix_g in
+    ( match g with
+    | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " (var v) ")"
+    | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " (var v) " ; separator=', ')"
+    | SUM -> make_aggreg "SUM(" (var_numeric v) ")"
+    | AVG -> make_aggreg "AVG(" (var_numeric v) ")"
+    | MAX -> make_aggreg "MAX(" (var v) ")"
+    | MIN -> make_aggreg "MIN(" (var v) ")"
+    | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")"
+    | ID -> make_aggreg "" (var v) "" )
+let projection (def,v : projection) : selector =
+  match def with
+  | `Bare -> (var v)
+  | _ ->
+    let s_def = projection_def def in
+    let s_var = var v in
+    if s_def = s_var
+    then s_var
+    else "(" ^ s_def ^ " AS " ^ s_var ^ ")"
+
 let select
     ?(distinct=false)
-    ~(projections : Rdf.var list)
-    ?(aggregations : (aggreg * Rdf.var * Rdf.var) list = [])
+    ~(projections : projection list)
     ?(groupings : Rdf.var list = [])
     ?(having : expr = log_true)
     ?(ordering : (order * Rdf.var) list = [])
     ?(limit : int option)
     (pattern : pattern) : query =
-  if projections = [] && aggregations = []
+  if projections = []
   then ask pattern
   else
-    let make_aggreg prefix_g expr suffix_g vg = "(" ^ prefix_g ^ expr ^ suffix_g ^ " AS " ^ var vg ^ ")" in
-    let sel =
-      String.concat " " (List.map var projections) ^ " " ^
-	String.concat " "
-	(List.map
-	   (fun (g,v,vg) ->
-	     match g with
-	       | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " (var v) ")" vg
-	       | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " (var v) (" ; separator=', ')") vg
-	       | SUM -> make_aggreg "SUM(" (var_numeric v) ")" vg
-	       | AVG -> make_aggreg "AVG(" (var_numeric v) ")" vg
-	       | MAX -> make_aggreg "MAX(" (var v) ")" vg
-	       | MIN -> make_aggreg "MIN(" (var v) ")" vg
-	       | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")" vg
-	       | ID -> make_aggreg "" (var v) "" vg)
-	   aggregations) in
+    let sel = String.concat " " (List.map projection projections) in
     let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in
     let s =
-      if groupings = [] || aggregations = []
+      if groupings = []
       then s
       else s ^ "\nGROUP BY " ^ String.concat " " (List.map var groupings) in
     let s =
@@ -209,19 +222,47 @@ let select
 let select_from_service url query =
   "SELECT * FROM { SERVICE <" ^ url ^ "> { " ^ query ^ " }}"
 
+type subquery =
+  { projections : projection list;
+    pattern : pattern;
+    groupings : Rdf.var list;
+    having : expr;
+    limit : int option }
+    
+let subquery_having (sq : subquery) (e : expr) : subquery =
+  { sq with having = log_and [sq.having; e] }
+
+let query_of_subquery : subquery -> query = function
+  | { projections; pattern; groupings; having; limit} ->
+    select ~distinct:true ~projections ~groupings ~having ?limit pattern
+
+let pattern_of_subquery (sq : subquery) : pattern =
+  if sq.having = log_true
+  then subquery (query_of_subquery sq)
+  else join [subquery (query_of_subquery {sq with having=log_true}); (* because HAVING not allowed in subqueries *)
+	     filter sq.having]
+
+
+(* formulas *)
+      
 type formula =
   | Pattern of pattern (* binding *)
+  | Subquery of subquery (* sub-queries *)
   | Filter of expr (* non-binding *)
   | True (* empty binding *)
   | False (* no binding *)
   | Or of pattern * expr (* mixed unions *)
 
-let formula_and (f1 : formula) (f2 : formula) : formula =
+let rec formula_and (f1 : formula) (f2 : formula) : formula =
   match f1, f2 with
     | False, _
     | _, False -> False
     | True, _ -> f2
     | _, True -> f1
+    | Subquery sq1, Filter e2 -> Subquery (subquery_having sq1 e2) (* kind of unsafe *)
+    | Filter e1, Subquery sq2 -> Subquery (subquery_having sq2 e1) (* kind of unsafe *)
+    | Subquery sq1, _ -> formula_and (Pattern (pattern_of_subquery sq1)) f2
+    | _, Subquery sq2 -> formula_and f1 (Pattern (pattern_of_subquery sq2))
     | Pattern p1, Pattern p2 -> Pattern (join [p1;p2])
     | Pattern p1, Filter e2 -> Pattern (join [p1; filter e2])
     | Filter e1, Pattern p2 -> Pattern (join [p2; filter e1])
@@ -241,6 +282,7 @@ let formula_or_list (lf : formula list) : formula =
       (fun f (lp,le,btrue) ->
 	match f with
 	  | Pattern p -> (p::lp,le,btrue)
+	  | Subquery sq -> (pattern_of_subquery sq::lp,le,btrue)
 	  | Filter e -> (lp,e::le,btrue)
 	  | True -> (lp,le,true)
 	  | False -> (lp,le,btrue)
@@ -257,6 +299,7 @@ let formula_or_list (lf : formula list) : formula =
 
 let formula_optional : formula -> formula = function
   | Pattern p -> Pattern (optional p)
+  | Subquery sq -> Pattern (optional (pattern_of_subquery sq))
   | Filter e -> True
   | True -> True
   | False -> True
@@ -264,6 +307,7 @@ let formula_optional : formula -> formula = function
 
 let formula_not : formula -> formula = function
   | Pattern p -> Filter (not_exists p)
+  | Subquery sq -> Filter (not_exists (pattern_of_subquery sq))
   | Filter e -> Filter (log_not e)
   | True -> False
   | False -> True
@@ -271,6 +315,7 @@ let formula_not : formula -> formula = function
 
 let formula_bind (x : Rdf.term) : formula -> formula = function
   | Pattern p -> Pattern p
+  | Subquery sq -> Subquery sq
   | Filter e -> Pattern (join [something x; filter e])
   | True -> True (*Pattern (something x)*)
   | False -> False
@@ -282,7 +327,43 @@ let expr_of_formula : formula -> expr = function
 
 let pattern_of_formula : formula -> pattern = function
   | Pattern p -> p
+  | Subquery sq -> pattern_of_subquery sq
   | Filter e -> filter e (* tentative *)
   | True -> empty
   | False -> filter log_false (* tentative *)
   | Or (p,e) -> union [p; filter e] (* tentative *)
+
+(* views *)
+
+type view = Rdf.var list * (?limit:int -> unit -> formula)
+
+let view_defs view = fst view
+  
+let empty_view : view = ([], (fun ?limit () -> True))
+
+let join_views (views : view list) : view =
+  let list_defs, list_form = List.split views in
+  Common.list_to_set (List.concat list_defs),
+  (fun ?limit () ->
+    formula_and_list
+      (List.map (fun f -> f ?limit ()) list_form))
+  
+let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
+  match f ?limit () with
+  | Subquery sq ->
+    select
+      ?distinct
+      ~projections:sq.projections (*List.filter (fun (_,v) -> List.mem v lv) sq.projections*)
+      ~groupings:sq.groupings
+      ~having:sq.having
+      ?ordering
+      ?limit
+      sq.pattern
+  | form ->
+    select
+      ?distinct
+      ~projections:(List.map (fun v -> (`Bare,v)) lv)
+      ?ordering
+      ?limit
+      (pattern_of_formula form)
+
