@@ -1,3 +1,21 @@
+head, body, input, textarea, select {
+    font-family: Tahoma, Geneva, sans-serif;
+}
+
+button {
+    color:white;
+    background-color:#646464;
+    border-radius:5px;
+    border: 1px solid #646464;
+    font-weight:bold;
+    padding: 5px 5px 0px 5px;
+    margin: 0px 3px;
+}
+button:hover {
+    color:#646464;
+    background-color:white;
+}
+
 .texte
 {
 display:none;
@@ -17,7 +35,7 @@ header
 {
 margin:5px 0px;
 padding:5px 10px;
-height:50px;
+/*height:50px;*/
 color:white;
 background-image:url('sparkles_background.png');
 background-repeat:repeat-x;
@@ -26,12 +44,12 @@ background-repeat:repeat-x;
 .heading
 {
 width:100%;
-padding: 5px 5px;
+padding: 3px 3px;
 margin: 5px 0px;
 color:white;
 background-color:#c8a0c8;
 font-style:italic;
-font-weight:bold;
+/*font-weight:bold;*/
 }
 
 .config-heading
@@ -88,6 +106,19 @@ color:darkred;
 text-align:right;
 }
 
+#control-navig {
+    display: -webkit-flex; /* Safari */
+    -webkit-align-items: center; /* Safari 7.0+ */
+    display: flex;
+    align-items: center;
+}
+#home, #back, #forward, #refresh {
+    padding: 2px;
+}
+#refresh { padding-right: 10px; }
+#config-control { padding-left: 10px; }
+}
+
 #sparql-endpoint
 {
 text-align:right;
@@ -112,11 +143,7 @@ text-decoration:underline;
 #lisql
 {
 margin:10px;
-font-weight:bold;
-}
-
-#current-focus
-{
+/*font-weight:bold;*/
 }
 
 .focus
@@ -145,7 +172,7 @@ margin:0px;
 
 #increments-focus
 {
-font-weight:bold;
+/*font-weight:bold;*/
 }
 
 .incr-box
@@ -157,12 +184,12 @@ float:left;
 
 .pattern-incrs
 {
-width:180px;
+width:155px;
 }
 
 #pattern-terms
 {
-width:130px;
+width:120px;
 }
 
 .list-incrs
@@ -194,6 +221,16 @@ cursor:pointer;
 .count-incrs
 {
 text-align:right;
+}
+
+#current-focus
+{
+clear:both;
+}
+
+#query
+{
+clear:both;
 }
 
 #results

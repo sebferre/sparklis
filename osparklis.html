@@ -15,6 +15,11 @@
   <header>
     <h2 class="texte lang-en">Sparklis - <small><em>Complex queries and exploratory search on SPARQL endpoints at your fingertips!</em></small></h2>
     <h2 class="texte lang-fr">Sparklis - <small><em>Requêtes complexes et recherche exploratoire du bout des doigts!</em></small></h2>
+    <br>
+    <span style="font-weight:normal;background-color:black;color:yellow">
+      <span class="texte lang-en">NEW in 2016: nested aggregations, and computation/filtering expressions !!</span>
+      <span class="texte lang-fr">NOUVEAU en 2016 : agrégations imbriquées et expressions de calcul/filtrage !!</span>
+    </span>
   </header>
 
   <div id="external-links" style="margin-left:auto;margin-right:0px">
@@ -29,10 +34,8 @@
     </a>
     &nbsp;
     <a target="_blank" href="http://tinyurl.com/kxozx9r">
-      <mark>
-	<span class="texte lang-en">Usability survey</span>
-	<span class="texte lang-fr">Enquête d'utilisabilité</span>
-      </mark>
+      <span class="texte lang-en">Usability survey</span>
+      <span class="texte lang-fr">Enquête d'utilisabilité</span>
     </a>
   </div>
 
@@ -40,22 +43,30 @@
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to reset the query</span>
       <span class="tooltip lang-fr">Cliquer pour réinitialiser la requête</span>
-      <img id="home" src="icon-home.png" height="40" alt="Home">
+      <img id="home" src="icon-home.png" height="30" alt="Home"
+	   onmouseover="this.src='icon-home_hover.png';"
+	   onmouseout="this.src='icon-home.png';">
     </span>
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to go back in navigation history</span>
       <span class="tooltip lang-fr">Cliquer pour revenir à la requête précédente</span>
-      <img id="back" src="icon-back.png" height="40" alt="Back">
+      <img id="back" src="icon-back.png" height="30" alt="Back"
+	   onmouseover="this.src='icon-back_hover.png';"
+	   onmouseout="this.src='icon-back.png';">
     </span>
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to go forward in navigation history</span>
       <span class="tooltip lang-fr">Cliquer pour retourner à la requête suivante</span>
-      <img id="forward" src="icon-forward.png" height="40" alt="Forward">
+      <img id="forward" src="icon-forward.png" height="30" alt="Forward"
+	   onmouseover="this.src='icon-forward_hover.png';"
+	   onmouseout="this.src='icon-forward.png';">
     </span>
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to refresh the current view, e.g. after changing the configuration</span>
       <span class="tooltip lang-fr">Cliquer pour rafraîchir la vue actuelle, ex. après avoir changer la configuration</span>
-      <img id="refresh" src="icon-refresh.png" height="40" alt="Refresh">
+      <img id="refresh" src="icon-refresh.png" height="30" alt="Refresh"
+	   onmouseover="this.src='icon-refresh_hover.png';"
+	   onmouseout="this.src='icon-refresh.png';">
     </span>
     <span id="sparql-endpoint">
       <span class="texte lang-en">SPARQL endpoint: </span>
@@ -86,13 +97,15 @@
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
 	<span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
-	<input id="sparql-endpoint-button" type="button" value="Go">
+	<button id="sparql-endpoint-button">Go</button>
       </span>
     </span>
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to open/close configuration panel</span>
       <span class="tooltip lang-fr">Cliquer pour ouvrir/fermer le panneau de configuration</span>
-      <img id="config-control" src="icon-config.png" height="40" alt="Config">
+      <img id="config-control" src="icon-config.png" height="30" alt="Config"
+	   onmouseover="this.src='icon-config_hover.png';"
+	   onmouseout="this.src='icon-config.png';">
     </span>
   </div>
 
@@ -293,33 +306,11 @@
     </em>
   </div>
 
-  <div class="heading">
-    <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
-    <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
-    <span class="tooltiped">
-      <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
-      <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
-      <button id="permalink">
-	permalink
-      </button>
-    </span>
-  </div>
-  <span class="tooltiped">
-    <span class="tooltip lang-en">Click on a query element to change focus</span>
-    <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
-    <div id="lisql">
-    </div>
-  </span>
-
   <div id="increments">
     <div class="heading">
       <span class="texte lang-en">Sparklis suggestions to refine your query</span>
       <span class="texte lang-fr">Suggestions de Sparklis pour affiner votre requête</span>
     </div>
-    <div>
-      <span class="texte lang-en">Current focus on </span>
-      <span class="texte lang-fr">Focus actuel sur </span>
-      <span id="increments-focus" class="highlighted">the thing</span></div>
     <div class="incr-box">
       <div>
 	<span class="tooltiped">
@@ -346,7 +337,7 @@
 	<span class="tooltiped">
 	  <span class="tooltip lang-en">Click this button to insert this filter at the query focus</span>
 	  <span class="tooltip lang-fr">Cliquer ce bouton pour insérer ce filtre au focus de la requête</span>
-	  <input id="button-terms" type="button" value="OK">
+	  <button id="button-terms">OK</button>
 	</span>
       </div>
       <span class="tooltiped">
@@ -406,6 +397,31 @@
 	<span class="texte lang-fr">Aucun modifieur</span>
       </div>
     </div>
+    <div id="current-focus">
+      <span class="texte lang-en">Current focus on </span>
+      <span class="texte lang-fr">Focus actuel sur </span>
+      <span id="increments-focus" class="highlighted">the thing</span>
+    </div>
+  </div>
+
+  <div id="query">
+    <div class="heading">
+      <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
+      <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to display the permanent link to the current view</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
+	<button id="permalink">
+	  permalink
+	</button>
+      </span>
+    </div>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click on a query element to change focus</span>
+      <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
+      <div id="lisql">
+      </div>
+    </span>
   </div>
 
   <div id="results">
@@ -417,7 +433,9 @@
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to show the previous page of results</span>
 	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
-	<img class="previous-results" src="icon-previous.png" height="25" alt="Previous">
+	<img class="previous-results" src="icon-previous.png" height="30" alt="Previous"
+	     onmouseover="this.src='icon-previous_hover.png';"
+	     onmouseout="this.src='icon-previous.png';">
       </span>
       <span class="count-results">
 	<span class="texte lang-en">No result</span>
@@ -426,7 +444,9 @@
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to show the next page of results</span>
 	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
-	<img class="next-results" src="icon-next.png" height="25" alt="Next">
+	<img class="next-results" src="icon-next.png" height="30" alt="Next"
+	     onmouseover="this.src='icon-next_hover.png';"
+	     onmouseout="this.src='icon-next.png';">
       </span>
       <span class="texte lang-en">Show </span>
       <span class="texte lang-fr">Montrer </span>
@@ -452,7 +472,9 @@
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to show the previous page of results</span>
 	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
-	<img class="previous-results" src="icon-previous.png" height="25" alt="Previous">
+	<img class="previous-results" src="icon-previous.png" height="30" alt="Previous"
+	     onmouseover="this.src='icon-previous_hover.png';"
+	     onmouseout="this.src='icon-previous.png';">
       </span>
       <span class="count-results">
 	<span class="texte lang-en">No result</span>
@@ -461,7 +483,9 @@
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to show the next page of results</span>
 	<span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
-	<img class="next-results" src="icon-next.png" height="25" alt="Next">
+	<img class="next-results" src="icon-next.png" height="30" alt="Next"
+	     onmouseover="this.src='icon-next_hover.png';"
+	     onmouseout="this.src='icon-next.png';">
       </span>
       <span class="texte lang-en">Show </span>
       <span class="texte lang-fr">Montrer </span>
@@ -490,24 +514,23 @@
   </div>
 
   <footer>
-    <p>
-      <span class="texte lang-en">Created by </span>
-      <span class="texte lang-fr">Créé par </span>
-      <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> © 2013
-      <a target="_blank" href="http://www.irisa.fr/LIS/"><img src="lis.png" alt="LIS team" height="40"></a>
-      <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="40"></a>
-      <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
-    </p>
-    <p>
-      <span class="texte lang-en">Last modified September 2nd, 2015. Visit </span>
-      <span class="texte lang-fr">Dernière modification le 2 septembre 2015. Visiter </span>
-      <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">
-	<span class="texte lang-en">my homepage</span>
-	<span class="texte lang-fr">ma page Web</span>
-      </a>
-      <span class="texte lang-en"> for more information.</span>
-      <span class="texte lang-fr"> pour plus d'information.</span>
-    </p>
+    <hr/>
+    <span class="texte lang-en">Created by </span>
+    <span class="texte lang-fr">Créé par </span>
+    <a target="_blank" href="http://www.irisa.fr/LIS/Members/ferre/">Sébastien Ferré</a> © 2013
+    <a target="_blank" href="http://www.irisa.fr/LIS/"><img src="lis.png" alt="LIS team" height="30"></a>
+    <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="30"></a>
+    <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="30"></a>
+    <br/>
+
+    <span class="texte lang-en">Last modified February 14th, 2016. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 14 février 2016. Visiter </span>
+    <a target="_blank" href="http://www.irisa.fr/LIS/ferre/">
+      <span class="texte lang-en">my homepage</span>
+      <span class="texte lang-fr">ma page Web</span>
+    </a>
+    <span class="texte lang-en"> for more information.</span>
+    <span class="texte lang-fr"> pour plus d'information.</span>
   </footer>
 </body>
 </html>
