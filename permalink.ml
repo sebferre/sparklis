@@ -231,11 +231,13 @@ let parse_opt ps ~version = parser
 let rec parse_list ps ~version f = parser
   | [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; args = parse_args ps ~version >] -> args
 and parse_args ps ~version = parser
+  | [< 'Kwd ")" >] -> []
   | [< x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
-  | [< 'Kwd ")" >] -> []
+  | [<>] -> syntax_error "invalid args"
 and parse_args_aux ps ~version = parser
-  | [< 'Kwd ","; x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
   | [< 'Kwd ")" >] -> []
+  | [< 'Kwd ","; x = ps ~version; xs = parse_args_aux ps ~version >] -> x::xs
+  | [<>] -> syntax_error "invalid args_aux"
 
 let parse_lr ps ~version f = parser
   | [< xs = parse_list ps ~version f >] -> xs
@@ -249,15 +251,19 @@ and parse_s ~version = parser
     | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), id, modif, expr, rel_opt)
     | [< id, expr = parse_bin ~version "SFilter" parse_id parse_expr >] -> SFilter ((), id, expr)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
+    | [<>] -> syntax_error "invalid s"
 and parse_dim ~version = parser
     | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> Foreach ((), id, modif, rel_opt, id2)
+    | [<>] -> syntax_error "invalid dim"
 and parse_aggreg ~version = parser
     | [< id, modif, g, rel_opt, id2 = parse_quin ~version "TheAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_id >] -> TheAggreg ((), id, modif, g, rel_opt, id2)
+    | [<>] -> syntax_error "invalid aggreg"
 and parse_expr ~version = parser
-    | [< _ = parse_atom "Undef" >] -> Undef ()
+    | [< () = parse_atom ~version "Undef" >] -> Undef ()
     | [< t = parse_un ~version "Const" parse_term >] -> Const ((), t)
     | [< id = parse_un ~version "Var" parse_id >] -> Var ((), id)
     | [< func, args = parse_bin ~version "Apply" parse_func (fun ~version -> parse_list parse_expr ~version "Args") >] -> Apply ((), func, args)
+    | [<>] -> syntax_error "invalid expr"
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
