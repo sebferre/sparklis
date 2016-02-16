@@ -287,7 +287,7 @@ object
   method clear = Hashtbl.clear ht
 end
 
-let rec ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in ?(tentative = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
   let use_proxy = config_proxy#value in
@@ -360,7 +360,8 @@ let rec ajax_in (elts : Dom_html.element t list) (pool : ajax_pool)
 		    ajax_in elts pool endpoint sparql k1 k0
 		  end
 		| 4 ->
-		  alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		  if not tentative then
+		    alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
 		  k0 code
 		| 5 ->
 		  alert "There was an error at the SPARQL endpoint during the evaluation of the query.";

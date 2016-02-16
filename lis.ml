@@ -314,13 +314,19 @@ object (self)
       k index
     in
     let sparql_term =
-      (*"PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> " ^*)
 	"SELECT DISTINCT ?term WHERE { " ^
-	Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
-	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
-    Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
+	  Sparql.pattern_of_formula (Lisql2sparql.search_constr (Rdf.Var "term") constr) ^
+	  " FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
+    Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
-      (fun code -> process Sparql_endpoint.empty_results)
+      (fun code -> (* trying standard yet inefficient approach *)
+	let sparql_term =
+	  "SELECT DISTINCT ?term WHERE { " ^
+	    Sparql.pattern_of_formula (Sparql.formula_and (Sparql.Pattern (Sparql.something (Rdf.Var "term"))) (Lisql2sparql.filter_constr_entity (Rdf.Var "term") constr)) ^
+	    " } LIMIT " ^  string_of_int config_max_results#value in
+	Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
+	  (fun results_term -> process results_term)
+	  (fun code -> process Sparql_endpoint.empty_results))
 
   method ajax_index_properties_init constr elt (k : Lisql.increment index -> unit) =
     let process results_class results_prop =
