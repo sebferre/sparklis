@@ -3,6 +3,8 @@ open Js
 open XmlHttpRequest
 open Jsutils
 
+let sparql_ns = "http://www.w3.org/2005/sparql-results#"
+
 (* endpoint-specific aspects *)
 
 let uri_of_id (id : string) : Rdf.uri option =
@@ -19,25 +21,71 @@ type results =
     }
 
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
+let unit_results = { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
 
-module Xml =
+module Xml = (* CAUTION: some specifics to SPARQL results *)
 struct
-  let find (elt : Dom.element t) (tag : string) : Dom.element t =
+  let lookup_prefix (elt : Dom.element t) (ns : string) : string =
+    let prefix = ref "" in
+    let node_map = elt##attributes in
+    for i = 0 to node_map##length - 1 do
+      Opt.iter (node_map##item(i))
+	(fun a ->
+	  let value = to_string a##value in
+	  if value = sparql_ns
+	  then
+	    let name = to_string a##name in
+	    try
+	      let pre = String.sub name 6 (String.length name - 6) in (* 6 = length "xmlns:" *)
+	      prefix := pre ^ ":"
+	    with _ -> ())
+    done;
+    !prefix
+
+  let get (elt : Dom.element t) (tag : string) : Dom.element t =
     let nodelist = elt##getElementsByTagName(string tag) in
     Opt.get (nodelist##item(0))
-      (fun () -> failwith ("Xml.find: unfound tag: " ^ tag))
+      (fun () -> failwith ("Sparql_endpoint.Xml.get: missing tag " ^ tag))
+
+  let find (elt : Dom.element t) (tag : string) : Dom.element t option =
+    try Some (get elt tag)
+    with _ -> None
 
   let find_all (elt : Dom.element t) (tag : string) : Dom.element t list =
     let nodelist = elt##getElementsByTagName(string tag) in
     let l = nodelist##length in
     let res = ref [] in
     for i = l-1 downto 0 do
-      Opt.case (nodelist##item(i))
-	(fun () -> ())
+      Opt.iter (nodelist##item(i))
 	(fun e -> res := e::!res)
     done;
     !res
 
+  let get_attribute (elt : Dom.element t) (attr : string) : string =
+    Opt.case (elt##getAttribute(string attr))
+      (fun () -> failwith ("Sparql_endpoint.Xml.get_attribute: missing attribute " ^ attr))
+      (fun js -> to_string js)
+
+  let find_attribute (elt : Dom.element t) (attr : string) : string option =
+    try Some (get_attribute elt attr)
+    with _ -> None
+
+(*
+  let get_attributeNS (elt : Dom.element t) (attr : string) : js_string t opt =
+    (*elt##getAttributeNS(string sparql_ns, string attr)*) (* not working, because HTML5 DOM ? *)
+    let res = ref null in
+    let node_map = elt##attributes in
+    for i = 0 to node_map##length - 1 do
+      Opt.iter (node_map##item(i))
+	(fun a ->
+	  let name = to_string a##name in
+	  let n = String.length name in
+	  if (try attr = String.sub name (String.length name - n) n with _ -> false)
+	  then res := some (a##value))
+    done;
+    !res
+*)
+      
   let get_text (elt : Dom.element t) : string =
     Opt.case (elt##firstChild)
       (fun () -> "")
@@ -53,71 +101,66 @@ end
 let results_of_xml (doc_xml : Dom.element Dom.document t) =
   try
     let elt_xml : Dom.element t = doc_xml##documentElement in
-    (try
-      let elt_boolean = Xml.find elt_xml "boolean" in
-      match Xml.get_text elt_boolean with
-	| "true" -> { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
-	| _ -> empty_results
-    with _ ->
-      let elt_head : Dom.element t = Xml.find elt_xml "head" in
-      let elts_var = Xml.find_all elt_head "variable" in
+    let prefix = Xml.lookup_prefix elt_xml sparql_ns in
+    match Xml.find elt_xml (prefix ^ "boolean") with
+    | Some elt_boolean ->
+      ( match Xml.get_text elt_boolean with
+      | "true" -> unit_results
+      | _ -> empty_results )
+    | None ->
+      let elt_head : Dom.element t = Xml.get elt_xml (prefix ^ "head") in
+      let elts_var = Xml.find_all elt_head (prefix ^ "variable") in
       let dim, rev_vars =
 	List.fold_left
 	  (fun (i, vars as res) elt_var ->
-	    Opt.case (elt_var##getAttribute(string "name"))
-	      (fun _ -> res)
-	      (fun v ->
-		let v = to_string v in
-		if v = "_star_fake"
-		then res
-		else (i+1, (v,i)::vars)))
+	    let v = Xml.get_attribute elt_var (prefix ^ "name") in
+	    if v = "_star_fake"
+	    then res
+	    else (i+1, (v,i)::vars))
 	  (0,[]) elts_var in
       let vars = List.rev rev_vars in
-      let elt_results = Xml.find elt_xml "results" in
-      let elts_result = Xml.find_all elt_results "result" in
+      let elt_results = Xml.get elt_xml (prefix ^ "results") in
+      let elts_result = Xml.find_all elt_results (prefix ^ "result") in
       let length, rev_bindings =
 	List.fold_left
 	  (fun (j,l) elt_result ->
 	    let binding = Array.make dim None in
-	    let elts_binding = Xml.find_all elt_result "binding" in
+	    let elts_binding = Xml.find_all elt_result (prefix ^ "binding") in
 	    List.iter
 	      (fun elt_binding ->
-		Opt.case (elt_binding##getAttribute(string "name"))
-		  (fun () -> ())
-		  (fun v ->
-		    let i = List.assoc (to_string v) vars in
-		    let term_opt =
-		      try
-			let elt_uri = Xml.find elt_binding "uri" in
-			let uri = Xml.get_text elt_uri in
-			Some (Rdf.URI uri)
-		      with _ ->
-			try
-			  let elt_lit = Xml.find elt_binding "literal" in
-			  let s = Xml.get_text elt_lit in
-			  Opt.case (elt_lit##getAttribute(string "xml:lang"))
-			    (fun () ->
-			      Opt.case (elt_lit##getAttribute(string "datatype"))
-				(fun () -> Some (Rdf.PlainLiteral (s, "")))
-				(fun dt ->
-				  try Some (Rdf.Number (float_of_string s, s, to_string dt))
-				  with _ -> Some (Rdf.TypedLiteral (s, to_string dt))))
-			    (fun lang -> Some (Rdf.PlainLiteral (s, to_string lang)))
-			with _ ->
-			  try
-			    let elt_bnode = Xml.find elt_binding "bnode" in
-			    let id = Xml.get_text elt_bnode in
-			    match uri_of_id id with
-			      | Some uri -> Some (Rdf.URI uri)
-			      | None -> Some (Rdf.Bnode id)
-			  with _ ->
-			    None in
-		    binding.(i) <- term_opt))
+		let v = Xml.get_attribute elt_binding (prefix ^ "name") in
+		let i = List.assoc v vars in
+		let term_opt =
+		  match Xml.find elt_binding (prefix ^ "uri") with
+		  | Some elt_uri ->
+		    let uri = Xml.get_text elt_uri in
+		    Some (Rdf.URI uri)
+		  | None ->
+		    match Xml.find elt_binding (prefix ^ "literal") with
+		    | Some elt_lit ->
+		      let s = Xml.get_text elt_lit in
+		      ( match Xml.find_attribute elt_lit "xml:lang" with
+		      | Some lang -> Some (Rdf.PlainLiteral (s, lang))
+		      | None ->
+			( match Xml.find_attribute elt_lit (prefix ^ "datatype") with
+			| Some dt ->
+			  (try Some (Rdf.Number (float_of_string s, s, dt))
+			   with _ -> Some (Rdf.TypedLiteral (s, dt)))
+			| None -> Some (Rdf.PlainLiteral (s, ""))))
+		    | None ->
+		      match Xml.find elt_binding (prefix ^ "bnode") with
+		      | Some elt_bnode ->
+			let id = Xml.get_text elt_bnode in
+			( match uri_of_id id with
+			| Some uri -> Some (Rdf.URI uri)
+			| None -> Some (Rdf.Bnode id) )
+		      | None -> None in
+		binding.(i) <- term_opt)
 	      elts_binding;
 	    (j+1, binding::l))
 	  (0,[]) elts_result in
       let bindings = List.rev rev_bindings in
-      { dim; vars; length; bindings; })
+      { dim; vars; length; bindings; }
   with exn ->
     Firebug.console##log(string (Printexc.to_string exn));
     empty_results

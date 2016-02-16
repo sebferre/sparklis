@@ -81,3 +81,13 @@ let integer_of_input ?(min = min_int) ?(max = max_int) input : int option =
     else if n > max then None
     else Some n
   with _ -> None
+
+(* DOM utilities *)
+
+let getElementsByTagNameNS (elt : Dom.element t) (ns : js_string t) (name : js_string t) : Dom.element Dom.nodeList t =
+(*elt##getElementsByTagName(name)*)
+  Unsafe.coerce (Unsafe.meth_call elt "getElementsByTagNameNS" [|Unsafe.inject ns; Unsafe.inject name|])
+
+let lookupPrefix (elt : Dom.element t) (ns : js_string t) : js_string t opt =
+  (* not working in Internet Explorer *)
+  some (Unsafe.coerce (Unsafe.meth_call elt "lookupPrefix" [|Unsafe.inject ns|]))
