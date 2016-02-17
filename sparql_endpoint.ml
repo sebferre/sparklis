@@ -271,12 +271,11 @@ object
   method clear = Hashtbl.clear ht
 end
 
-let rec ajax_in ?(tentative = false) (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
-  let use_proxy = config_proxy#value in
   let real_endpoint, real_sparql = (* use of proxy, if defined *)
-    if use_proxy
+    if config_proxy#value
     then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
     else endpoint, sparql in
   let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
@@ -330,19 +329,28 @@ let rec ajax_in ?(tentative = false) (elts : Dom_html.element t list) (pool : aj
 		  ( match results_opt with
 		    | None ->
 		      Firebug.console##log(string "No XML content");
-		      ()
+		      k0 code
 		    | Some results ->
-		      cache#replace real_endpoint prologue_sparql results;
-		      k1 results )
+		      if fail_on_empty_results && results.length = 0
+		      then k0 code
+		      else begin
+			cache#replace real_endpoint prologue_sparql results;
+			k1 results
+		      end)
 		| 0 ->
-		  if use_proxy
+		  if config_proxy#value (* proxy was used *)
 		  then begin
-		    alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
+		    alert "The proxy SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running.";
 		    k0 code end
-		  else begin
-		    config_proxy#set_value true;
-		    ajax_in elts pool endpoint sparql k1 k0
-		  end
+		  else
+		    if config_proxy_url#value = "" (* no proxy allowed *)
+		    then begin
+		      alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can either specify a proxy SPARQL endpoint in configuration panel, or contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
+		      k0 code end
+		    else begin
+		      config_proxy#set_value true;
+		      ajax_in elts pool endpoint sparql k1 k0
+		    end
 		| 4 ->
 		  if not tentative then
 		    alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
@@ -365,13 +373,17 @@ let rec ajax_in ?(tentative = false) (elts : Dom_html.element t list) (pool : aj
       req##send(Js.some (string (encode_fields fields)))
 (*  req##send(Js.some (string sparql)) *)
 
-let rec ajax_list_in elts pool endpoint sparql_list k1 k0 =
+let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpoint sparql_list k1 k0 =
   match sparql_list with
     | [] -> k1 []
     | s::ls ->
-      ajax_in elts pool endpoint s
+      ajax_in ?tentative elts pool endpoint s
 	(fun r ->
-	  ajax_list_in elts pool endpoint ls
-	    (fun rs -> k1 (r::rs))
+	  ajax_list_in ?tentative elts pool endpoint ls
+	    (fun rs1 ->
+	      let rs = r::rs1 in
+	      if fail_on_empty_results && List.for_all (fun r -> r.length = 0) rs
+	      then k0 200
+	      else k1 rs)
 	    (fun code -> k0 code))
 	(fun code -> k0 code)

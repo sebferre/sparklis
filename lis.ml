@@ -363,27 +363,24 @@ object (self)
 	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr) ^
 	" } LIMIT " ^ string_of_int config_max_properties#value in
-    Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+    Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop]
       (function
-      | [results_class; results_prop] ->
-	if results_class.Sparql_endpoint.length > 0 || results_prop.Sparql_endpoint.length > 0
-	then process results_class results_prop
-	else (* looking at facts *)
-	  let sparql_class =
-	    "SELECT DISTINCT ?class WHERE { [] a ?class " ^
-	      Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr) ^
-	      " } LIMIT " ^ string_of_int config_max_classes#value in
-	  let sparql_prop =
-	    "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
-	      Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr) ^
-	      " } LIMIT " ^ string_of_int config_max_properties#value in
-	  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
-	    (function
-	    | [results_class; results_prop] -> process results_class results_prop
-	    | _ -> assert false)
-	    (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+      | [results_class; results_prop] -> process results_class results_prop
       | _ -> assert false)
-      (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+      (fun _ -> (* looking at facts *)
+	let sparql_class =
+	  "SELECT DISTINCT ?class WHERE { [] a ?class " ^
+	    Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Rdf.Var "class") constr) ^
+	    " } LIMIT " ^ string_of_int config_max_classes#value in
+	let sparql_prop =
+	  "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
+	    Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr) ^
+	    " } LIMIT " ^ string_of_int config_max_properties#value in
+	Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+	  (function
+	  | [results_class; results_prop] -> process results_class results_prop
+	  | _ -> assert false)
+	  (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results))
 
   method ajax_index_properties constr elt (k : Lisql.increment index -> unit) =
     let process results_a results_has results_isof =
@@ -439,14 +436,11 @@ object (self)
 	Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	  (Sparql.pattern_of_formula
 	     (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Rdf.Var "prop") constr))) in
-      Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
+      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	(function
-	  | [results_a; results_has; results_isof] ->
-	    if results_a.Sparql_endpoint.length > 0 || results_has.Sparql_endpoint.length > 0 || results_isof.Sparql_endpoint.length > 0
-	    then process results_a results_has results_isof
-	    else ajax_intent ()
-	  | _ -> assert false)
-	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	| [results_a; results_has; results_isof] -> process results_a results_has results_isof
+	| _ -> assert false)
+	(fun _ -> ajax_intent ())
     in
     if focus_no_incr (*Lisql.is_aggregation_focus focus*) then k [] (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index = [] then
