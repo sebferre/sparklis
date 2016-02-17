@@ -208,7 +208,9 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
       (Lisql2nl.word_of_incr Lisql2nl.config_lang#grammar
 	 incr) in
   let text = String.lowercase text in
-  let words = Regexp.split (Regexp.regexp "[- ,;:.()]+") text in
+  let data =
+    try `Number (float_of_string text)
+    with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
   let html = html_of_nl_xml state xml in
   let rank, title_opt =
     let grammar = Lisql2nl.config_lang#grammar in
@@ -237,31 +239,35 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
     if freq = 1
     then ""
     else " [" ^ string_of_int freq ^ "]" in
-  freq, rank, words, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  freq, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lisql.increment Lis.index) =
   let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
   let sorted_index =
     List.sort
-      (fun (f1,r1,lw1,_) (f2,r2,lw2,_) ->
+      (fun (f1,r1,data1,_) (f2,r2,data2,_) ->
 	let c = Pervasives.compare (f2,r1) (f1,r2) in
 	if c <> 0
 	then c
 	else
-	  if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
-	  else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
-	  else Pervasives.compare lw1 lw2)
+	  match data1, data2 with
+	  | `Number f1, `Number f2 -> Pervasives.compare f1 f2
+	  | `Number _, `Words _ -> 1 (* words before numbers *)
+	  | `Words _, `Number _ -> -1
+	  | `Words lw1, `Words lw2 ->
+	    if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
+	    else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
+	    else Pervasives.compare lw1 lw2)
       enriched_index in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf "<ul>";
   List.iter
-    (fun (_freq,_rank,_words,html) ->
+    (fun (_freq,_rank,_data,html) ->
       Buffer.add_string buf "<li>";
       Buffer.add_string buf html;
       Buffer.add_string buf "</li>")
     sorted_index;
-
   Buffer.add_string buf "</ul>";
   Buffer.contents buf
 

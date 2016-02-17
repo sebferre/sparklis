@@ -109,7 +109,7 @@ let view_of_list_focus x (ll,rr) =
   let defs =
     if Ids.all_defined_in x_ids defs
     then Ids.defs x_ids @ defs
-    else assert false in
+    else assert false in (* TODO: assertion failed when inserting ref *)
   let defs, rev_rr =
     List.fold_left2
       (fun (defs,rev_rr) y ids ->
