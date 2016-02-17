@@ -70,22 +70,6 @@ struct
     try Some (get_attribute elt attr)
     with _ -> None
 
-(*
-  let get_attributeNS (elt : Dom.element t) (attr : string) : js_string t opt =
-    (*elt##getAttributeNS(string sparql_ns, string attr)*) (* not working, because HTML5 DOM ? *)
-    let res = ref null in
-    let node_map = elt##attributes in
-    for i = 0 to node_map##length - 1 do
-      Opt.iter (node_map##item(i))
-	(fun a ->
-	  let name = to_string a##name in
-	  let n = String.length name in
-	  if (try attr = String.sub name (String.length name - n) n with _ -> false)
-	  then res := some (a##value))
-    done;
-    !res
-*)
-      
   let get_text (elt : Dom.element t) : string =
     Opt.case (elt##firstChild)
       (fun () -> "")
@@ -113,7 +97,7 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
       let dim, rev_vars =
 	List.fold_left
 	  (fun (i, vars as res) elt_var ->
-	    let v = Xml.get_attribute elt_var (prefix ^ "name") in
+	    let v = Xml.get_attribute elt_var "name" in
 	    if v = "_star_fake"
 	    then res
 	    else (i+1, (v,i)::vars))
@@ -128,7 +112,7 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
 	    let elts_binding = Xml.find_all elt_result (prefix ^ "binding") in
 	    List.iter
 	      (fun elt_binding ->
-		let v = Xml.get_attribute elt_binding (prefix ^ "name") in
+		let v = Xml.get_attribute elt_binding "name" in
 		let i = List.assoc v vars in
 		let term_opt =
 		  match Xml.find elt_binding (prefix ^ "uri") with
@@ -142,7 +126,7 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
 		      ( match Xml.find_attribute elt_lit "xml:lang" with
 		      | Some lang -> Some (Rdf.PlainLiteral (s, lang))
 		      | None ->
-			( match Xml.find_attribute elt_lit (prefix ^ "datatype") with
+			( match Xml.find_attribute elt_lit "datatype" with
 			| Some dt ->
 			  (try Some (Rdf.Number (float_of_string s, s, dt))
 			   with _ -> Some (Rdf.TypedLiteral (s, dt)))
@@ -334,7 +318,7 @@ let rec ajax_in ?(tentative = false) (elts : Dom_html.element t list) (pool : aj
 	  (* Firebug.console##log(req##statusText); *)
 	      ( match code / 100 with
 		| 2 ->
-	      (*Firebug.console##log(req##responseText);*)
+		  (* Firebug.console##log(req##responseText); *)
 	      (*	let results = results_of_json xhr.content in *)
 		  let results_opt =
                     match Js.Opt.to_option (req##responseXML) with
