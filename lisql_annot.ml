@@ -102,19 +102,19 @@ let view_of_list_focus x (ll,rr) =
   let defs, ll_y_ids =
     List.fold_right2
       (fun y ids (defs,ll) ->
-	if Ids.all_defined_in ids defs
-	then (Ids.defs ids @ defs, (y,ids)::ll)
+	let new_defs = Ids.defs ids @ defs in
+	if Ids.all_defined_in ids new_defs
+	then (new_defs, (y,ids)::ll)
 	else (defs, ll))
       ll ll_ids ([],[]) in
-  let defs =
-    if Ids.all_defined_in x_ids defs
-    then Ids.defs x_ids @ defs
-    else assert false in (* TODO: assertion failed when inserting ref *)
+  let defs = Ids.defs x_ids @ defs in
+  assert (Ids.all_defined_in x_ids defs);
   let defs, rev_rr =
     List.fold_left2
       (fun (defs,rev_rr) y ids ->
-	if Ids.all_defined_in ids defs
-	then (Ids.defs ids @ defs, y::rev_rr)
+	let new_defs = Ids.defs ids @ defs in
+	if Ids.all_defined_in ids new_defs
+	then (new_defs, y::rev_rr)
 	else (defs, rev_rr))
       (defs,[]) rr rr_ids in
   let ll_rr = List.map fst ll_y_ids, List.rev rev_rr in
