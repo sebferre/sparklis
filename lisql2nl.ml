@@ -185,7 +185,7 @@ let word_syntagm_of_property uri =
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
-  | Rdf.Number (f,s,dt) -> word_of_term (Rdf.TypedLiteral (s,dt))
+  | Rdf.Number (f,s,dt) -> word_of_term (if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt))
   | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.config_class_lexicon#value#info dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
@@ -205,11 +205,11 @@ let string_of_input_type grammar = function
 let noun_adj_opt_of_aggreg grammar = function
   | NumberOf -> grammar#aggreg_number
   | ListOf -> grammar#aggreg_list
-  | Total -> grammar#aggreg_total
-  | Average -> grammar#aggreg_average
-  | Maximum -> grammar#aggreg_maximum
-  | Minimum -> grammar#aggreg_minimum
   | Sample -> grammar#aggreg_sample
+  | Total _ -> grammar#aggreg_total
+  | Average _ -> grammar#aggreg_average
+  | Maximum _ -> grammar#aggreg_maximum
+  | Minimum _ -> grammar#aggreg_minimum
 
 let word_of_aggreg grammar g =
   let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
@@ -276,11 +276,11 @@ let var_of_uri (uri : Rdf.uri) : string =
 let var_of_aggreg = function
   | NumberOf -> "number_of"
   | ListOf -> "list_of"
-  | Total -> "total"
-  | Average -> "average"
-  | Maximum -> "maximum"
-  | Minimum -> "minimum"
   | Sample -> "sample"
+  | Total _ -> "total"
+  | Average _ -> "average"
+  | Maximum _ -> "maximum"
+  | Minimum _ -> "minimum"
 
 let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling_list = function
   | Is (_,np) -> labelling_s1 ~as_p1:true grammar ~labels np

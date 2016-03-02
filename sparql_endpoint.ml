@@ -130,7 +130,9 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
 			| Some dt ->
 			  (try Some (Rdf.Number (float_of_string s, s, dt))
 			   with _ -> Some (Rdf.TypedLiteral (s, dt)))
-			| None -> Some (Rdf.PlainLiteral (s, ""))))
+			| None ->
+			  (try Some (Rdf.Number (float_of_string s, s, ""))
+			   with _ -> Some (Rdf.PlainLiteral (s, "")))))
 		    | None ->
 		      match Xml.find elt_binding (prefix ^ "bnode") with
 		      | Some elt_bnode ->
@@ -196,7 +198,7 @@ let results_of_json s_json =
 		  | "plain-literal" ->
 		    let olang = Unsafe.get ocell (string "xml:lang") in
 		    Rdf.PlainLiteral (to_string v, to_string (Unsafe.get olang (string "fullBytes")))
-		  | "literal" ->
+		  | "literal" -> (* TODO: handle plain literals as numbers *)
 		    ( try
 			let odatatype = Unsafe.get ocell (string "datatype") in
 			let s = to_string v in

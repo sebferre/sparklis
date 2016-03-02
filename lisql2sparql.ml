@@ -32,15 +32,22 @@ object (self)
 
 end
 
+let sparql_num_conv = function
+  | `Integer -> "xsd:integer"
+  | `Decimal -> "xsd:decimal"
+  | `Double -> "xsd:double"
+let sparql_num_conv_opt = function
+  | None -> None
+  | Some conv -> Some (sparql_num_conv conv)
   
 let sparql_aggreg = function
   | NumberOf -> Sparql.DistinctCOUNT
   | ListOf -> Sparql.DistinctCONCAT
-  | Total -> Sparql.SUM
-  | Average -> Sparql.AVG
-  | Maximum -> Sparql.MAX
-  | Minimum -> Sparql.MIN
   | Sample -> Sparql.SAMPLE
+  | Total conv_opt -> Sparql.SUM (sparql_num_conv_opt conv_opt)
+  | Average conv_opt -> Sparql.AVG (sparql_num_conv_opt conv_opt)
+  | Maximum conv_opt -> Sparql.MAX (sparql_num_conv_opt conv_opt)
+  | Minimum conv_opt -> Sparql.MIN (sparql_num_conv_opt conv_opt)
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
@@ -181,6 +188,7 @@ and name_func = function
   | `Encode_for_URI -> "encode_for_uri"
   | `Replace -> "replace"
   | `Integer -> "xsd:integer"
+  | `Decimal -> "xsd:decimal"
   | `Double -> "xsd:double"
   | `Add | `Sub | `Mul | `Div -> invalid_arg "Lisql2sparql.name_func"
   | `Neg -> "-"

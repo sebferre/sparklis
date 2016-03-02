@@ -26,14 +26,17 @@ type order = Unordered | Highest | Lowest
 type modif_s2 = project * order
 type modif_p2 = Fwd | Bwd
 
-type aggreg = NumberOf | ListOf | Total | Average | Maximum | Minimum | Sample
+type num_conv = [`Integer | `Decimal | `Double] (* subset of type [func] *)
+type aggreg =
+| NumberOf | ListOf | Sample
+| Total of num_conv option | Average of num_conv option | Maximum of num_conv option | Minimum of num_conv option
 type func =
 [ `Str
 | `Lang | `Datatype
 | `IRI | `STRDT | `STRLANG
 | `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
 | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
-| `Integer | `Double
+| `Integer | `Decimal | `Double
 | `Add | `Sub | `Mul | `Div | `Neg
 | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
 | `Date | `Time

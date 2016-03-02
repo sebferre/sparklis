@@ -83,7 +83,7 @@ let string (s : string) : term =
 
 let rec term : Rdf.term -> term = function
   | Rdf.URI u -> uri u
-  | Rdf.Number (f,s,dt) -> term (Rdf.TypedLiteral (s,dt))
+  | Rdf.Number (f,s,dt) -> if dt="" then term (Rdf.PlainLiteral (s,"")) else term (Rdf.TypedLiteral (s,dt))
   | Rdf.TypedLiteral (s,dt) -> string s ^ "^^" ^ uri dt
   | Rdf.PlainLiteral (s,lang) -> string s ^ (if lang = "" then "" else "@" ^ lang)
   | Rdf.Bnode name -> if name="" then "[]" else "_:" ^ name
@@ -156,7 +156,9 @@ let search_contains (l : Rdf.term) (w : string) : pattern =
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
-type aggreg = DistinctCOUNT | DistinctCONCAT | SUM | AVG | MAX | MIN | SAMPLE | ID
+type aggreg =
+| DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
+| SUM of string option | AVG of string option | MAX of string option | MIN of string option
 type order = ASC | DESC
 
 type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * Rdf.var]
@@ -167,13 +169,14 @@ let projection_def : projection_def -> expr = function
   | `Expr e -> e
   | `Aggreg (g,v) ->
     let make_aggreg prefix_g expr suffix_g = prefix_g ^ expr ^ suffix_g in
+    let make_conv conv_opt v = match conv_opt with None -> var v | Some conv -> conv ^ "(" ^ var v ^ ")" in
     ( match g with
     | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " (var v) ")"
     | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " (var v) " ; separator=', ')"
-    | SUM -> make_aggreg "SUM(" (var_numeric v) ")"
-    | AVG -> make_aggreg "AVG(" (var_numeric v) ")"
-    | MAX -> make_aggreg "MAX(" (var v) ")"
-    | MIN -> make_aggreg "MIN(" (var v) ")"
+    | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt v) ")"
+    | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt v) ")"
+    | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt v) ")"
+    | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt v) ")"
     | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")"
     | ID -> make_aggreg "" (var v) "" )
 let projection (def,v : projection) : selector =

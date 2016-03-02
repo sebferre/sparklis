@@ -72,6 +72,11 @@ let list_func_atom =
     `LangMatches, "LangMatches";
     `REGEX, "REGEX"    
   ]
+let list_num_conv_atom =
+  [ `Integer, "Integer";
+    `Decimal, "Decimal";
+    `Double, "Double"
+  ]
 
 let atom_of_func func =
   try List.assoc func list_func_atom
@@ -79,6 +84,13 @@ let atom_of_func func =
 let func_of_atom atom =
   try fst (List.find (fun (_,a) -> a=atom) list_func_atom)
   with _ -> invalid_arg "Permalink.func_of_atom"
+
+let atom_of_num_conv conv =
+  try List.assoc conv list_num_conv_atom
+  with _ -> invalid_arg "Permalink.atom_of_num_conv"
+let num_conv_of_atom atom =
+  try fst (List.find (fun (_,a) -> a=atom) list_num_conv_atom)
+  with _ -> invalid_arg "Permalink.num_conv_of_atom"
 
 
 (* current-version printing *)
@@ -163,13 +175,15 @@ and print_project = function
 and print_aggreg_op = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"
-  | Total -> print_atom "Total"
-  | Average -> print_atom "Average"
-  | Maximum -> print_atom "Maximum"
-  | Minimum -> print_atom "Minimum"
   | Sample -> print_atom "Sample"
+  | Total conv_opt -> print_un "Total" (print_opt print_num_conv conv_opt)
+  | Average conv_opt -> print_un "Average" (print_opt print_num_conv conv_opt)
+  | Maximum conv_opt -> print_un "Maximum" (print_opt print_num_conv conv_opt)
+  | Minimum conv_opt  -> print_un "Minimum" (print_opt print_num_conv conv_opt)
 and print_func = function
   | func -> print_atom (atom_of_func func)
+and print_num_conv = function
+  | conv -> print_atom (atom_of_num_conv conv)
 and print_order = function
   | Unordered -> print_atom "Unordered"
   | Highest -> print_atom "Highest"
@@ -321,15 +335,22 @@ and parse_project ~version = parser
 and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "NumberOf" >] -> NumberOf
   | [< () = parse_atom ~version "ListOf" >] -> ListOf
-  | [< () = parse_atom ~version "Total" >] -> Total
-  | [< () = parse_atom ~version "Average" >] -> Average
-  | [< () = parse_atom ~version "Maximum" >] -> Maximum
-  | [< () = parse_atom ~version "Minimum" >] -> Minimum
   | [< () = parse_atom ~version "Sample" >] -> Sample
+  | [< conv_opt = parse_un ~version "Total" (parse_opt parse_num_conv) >] -> Total conv_opt
+  | [< () = parse_atom ~version "Total" >] -> Total None (* backward compat *)
+  | [< conv_opt = parse_un ~version "Average" (parse_opt parse_num_conv) >] -> Average conv_opt
+  | [< () = parse_atom ~version "Average" >] -> Average None (* backward compat *)
+  | [< conv_opt = parse_un ~version "Maximum" (parse_opt parse_num_conv) >] -> Maximum conv_opt
+  | [< () = parse_atom ~version "Maximum" >] -> Maximum None (* backward compat *)
+  | [< conv_opt = parse_un ~version "Minimum" (parse_opt parse_num_conv) >] -> Minimum conv_opt
+  | [< () = parse_atom ~version "Minimum" >] -> Minimum None (* backward compat *)
   | [<>] -> syntax_error "invalid aggreg"
 and parse_func ~version = parser
     | [< 'Ident atom >] -> func_of_atom atom
     | [<>] -> syntax_error "invalid func"
+and parse_num_conv ~version = parser
+    | [< 'Ident atom >] -> num_conv_of_atom atom
+    | [<>] -> syntax_error "invalid num_conv"
 and parse_order ~version = parser
   | [< () = parse_atom ~version "Unordered" >] -> Unordered
   | [< () = parse_atom ~version "Highest" >] -> Highest

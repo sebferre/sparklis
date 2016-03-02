@@ -468,17 +468,17 @@ object (self)
 	let incrs =
 	  List.fold_left
 	    (fun incrs aggreg ->
-	      if Lisql_type.is_insertable_aggreg aggreg focus_type_constraints
-	      then IncrAggreg aggreg :: incrs
-	      else incrs)
+	      match Lisql_type.find_insertable_aggreg aggreg focus_type_constraints with
+	      | Some aggreg_conv -> IncrAggreg aggreg_conv :: incrs
+	      | None -> incrs)
 	    incrs
 	    [ Lisql.NumberOf;
 	      Lisql.ListOf;
-	      Lisql.Total;
-	      Lisql.Average;
-	      Lisql.Maximum;
-	      Lisql.Minimum;
-	      Lisql.Sample ] in
+	      Lisql.Sample;
+	      Lisql.Total None;
+	      Lisql.Average None;
+	      Lisql.Maximum None;
+	      Lisql.Minimum None ] in
 	let incrs =
 	  List.fold_left
 	    (fun incrs (func,arity,pos) ->
