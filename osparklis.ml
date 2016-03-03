@@ -739,7 +739,13 @@ let _ =
 	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
       (try
-	let url = List.assoc "endpoint" args in
+	 let url = List.assoc "endpoint" args in
+	 let url = (* switching from lisfs2008 to servolis *)
+	   try List.assoc url
+		 ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr:3030/dbpedia/sparql";
+		  "http://lisfs2008.irisa.fr/defiEGC2016/sparql", "http://servolis.irisa.fr:3131/defiEGC2016/sparql";
+		  "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
+	   with _ -> url in
 	default_endpoint := url;
 	try
 	  let query = Permalink.to_query (List.assoc "query" args) in
