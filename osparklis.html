@@ -306,10 +306,60 @@
     </em>
   </div>
 
+  <div id="query">
+    <div class="heading">
+      <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
+      <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to display the permanent link to the current view</span>
+	<span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
+	<button id="permalink">
+	  permalink
+	</button>
+      </span>
+    </div>
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click on a query element to change focus</span>
+      <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
+      <div id="lisql">
+      </div>
+    </span>
+  </div>
+
   <div id="increments">
     <div class="heading">
+      <button id="show-hide-increments">-</button>
       <span class="texte lang-en">Sparklis suggestions to refine your query</span>
       <span class="texte lang-fr">Suggestions de Sparklis pour affiner votre requête</span>
+    </div>
+    <div id="increments-body" style="display:block">
+    <div id="current-focus">
+      <span class="texte lang-en">Current focus on </span>
+      <span class="texte lang-fr">Focus actuel sur </span>
+      <span id="increments-focus" class="highlighted">the thing</span>
+    </div>
+    <div class="incr-box">
+      <div>
+	<select id="select-properties" class="select-incrs">
+	  <option value="matchesAll">matches all</option>
+	  <option value="matchesAny">matches any</option>
+	</select>
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Input keywords to filter concepts</span>
+	  <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les concepts</span>
+	<input id="pattern-properties" class="pattern-incrs" type="text">
+	</span>
+      </div>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
+	<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
+	<div id="list-properties" class="list-incrs">
+	</div>
+      </span>
+      <div id="count-properties" class="count-incrs">
+	<span class="texte lang-en">No concept</span>
+	<span class="texte lang-fr">Aucun concept</span>
+      </div>
     </div>
     <div class="incr-box">
       <div>
@@ -353,29 +403,6 @@
     </div>
     <div class="incr-box">
       <div>
-	<select id="select-properties" class="select-incrs">
-	  <option value="matchesAll">matches all</option>
-	  <option value="matchesAny">matches any</option>
-	</select>
-	<span class="tooltiped">
-	  <span class="tooltip lang-en">Input keywords to filter concepts</span>
-	  <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les concepts</span>
-	<input id="pattern-properties" class="pattern-incrs" type="text">
-	</span>
-      </div>
-      <span class="tooltiped">
-	<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
-	<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
-	<div id="list-properties" class="list-incrs">
-	</div>
-      </span>
-      <div id="count-properties" class="count-incrs">
-	<span class="texte lang-en">No concept</span>
-	<span class="texte lang-fr">Aucun concept</span>
-      </div>
-    </div>
-    <div class="incr-box">
-      <div>
 	<select id="select-modifiers" class="select-incrs">
 	  <option value="matchesAll">matches all</option>
 	  <option value="matchesAny">matches any</option>
@@ -397,38 +424,16 @@
 	<span class="texte lang-fr">Aucun modifieur</span>
       </div>
     </div>
-    <div id="current-focus">
-      <span class="texte lang-en">Current focus on </span>
-      <span class="texte lang-fr">Focus actuel sur </span>
-      <span id="increments-focus" class="highlighted">the thing</span>
     </div>
-  </div>
-
-  <div id="query">
-    <div class="heading">
-      <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
-      <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
-      <span class="tooltiped">
-	<span class="tooltip lang-en">Click to display the permanent link to the current view</span>
-	<span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
-	<button id="permalink">
-	  permalink
-	</button>
-      </span>
-    </div>
-    <span class="tooltiped">
-      <span class="tooltip lang-en">Click on a query element to change focus</span>
-      <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
-      <div id="lisql">
-      </div>
-    </span>
   </div>
 
   <div id="results">
     <div class="heading">
+      <button id="show-hide-results">-</button>
       <span class="texte lang-en">Results of your query</span>
       <span class="texte lang-fr">Résultats de votre requête</span>
     </div>
+    <div id="results-body" style="display:block">
     <div id="control-results-top">
       <span class="tooltiped">
 	<span class="tooltip lang-en">Click to show the previous page of results</span>
@@ -498,19 +503,23 @@
       <span class="texte lang-en"> results</span>
       <span class="texte lang-fr"> résultats</span>
     </div>
+    </div>
   </div>
 
   <div id="sparql">
     <div class="heading">
+      <button id="show-hide-sparql">+</button>
       <span class="texte lang-en">Your query in SPARQL</span>
       <span class="texte lang-fr">Votre requête en SPARQL</span>
     </div>
-    <span class="tooltiped">
-      <span class="tooltip lang-en">This is the SPARQL version of your query</span>
-      <span class="tooltip lang-fr">Ceci est la version SPARQL de votre requête</span>
-      <div id="sparql-query">
-      </div>
-    </span>
+    <div id="sparql-body" style="display:none">
+      <span class="tooltiped">
+	<span class="tooltip lang-en">This is the SPARQL version of your query</span>
+	<span class="tooltip lang-fr">Ceci est la version SPARQL de votre requête</span>
+	<div id="sparql-query">
+	</div>
+      </span>
+    </div>
   </div>
 
   <footer>

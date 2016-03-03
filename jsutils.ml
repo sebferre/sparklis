@@ -35,6 +35,16 @@ let jquery_all s k = jquery_all_from Dom_html.document s k
 
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
+let jquery_toggle_innerHTML sel s1 s2 =
+  jquery sel (fun elt ->
+    elt##innerHTML <- string (if to_string elt##innerHTML = s1 then s2 else s1))
+
+let jquery_show sel = jquery sel (fun elt -> elt##style##display <- string "block")
+let jquery_hide sel = jquery sel (fun elt -> elt##style##display <- string "none")
+let jquery_toggle sel = jquery sel (fun elt ->
+  if to_string elt##style##display = "none"
+  then elt##style##display <- string "block"
+  else elt##style##display <- string "none")    
 
 let jquery_click sel = jquery_input sel (fun input -> input##click())
 

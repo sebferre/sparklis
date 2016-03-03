@@ -106,18 +106,18 @@ color:darkred;
 text-align:right;
 }
 
-#control-navig {
+#control-navig, #control-results-top, #control-results-bottom {
     display: -webkit-flex; /* Safari */
     -webkit-align-items: center; /* Safari 7.0+ */
     display: flex;
     align-items: center;
 }
-#home, #back, #forward, #refresh {
+#home, #back, #forward, #refresh, .previous-results, .next-results {
     padding: 2px;
 }
-#refresh { padding-right: 10px; }
-#config-control { padding-left: 10px; }
-}
+#refresh, .previous-results, .next-results { padding-right: 10px; }
+#config-control, .next-results { padding-left: 10px; }
+
 
 #sparql-endpoint
 {

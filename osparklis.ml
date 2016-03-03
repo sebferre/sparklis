@@ -791,6 +791,16 @@ let _ =
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
+    jquery "#show-hide-increments" (onclick (fun elt ev ->
+      jquery_toggle "#increments-body";
+      jquery_toggle_innerHTML "#show-hide-increments" "+" "-"));
+    jquery "#show-hide-results" (onclick (fun elt ev ->
+      jquery_toggle "#results-body";
+      jquery_toggle_innerHTML "#show-hide-results" "+" "-"));
+    jquery "#show-hide-sparql" (onclick (fun elt ev ->
+      jquery_toggle "#sparql-body";
+      jquery_toggle_innerHTML "#show-hide-sparql" "+" "-"));
+
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
