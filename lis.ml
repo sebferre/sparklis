@@ -506,6 +506,7 @@ object (self)
 	      `Encode_for_URI, 1, 1;
 	      `Replace, 3, 1;
 	      `Integer, 1, 1;
+	      `Decimal, 1, 1;
 	      `Double, 1, 1;
 	      `Add, 2, 1;
 	      `Add, 2, 2;

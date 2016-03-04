@@ -30,6 +30,7 @@ let list_func_atom =
     `Encode_for_URI, "Encore_for_URI";
     `Replace, "Replace";
     `Integer, "Integer";
+    `Decimal, "Decimal";
     `Double, "Double";
     `Add, "Add";
     `Sub, "Sub";
