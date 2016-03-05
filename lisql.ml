@@ -312,7 +312,7 @@ let elt_s_of_focus = function
 
 (* ids retrieval : TODO: move to [lisql_annot] to avoid multiple traversals *)
 
-type id_mode = [ `Def | `Ref ]
+type id_mode = [ `Def | `DefDim of id | `DefAggreg of id | `DefExpr | `Ref ]
 
 module Ids =
 struct
@@ -323,13 +323,39 @@ struct
   let remove id ids = List.filter (fun (id2,_) -> id2<>id) ids
   let union ids1 ids2 = ids1 @ ids2
   let concat l_ids = List.concat l_ids
-  let has_def id ids = List.exists (fun (id2,mode) -> id2=id && mode=`Def) ids
-  let defs ids = List.fold_right (fun (id,mode) defs -> if mode=`Def then id::defs else defs) ids []
+  let has_def id ids =
+    List.exists
+      (fun (id2,mode) ->
+	id2=id && (match mode with `Ref -> false | _ -> true))
+      ids
+  let defs ids =
+    List.fold_right
+      (fun (id,mode) defs ->
+	match mode with
+	| `Def -> id::defs
+	| `DefDim _ -> id::defs
+	| `DefAggreg _ -> id::defs
+	| `DefExpr -> id::defs
+	| `Ref -> defs)
+      ids []
+  let dims ids =
+    List.fold_right
+      (fun (id,mode) dims ->
+	match mode with
+	| `Def -> id::dims
+	| `DefDim id2 -> id2::dims
+	| `DefAggreg _ -> dims
+	| `DefExpr -> dims
+	| `Ref -> dims)
+      ids []
   let rec refs = function
     | [] -> []
-    | (id,`Def)::ids -> refs ids
     | (id,`Ref)::ids -> id :: refs (List.remove_assoc id ids)
-  let all_defined_in ids defs = List.for_all (function (id,`Ref) -> List.mem id defs | (id,`Def) -> true) ids
+    | _::ids -> refs ids
+  let all_defined_in ids defs =
+    List.for_all
+      (function (id,`Ref) -> List.mem id defs | _ -> true)
+      ids
   let max_id ids = List.fold_left (fun res (id,_) -> max res id) 0 ids
 end
   
@@ -369,10 +395,10 @@ and ids_elt_s2 ~as_p1 = function
   | The id -> Ids.singleton id `Ref
 and ids_elt_dim = function
   | Foreach (_,id,modif,rel_opt,id2) ->
-    Ids.add id `Def (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
+    Ids.add id (`DefDim id2) (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
 and ids_elt_aggreg = function
   | TheAggreg (_,id,modif,g,rel_opt,id2) ->
-    Ids.add id `Def (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
+    Ids.add id (`DefAggreg id2) (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
 and ids_elt_expr = function
   | Undef _ -> Ids.empty
   | Const (_,t) -> Ids.empty
@@ -381,7 +407,7 @@ and ids_elt_expr = function
 and ids_elt_s = function
   | Return (_,np) -> ids_elt_s1 ~as_p1:false np
   | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
-  | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `Def (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
+  | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `DefExpr (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
   | SFilter (_,id,expr) -> Ids.add id `Def (ids_elt_expr expr)
   | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 

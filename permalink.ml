@@ -177,10 +177,10 @@ and print_aggreg_op = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"
   | Sample -> print_atom "Sample"
-  | Total conv_opt -> print_un "Total" (print_opt print_num_conv conv_opt)
-  | Average conv_opt -> print_un "Average" (print_opt print_num_conv conv_opt)
-  | Maximum conv_opt -> print_un "Maximum" (print_opt print_num_conv conv_opt)
-  | Minimum conv_opt  -> print_un "Minimum" (print_opt print_num_conv conv_opt)
+  | Total conv_opt -> print_un "TotalConv" (print_opt print_num_conv conv_opt)
+  | Average conv_opt -> print_un "AverageConv" (print_opt print_num_conv conv_opt)
+  | Maximum conv_opt -> print_un "MaximumConv" (print_opt print_num_conv conv_opt)
+  | Minimum conv_opt  -> print_un "MinimumConv" (print_opt print_num_conv conv_opt)
 and print_func = function
   | func -> print_atom (atom_of_func func)
 and print_num_conv = function
@@ -337,13 +337,13 @@ and parse_aggreg_op ~version = parser
   | [< () = parse_atom ~version "NumberOf" >] -> NumberOf
   | [< () = parse_atom ~version "ListOf" >] -> ListOf
   | [< () = parse_atom ~version "Sample" >] -> Sample
-  | [< conv_opt = parse_un ~version "Total" (parse_opt parse_num_conv) >] -> Total conv_opt
+  | [< conv_opt = parse_un ~version "TotalConv" (parse_opt parse_num_conv) >] -> Total conv_opt
   | [< () = parse_atom ~version "Total" >] -> Total None (* backward compat *)
-  | [< conv_opt = parse_un ~version "Average" (parse_opt parse_num_conv) >] -> Average conv_opt
+  | [< conv_opt = parse_un ~version "AverageConv" (parse_opt parse_num_conv) >] -> Average conv_opt
   | [< () = parse_atom ~version "Average" >] -> Average None (* backward compat *)
-  | [< conv_opt = parse_un ~version "Maximum" (parse_opt parse_num_conv) >] -> Maximum conv_opt
+  | [< conv_opt = parse_un ~version "MaximumConv" (parse_opt parse_num_conv) >] -> Maximum conv_opt
   | [< () = parse_atom ~version "Maximum" >] -> Maximum None (* backward compat *)
-  | [< conv_opt = parse_un ~version "Minimum" (parse_opt parse_num_conv) >] -> Minimum conv_opt
+  | [< conv_opt = parse_un ~version "MinimumConv" (parse_opt parse_num_conv) >] -> Minimum conv_opt
   | [< () = parse_atom ~version "Minimum" >] -> Minimum None (* backward compat *)
   | [<>] -> syntax_error "invalid aggreg"
 and parse_func ~version = parser

@@ -23,49 +23,65 @@ let focus_term_s2 : elt_s2 -> focus_term = function
 type sid = int (* sentence id, position in seq list *)
 type view =
 | Unit
-| Atom of id list * sid
-| Join of id list * view list
-| Aggreg of id list * id list * sid * view
+| Atom of id list * id list * sid (* defs, refs, sid *)
+| Join of id list * id list * id list * view list (* defs, dims, refs, views *)
+| Aggreg of id list * id list * id list * sid * view (* defs, dims, refs, sid, aggregated_view *)
 
 let view_defs = function
   | Unit -> []
-  | Atom (defs,_) -> defs
-  | Join (defs,_) -> defs
-  | Aggreg (defs,refs,_,_) -> defs
+  | Atom (defs,refs,_) -> defs
+  | Join (defs,dims,refs,_) -> defs
+  | Aggreg (defs,dims,refs,_,_) -> defs
 
+let view_dims = function
+  | Unit -> []
+  | Atom (defs,refs,_) -> defs
+  | Join (defs,dims,refs,_) -> dims
+  | Aggreg (defs,dims,refs,_,_) -> dims
+
+let view_refs = function
+  | Unit -> []
+  | Atom (defs, refs, _) -> refs
+  | Join (defs, dims, refs, _) -> refs
+  | Aggreg (defs,dims,refs,_,_) -> refs
+    
 let rec view_available_dims = function
   | Unit -> []
-  | Atom (defs,_) -> []
-  | Join (defs,_) -> []
-  | Aggreg (defs,refs,sid,v) -> List.filter (fun id -> not (List.mem id refs)) (view_defs v)
+  | Atom (defs,refs,_) -> []
+  | Join (defs,dims,refs,_) -> []
+  | Aggreg (defs,dims,refs,sid,v) -> List.filter (fun id -> not (List.mem id refs)) (view_defs v)
 
 let rec sid_in_view sid = function
   | Unit -> false
-  | Atom (_,sid1) -> sid1 = sid
-  | Join (_,lv) -> List.exists (fun v -> sid_in_view sid v) lv
-  | Aggreg (_,_,sid1,v) -> sid1 = sid || sid_in_view sid v
+  | Atom (_,_,sid1) -> sid1 = sid
+  | Join (_,_,_,lv) -> List.exists (fun v -> sid_in_view sid v) lv
+  | Aggreg (_,_,_,sid1,v) -> sid1 = sid || sid_in_view sid v
 
 let rec top_sid_in_view sid = function
   | Unit -> false
-  | Atom (_, sid1) -> sid1 = sid
-  | Join (_,lv) -> List.exists (fun v -> top_sid_in_view sid v) lv
-  | Aggreg (_,_,sid1,_) -> sid1 = sid
+  | Atom (_,_,sid1) -> sid1 = sid
+  | Join (_,_,_,lv) -> List.exists (fun v -> top_sid_in_view sid v) lv
+  | Aggreg (_,_,_,sid1,_) -> sid1 = sid
 
 let join_views = function
   | [] -> Unit
   | [v] -> v
-  | lv -> Join (List.concat (List.map view_defs lv), lv)
+  | lv -> Join (List.concat (List.map view_defs lv),
+		List.concat (List.map view_dims lv),
+		List.concat (List.map view_refs lv),
+		lv)
 
 
 let rec views_of_seq (views : view list) (sid : sid) : unit elt_s list -> view list = function
   | [] -> views
   | s::ls ->
     let ids = ids_elt_s s in
-    let defs, refs = Ids.defs ids, Ids.refs ids in
+    let defs, dims, refs = Ids.defs ids, Ids.dims ids, Ids.refs ids in
     match s with
     | Return _ -> (* TODO: handle Return's depending on other sentences *)
-      views_of_seq (Atom (defs, sid) :: views) (sid+1) ls
+      views_of_seq (Atom (defs, refs, sid) :: views) (sid+1) ls
     | SExpr _ | SFilter _ ->
+      let new_view = Atom (defs, refs, sid) in
       let views =
 	List.fold_right
 	  (fun view views ->
@@ -73,23 +89,47 @@ let rec views_of_seq (views : view list) (sid : sid) : unit elt_s list -> view l
 	    if List.for_all
 	      (fun ref_id -> List.mem ref_id v_defs)
 	      refs
-	    then join_views [view; Atom (defs, sid)]::views
+	    then join_views [view; new_view]::views
 	    else view::views)
 	  views [] in
       views_of_seq views (sid+1) ls
     | SAggreg _ ->
       let views =
-	List.fold_right
-	  (fun view views ->
-	    let v_defs = view_defs view in
-	    if List.for_all
-	      (fun ref_id -> List.mem ref_id v_defs)
-	      refs
-	    then
-	      let aggregation_view = Aggreg (defs, refs, sid, view) in
-	      aggregation_view::join_views [view; aggregation_view]::views
-	    else view::views)
-	  views [] in
+	try
+	  let aggregated_view =
+	    List.find
+	      (fun view ->
+		let v_defs = view_defs view in
+		List.for_all (fun ref_id -> List.mem ref_id v_defs) refs)
+	      views in
+	  let aggregated_view = (* removing unnecessary stuff from aggregated view *)
+	    match aggregated_view with
+	    | Join (_,_,_,lv) ->
+	      let _, lv2 =
+		List.fold_right
+		  (fun v (refs,lv2) ->
+		    let v_defs, v_refs = view_defs v, view_refs v in
+		    if List.exists (fun def_id -> List.mem def_id refs) v_defs
+		    then (v_refs@refs, v::lv2)
+		    else (refs,lv2))
+		  lv (refs,[]) in		
+	      join_views lv2
+	    | _ -> aggregated_view in
+	  let aggregation_view = Aggreg (defs, dims, refs, sid, aggregated_view) in
+	  let merged, views =
+	    List.fold_right
+	      (fun view (merged,views) ->
+		let v_dims = view_dims view in
+		if List.for_all (fun dim_id -> List.mem dim_id v_dims) dims
+		then
+		  let same_dims = List.for_all (fun dim_id -> List.mem dim_id dims) v_dims in
+		  (merged || same_dims), join_views [view; aggregation_view]::views
+		else merged, view::views)
+	      views (false,[]) in
+	  if merged
+	  then views
+	  else aggregation_view :: views
+	with Not_found -> views in
       views_of_seq views (sid+1) ls
     | Seq _ -> assert false
       
