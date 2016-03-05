@@ -386,13 +386,13 @@ and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = functio
   | Foreach (_, id, modif, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls rel_opt in
-    (id, `Alias id2) :: lab_rel @ labelling
+    labelling @ (id, `Alias id2) :: lab_rel
 and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = function
   | TheAggreg (_, id, modif, g, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
     let ls_g = labelling_aggreg_op grammar g ls in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls_g rel_opt in
-    (id, `Labels ls_g) :: lab_rel @ labelling
+    labelling @ (id, `Labels ls_g) :: lab_rel
 and labelling_aggreg_op grammar g ls =
   let v = var_of_aggreg g in
   let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
@@ -417,9 +417,9 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
     lab3
   | SExpr (_,id,modif,expr,rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
-    (id, `Labels [("expr", `Expr expr)]) :: lab_rel @ labelling
+    labelling @ (id, `Labels [("expr", `Expr expr)]) :: lab_rel
   | SFilter (_,id,expr) ->
-    (id, `Labels [("expr", `Expr expr)]) :: labelling
+    labelling @ (id, `Labels [("expr", `Expr expr)]) :: []
   | Seq (_, lr) ->
     List.fold_left
       (fun labelling s -> labelling_s grammar ~labelling s)
@@ -458,7 +458,7 @@ object (self)
   val mutable id_list : (id * [`Label of Rdf.var * (ng_label * int) | `Alias of id]) list = []
   initializer
     let lab_rank =
-      List.map
+      List.rev_map (* reverse to process elements from left to right *)
 	(function
 	| (id, `Alias id2) -> (id, `Alias id2)
 	| (id, `Labels ls) ->
@@ -472,7 +472,7 @@ object (self)
 	      ls in
 	  (id, `Labels ls_rank))
 	lab in
-    id_list <- List.map
+    id_list <- List.rev_map
       (function
       | (id, `Alias id2) -> (id, `Alias id2)
       | (id, `Labels ls_rank) ->
