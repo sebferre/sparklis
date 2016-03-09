@@ -484,7 +484,7 @@ object (self)
 	      if count < best_count then (count,size,label)
 	      else if count = best_count && size < best_size then (count,size,label)
 	      else (best_count,best_size,best_label))
-	    (max_int,max_int,List.hd ls_rank) ls_rank in
+	    (max_int,max_int, (try List.hd ls_rank with _ -> ("thing", (`Word `Undefined, 1)))) ls_rank in
 	(id, `Label best_label))
       lab_rank
 
@@ -501,7 +501,7 @@ object (self)
       if n = 1
       then ng
       else `Nth (k, ng)
-    with _ -> failwith ("Lisql2nl.get_id_label: undefined label for id=" ^ string_of_int id)
+    with _ -> `Word `Undefined (*failwith ("Lisql2nl.get_id_label: undefined label for id=" ^ string_of_int id)*)
 
   method get_id_var (id : id) : string =
     let prefix, id =

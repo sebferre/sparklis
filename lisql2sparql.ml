@@ -416,10 +416,10 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
   let ids2vars ids = List.map state#id_labelling#get_id_var ids in
   match s with
   | Return (annot,np) ->
-    let defs, refs = Ids.defs annot#ids, Ids.refs annot#ids in
-    let lv = ids2vars defs in
+    let ids = annot#ids in
+    let lv = ids2vars (Ids.elements ids.defs) in
     let form = form_s1 state np (fun t -> Sparql.True) in
-    Atom (defs,refs,-1), (lv, (fun ?limit () -> form))
+    Atom (ids,-1), (lv, (fun ?limit () -> form))
   | SExpr (annot,id,modif,expr,rel_opt) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
@@ -472,9 +472,9 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
     seq_view, form_seq_view state lr seq_view
 and form_seq_view state (lr : annot elt_s list) : view -> Sparql.view = function
   | Unit -> Sparql.empty_view
-  | Atom (_defs, _refs, sid) -> snd (form_s state (List.nth lr sid))
-  | Join (_defs, _dims, _refs, lv) -> Sparql.join_views (List.map (form_seq_view state lr) lv)
-  | Aggreg (_defs,_dims,_refs,sid,v) ->
+  | Atom (_, sid) -> snd (form_s state (List.nth lr sid))
+  | Join (_, lv) -> Sparql.join_views (List.map (form_seq_view state lr) lv)
+  | Aggreg (_,sid,v) ->
     let aggregated_view = form_seq_view state lr v in
     snd (form_s state ~aggregated_view (List.nth lr sid))
 

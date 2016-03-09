@@ -267,6 +267,48 @@ let id_of_focus = function
   | AtS (s,_) -> id_of_s s
   | _ -> None
 
+
+(* getting element annotation *)
+
+let rec annot_p1 : 'a elt_p1 -> 'a = function
+  | Is (a,np) -> a
+  | Type (a,c) -> a
+  | Rel (a,p,modif,np) -> a
+  | Triple (a,arg,np1,np2) -> a
+  | Search (a,constr) -> a
+  | Filter (a,constr) -> a
+  | And (a,lr) -> a
+  | Or (a,lr) -> a
+  | Maybe (a,f) -> a
+  | Not (a,f) -> a
+  | IsThere a -> a
+and annot_p1_opt : 'a elt_p1 option -> 'a option = function
+  | None -> None
+  | Some f -> Some (annot_p1 f)
+and annot_s1 = function
+  | Det (a,det,rel_opt) -> a
+  | AnAggreg (a,id,modif,g,rel_opt,np) -> a
+  | NAnd (a,lr) -> a
+  | NOr (a,lr) -> a
+  | NMaybe (a,f) -> a
+  | NNot (a,f) -> a
+and annot_dim = function
+  | Foreach (a,id,modif,rel_opt,id2) -> a
+and annot_aggreg = function
+  | TheAggreg (a,id,modif,g,rel_opt,id2) -> a
+and annot_expr = function
+  | Undef a -> a
+  | Const (a,t) -> a
+  | Var (a,id) -> a
+  | Apply (a,func,lr) -> a
+and annot_s = function
+  | Return (a,np) -> a
+  | SAggreg (a,dims,aggregs) -> a
+  | SExpr (a,id,modif,expr,rel_opt) -> a
+  | SFilter (a,id,expr) -> a
+  | Seq (a,lr) -> a
+
+    
 (* extraction of LISQL s element from focus *)
 
 let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
@@ -309,107 +351,6 @@ let elt_s_of_focus = function
   | AtAggreg (f,ctx) -> elt_s_of_ctx_aggreg f ctx
   | AtExpr (f,ctx) -> elt_s_of_ctx_expr f ctx
   | AtS (f,ctx) -> elt_s_of_ctx_s f ctx
-
-(* ids retrieval : TODO: move to [lisql_annot] to avoid multiple traversals *)
-
-type id_mode = [ `Def | `DefDim of id | `DefAggreg of id | `DefExpr | `Ref ]
-
-module Ids =
-struct
-  type t = (id * id_mode) list
-  let empty = []
-  let singleton id mode = [(id,mode)]
-  let add id mode ids = (id,mode)::ids
-  let remove id ids = List.filter (fun (id2,_) -> id2<>id) ids
-  let union ids1 ids2 = ids1 @ ids2
-  let concat l_ids = List.concat l_ids
-  let has_def id ids =
-    List.exists
-      (fun (id2,mode) ->
-	id2=id && (match mode with `Ref -> false | _ -> true))
-      ids
-  let defs ids =
-    List.fold_right
-      (fun (id,mode) defs ->
-	match mode with
-	| `Def -> id::defs
-	| `DefDim _ -> id::defs
-	| `DefAggreg _ -> id::defs
-	| `DefExpr -> id::defs
-	| `Ref -> defs)
-      ids []
-  let dims ids =
-    List.fold_right
-      (fun (id,mode) dims ->
-	match mode with
-	| `Def -> id::dims
-	| `DefDim id2 -> id2::dims
-	| `DefAggreg _ -> dims
-	| `DefExpr -> dims
-	| `Ref -> dims)
-      ids []
-  let rec refs = function
-    | [] -> []
-    | (id,`Ref)::ids -> id :: refs (List.remove_assoc id ids)
-    | _::ids -> refs ids
-  let all_defined_in ids defs =
-    List.for_all
-      (function (id,`Ref) -> List.mem id defs | _ -> true)
-      ids
-  let max_id ids = List.fold_left (fun res (id,_) -> max res id) 0 ids
-end
-  
-type ids = Ids.t
-
-let rec ids_elt_p1 : 'a elt_p1 -> ids = function
-  | Is (_,np) -> ids_elt_s1 ~as_p1:true np
-  | Type _ -> Ids.empty
-  | Rel (_,p,modif,np) -> ids_elt_s1 ~as_p1:false np
-  | Triple (_,arg,np1,np2) -> Ids.union (ids_elt_s1 ~as_p1:false np1) (ids_elt_s1 ~as_p1:false np2)
-  | Search _ -> Ids.empty
-  | Filter _ -> Ids.empty
-  | And (_,lr) -> Ids.concat (List.map ids_elt_p1 lr)
-  | Or (_,lr) -> Ids.concat (List.map ids_elt_p1 lr)
-  | Maybe (_,f) -> ids_elt_p1 f
-  | Not (_,f) -> ids_elt_p1 f
-  | IsThere _ -> Ids.empty
-and ids_elt_p1_opt : 'a elt_p1 option -> ids = function
-  | None -> Ids.empty
-  | Some f -> ids_elt_p1 f
-and ids_elt_s1 ~as_p1 = function
-  | Det (_,det,rel_opt) -> Ids.union (ids_elt_s2 ~as_p1 det) (ids_elt_p1_opt rel_opt)
-  | AnAggreg (_,id,modif,g,rel_opt,np) ->
-    Ids.add id `Def
-      (Ids.union
-	 (ids_elt_p1_opt rel_opt)
-	 (match id_of_s1 np with
-	 | None -> assert false
-	 | Some id2 -> Ids.add id2 `Ref (Ids.remove id2 (ids_elt_s1 ~as_p1:true np))))
-  | NAnd (_,lr) -> Ids.concat (List.map (ids_elt_s1 ~as_p1) lr)
-  | NOr (_,lr) -> Ids.concat (List.map (ids_elt_s1 ~as_p1) lr)
-  | NMaybe (_,f) -> ids_elt_s1 ~as_p1 f
-  | NNot (_,f) -> ids_elt_s1 ~as_p1 f
-and ids_elt_s2 ~as_p1 = function
-  | Term _ -> Ids.empty
-  | An (id, _, _) -> if as_p1 then Ids.empty else Ids.singleton id `Def
-  | The id -> Ids.singleton id `Ref
-and ids_elt_dim = function
-  | Foreach (_,id,modif,rel_opt,id2) ->
-    Ids.add id (`DefDim id2) (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
-and ids_elt_aggreg = function
-  | TheAggreg (_,id,modif,g,rel_opt,id2) ->
-    Ids.add id (`DefAggreg id2) (Ids.add id2 `Ref (ids_elt_p1_opt rel_opt))
-and ids_elt_expr = function
-  | Undef _ -> Ids.empty
-  | Const (_,t) -> Ids.empty
-  | Var (_,id) -> Ids.singleton id `Ref
-  | Apply (_,func,lr) -> Ids.concat (List.map ids_elt_expr lr)
-and ids_elt_s = function
-  | Return (_,np) -> ids_elt_s1 ~as_p1:false np
-  | SAggreg (_,dims,aggregs) -> Ids.union (Ids.concat (List.map ids_elt_dim dims)) (Ids.concat (List.map ids_elt_aggreg aggregs))
-  | SExpr (_,id,modif,expr,rel_opt) -> Ids.add id `DefExpr (Ids.union (ids_elt_expr expr) (ids_elt_p1_opt rel_opt))
-  | SFilter (_,id,expr) -> Ids.add id `Def (ids_elt_expr expr)
-  | Seq (_,lr) -> Ids.concat (List.map ids_elt_s lr) (* BEWARE: an approximation, but should not be used *)
 
 
 (* focus moves *)
@@ -592,10 +533,9 @@ let left_dim (f : unit elt_dim) : ctx_dim -> focus option = function
   | SAggregForeachX (([],rr),aggregs,ctx) -> None
   | SAggregForeachX ((x::ll,rr),aggregs,ctx) -> Some (AtDim (x, SAggregForeachX ((ll,f::rr),aggregs,ctx)))
 let left_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
-  | SAggregX ([], ([],rr), ctx) -> None
   | SAggregX (dims, ([],rr), ctx) ->
     ( match List.rev dims with
-    | [] -> assert false
+    | [] -> None
     | x::ll_dims -> Some (AtDim (x, SAggregForeachX ((ll_dims,[]), f::rr, ctx))) )
   | SAggregX (dims, (x::ll,rr), ctx) -> Some (AtAggreg (x, SAggregX (dims, (ll,f::rr), ctx)))
 let left_expr (f : unit elt_expr) : ctx_expr -> focus option = function
@@ -636,15 +576,18 @@ let rec next_undef_focus focus =
   | _ -> Some focus
 
 
-let rec focus_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
-  match steps, foc_opt with
-    | _, None -> None
-    | [], _ -> foc_opt
-    | step::others, Some foc ->
+let rec focus_moves (steps : (focus -> focus option) list) (foc : focus) : focus = (* makes as many steps as possible *)
+  match steps with
+    | [] -> foc
+    | step::others ->
       ( match step foc with
-	| None -> Some foc
-	| Some foc' -> focus_moves others (Some foc') )
+	| None -> foc
+	| Some foc' -> focus_moves others foc' )
 
+let rec focus_opt_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
+  match foc_opt with
+  | None -> None
+  | Some foc -> Some (focus_moves steps foc)
 
 (* increments *)
 
@@ -788,12 +731,12 @@ let insert_type c = function
 
 let insert_rel p m focus =
   let foc_opt = insert_elt_p1 (Rel ((), p, m, factory#top_s1)) focus in
-  focus_moves [down_focus] foc_opt
+  focus_opt_moves [down_focus] foc_opt
 
 let insert_triple arg focus =
   let foc_opt = insert_elt_p1 (Triple ((), arg, factory#top_s1, factory#top_s1)) focus in
   let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
-  focus_moves steps foc_opt
+  focus_opt_moves steps foc_opt
 
 let insert_triplify = function
   | AtP1 (Rel (_, p, Fwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
@@ -811,7 +754,7 @@ let insert_is = function
   | AtS1 (f, IsX ctx) when is_top_s1 f -> None
   | focus ->
     let foc_opt = insert_elt_p1 (Is ((),factory#top_s1)) focus in
-    focus_moves [down_focus] foc_opt
+    focus_opt_moves [down_focus] foc_opt
 
 let insert_and = function
 (*
@@ -1089,8 +1032,6 @@ let delete_focus = function
 
 (* goto to query *)
 
-let focus_of_query (s : unit elt_s) = 
-  factory#set (Ids.max_id (ids_elt_s s)); (* to account for ids imported from we don't know where (ex., permalinks) *)
-  AtS (s, Root)
+let focus_of_query (s : unit elt_s) = AtS (s, Root)
 
 let goto (s : unit elt_s) focus = Some (focus_of_query s)
