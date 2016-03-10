@@ -108,7 +108,7 @@ let sparql_lexicon
 	       (List.map (fun uri -> Sparql.bind (Sparql.uri uri) u) l_uri);
 	     Sparql.optional
 	       (Sparql.join
-		  ( Sparql.triple (Rdf.Var u) (Rdf.URI property) (Rdf.Var l)
+		  ( Sparql.triple (Sparql.var u) (Sparql.uri property) (Sparql.var l)
 		    :: ( match language with
 		      | None -> []
 		      | Some lang -> [Sparql.filter (Sparql.expr_comp "=" (Sparql.expr_func "lang" [Sparql.var l]) (Sparql.string lang))] ))) ]) in

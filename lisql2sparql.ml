@@ -49,20 +49,20 @@ let sparql_aggreg = function
   | Maximum conv_opt -> Sparql.MAX (sparql_num_conv_opt conv_opt)
   | Minimum conv_opt -> Sparql.MIN (sparql_num_conv_opt conv_opt)
 
-let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c : constr) : Sparql.formula =
+let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
   let label_prop, label_lang = label_property_lang in
   let label_wrapper make_filter =
     if label_prop = ""
     then make_filter t
     else
-      let l = Rdf.Var "constr_label" in
+      let term_l = Sparql.var "constr_label" in
       Sparql.formula_or_list
 	[ make_filter t;
 	  Sparql.formula_and_list
-	    [ Sparql.Pattern (Sparql.triple t (Rdf.URI label_prop) l);
-	      if label_lang = "" then Sparql.True else Sparql.Filter (Sparql.expr_regex (Sparql.expr_func "lang" [Sparql.term l]) label_lang);
-	      make_filter l ] ] in
+	    [ Sparql.Pattern (Sparql.triple t (Sparql.uri label_prop) term_l);
+	      if label_lang = "" then Sparql.True else Sparql.Filter (Sparql.expr_regex (Sparql.expr_func "lang" [term_l]) label_lang);
+	      make_filter term_l ] ] in
   match c with
     | True -> Sparql.True
     | MatchesAll [] -> Sparql.True
@@ -71,7 +71,7 @@ let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c
 	Sparql.Filter
 	  (Sparql.log_and
 	     (List.map
-		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [Sparql.term t]) pat)
+		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [t]) pat)
 		lpat)))
     | MatchesAny [] -> Sparql.True
     | MatchesAny lpat ->
@@ -79,57 +79,57 @@ let filter_constr_gen ~(label_property_lang : string * string) (t : Rdf.term) (c
 	Sparql.Filter
 	  (Sparql.log_or
 	     (List.map
-		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [Sparql.term t]) pat)
+		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [t]) pat)
 		lpat)))
     | After pat ->
-      Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [Sparql.term t]) (Sparql.string pat))
+      Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [t]) (Sparql.string pat))
     | Before pat ->
-      Sparql.Filter (Sparql.expr_comp "<=" (Sparql.expr_func "str" [Sparql.term t]) (Sparql.string pat))
+      Sparql.Filter (Sparql.expr_comp "<=" (Sparql.expr_func "str" [t]) (Sparql.string pat))
     | FromTo (pat1,pat2) ->
       Sparql.Filter
 	(Sparql.log_and
-	   [Sparql.expr_comp ">=" (Sparql.expr_func "str" [Sparql.term t]) (Sparql.string pat1);
-	    Sparql.expr_comp "<=" (Sparql.expr_func "str" [Sparql.term t]) (Sparql.string pat2)])
+	   [Sparql.expr_comp ">=" (Sparql.expr_func "str" [t]) (Sparql.string pat1);
+	    Sparql.expr_comp "<=" (Sparql.expr_func "str" [t]) (Sparql.string pat2)])
     | HigherThan pat ->
-      Sparql.Filter (Sparql.expr_comp ">=" (Sparql.term_numeric t) pat)
+      Sparql.Filter (Sparql.expr_comp ">=" (Sparql.conv_numeric t) pat)
     | LowerThan pat ->
-      Sparql.Filter (Sparql.expr_comp "<=" (Sparql.term_numeric t) pat)
+      Sparql.Filter (Sparql.expr_comp "<=" (Sparql.conv_numeric t) pat)
     | Between (pat1,pat2) ->
       Sparql.Filter
 	(Sparql.log_and
-	   [Sparql.expr_comp ">=" (Sparql.term_numeric t) pat1;
-	    Sparql.expr_comp "<=" (Sparql.term_numeric t) pat2])
+	   [Sparql.expr_comp ">=" (Sparql.conv_numeric t) pat1;
+	    Sparql.expr_comp "<=" (Sparql.conv_numeric t) pat2])
     | HasLang pat ->
       Sparql.Filter
 	(Sparql.log_and
-	   [Sparql.expr_func "isLiteral" [Sparql.term t];
-	    Sparql.expr_regex (Sparql.expr_func "lang" [Sparql.term t]) pat])
+	   [Sparql.expr_func "isLiteral" [t];
+	    Sparql.expr_regex (Sparql.expr_func "lang" [t]) pat])
     | HasDatatype pat ->
       Sparql.Filter
 	(Sparql.log_and
-	   [Sparql.expr_func "isLiteral" [Sparql.term t];
-	    Sparql.expr_regex (Sparql.expr_func "str" [Sparql.expr_func "datatype" [Sparql.term t]]) pat])
+	   [Sparql.expr_func "isLiteral" [t];
+	    Sparql.expr_regex (Sparql.expr_func "str" [Sparql.expr_func "datatype" [t]]) pat])
 
 let filter_constr_entity t c = filter_constr_gen ~label_property_lang:Lexicon.config_entity_lexicon#property_lang t c
 let filter_constr_class t c = filter_constr_gen ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
 let filter_constr_property t c = filter_constr_gen ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
 
 
-let search_constr (t : Rdf.term) (c : constr) : Sparql.formula =
-  let l = Rdf.Var "search_label" in
+let search_constr (t : Sparql.term) (c : constr) : Sparql.formula =
+  let term_l = Sparql.var "search_label" in
   match c with
     | MatchesAll (w::lw) ->
       Sparql.formula_and_list
-	[ Sparql.Pattern (Sparql.search_label t l);
-	  Sparql.Pattern (Sparql.search_contains l w);
-	  Sparql.Filter (Sparql.log_and (List.map (fun w -> Sparql.expr_regex (Sparql.term l) w) lw)) ]
+	[ Sparql.Pattern (Sparql.search_label t term_l);
+	  Sparql.Pattern (Sparql.search_contains term_l w);
+	  Sparql.Filter (Sparql.log_and (List.map (fun w -> Sparql.expr_regex term_l w) lw)) ]
     | MatchesAny lw ->
       Sparql.formula_or_list
 	(List.map
 	   (fun w ->
 	     Sparql.formula_and_list
-	       [Sparql.Pattern (Sparql.search_label t l);
-		Sparql.Pattern (Sparql.search_contains l w)])
+	       [Sparql.Pattern (Sparql.search_label t term_l);
+		Sparql.Pattern (Sparql.search_contains term_l w)])
 	   lw)
     | _ ->
       Sparql.Pattern (Sparql.something t)
@@ -222,8 +222,8 @@ and name_func = function
   | `LangMatches -> "langMatches"
 
     
-type sparql_p1 = Rdf.term -> Sparql.formula
-type sparql_p2 = Rdf.term -> Rdf.term -> Sparql.formula
+type sparql_p1 = Sparql.expr -> Sparql.formula
+type sparql_p2 = Sparql.expr -> Sparql.expr -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
 type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
@@ -232,12 +232,12 @@ type sparql_s = Sparql.formula
 
 let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
-  | Type (annot,c) -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c)))
+  | Type (annot,c) -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
   | Rel (annot,p,m,np) ->
     let q_np = form_s1 state np in
     (fun x -> q_np (fun y ->
       let s, o = match m with Fwd -> x, y | Bwd -> y, x in
-      Sparql.Pattern (Sparql.triple s (Rdf.URI p) o)))
+      Sparql.Pattern (Sparql.triple s (Sparql.uri p) o)))
   | Triple (annot,arg,np1,np2) ->
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
@@ -307,19 +307,19 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
       (fun x -> Sparql.formula_not (d x))
 and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
-    (fun x -> Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))
+    (fun x -> Sparql.Filter (Sparql.expr_comp "=" x (Sparql.term t)))
 (*    (fun x -> "BIND (" ^ Sparql.term t ^ " AS " ^ Sparql.term x ^ ")") *)
   | An (_id, _modif,head) ->
     let d_head =
       match head with
 	| Thing -> (fun x -> Sparql.True)
-	| Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) in
+	| Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c))) in
     d_head
   | The id ->
     (fun x ->
       let v = state#id_labelling#get_id_var id in
       let t = Rdf.Var v in
-      Sparql.Filter (Sparql.expr_comp "=" (Sparql.term x) (Sparql.term t)))    
+      Sparql.Filter (Sparql.expr_comp "=" x (Sparql.term t)))    
 and form_s1 state : annot elt_s1 -> sparql_s1 = function
   | Det (annot,det,rel_opt) ->
     let qu = form_s2 state det in
@@ -364,26 +364,28 @@ and form_s1 state : annot elt_s1 -> sparql_s1 = function
     q
 *)
 and form_s2 state : elt_s2 -> sparql_s2 = function
-  | Term t -> (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
+  | Term term ->
+    let t = Sparql.term term in
+    (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = form_head state head in
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
-    let t = Rdf.Var v in
+    let t = Sparql.var v in
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d2 t) (d1 t))) (* YES: d2 - d1 *)
   | The id ->
     let v = state#id_labelling#get_id_var id in
-    let t = Rdf.Var v in
+    let t = Sparql.var v in
     (fun d1 d2 -> Sparql.formula_and (d2 t) (d1 t)) (* YES: d2 - s1 *)
-and form_head state : elt_head -> (Rdf.term -> Sparql.formula -> Sparql.formula) = function
+and form_head state : elt_head -> (Sparql.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
     (fun x form -> Sparql.formula_bind x form)
   | Class c ->
-    (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Rdf.URI c))) form)
+    (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c))) form)
 and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let vg = state#id_labelling#get_id_var idg in
   let v = state#id_labelling#get_id_var id in
-  state#set_aggreg v (vg, g, (d (Rdf.Var vg)));
+  state#set_aggreg v (vg, g, (d (Sparql.var vg)));
   state#set_modif vg modifg
 and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
   | ForEach (annot,id,modif,rel_opt,id2) ->
@@ -391,7 +393,7 @@ and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option 
     state#set_modif v modif;
     let d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
-    Some (`Expr (Sparql.var v2), v), Some v2, (d (Rdf.Var v2))
+    Some (`Expr (Sparql.var v2), v), Some v2, (d (Sparql.var v2))
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
     None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
@@ -401,7 +403,8 @@ and form_aggreg state : annot elt_aggreg -> Sparql.projection * Sparql.expr (* h
     state#set_modif v modif;
     let d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
-    (`Aggreg (sparql_aggreg g, v2), v), Sparql.expr_of_formula (d (Rdf.Var v))
+    let sparql_g = sparql_aggreg g in
+    (`Aggreg (sparql_g, Sparql.var v2), v), Sparql.expr_of_formula (d (Sparql.expr_aggreg sparql_g (Sparql.var v2)))
 and form_expr state : annot elt_expr -> Sparql.expr = function
   | Undef annot -> ""
   | Const (annot,t) -> Sparql.term t
@@ -432,7 +435,7 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : seq_
       then Sparql.True
       else
 	let d = form_p1_opt state rel_opt in
-	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
+	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Sparql.var v)) in
     (0,Unit), ([v], (fun ?limit () -> form))
   | SFilter (annot,id,expr) ->
     let v = state#id_labelling#get_id_var id in
@@ -502,7 +505,7 @@ let make_query state t_list (defs, f : Sparql.view) : template =
     let f_constr =
       fun ?limit () ->
 	match t_list, constr with
-	| [(Rdf.Var _ as t)], Some c -> Sparql.formula_and (f ?limit ()) (filter_constr_entity t c)
+	| [(Rdf.Var _ as t)], Some c -> Sparql.formula_and (f ?limit ()) (filter_constr_entity (Sparql.term t) c)
 	| _ -> f ?limit () in
     Sparql.query_of_view ~distinct:true ~ordering ~limit (visible_defs, f_constr))
 
@@ -524,18 +527,19 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     match ft, t_list with
       | `IdNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
       | _, [t] ->
-	let tx = Rdf.Var x in
+	let term_t = Sparql.term t in
+	let tx = Sparql.var x in
 	Some (fun ?(constr=True) ~limit ->
 	  let form_x =
 	    match t with
 	    | Rdf.Var _
-	    | Rdf.Bnode _ -> Sparql.formula_and (f ~limit ()) (triple t tx)
-	    | _ -> triple t tx in
+	    | Rdf.Bnode _ -> Sparql.formula_and (f ~limit ()) (triple term_t tx)
+	    | _ -> triple term_t tx in
 	  Sparql.select ~projections:[(`Bare,x)] ~limit
 	    (Sparql.pattern_of_formula
 	       (Sparql.formula_and form_x (filter_constr tx constr))))
       | _ -> None in
   let query_class_opt = query_incr_opt "class" filter_constr_class (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
-  let query_prop_has_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Rdf.Bnode ""))) in
-  let query_prop_isof_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple (Rdf.Bnode "") tp t)) in
+  let query_prop_has_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
+  let query_prop_isof_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
   t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt, annot_view

@@ -74,6 +74,8 @@ let uri (uri : Rdf.uri) : term =
     | None -> "<" ^ uri ^ ">"
     | Some qname -> qname
 
+let bnode (name : string) : term = if name="" then "[]" else "_:" ^ name
+    
 let var (v : Rdf.var) : term = "?" ^ v
 
 let string (s : string) : term =
@@ -86,11 +88,10 @@ let rec term : Rdf.term -> term = function
   | Rdf.Number (f,s,dt) -> if dt="" then term (Rdf.PlainLiteral (s,"")) else term (Rdf.TypedLiteral (s,dt))
   | Rdf.TypedLiteral (s,dt) -> string s ^ "^^" ^ uri dt
   | Rdf.PlainLiteral (s,lang) -> string s ^ (if lang = "" then "" else "@" ^ lang)
-  | Rdf.Bnode name -> if name="" then "[]" else "_:" ^ name
+  | Rdf.Bnode name -> bnode name
   | Rdf.Var v -> var v
 
-let term_numeric (t : Rdf.term) : expr = "xsd:double(" ^ term t ^ ")" (* "STRDT(str(" ^ term t ^ "),xsd:double)" *)
-let var_numeric (v : Rdf.var) : expr = term_numeric (Rdf.Var v)
+let conv_numeric (t : term) : expr = "xsd:double(" ^ t ^ ")"
 
 let indent : int -> string -> string =
   let re = Regexp.regexp_string "\n" in
@@ -100,6 +101,24 @@ let expr_func (f : string) (l_expr : expr list) : expr = f ^ "(" ^ String.concat
 let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^ String.concat op l_expr ^ ")"
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^ " " ^ relop ^ " " ^ expr2
+
+type aggreg =
+| DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
+| SUM of string option | AVG of string option | MAX of string option | MIN of string option
+
+let expr_aggreg (g : aggreg) (expr1 : expr) : expr =
+  let make_aggreg prefix_g expr suffix_g = prefix_g ^ expr ^ suffix_g in
+  let make_conv conv_opt expr = match conv_opt with None -> expr | Some conv -> conv ^ "(" ^ expr ^ ")" in
+  match g with
+  | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " expr1 ")"
+  | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " expr1 " ; separator=', ')"
+  | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt expr1) ")"
+  | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt expr1) ")"
+  | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt expr1) ")"
+  | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt expr1) ")"
+  | SAMPLE -> make_aggreg "SAMPLE(" expr1 ")"
+  | ID -> make_aggreg "" expr1 ""
+
 
 let log_true : expr = "true"
 let log_false : expr = "false"
@@ -125,9 +144,9 @@ let log_or (le : expr list) : expr =
       | _ -> "(  " ^ String.concat "\n|| " (List.map (indent 3) le) ^ " )"
 
 let empty : pattern = ""
-let something s = term s ^ " a [] ."
-let rdf_type s c = term s ^ " a " ^ term c ^ " ."
-let triple s p o = term s ^ " " ^ term p ^ " " ^ term o ^ " ."
+let something (s : term) : pattern = s ^ " a [] ."
+let rdf_type (s : term) (c : term) : pattern = s ^ " a " ^ c ^ " ."
+let triple (s : term) (p : term) (o : term) : pattern = s ^ " " ^ p ^ " " ^ o ^ " ."
 let bind (e : expr) (v : Rdf.var) : pattern = "BIND (" ^ e ^ " AS " ^ var v ^ ")"
 let filter (e : expr) : pattern =
   if e = log_true then empty
@@ -147,38 +166,25 @@ let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ indent 13 p ^ " }"
 
 let subquery (q : query) : pattern = "{ " ^ indent 2 q ^ " }"
 
-let search_label (t : Rdf.term) (l : Rdf.term) : pattern =
-  term t ^ " rdfs:label " ^ term l ^ " ." (* ^ sparql_constr l (HasLang "en") *)
-let search_contains (l : Rdf.term) (w : string) : pattern =
-  term l ^ " bif:contains " ^ string w ^ " ."
+let search_label (t : term) (l : term) : pattern =
+  t ^ " rdfs:label " ^ l ^ " ." (* ^ sparql_constr l (HasLang "en") *)
+let search_contains (l : term) (w : string) : pattern =
+  l ^ " bif:contains " ^ string w ^ " ."
 
 
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
 
-type aggreg =
-| DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
-| SUM of string option | AVG of string option | MAX of string option | MIN of string option
 type order = ASC | DESC
 
-type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * Rdf.var]
+type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * expr]
 type projection = projection_def * Rdf.var
 
 let projection_def : projection_def -> expr = function
   | `Bare -> ""
   | `Expr e -> e
-  | `Aggreg (g,v) ->
-    let make_aggreg prefix_g expr suffix_g = prefix_g ^ expr ^ suffix_g in
-    let make_conv conv_opt v = match conv_opt with None -> var v | Some conv -> conv ^ "(" ^ var v ^ ")" in
-    ( match g with
-    | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " (var v) ")"
-    | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " (var v) " ; separator=', ')"
-    | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt v) ")"
-    | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt v) ")"
-    | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt v) ")"
-    | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt v) ")"
-    | SAMPLE -> make_aggreg "SAMPLE(" (var v) ")"
-    | ID -> make_aggreg "" (var v) "" )
+  | `Aggreg (g,e) -> expr_aggreg g e
+
 let projection (def,v : projection) : selector =
   match def with
   | `Bare -> (var v)
@@ -262,8 +268,10 @@ let rec formula_and (f1 : formula) (f2 : formula) : formula =
     | _, False -> False
     | True, _ -> f2
     | _, True -> f1
+(*
     | Subquery sq1, Filter e2 -> Subquery (subquery_having sq1 e2) (* kind of unsafe *)
     | Filter e1, Subquery sq2 -> Subquery (subquery_having sq2 e1) (* kind of unsafe *)
+*)
     | Subquery sq1, _ -> formula_and (Pattern (pattern_of_subquery sq1)) f2
     | _, Subquery sq2 -> formula_and f1 (Pattern (pattern_of_subquery sq2))
     | Pattern p1, Pattern p2 -> Pattern (join [p1;p2])
@@ -316,7 +324,7 @@ let formula_not : formula -> formula = function
   | False -> True
   | Or (p,e) -> Filter (log_and [not_exists p; log_not e])
 
-let formula_bind (x : Rdf.term) : formula -> formula = function
+let formula_bind (x : term) : formula -> formula = function
   | Pattern p -> Pattern p
   | Subquery sq -> Subquery sq
   | Filter e -> Pattern (join [something x; filter e])
