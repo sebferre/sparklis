@@ -135,19 +135,19 @@ object (self)
   val mutable query_prop_has_opt : Lisql2sparql.template option = None
   val mutable query_prop_isof_opt : Lisql2sparql.template option = None
 
-  val mutable view : Lisql_annot.view = Lisql_annot.Unit
-    
+  val mutable seq_view : Lisql_annot.seq_view = 0, Lisql_annot.Unit
+
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, annot_view =
+      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, seq_v =
 	Lisql2sparql.s_annot id_labelling focus_term s_annot in
       focus_term_list <- t_list;
       query_opt <- q_opt;
       query_class_opt <- qc_opt;
       query_prop_has_opt <- qph_opt;
       query_prop_isof_opt <- qpi_opt;
-      view <- annot_view
+      seq_view <- seq_v
     end
 
   initializer self#init
@@ -280,7 +280,7 @@ object (self)
 		if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt
 		then (Lisql.IncrId id, 1)::index
 		else index)
-	      index (Lisql_annot.view_defs view)
+	      index (Lisql_annot.seq_view_defs seq_view)
 	  else index in
 	index
       | _ -> []
@@ -464,7 +464,7 @@ object (self)
 	let incrs =
 	  List.fold_left
 	    (fun incrs id -> IncrForeach id :: incrs)
-	    incrs (Lisql_annot.view_available_dims view) in
+	    incrs (Lisql_annot.seq_view_available_dims seq_view) in
 	let incrs =
 	  List.fold_left
 	    (fun incrs aggreg ->

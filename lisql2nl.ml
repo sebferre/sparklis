@@ -103,7 +103,7 @@ and 'a np = ('a, 'a nl_np) annotated
 and 'a nl_np =
   [ `Void
   | `PN of word * 'a rel
-  (*  | `Ref of np_label * 'a rel (* TODO: replace by Qu _, with np_label as ng *) *)
+  | `LabelWord of ng_label * word
   | `Qu of qu * adj * 'a ng
   | `QuOneOf of qu * word list
   | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
@@ -383,10 +383,11 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
     let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
 and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
-  | Foreach (_, id, modif, rel_opt, id2) ->
+  | ForEach (_, id, modif, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls rel_opt in
     labelling @ (id, `Alias id2) :: lab_rel
+  | ForTerm (_, t, id2) -> labelling
 and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = function
   | TheAggreg (_, id, modif, g, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
@@ -661,9 +662,11 @@ and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
 and np_of_elt_dim grammar ~id_labelling : annot elt_dim -> annot np = function
-  | Foreach (annot,id,modif,rel_opt,id2) ->
+  | ForEach (annot,id,modif,rel_opt,id2) ->
     let qu, adj = qu_adj_of_modif grammar (Some annot) `Each modif in
     A (annot, `Qu (qu, adj, X (`LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))))
+  | ForTerm (annot,t,id2) ->
+    A (annot, `LabelWord (id_labelling#get_id_label id2, word_of_term t))
 and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     np_of_aggreg grammar (Some annot) `The modif g
@@ -738,7 +741,7 @@ and map_np transf np =
     ( function
     | `Void -> `Void
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
-    (*    | `Ref (np_label,rel) -> `Ref (np_label, map_rel transf rel) *)
+    | `LabelWord (l,w) -> `LabelWord (l,w)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
     | `And (lr) -> `And (List.map (map_np transf) lr)
@@ -899,7 +902,7 @@ let xml_seq grammar annot_opt (lr : xml list) =
     match annot_opt with
     | Some annot ->
       ( match annot#seq_view with
-      | Some seq_view -> List.map (fun sid -> not (sid_in_view sid seq_view)) (Common.from_to 0 (List.length lr - 1))
+      | Some (_,view) -> List.map (fun sid -> not (sid_in_view sid view)) (Common.from_to 0 (List.length lr - 1))
       | _ -> assert false )
     | None -> List.map (fun _ -> false) lr in
   [ Coord ([Kwd grammar#and_], List.map2 xml_suspended seq_susp lr) ]
@@ -949,7 +952,7 @@ and xml_np grammar ~id_labelling np =
     ( fun annot_opt -> function
     | `Void -> []
     | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
-    (*    | `Ref (np_label,rel) -> xml_np_label grammar ~id_labelling np_label @ xml_rel grammar ~id_labelling rel *)
+    | `LabelWord (l,w) -> xml_ng_label grammar ~id_labelling l @ Word w :: []
     | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
     | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
     | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
@@ -1105,14 +1108,14 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
       | AtS1 (Det (_, Term t0, _), _) when t0 = t -> xml_t @ [DeleteIncr]
-      | AtS1 _ | AtExpr _ -> xml_t
+      | AtS1 _ | AtExpr _ | AtDim _ -> xml_t
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
   | IncrId id ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
-      | AtS1 _ | AtExpr _ -> xml
+      | AtS1 _ | AtExpr _ | AtDim _ -> xml
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )

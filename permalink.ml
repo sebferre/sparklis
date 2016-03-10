@@ -126,7 +126,8 @@ and print_s = function
   | SFilter (_,id,expr) -> print_bin "SFilter" (print_id id) (print_expr expr)
   | Seq (_,lr) -> print_lr print_s "Seq" lr
 and print_dim = function
-  | Foreach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
+  | ForEach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
+  | ForTerm (_,t,id2) -> print_nary "Forterm" [print_term t; print_id id2]
 and print_aggreg = function
   | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_id id2]
 and print_expr = function
@@ -268,7 +269,8 @@ and parse_s ~version = parser
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
     | [<>] -> syntax_error "invalid s"
 and parse_dim ~version = parser
-    | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> Foreach ((), id, modif, rel_opt, id2)
+    | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> ForEach ((), id, modif, rel_opt, id2)
+    | [< t, id2 = parse_bin ~version "Forterm" parse_term parse_id >] -> ForTerm ((), t, id2)
     | [<>] -> syntax_error "invalid dim"
 and parse_aggreg ~version = parser
     | [< id, modif, g, rel_opt, id2 = parse_quin ~version "TheAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_id >] -> TheAggreg ((), id, modif, g, rel_opt, id2)

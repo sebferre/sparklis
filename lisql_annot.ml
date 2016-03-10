@@ -6,14 +6,14 @@ open Lisql
 
 (* focus terms *)
 
-type focus_term = [ `Term of Rdf.term | `IdIncr of id | `IdNoIncr of id | `Undefined ]
+type focus_term = [ `TermIncr of Rdf.term | `TermNoIncr of Rdf.term | `IdIncr of id | `IdNoIncr of id | `Undefined ]
 
 let define_focus_term (ft : focus_term) : focus_term option -> focus_term = function
   | None -> ft
   | Some x -> x
 
 let focus_term_s2 : elt_s2 -> focus_term = function
-  | Term t -> `Term t
+  | Term t -> `TermIncr t
   | An (id,_,_) -> `IdIncr id
   | The id -> `IdIncr id
 
@@ -58,11 +58,12 @@ type view =
 | Atom of annot_ids * sid (* ids, sid *)
 | Join of annot_ids * view list (* ids, views *)
 | Aggreg of annot_ids * sid * view (* ids, sid, aggregated_view *)
+type seq_view = sid * view
 
 class annot
   ~focus_pos ~focus
   ?(ids : annot_ids = empty_ids)
-  ?(seq_view : view option) ?(defined : bool = false) () =
+  ?(seq_view : seq_view option) ?(defined : bool = false) () =
 object (self)
   val focus_pos : focus_pos = focus_pos
   val focus : focus = focus
@@ -147,14 +148,6 @@ let view_ids = function
   | Join (ids,_) -> ids
   | Aggreg (ids,_,_) -> ids
 
-let view_defs : view -> id list = fun v -> Ids.elements (view_ids v).defs
-
-let rec view_available_dims : view -> id list = function
-  | Unit -> []
-  | Atom (ids,_) -> []
-  | Join (ids,_) -> []
-  | Aggreg (ids,sid,v) -> Ids.elements (Ids.diff (view_ids v).defs ids.refs)
-
 let rec sid_in_view sid = function
   | Unit -> false
   | Atom (_,sid1) -> sid1 = sid
@@ -171,6 +164,21 @@ let join_views = function
   | [] -> Unit
   | [v] -> v
   | lv -> Join (list_union_ids (List.map view_ids lv), lv)
+
+let seq_view_defs (_, v : seq_view) : id list =
+  Ids.elements (view_ids v).defs
+
+let seq_view_available_dims (focus_sid, v : seq_view) : id list =
+  let rec aux = function
+    | Unit -> []
+    | Atom (ids,_) -> []
+    | Join (ids,lv) -> List.concat (List.map aux lv)
+    | Aggreg (ids,sid,v) ->
+      if sid = focus_sid
+      then Ids.elements (Ids.diff (view_ids v).defs ids.refs)
+      else []
+  in
+  aux v
 
 
 let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) list -> view list = function
@@ -230,20 +238,24 @@ let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) lis
 
 let view_of_list a_lr =
   let views = views_of_seq [] 0 a_lr in
-  try List.find (top_sid_in_view (List.length a_lr - 1)) views
-  with _ ->
-    match views with
-    | [] -> Unit
-    | v::_ -> v
+  let sid = List.length a_lr - 1 in
+  sid,
+  (try List.find (top_sid_in_view sid) views
+   with _ ->
+     match views with
+     | [] -> Unit
+     | v::_ -> v)
 
 let view_of_list_focus a_x a_ll_rr =
   (* computing views *)
   let views = views_of_seq [] 0 (list_of_ctx a_x a_ll_rr) in
-  try List.find (top_sid_in_view (List.length (fst a_ll_rr))) views
-  with _ ->
-    match views with
-    | [] -> Unit
-    | v::_ -> v
+  let sid = List.length (fst a_ll_rr) in
+  sid,
+  (try List.find (top_sid_in_view sid) views
+   with _ ->
+     match views with
+     | [] -> Unit
+     | v::_ -> v)
 
     
 (* unzipping and annotation *)
@@ -339,10 +351,13 @@ and annot_elt_dim pos dim ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtDim (dim,ctx)) in
   let pos_down = focus_pos_down pos in
   match dim with
-  | Foreach (_,id,modif,rel_opt,id2) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForeachThatX (id,modif,id2,ctx)) in
-					let ids = {all = Ids.add id ids_rel.all; defs = Ids.add id ids_rel.defs; dims = Ids.add id2 ids_rel.dims; refs = Ids.add id2 ids_rel.refs} in
+  | ForEach (_,id,modif,rel_opt,id2) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForEachThatX (id,modif,id2,ctx)) in
+					(*let ids = {all = Ids.add id ids_rel.all; defs = Ids.add id ids_rel.defs; dims = Ids.add id2 ids_rel.dims; refs = Ids.add id2 ids_rel.refs} in*)
+					let ids = {all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
 					let a = annot ~ids () in
-					a, Foreach (a, id, modif, a_rel_opt, id2)
+					a, ForEach (a, id, modif, a_rel_opt, id2)
+  | ForTerm (_,t,id2) -> let a = annot ~ids:{empty_ids with refs = Ids.singleton id2} () in
+			 a, ForTerm (a, t, id2)
 and annot_elt_aggreg pos aggreg ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtAggreg (aggreg,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -385,7 +400,7 @@ and annot_elt_s pos s ctx =
   | SAggreg (_,dims,aggregs) ->
     let la1, l_a_dim =
       List.split (List.map
-		    (fun (x,ll_rr) -> annot_elt_dim pos_down x (SAggregForeachX (ll_rr,aggregs,ctx)))
+		    (fun (x,ll_rr) -> annot_elt_dim pos_down x (SAggregForX (ll_rr,aggregs,ctx)))
 		    (ctx_of_list dims)) in
     let la2, l_a_aggreg =
       List.split (List.map
@@ -438,13 +453,13 @@ let rec annot_ctx_p1 ft_opt (a1,a_x) x = function
       | Some id2 -> { ids with defs = Ids.remove id2 ids.defs; dims = Ids.remove id2 ids.dims; refs = Ids.add id2 ids.refs } in
     let a = new annot ~focus_pos:(`Above (false, None)) ~focus:(AtS1 (f,ctx)) ~ids () in
     annot_ctx_s1 (Some ft) (a, AnAggreg (a, id, modif, g, Some a_x, a_np)) f ctx
-  | ForeachThatX (id,modif,id2,ctx) ->
+  | ForEachThatX (id,modif,id2,ctx) ->
     let ft = define_focus_term (`IdIncr id) ft_opt in
-    let f = Foreach ((),id,modif,Some x,id2) in
+    let f = ForEach ((),id,modif,Some x,id2) in
     let ids = a1#ids in
     let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = Ids.add id2 ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtDim (f,ctx)) ~ids () in
-    annot_ctx_dim ft (a, Foreach (a, id, modif, Some a_x, id2)) f ctx
+    annot_ctx_dim ft (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
   | TheAggregThatX (id,modif,g,id2,ctx) ->
     let ft = define_focus_term (`IdNoIncr id) ft_opt in
     let f = TheAggreg ((),id,modif,g,Some x,id2) in
@@ -564,14 +579,14 @@ and annot_ctx_s1 ft_opt (a1,a_x) x = function
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtS1 (f,ctx)) ~ids () in (* suspended *)
     annot_ctx_s1 ft_opt (a, NNot (a, a_x)) f ctx
 and annot_ctx_dim ft (a1,a_x) x = function
-  | SAggregForeachX (ll_rr,aggregs,ctx) ->
+  | SAggregForX (ll_rr,aggregs,ctx) ->
     let dims = list_of_ctx x ll_rr in
     let f = SAggreg ((),dims,aggregs) in
     let la_dim, lar_dim =
       List.split
 	(list_of_ctx (a1,a_x)
 	   (map_ctx_list
-	      (fun (x2,ll_rr2) -> annot_elt_dim (`Aside false) x2 (SAggregForeachX (ll_rr2,aggregs,ctx)))
+	      (fun (x2,ll_rr2) -> annot_elt_dim (`Aside false) x2 (SAggregForX (ll_rr2,aggregs,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
     let la_aggreg, lar_aggreg =
       List.split
@@ -588,7 +603,7 @@ and annot_ctx_aggreg ft (a1,a_x) x = function
     let la_dim, lar_dim =
       List.split
 	(List.map
-	   (fun (x2,ll_rr2) -> annot_elt_dim (`Aside false) x2 (SAggregForeachX (ll_rr2,aggregs,ctx)))
+	   (fun (x2,ll_rr2) -> annot_elt_dim (`Aside false) x2 (SAggregForX (ll_rr2,aggregs,ctx)))
 	   (ctx_of_list dims)) in
     let la_aggreg, lar_aggreg =
       List.split
@@ -666,7 +681,7 @@ and annot_focus_aux = function
     let np_annot = annot_elt_s1 ~as_p1 `At np ctx in
     annot_ctx_s1 ft_opt np_annot np ctx
   | AtDim (dim,ctx) ->
-    let ft = match dim with Foreach (_,id,_,_,_) -> `IdIncr id in
+    let ft = match dim with ForEach (_,id,_,_,_) -> `IdIncr id | ForTerm (_,t,_) -> `TermNoIncr t in
     let dim_annot = annot_elt_dim `At dim ctx in
     annot_ctx_dim ft dim_annot dim ctx
   | AtAggreg (aggreg,ctx) ->

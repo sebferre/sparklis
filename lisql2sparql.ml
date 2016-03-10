@@ -385,13 +385,16 @@ and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let v = state#id_labelling#get_id_var id in
   state#set_aggreg v (vg, g, (d (Rdf.Var vg)));
   state#set_modif vg modifg
-and form_dim state : annot elt_dim -> Sparql.projection * Rdf.var (* group by var *) * Sparql.formula (* relative *) = function
-  | Foreach (annot,id,modif,rel_opt,id2) ->
+and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
+  | ForEach (annot,id,modif,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
     let d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
-    (`Expr (Sparql.var v2), v), v2, (d (Rdf.Var v))
+    Some (`Expr (Sparql.var v2), v), Some v2, (d (Rdf.Var v2))
+  | ForTerm (annot,t,id2) ->
+    let v2 = state#id_labelling#get_id_var id2 in
+    None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
 and form_aggreg state : annot elt_aggreg -> Sparql.projection * Sparql.expr (* having expr *) = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
@@ -412,14 +415,14 @@ and form_expr state : annot elt_expr -> Sparql.expr = function
       | _ ->
 	let sparql_args = List.map (fun arg -> form_expr state arg) args in
 	expr_apply func sparql_args )
-and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view * Sparql.view =
+and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : seq_view * Sparql.view =
   let ids2vars ids = List.map state#id_labelling#get_id_var ids in
   match s with
   | Return (annot,np) ->
     let ids = annot#ids in
     let lv = ids2vars (Ids.elements ids.defs) in
     let form = form_s1 state np (fun t -> Sparql.True) in
-    Atom (ids,-1), (lv, (fun ?limit () -> form))
+    (0,Atom (ids,0)), (lv, (fun ?limit () -> form))
   | SExpr (annot,id,modif,expr,rel_opt) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
@@ -430,7 +433,7 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
       else
 	let d = form_p1_opt state rel_opt in
 	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr v)) (d (Rdf.Var v)) in
-    Unit, ([v], (fun ?limit () -> form))
+    (0,Unit), ([v], (fun ?limit () -> form))
   | SFilter (annot,id,expr) ->
     let v = state#id_labelling#get_id_var id in
     let sparql_expr = form_expr state expr in
@@ -442,34 +445,35 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : view
       if sparql_expr = ""
       then Sparql.True
       else form in
-    Unit, (lv, (fun ?limit () -> form))
+    (0,Unit), (lv, (fun ?limit () -> form))
   | SAggreg (annot,dims,aggregs) ->
     let aggregated_defs, aggregated_f = aggregated_view in
     let l_dims = List.map (form_dim state) dims in
     let l_aggregs = List.map (form_aggreg state) aggregs in
-    let projections_dims = List.map (fun (proj,_,_) -> proj) l_dims in
+    let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in
     let projections_aggregs = List.map fst l_aggregs in
     let projections = projections_dims @ projections_aggregs in
-    let groupings_dims = List.map (fun (_,group,_) -> group) l_dims in
+    let groupings_dims = List.fold_right (fun (_,group_opt,_) res -> match group_opt with None -> res | Some group -> group::res) l_dims [] in
     let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
     let havings_aggregs = List.map snd l_aggregs in
     let f_aggreg =
       fun ?limit () ->
 	Sparql.Subquery
 	  { Sparql.projections = projections;
-	    pattern = Sparql.pattern_of_formula (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) ());
+	    pattern = Sparql.pattern_of_formula
+	      (Sparql.formula_and_list
+		 (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) () :: lf_dims));
 	    groupings = groupings_dims;
 	    having = Sparql.log_and havings_aggregs;
 	    limit;
 	  } in
-    let f =
-      fun ?limit () ->
-	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in
+    (*let f = fun ?limit () ->
+    	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in *)
     let lv = List.map snd projections in
-    Unit, (lv, f)
+    (0,Unit), (lv, f_aggreg)
   | Seq (annot,lr) ->
-    let seq_view = match annot#seq_view with Some v -> v | None -> assert false in
-    seq_view, form_seq_view state lr seq_view
+    let (_, view as seq_view) = match annot#seq_view with Some v -> v | None -> assert false in
+    seq_view, form_seq_view state lr view
 and form_seq_view state (lr : annot elt_s list) : view -> Sparql.view = function
   | Unit -> Sparql.empty_view
   | Atom (_, sid) -> snd (form_s state (List.nth lr sid))
@@ -504,12 +508,12 @@ let make_query state t_list (defs, f : Sparql.view) : template =
 
       
 let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s)
-    : Rdf.term list * template option * template option * template option * template option * view =
+    : Rdf.term list * template option * template option * template option * template option * seq_view =
   let state = new state id_labelling in
   let annot_view, (defs, f as view) = form_s state s_annot in
   let t_list =
     match ft with
-    | `Term t -> [t]
+    | `TermIncr t | `TermNoIncr t -> [t]
     | `IdIncr id | `IdNoIncr id -> [Rdf.Var (id_labelling#get_id_var id)]
     | `Undefined -> [] in
   let query_opt =
