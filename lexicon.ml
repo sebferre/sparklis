@@ -102,18 +102,20 @@ let sparql_lexicon
   let bind_labels l_uri k =
     let u, l = "u", "l" in
     let sparql =
-      Sparql.select ~projections:[(`Bare,u); (`Bare,l)]
-	(Sparql.join
-	   [ Sparql.union
-	       (List.map (fun uri -> Sparql.bind (Sparql.uri uri) u) l_uri);
-	     Sparql.optional
-	       (Sparql.join
-		  ( Sparql.triple (Sparql.var u) (Sparql.uri property) (Sparql.var l)
+      let open Sparql in
+      let v_u, v_l = Sparql.var u, Sparql.var l in
+      select ~projections:[(`Bare,u); (`Bare,l)]
+	(join
+	   [ union
+	       (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
+	     optional
+	       (join
+		  ( triple (v_u :> term) (uri property) (v_l :> term)
 		    :: ( match language with
 		      | None -> []
-		      | Some lang -> [Sparql.filter (Sparql.expr_comp "=" (Sparql.expr_func "lang" [Sparql.var l]) (Sparql.string lang))] ))) ]) in
+		      | Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]) in
     let pool = new Sparql_endpoint.ajax_pool in
-    Sparql_endpoint.ajax_in [] pool endpoint sparql
+    Sparql_endpoint.ajax_in [] pool endpoint (sparql :> string)
       (fun results ->
 	let l_uri_info_opt =
 	  let i = List.assoc u results.Sparql_endpoint.vars in

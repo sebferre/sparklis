@@ -1,9 +1,34 @@
 
-type term = string
-type expr = string
-type pattern = string
-type selector = string
-type query = string
+module S : (* private use of strings to represent SPARQL strings *)
+sig
+  type +'a sparql = private string
+  val sparql : string -> 'a sparql
+  val (^^) : 'a sparql -> 'b sparql -> 'c sparql
+  val (^<) : string -> 'a sparql -> 'b sparql
+  val (^>) : 'a sparql -> string -> 'b sparql
+  val concat : string -> 'a sparql list -> 'b sparql
+  val indent : int -> 'a sparql -> 'a sparql
+end =
+struct
+  type +'a sparql = string
+  let sparql s = s
+  let (^^) s1 s2 = s1 ^ s2
+  let (^<) s1 s2 = s1 ^ s2
+  let (^>) s1 s2 = s1 ^ s2
+  let concat sep ls = String.concat sep ls
+  let indent =
+    let re = Regexp.regexp_string "\n" in
+    fun w paragraph -> (Regexp.global_replace re : string -> string -> string) paragraph ("\n" ^ String.make w ' ')
+end
+
+include S
+
+type var = [`Var] sparql
+type term = [`Var|`Term] sparql
+type expr = [`Var|`Term|`Expr] sparql
+type pattern = [`Pattern] sparql
+type selector = [`Var|`Selector] sparql
+type query = [`Query] sparql
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
@@ -69,63 +94,62 @@ object (self)
 
 end
 
+
+
 let uri (uri : Rdf.uri) : term =
   match prologue#qname_of_uri uri with
-    | None -> "<" ^ uri ^ ">"
-    | Some qname -> qname
+    | None -> sparql ("<" ^ uri ^ ">")
+    | Some qname -> sparql qname
 
-let bnode (name : string) : term = if name="" then "[]" else "_:" ^ name
+let bnode (name : string) : term = sparql (if name="" then "[]" else "_:" ^ name)
     
-let var (v : Rdf.var) : term = "?" ^ v
+let var (v : Rdf.var) : var = sparql ("?" ^ v)
 
 let string (s : string) : term =
   if String.contains s '\n' || String.contains s '"'
-  then "\"\"\"" ^ s ^ "\"\"\""
-  else "\"" ^ s ^ "\""
+  then sparql ("\"\"\"" ^ s ^ "\"\"\"")
+  else sparql ("\"" ^ s ^ "\"")
 
 let rec term : Rdf.term -> term = function
   | Rdf.URI u -> uri u
   | Rdf.Number (f,s,dt) -> if dt="" then term (Rdf.PlainLiteral (s,"")) else term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> string s ^ "^^" ^ uri dt
-  | Rdf.PlainLiteral (s,lang) -> string s ^ (if lang = "" then "" else "@" ^ lang)
+  | Rdf.TypedLiteral (s,dt) -> string s ^^ sparql "^^" ^^ uri dt
+  | Rdf.PlainLiteral (s,lang) -> string s ^^ sparql (if lang = "" then "" else "@" ^ lang)
   | Rdf.Bnode name -> bnode name
-  | Rdf.Var v -> var v
-
-let conv_numeric (t : term) : expr = "xsd:double(" ^ t ^ ")"
-
-let indent : int -> string -> string =
-  let re = Regexp.regexp_string "\n" in
-  fun w p -> Regexp.global_replace re p ("\n" ^ String.make w ' ')
-
-let expr_func (f : string) (l_expr : expr list) : expr = f ^ "(" ^ String.concat "," l_expr ^ ")"
-let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^ String.concat op l_expr ^ ")"
-let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^ expr ^ ", \"" ^ pat ^ "\", 'i')"
-let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^ " " ^ relop ^ " " ^ expr2
+  | Rdf.Var v -> (var v :> term)
 
 type aggreg =
 | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
 | SUM of string option | AVG of string option | MAX of string option | MIN of string option
 
-let expr_aggreg (g : aggreg) (expr1 : expr) : expr =
-  let make_aggreg prefix_g expr suffix_g = prefix_g ^ expr ^ suffix_g in
-  let make_conv conv_opt expr = match conv_opt with None -> expr | Some conv -> conv ^ "(" ^ expr ^ ")" in
+let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
+  let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
+  let make_conv conv_opt term : expr = match conv_opt with None -> (term :> expr) | Some conv -> conv ^< "(" ^< term ^> ")" in
   match g with
-  | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " expr1 ")"
-  | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " expr1 " ; separator=', ')"
-  | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt expr1) ")"
-  | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt expr1) ")"
-  | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt expr1) ")"
-  | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt expr1) ")"
-  | SAMPLE -> make_aggreg "SAMPLE(" expr1 ")"
-  | ID -> make_aggreg "" expr1 ""
+  | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
+  | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator=', ')"
+  | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt term) ")"
+  | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt term) ")"
+  | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt term) ")"
+  | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt term) ")"
+  | SAMPLE -> make_aggreg "SAMPLE(" term ")"
+  | ID -> make_aggreg "" term ""
+
+let conv_numeric (e : expr) : expr = "xsd:double(" ^< e ^> ")"
+
+let expr_func (f : string) (l_expr : expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
+let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^< concat op l_expr ^> ")"
+let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
+let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
 
 
-let log_true : expr = "true"
-let log_false : expr = "false"
+
+let log_true : expr = sparql "true"
+let log_false : expr = sparql "false"
 let log_not (e : expr) : expr =
   if e = log_true then log_false
   else if e = log_false then log_true
-  else "!( " ^ indent 3 e ^ " )"
+  else "!( " ^< indent 3 e ^> " )"
 let log_and (le : expr list) : expr = 
   if List.mem log_false le then log_false
   else
@@ -133,7 +157,7 @@ let log_and (le : expr list) : expr =
     match le with
       | [] -> log_true
       | [e] -> e
-      | _ -> "(  " ^ String.concat "\n&& " (List.map (indent 3) le) ^ " )"
+      | _ -> "(  " ^< concat "\n&& " (List.map (indent 3) le) ^> " )"
 let log_or (le : expr list) : expr =
   if List.mem log_true le then log_true
   else
@@ -141,100 +165,99 @@ let log_or (le : expr list) : expr =
     match le with
       | [] -> log_false
       | [e] -> e
-      | _ -> "(  " ^ String.concat "\n|| " (List.map (indent 3) le) ^ " )"
+      | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
-let empty : pattern = ""
-let something (s : term) : pattern = s ^ " a [] ."
-let rdf_type (s : term) (c : term) : pattern = s ^ " a " ^ c ^ " ."
-let triple (s : term) (p : term) (o : term) : pattern = s ^ " " ^ p ^ " " ^ o ^ " ."
-let bind (e : expr) (v : Rdf.var) : pattern = "BIND (" ^ e ^ " AS " ^ var v ^ ")"
+let empty : pattern = sparql ""
+let something (s : term) : pattern = s ^> " a [] ."
+let rdf_type (s : term) (c : term) : pattern = s ^^ " a " ^< c ^> " ."
+let triple (s : term) (p : term) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
+let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
 let filter (e : expr) : pattern =
   if e = log_true then empty
-  else "FILTER ( " ^ indent 9 e ^ " )"
+  else "FILTER ( " ^< indent 9 e ^> " )"
 let join (lp : pattern list) : pattern =
-  String.concat "\n" (List.filter ((<>) empty) lp)
+  concat "\n" (List.filter ((<>) empty) lp)
 let union (lp : pattern list) : pattern =
   if List.mem empty lp then invalid_arg "Sparql.union: empty pattern";
   match lp with
     | [] -> invalid_arg "Sparql.union: empty list"
     | [p] -> p
-    | p::lp1 -> "{ " ^ indent 2 p ^ " }\nUNION " ^ String.concat "\nUNION " (List.map (fun p -> "{ " ^ indent 8 p ^ " }") lp1)
+    | p::lp1 -> "{ " ^< indent 2 p ^^ " }\nUNION " ^< concat "\nUNION " (List.map (fun p -> "{ " ^< indent 8 p ^> " }") lp1)
 let optional (p : pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
-  "OPTIONAL { " ^ indent 11 p ^ " }"
-let not_exists (p : pattern) : expr = "NOT EXISTS { " ^ indent 13 p ^ " }"
+  "OPTIONAL { " ^< indent 11 p ^> " }"
+let not_exists (p : pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
 
-let subquery (q : query) : pattern = "{ " ^ indent 2 q ^ " }"
+let subquery (q : query) : pattern = "{ " ^< indent 2 q ^> " }"
 
 let search_label (t : term) (l : term) : pattern =
-  t ^ " rdfs:label " ^ l ^ " ." (* ^ sparql_constr l (HasLang "en") *)
+  t ^^ " rdfs:label " ^< l ^> " ." (* ^ sparql_constr l (HasLang "en") *)
 let search_contains (l : term) (w : string) : pattern =
-  l ^ " bif:contains " ^ string w ^ " ."
+  l ^^ " bif:contains " ^< string w ^> " ."
 
 
 let ask (pattern : pattern) : query =
-  "ASK\nWHERE { " ^ indent 8 pattern ^ " }"
+  "ASK\nWHERE { " ^< indent 8 pattern ^> " }"
 
 type order = ASC | DESC
 
-type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * expr]
+type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * term]
 type projection = projection_def * Rdf.var
 
 let projection_def : projection_def -> expr = function
-  | `Bare -> ""
+  | `Bare -> sparql ""
   | `Expr e -> e
-  | `Aggreg (g,e) -> expr_aggreg g e
+  | `Aggreg (g,t) -> (term_aggreg g t :> expr)
 
 let projection (def,v : projection) : selector =
   match def with
-  | `Bare -> (var v)
+  | `Bare -> (var v :> selector)
   | _ ->
-    let s_def = projection_def def in
-    let s_var = var v in
-    if s_def = s_var
-    then s_var
-    else "(" ^ s_def ^ " AS " ^ s_var ^ ")"
+    let e_def = projection_def def in
+    if e_def = (var v :> expr)
+    then (var v :> selector)
+    else "(" ^< e_def ^^ " AS " ^< var v ^> ")"
 
 let select
     ?(distinct=false)
     ~(projections : projection list)
-    ?(groupings : Rdf.var list = [])
+    ?(groupings : var list = [])
     ?(having : expr = log_true)
-    ?(ordering : (order * Rdf.var) list = [])
+    ?(ordering : (order * var) list = [])
     ?(limit : int option)
     (pattern : pattern) : query =
   if projections = []
   then ask pattern
   else
-    let sel = String.concat " " (List.map projection projections) in
-    let s = "SELECT " ^ (if distinct then "DISTINCT " else "") ^ sel ^ "\nWHERE { " ^ indent 8 pattern ^ " }" in
+    let sel = concat " " (List.map projection projections) in
+    let s = "SELECT " ^< (if distinct then "DISTINCT " else "") ^< sel ^^ "\nWHERE { " ^< indent 8 pattern ^> " }" in
     let s =
       if groupings = []
       then s
-      else s ^ "\nGROUP BY " ^ String.concat " " (List.map var groupings) in
+      else s ^^ "\nGROUP BY " ^< concat " " groupings in
     let s =
       if having = log_true
       then s
-      else s ^ "\nHAVING ( " ^ indent 9 having ^ " )" in
+      else s ^^ "\nHAVING ( " ^< indent 9 having ^> " )" in
     let s =
       if ordering = []
       then s
-      else s ^ "\nORDER BY " ^ String.concat " "
+      else s ^^ "\nORDER BY " ^< concat " "
 	(List.map
 	   (function
-	     | (ASC,v) -> "ASC(" ^ var v ^ ")"
-	     | (DESC,v) -> "DESC(" ^ var v ^ ")")
+	     | (ASC,v) -> "ASC(" ^< v ^> ")"
+	     | (DESC,v) -> "DESC(" ^< v ^> ")")
 	   ordering) in
-    let s = match limit with None -> s | Some n -> s ^ "\nLIMIT " ^ string_of_int n in
+    let s = match limit with None -> s | Some n -> s ^> "\nLIMIT " ^ string_of_int n in
     s
 
-let select_from_service url query =
-  "SELECT * FROM { SERVICE <" ^ url ^ "> { " ^ query ^ " }}"
+let select_from_service url query : query =
+  "SELECT * FROM { SERVICE <" ^< url ^< "> { " ^< query ^> " }}"
 
 type subquery =
   { projections : projection list;
     pattern : pattern;
-    groupings : Rdf.var list;
+    groupings : var list;
     having : expr;
     limit : int option }
     
@@ -373,7 +396,7 @@ let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
   | form ->
     select
       ?distinct
-      ~projections:(List.map (fun v -> (`Bare,v)) lv)
+      ~projections:(List.map (fun v -> (`Bare, v)) lv)
       ?ordering
       ?limit
       (pattern_of_formula form)
