@@ -28,6 +28,7 @@ type term = [`Var|`Term] sparql
 type expr = [`Var|`Term|`Expr] sparql
 type pattern = [`Pattern] sparql
 type selector = [`Var|`Selector] sparql
+type ordering = [`Ordering] sparql
 type query = [`Query] sparql
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
@@ -122,16 +123,20 @@ type aggreg =
 | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
 | SUM of string option | AVG of string option | MAX of string option | MIN of string option
 
+let apply_conv_opt (conv_opt : string option) (term : term) : expr =
+  match conv_opt with
+  | None -> (term :> expr)
+  | Some conv -> conv ^< "(" ^< term ^> ")"
+
 let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
   let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
-  let make_conv conv_opt term : expr = match conv_opt with None -> (term :> expr) | Some conv -> conv ^< "(" ^< term ^> ")" in
   match g with
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
   | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator=', ')"
-  | SUM conv_opt -> make_aggreg "SUM(" (make_conv conv_opt term) ")"
-  | AVG conv_opt -> make_aggreg "AVG(" (make_conv conv_opt term) ")"
-  | MAX conv_opt -> make_aggreg "MAX(" (make_conv conv_opt term) ")"
-  | MIN conv_opt -> make_aggreg "MIN(" (make_conv conv_opt term) ")"
+  | SUM conv_opt -> make_aggreg "SUM(" (apply_conv_opt conv_opt term) ")"
+  | AVG conv_opt -> make_aggreg "AVG(" (apply_conv_opt conv_opt term) ")"
+  | MAX conv_opt -> make_aggreg "MAX(" (apply_conv_opt conv_opt term) ")"
+  | MIN conv_opt -> make_aggreg "MIN(" (apply_conv_opt conv_opt term) ")"
   | SAMPLE -> make_aggreg "SAMPLE(" term ")"
   | ID -> make_aggreg "" term ""
 
@@ -199,7 +204,13 @@ let search_contains (l : term) (w : string) : pattern =
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^< indent 8 pattern ^> " }"
 
-type order = ASC | DESC
+type order = ASC of string option | DESC of string option
+
+let ordering (order : order) (term : term) : ordering =
+  match order with
+  | ASC conv_opt -> "ASC(" ^< apply_conv_opt conv_opt term ^> ")"
+  | DESC conv_opt -> "DESC(" ^< apply_conv_opt conv_opt term ^> ")"
+
 
 type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * term]
 type projection = projection_def * Rdf.var
@@ -223,7 +234,7 @@ let select
     ~(projections : projection list)
     ?(groupings : var list = [])
     ?(having : expr = log_true)
-    ?(ordering : (order * var) list = [])
+    ?(orderings : (order * var) list = [])
     ?(limit : int option)
     (pattern : pattern) : query =
   if projections = []
@@ -240,14 +251,9 @@ let select
       then s
       else s ^^ "\nHAVING ( " ^< indent 9 having ^> " )" in
     let s =
-      if ordering = []
+      if orderings = []
       then s
-      else s ^^ "\nORDER BY " ^< concat " "
-	(List.map
-	   (function
-	     | (ASC,v) -> "ASC(" ^< v ^> ")"
-	     | (DESC,v) -> "DESC(" ^< v ^> ")")
-	   ordering) in
+      else s ^^ "\nORDER BY " ^< concat " " (List.map (fun (order,v) -> ordering order (v :> term)) orderings) in
     let s = match limit with None -> s | Some n -> s ^> "\nLIMIT " ^ string_of_int n in
     s
 
@@ -382,7 +388,7 @@ let join_views (views : view list) : view =
     formula_and_list
       (List.map (fun f -> f ?limit ()) list_form))
   
-let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
+let query_of_view ?distinct ?orderings ?limit (lv, f : view) : query =
   match f ?limit () with
   | Subquery sq ->
     select
@@ -390,14 +396,14 @@ let query_of_view ?distinct ?ordering ?limit (lv, f : view) : query =
       ~projections:sq.projections (*List.filter (fun (_,v) -> List.mem v lv) sq.projections*)
       ~groupings:sq.groupings
       ~having:sq.having
-      ?ordering
+      ?orderings
       ?limit
       sq.pattern
   | form ->
     select
       ?distinct
       ~projections:(List.map (fun v -> (`Bare, v)) lv)
-      ?ordering
+      ?orderings
       ?limit
       (pattern_of_formula form)
 

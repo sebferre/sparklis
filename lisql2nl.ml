@@ -234,8 +234,8 @@ let string_of_func grammar func =
 
 let word_of_order grammar = function
   | Unordered -> `Op ""
-  | Highest -> `Op grammar#order_highest
-  | Lowest -> `Op grammar#order_lowest
+  | Highest _ -> `Op grammar#order_highest
+  | Lowest _ -> `Op grammar#order_lowest
 
 let word_of_incr grammar = function
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
@@ -539,8 +539,8 @@ and qu_adj_of_modif grammar annot_opt qu modif : qu * adj =
     | Unselect, order -> `Any (match annot_opt with None -> false | Some annot -> annot#is_at_focus), snd (qu_adj_of_order grammar `A order)
 and qu_adj_of_order grammar qu : order -> qu * adj = function
   | Unordered -> qu, `Nil
-  | Highest -> `The, `Order (`Op grammar#order_highest)
-  | Lowest -> `The, `Order (`Op grammar#order_lowest)
+  | Highest _ -> `The, `Order (`Op grammar#order_highest)
+  | Lowest _ -> `The, `Order (`Op grammar#order_lowest)
 
 let ng_of_id ~id_labelling id : annot ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))

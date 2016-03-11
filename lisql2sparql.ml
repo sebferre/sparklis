@@ -49,6 +49,11 @@ let sparql_aggreg = function
   | Maximum conv_opt -> Sparql.MAX (sparql_num_conv_opt conv_opt)
   | Minimum conv_opt -> Sparql.MIN (sparql_num_conv_opt conv_opt)
 
+let sparql_order = function
+  | Unordered -> None
+  | Lowest conv_opt -> Some (Sparql.ASC (sparql_num_conv_opt conv_opt))
+  | Highest conv_opt -> Some (Sparql.DESC (sparql_num_conv_opt conv_opt))
+
 let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
   let label_prop, label_lang = label_property_lang in
@@ -495,13 +500,12 @@ let make_query state t_list (defs, f : Sparql.view) : template =
     List.filter
       (fun v -> state#project v = Select || List.mem (Rdf.Var v) t_list)
       defs in
-  let ordering =
+  let orderings =
     List.fold_right
-      (fun v ordering ->
-	match state#order v with
-	| Unordered -> ordering
-	| Lowest -> (Sparql.ASC, Sparql.var v) :: ordering
-	| Highest -> (Sparql.DESC, Sparql.var v) :: ordering)
+      (fun v orderings ->
+	match sparql_order (state#order v) with
+	| None -> orderings
+	| Some order -> (order, Sparql.var v)::orderings)
       defs [] in
   (fun ?constr ~limit ->
     let f_constr =
@@ -509,7 +513,7 @@ let make_query state t_list (defs, f : Sparql.view) : template =
 	match t_list, constr with
 	| [(Rdf.Var _ as t)], Some c -> Sparql.formula_and (f ?limit ()) (filter_constr_entity (Sparql.term t) c)
 	| _ -> f ?limit () in
-    (Sparql.query_of_view ~distinct:true ~ordering ~limit (visible_defs, f_constr) :> string))
+    (Sparql.query_of_view ~distinct:true ~orderings ~limit (visible_defs, f_constr) :> string))
 
       
 let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s)

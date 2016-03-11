@@ -19,14 +19,15 @@ type constr =
 
 
 (* LISQL modifiers *)
-type id = int
-type arg = S | P | O
-type project = Unselect | Select (* | Aggreg of aggreg * order *)
-type order = Unordered | Highest | Lowest
-type modif_s2 = project * order
-type modif_p2 = Fwd | Bwd
 
 type num_conv = [`Integer | `Decimal | `Double] (* subset of type [func] *)
+
+type id = int
+type arg = S | P | O
+type project = Unselect | Select
+type order = Unordered | Highest of num_conv option | Lowest of num_conv option
+type modif_s2 = project * order
+type modif_p2 = Fwd | Bwd
 type aggreg =
 | NumberOf | ListOf | Sample
 | Total of num_conv option | Average of num_conv option | Maximum of num_conv option | Minimum of num_conv option

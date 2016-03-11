@@ -222,6 +222,15 @@ let is_predicate (func : func) : bool =
 
 type type_constraint = datatype list option (* list of possible types or anything *)
 
+let check_input_constraint constr dt_input =
+  match constr with
+  | None -> true
+  | Some ldt -> List.exists (fun dt -> fst (compatible_with dt dt_input)) ldt (* disjunctive compatibility *)
+let check_output_constraint constr dt_output : bool = (* assuming dt_ouput is not a conversion *)
+  match constr with
+  | None -> true
+  | Some ldt -> List.exists (fun dt -> fst (compatible_with dt_output dt)) ldt
+
 let check_input_constraint_conv_opt constr dt_input : bool * Lisql.num_conv option =
   match constr with
   | None -> true, None
@@ -229,17 +238,8 @@ let check_input_constraint_conv_opt constr dt_input : bool * Lisql.num_conv opti
     List.fold_left
       (fun (comp1,conv_opt1) dt ->
 	let (comp2,conv_opt2) = compatible_with dt dt_input in
-	let comp = comp1 || comp2 in
-	let conv_opt = if comp1 && comp2 then lcs_num_conv_opt conv_opt1 conv_opt2 else if comp2 then conv_opt2 else conv_opt1 in
-	comp, conv_opt)
-      (false,None) ldt
-let check_input_constraint constr dt_input =
-  let comp, conv_opt = check_input_constraint_conv_opt constr dt_input in
-  comp && conv_opt = None (* ignoring conversion opportunities *)
-let check_output_constraint constr dt_output : bool = (* assuming dt_ouput is not a conversion *)
-  match constr with
-  | None -> true
-  | Some ldt -> List.exists (fun dt -> fst (compatible_with dt_output dt)) ldt
+	comp1 && comp2, lcs_num_conv_opt conv_opt1 conv_opt2) (* conjunctive compatibility *)
+      (true,None) ldt
 
 let compatible_func_signatures func input_constr_list output_constr =
   List.filter
@@ -345,3 +345,15 @@ let find_insertable_aggreg aggreg focus_type_constraints : Lisql.aggreg option =
   | Average _ -> aux_num (fun conv_opt -> Average conv_opt) 
   | Maximum _ -> aux_num (fun conv_opt -> Maximum conv_opt) 
   | Minimum _ -> aux_num (fun conv_opt -> Minimum conv_opt) 
+
+let find_insertable_order order focus_type_constraints : Lisql.order =
+  let aux_num f_order =
+    let comp, conv_opt = check_input_constraint_conv_opt focus_type_constraints.input_constr `Float in
+    if comp
+    then f_order conv_opt
+    else f_order None
+  in
+  match order with
+  | Unordered -> Unordered
+  | Lowest _ -> aux_num (fun conv_opt -> Lowest conv_opt)
+  | Highest _ -> aux_num (fun conv_opt -> Highest conv_opt)

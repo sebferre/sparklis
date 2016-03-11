@@ -188,8 +188,8 @@ and print_num_conv = function
   | conv -> print_atom (atom_of_num_conv conv)
 and print_order = function
   | Unordered -> print_atom "Unordered"
-  | Highest -> print_atom "Highest"
-  | Lowest -> print_atom "Lowest"
+  | Highest conv_opt -> print_un "HighestConv" (print_opt print_num_conv conv_opt)
+  | Lowest conv_opt -> print_un "LowestConv" (print_opt print_num_conv conv_opt)
 and print_constr = function
   | True -> print_atom "True"
   | MatchesAll lw -> print_list print_string "MatchesAll" lw
@@ -355,10 +355,12 @@ and parse_num_conv ~version = parser
     | [< 'Ident atom >] -> num_conv_of_atom atom
     | [<>] -> syntax_error "invalid num_conv"
 and parse_order ~version = parser
-  | [< () = parse_atom ~version "Unordered" >] -> Unordered
-  | [< () = parse_atom ~version "Highest" >] -> Highest
-  | [< () = parse_atom ~version "Lowest" >] -> Lowest
-  | [<>] -> syntax_error "invalid order"
+    | [< () = parse_atom ~version "Unordered" >] -> Unordered
+    | [< conv_opt = parse_un ~version "HighestConv" (parse_opt parse_num_conv) >] -> Highest conv_opt
+    | [< () = parse_atom ~version "Highest" >] -> Highest None (* backward compat *)
+    | [< conv_opt = parse_un ~version "LowestConv" (parse_opt parse_num_conv) >] -> Lowest conv_opt
+    | [< () = parse_atom ~version "Lowest" >] -> Lowest None (* backward compat *)
+    | [<>] -> syntax_error "invalid order"
 and parse_constr ~version = parser
   | [< () = parse_atom ~version "True" >] -> True
   | [< lw = parse_list parse_string ~version "MatchesAll" >] -> MatchesAll lw

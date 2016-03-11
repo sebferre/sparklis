@@ -465,8 +465,13 @@ object (self)
 	let incrs =
 	  IncrIs :: IncrTriplify ::
 	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
-	    IncrUnselect :: IncrOrder Highest :: IncrOrder Lowest ::
+	    IncrUnselect ::
 	    incrs in
+	let incrs =
+	  List.fold_left
+	    (fun incrs order -> IncrOrder (Lisql_type.find_insertable_order order focus_type_constraints) :: incrs)
+	    incrs
+	    [ Highest None; Lowest None ] in
 	let incrs =
 	  List.fold_left
 	    (fun incrs id -> IncrForeach id :: incrs)
