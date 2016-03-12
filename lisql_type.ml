@@ -66,18 +66,18 @@ let lcs_num_conv_opt conv1_opt conv2_opt = match conv1_opt, conv2_opt with
   | _, None -> conv2_opt
   | Some conv1, Some conv2 ->
     match conv1, conv2 with
-    | `Double, _
-    | _, `Double -> Some `Double
-    | `Decimal, _
-    | _, `Decimal -> Some `Decimal
-    | _ -> Some `Integer
-    
+    | (`Double, b1) , (_, b2)
+    | (_, b1), (`Double, b2) -> Some (`Double, b1||b2)
+    | (`Decimal, b1), (_,b2)
+    | (_,b1), (`Decimal,b2) -> Some (`Decimal, b1||b2)
+    | (_,b1), (_,b2) -> Some (`Integer, b1||b2)
+
 (* typing functions *)
 
-let of_numeric_literal s src_dt =
-  if String.contains s 'E' || String.contains s 'e' then `Conversion (src_dt,`Double,`Float)
-  else if String.contains s '.' then `Conversion (src_dt,`Decimal,`Decimal)
-  else `Conversion (src_dt,`Integer,`Integer)
+let of_numeric_literal s src_dt apply_str =
+  if String.contains s 'E' || String.contains s 'e' then `Conversion (src_dt, (`Double, apply_str), `Float)
+  else if String.contains s '.' then `Conversion (src_dt, (`Decimal, apply_str), `Decimal)
+  else `Conversion (src_dt, (`Integer, apply_str), `Integer)
 
 let rec of_term : Rdf.term -> datatype = function
   | Rdf.URI _ -> `IRI
@@ -88,7 +88,7 @@ let rec of_term : Rdf.term -> datatype = function
     else
       let t = if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt) in
       let src_dt = of_term t in
-      of_numeric_literal s src_dt
+      of_numeric_literal s src_dt (dt<>"")
   | Rdf.TypedLiteral (_,dt) ->
     if dt = Rdf.xsd_string then `String
     else if dt = Rdf.xsd_integer then `Integer

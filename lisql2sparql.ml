@@ -32,27 +32,34 @@ object (self)
 
 end
 
-let sparql_num_conv = function
-  | `Integer -> "xsd:integer"
-  | `Decimal -> "xsd:decimal"
-  | `Double -> "xsd:double"
-let sparql_num_conv_opt = function
-  | None -> None
-  | Some conv -> Some (sparql_num_conv conv)
+let sparql_converter (conv_opt : num_conv option) : Sparql.converter =
+  match conv_opt with
+  | None -> (fun t -> (t :> Sparql.expr))
+  | Some (conv,b) ->
+    let func_conv =
+      match conv with
+      | `Integer -> "xsd:integer"
+      | `Decimal -> "xsd:decimal"
+      | `Double -> "xsd:double" in
+    (fun t ->
+      Sparql.expr_func func_conv
+	[ if b
+	  then Sparql.expr_func "str" [(t :> Sparql.expr)]
+	  else (t :> Sparql.expr) ])
   
 let sparql_aggreg = function
   | NumberOf -> Sparql.DistinctCOUNT
   | ListOf -> Sparql.DistinctCONCAT
   | Sample -> Sparql.SAMPLE
-  | Total conv_opt -> Sparql.SUM (sparql_num_conv_opt conv_opt)
-  | Average conv_opt -> Sparql.AVG (sparql_num_conv_opt conv_opt)
-  | Maximum conv_opt -> Sparql.MAX (sparql_num_conv_opt conv_opt)
-  | Minimum conv_opt -> Sparql.MIN (sparql_num_conv_opt conv_opt)
+  | Total conv_opt -> Sparql.SUM (sparql_converter conv_opt)
+  | Average conv_opt -> Sparql.AVG (sparql_converter conv_opt)
+  | Maximum conv_opt -> Sparql.MAX (sparql_converter conv_opt)
+  | Minimum conv_opt -> Sparql.MIN (sparql_converter conv_opt)
 
 let sparql_order = function
   | Unordered -> None
-  | Lowest conv_opt -> Some (Sparql.ASC (sparql_num_conv_opt conv_opt))
-  | Highest conv_opt -> Some (Sparql.DESC (sparql_num_conv_opt conv_opt))
+  | Lowest conv_opt -> Some (Sparql.ASC (sparql_converter conv_opt))
+  | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
 let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)

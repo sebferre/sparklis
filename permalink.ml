@@ -74,9 +74,12 @@ let list_func_atom =
     `REGEX, "REGEX"    
   ]
 let list_num_conv_atom =
-  [ `Integer, "Integer";
-    `Decimal, "Decimal";
-    `Double, "Double"
+  [ (`Integer, false), "Integer";
+    (`Integer, true), "IntegerStr";
+    (`Decimal, false), "Decimal";
+    (`Decimal, true), "DecimalStr";
+    (`Double, false), "Double";
+    (`Double, true), "DoubleStr";
   ]
 
 let atom_of_func func =
@@ -173,7 +176,6 @@ and print_modif = function
 and print_project = function
   | Unselect -> print_atom "Unselect"
   | Select -> print_atom "Select"
-(*  | Aggreg (g,o) -> print_bin "Aggreg" (print_aggreg g) (print_order o) *)
 and print_aggreg_op = function
   | NumberOf -> print_atom "NumberOf"
   | ListOf -> print_atom "ListOf"

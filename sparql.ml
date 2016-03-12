@@ -31,6 +31,8 @@ type selector = [`Var|`Selector] sparql
 type ordering = [`Ordering] sparql
 type query = [`Query] sparql
 
+type converter = term -> expr
+
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
   match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) ->
@@ -121,33 +123,26 @@ let rec term : Rdf.term -> term = function
 
 type aggreg =
 | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
-| SUM of string option | AVG of string option | MAX of string option | MIN of string option
-
-let apply_conv_opt (conv_opt : string option) (term : term) : expr =
-  match conv_opt with
-  | None -> (term :> expr)
-  | Some conv -> conv ^< "(" ^< term ^> ")"
+| SUM of converter | AVG of converter | MAX of converter | MIN of converter
 
 let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
   let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
   match g with
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
   | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator=', ')"
-  | SUM conv_opt -> make_aggreg "SUM(" (apply_conv_opt conv_opt term) ")"
-  | AVG conv_opt -> make_aggreg "AVG(" (apply_conv_opt conv_opt term) ")"
-  | MAX conv_opt -> make_aggreg "MAX(" (apply_conv_opt conv_opt term) ")"
-  | MIN conv_opt -> make_aggreg "MIN(" (apply_conv_opt conv_opt term) ")"
+  | SUM conv -> make_aggreg "SUM(" (conv term) ")"
+  | AVG conv -> make_aggreg "AVG(" (conv term) ")"
+  | MAX conv -> make_aggreg "MAX(" (conv term) ")"
+  | MIN conv -> make_aggreg "MIN(" (conv term) ")"
   | SAMPLE -> make_aggreg "SAMPLE(" term ")"
   | ID -> make_aggreg "" term ""
-
-let conv_numeric (e : expr) : expr = "xsd:double(" ^< e ^> ")"
 
 let expr_func (f : string) (l_expr : expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
 let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^< concat op l_expr ^> ")"
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
 
-
+let conv_numeric (e : expr) : expr = expr_func "xsd:double" [e]
 
 let log_true : expr = sparql "true"
 let log_false : expr = sparql "false"
@@ -204,12 +199,12 @@ let search_contains (l : term) (w : string) : pattern =
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^< indent 8 pattern ^> " }"
 
-type order = ASC of string option | DESC of string option
+type order = ASC of converter | DESC of converter
 
 let ordering (order : order) (term : term) : ordering =
   match order with
-  | ASC conv_opt -> "ASC(" ^< apply_conv_opt conv_opt term ^> ")"
-  | DESC conv_opt -> "DESC(" ^< apply_conv_opt conv_opt term ^> ")"
+  | ASC conv -> "ASC(" ^< conv term ^> ")"
+  | DESC conv -> "DESC(" ^< conv term ^> ")"
 
 
 type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * term]

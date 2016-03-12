@@ -20,7 +20,7 @@ type constr =
 
 (* LISQL modifiers *)
 
-type num_conv = [`Integer | `Decimal | `Double] (* subset of type [func] *)
+type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
 
 type id = int
 type arg = S | P | O
