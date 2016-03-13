@@ -34,6 +34,7 @@ object
 
   method virtual a_an : following:string -> string
   method virtual the : string
+  method virtual all_the : string
   method virtual each : string
   method virtual all : string
   method virtual no : string
@@ -139,6 +140,7 @@ object
     then "an"
     else "a"
   method the = "the"
+  method all_the = "all the"
   method each = "each"
   method all = "all"
   method no = "no"
@@ -309,6 +311,7 @@ object
 
   method a_an ~following = "un(e)"
   method the = "l'"
+  method all_the = "tous les"
   method each = "chaque"
   method no = "aucun(e)"
   method any = "n'importe quel(le)"

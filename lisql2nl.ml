@@ -117,7 +117,7 @@ and 'a nl_ng =
   | `LabelThat of ng_label * 'a rel
   | `OfThat of word * 'a np * 'a rel
   | `Aggreg of bool * 'a ng_aggreg * 'a ng ] (* the bool indicates suspension *)
-and qu = [ `A | `Any of bool | `The | `Each | `All | `One | `No of bool ]
+and qu = [ `A | `Any of bool | `The | `AllThe | `Each | `All | `One | `No of bool ]
 and adj =
   [ `Nil
   | `Order of word
@@ -519,7 +519,12 @@ let rec head_of_modif grammar annot_opt nn rel (modif : modif_s2) : annot np =
   let qu, adj =
     match modif with
       | Select, order -> qu_adj_of_order grammar `A order
-      | Unselect, order -> `Any (match annot_opt with None -> false | Some annot -> annot#is_at_focus), snd (qu_adj_of_order grammar `A order) in
+      | Unselect, order ->
+	`Any
+	  ( match annot_opt with
+	  | None -> false
+	  | Some annot -> annot#is_at_focus),
+	snd (qu_adj_of_order grammar `A order) in
   let nl = `Qu (qu, adj, X (`That (nn, rel))) in
   match annot_opt with
   | None -> X nl
@@ -801,9 +806,11 @@ object (self)
 	-> `ThereIs (A (a2, `PN (w, X `Nil)))
       | `Return (A (a2, `PN (w, X (`That vp))))
 	-> `Truth (A (a2, `PN (w, top_rel)), vp)
+      | `Return (A (a2, `Qu (`A, adj, (X (`That ((`Thing | `Class _), _)) as ng))))
+	-> `Return (A (a2, `Qu (`AllThe, adj, ng)))
       | nl -> nl)
   method np = function
-  | A (a1, `Qu (qu, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu ((`A | `The), `Nil, X ng)), []))))))))
+  | A (a1, `Qu (_, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu (qu, `Nil, X ng)), []))))))))
     -> A (a1, `Qu (qu, adj, A (a2, ng)))
   | A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, `That (`Thing, X (`That (X (`IsNP (X (`Qu ((`A | `The), `Nil, X ng)), []))))))))))
     -> A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, ng)))))
@@ -977,6 +984,7 @@ and xml_qu grammar qu xml =
 	| `A -> Kwd grammar#something :: xml_rem
 	| `Any susp -> xml_suspended susp [Word (`Op grammar#anything)] @ xml_rem
 	| `The -> Kwd grammar#the :: xml
+	| `AllThe -> Kwd grammar#everything :: xml_rem
 	| `Each -> Kwd grammar#each :: xml
 	| `All -> Kwd grammar#everything :: xml_rem
 	| `One -> Kwd grammar#quantif_one :: xml
@@ -986,6 +994,7 @@ and xml_qu grammar qu xml =
 	| `A -> xml_a_an grammar xml
 	| `Any susp -> xml_suspended susp [Word (`Op grammar#any)] @ xml
 	| `The -> Kwd grammar#the :: xml
+	| `AllThe -> Kwd grammar#all_the :: xml
 	| `Each -> Kwd grammar#each :: xml
 	| `All -> Kwd grammar#all :: xml
 	| `One -> Kwd grammar#quantif_one :: xml
