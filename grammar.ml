@@ -1,4 +1,6 @@
 
+type aggreg_syntax = [`A | `The] * string * string option (* quantifier, noun, adj_opt : adjective form is preferred *)
+
 type func_syntax =
 [ `Noun of string
 | `Prefix of string
@@ -54,15 +56,7 @@ object
   method virtual date_and_time : string
   method virtual uri : string
 
-  (* aggregations: (noun, adjective option), adjective is prefered *) 
-  method virtual aggreg_number : string * string option
-  method virtual aggreg_list : string * string option
-  method virtual aggreg_total : string * string option
-  method virtual aggreg_average : string * string option
-  method virtual aggreg_maximum : string * string option
-  method virtual aggreg_minimum : string * string option
-  method virtual aggreg_sample : string * string option
-
+  method virtual aggreg_syntax : Lisql.aggreg -> aggreg_syntax
   method virtual func_syntax : Lisql.func -> func_syntax
       
   method virtual order_highest : string
@@ -172,14 +166,15 @@ object
   method time = "time"
   method date_and_time = "date and time"
   method uri = "URI"
-      
-  method aggreg_number = "number", None
-  method aggreg_list = "list", None
-  method aggreg_total = "sum", Some "total"
-  method aggreg_average = "average", Some "average"
-  method aggreg_maximum = "maximum", Some "maximal"
-  method aggreg_minimum = "minimum", Some "minimal"
-  method aggreg_sample = "sample", Some "sample"
+
+  method aggreg_syntax = function
+  | Lisql.NumberOf -> `The, "number", None
+  | Lisql.ListOf -> `The, "list", None
+  | Lisql.Sample -> `A, "sample", None
+  | Lisql.Total _ -> `The, "sum", Some "total"
+  | Lisql.Average _ -> `The, "average", Some "average"
+  | Lisql.Maximum _ -> `The, "maximum", Some "maximal"
+  | Lisql.Minimum _ -> `The, "minimum", Some "minimal"
 
   method func_syntax = function
   | `Str -> `Noun "string"
@@ -340,13 +335,14 @@ object
   method date_and_time = "date et heure"
   method uri = "URI"
 
-  method aggreg_number = "nombre", None
-  method aggreg_list = "liste", None
-  method aggreg_total = "somme", Some "total(e)"
-  method aggreg_average = "moyenne", Some "moyen(ne)"
-  method aggreg_maximum = "maximum", Some "maximal(e)"
-  method aggreg_minimum = "minimum", Some "minimal(e)"
-  method aggreg_sample = "échantillon", None
+  method aggreg_syntax = function
+  | Lisql.NumberOf -> `The, "nombre", None
+  | Lisql.ListOf -> `The, "liste", None
+  | Lisql.Sample -> `A, "échantillon", None
+  | Lisql.Total _ -> `The, "somme", Some "total(e)"
+  | Lisql.Average _ -> `The, "moyenne", Some "moyen(ne)"
+  | Lisql.Maximum _ -> `The, "maximum", Some "maximal(e)"
+  | Lisql.Minimum _ -> `The, "minimum", Some "minimal(e)"
 
   method func_syntax = function
   | `Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]

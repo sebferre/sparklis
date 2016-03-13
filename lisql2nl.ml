@@ -202,17 +202,8 @@ let string_of_input_type grammar = function
   | `DateTime -> grammar#date_and_time
 (*  | `Time -> grammar#time *)
     
-let noun_adj_opt_of_aggreg grammar = function
-  | NumberOf -> grammar#aggreg_number
-  | ListOf -> grammar#aggreg_list
-  | Sample -> grammar#aggreg_sample
-  | Total _ -> grammar#aggreg_total
-  | Average _ -> grammar#aggreg_average
-  | Maximum _ -> grammar#aggreg_maximum
-  | Minimum _ -> grammar#aggreg_minimum
-
 let word_of_aggreg grammar g =
-  let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+  let qu, noun, adj_opt = grammar#aggreg_syntax g in
   match adj_opt with
     | None -> `Func noun
     | Some adj -> `Func adj
@@ -396,7 +387,7 @@ and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = f
     labelling @ (id, `Labels ls_g) :: lab_rel
 and labelling_aggreg_op grammar g ls =
   let v = var_of_aggreg g in
-  let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+  let qu, noun, adj_opt = grammar#aggreg_syntax g in
   let w = `Func noun in
   let make_aggreg =
     match adj_opt with
@@ -547,12 +538,12 @@ let ng_of_id ~id_labelling id : annot ng =
 
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : annot rel) (ng : annot ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
+  let qu_aggreg, noun, adj_opt = grammar#aggreg_syntax g in
   let ng_aggreg =
-    let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
     match ng, adj_opt with
-    (*| X (`LabelThat (`Expr _, _)), _*)
     | _, None -> `NounThatOf (`Func noun, rel)
     | _, Some adj -> `AdjThat (`Func adj, rel) in
+  let qu = if qu = `The then (qu_aggreg :> qu) else qu in (* the sample of --> a sample of *)
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
   match annot_opt with
@@ -646,7 +637,7 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let ng_aggreg =
-      let noun, adj_opt = noun_adj_opt_of_aggreg grammar g in
+      let qu, noun, adj_opt = grammar#aggreg_syntax g in
       match adj_opt with
       | None -> `NounThatOf (`Func noun, rel)
       | Some adj -> `AdjThat (`Func adj, rel) in
@@ -806,8 +797,6 @@ object (self)
   method s nl =
     map_annotated nl
       (function
-      | `Return (A (a2, `Qu (`A, adj, X (`Aggreg (susp,ngg,ng)))))
-	-> `Return (A (a2, `Qu (`The, adj, X (`Aggreg (susp, ngg, ng)))))
       | `Return (A (a2, `PN (w, X `Nil)))
 	-> `ThereIs (A (a2, `PN (w, X `Nil)))
       | `Return (A (a2, `PN (w, X (`That vp))))
