@@ -681,6 +681,7 @@ let insert_elt_p1 (elt : unit elt_p1) = function
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtDim (ForEach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForEachThatX (id,modif,id2,ctx)) elt rel_opt
   | AtDim _ -> None
+  | AtAggreg (_, SAggregX ([],_,_)) -> None (* HAVING clauses are not allowed without GROUP BY dimensions, unique value anyway *)
   | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
   | AtExpr (expr, SExprX (id,modif,rel_opt,ctx)) -> insert_elt_p1_in_rel_opt (SExprThatX (id,modif,expr,ctx)) elt rel_opt
   | AtExpr _ -> None (* no insertion inside expressions *)

@@ -270,10 +270,7 @@ let query_of_subquery : subquery -> query = function
     select ~distinct:true ~projections ~groupings ~having ?limit pattern
 
 let pattern_of_subquery (sq : subquery) : pattern =
-  if sq.having = log_true
-  then subquery (query_of_subquery sq)
-  else join [subquery (query_of_subquery {sq with having=log_true}); (* because HAVING not allowed in subqueries *)
-	     filter sq.having]
+  subquery (query_of_subquery sq)
 
 
 (* formulas *)
