@@ -887,6 +887,8 @@ and xml_node_text_content grammar = function
 
 let xml_a_an grammar xml =
   Kwd (grammar#a_an ~following:(xml_text_content grammar xml)) :: xml
+let xml_all_the grammar xml =
+  Kwd grammar#all_the :: xml
 
 let xml_suspended susp xml =
   if susp
@@ -1120,9 +1122,16 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with
-      | AtS1 (Det (_, An (_, _, Class c0), _), _) when c0 = c ->
-	xml_a_an grammar xml_c @ [DeleteIncr]
-      | AtS1 _ -> xml_a_an grammar xml_c
+      | AtS1 (np,ctx) ->
+	let xml_qu =
+	  match ctx with
+	  | ReturnX _ -> xml_all_the
+	  | _ -> xml_a_an in
+	let xml_delete_opt =
+	  match np with
+	  | Det (_, An (_, _, Class c0), _) when c0 = c -> [DeleteIncr]
+	  | _ -> [] in
+	xml_qu grammar xml_c @ xml_delete_opt
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar xml_c) )
