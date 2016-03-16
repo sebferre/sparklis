@@ -42,7 +42,7 @@ let has_prefix (s1 : string) (s2 : string) : bool =
     res := s1.[!i] = s2.[!i];
     incr i
   done;
-  !res && !i <= n1
+  !res && !i = n2
 
 let has_suffix (s1 : string) (s2 : string) : bool =
   let n1 = String.length s1 in
@@ -81,3 +81,5 @@ let uncamel s =
     end
   done;
   String.sub s2 0 !j
+
+    

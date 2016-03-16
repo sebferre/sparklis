@@ -71,16 +71,18 @@ let name_of_uri_concept =
   fun uri ->
     let name = name_of_uri uri in
     try Common.uncamel name
-    with _ -> name
+    with _ -> Jsutils.firebug "Common.uncamel failed"; name
 
 let prepositions = ["by"; "for"; "with"; "on"; "from"; "to"; "off"; "in"; "about"; "after"; "at"; "down"; "up"; "into"; "over"; "until"; "upon"; "within"; "without"]
 
 let syntagm_of_property_name (name : string) : property_syntagm * string =
-  if Common.has_suffix name " of" then `InvNoun, String.sub name 0 (String.length name - 3)
-  else if Common.has_prefix name "has " then `Noun, String.sub name 4 (String.length name - 4)
-  else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then `TransVerb, name
-  else if List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then `TransAdj, name
-  else `Noun, name
+  try
+    if Common.has_suffix name " of" then `InvNoun, String.sub name 0 (String.length name - 3)
+    else if Common.has_prefix name "has " then `Noun, String.sub name 4 (String.length name - 4)
+    else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then `TransVerb, name
+    else if List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then `TransAdj, name
+    else `Noun, name
+  with _ -> Jsutils.firebug ("Lexicon.syntagm_of_property_name: exception raised for:" ^ name); `Noun, name
 
 let syntagm_name_of_uri_property =
   fun uri ->

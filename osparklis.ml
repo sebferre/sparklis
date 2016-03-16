@@ -735,7 +735,9 @@ let _ =
       let args =
 	match args with
 	  | [] -> []
-	  | (k,v)::l -> (String.sub k 1 (String.length k - 1), v)::l in (* bug: '?' remains in first key *)
+	  | (k,v)::l ->
+	    let k = try String.sub k 1 (String.length k - 1) with _ -> firebug "osparklis.ml: removing '?' failed"; k in  (* bug: '?' remains in first key *)
+	    (k, v)::l in
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
       (try
 	 let url = List.assoc "endpoint" args in

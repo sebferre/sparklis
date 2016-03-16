@@ -34,7 +34,7 @@ type query = [`Query] sparql
 type converter = term -> expr
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
-  match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
+  try match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) ->
       let localname = Regexp.matched_string res in
       let len_namespace = String.length uri - String.length localname in
@@ -42,6 +42,7 @@ let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local nam
       then Some (String.sub uri 0 len_namespace, localname)
       else None
     | None -> None
+  with _ -> Jsutils.firebug "Sparql.split_uri failed"; None
 
 let prologue =
 object (self)
