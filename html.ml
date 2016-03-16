@@ -194,13 +194,15 @@ let html_id (state : state) (id : int) : string =
 
 (* HTML of increment lists *)
 
-let html_count_unit count max (unit,units) =
+let html_count_unit freq (unit,units) =
+  let count = freq.Lis.value in
+  let s_count = string_of_int count in
+  let s_count = if freq.Lis.partial then s_count ^ "+" else s_count in
   if count = 0 then Lisql2nl.config_lang#grammar#no ^ " " ^ unit
-  else if count = 1 then "1 " ^ unit
-  else if count >= max then string_of_int count ^ "+ " ^ units
-  else string_of_int count ^ " " ^ units
+  else if count = 1 then s_count ^ " " ^ unit
+  else s_count ^ " " ^ units
 
-let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
+let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
   let key = state#dico_incrs#add incr in
   let xml = Lisql2nl.xml_incr Lisql2nl.config_lang#grammar state#id_labelling focus incr in
   let text =
@@ -236,13 +238,22 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq) =
       | IncrFuncArg _ -> 16, Some grammar#tooltip_func
   in
   let html_freq =
-    if freq = 1
-    then ""
-    else " [" ^ string_of_int freq ^ "]" in
-  freq, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+    match freq_opt with
+    | None -> ""
+    | Some {Lis.value=1} -> ""
+    | Some {Lis.value; max_value; partial; unit} ->
+      let s = string_of_int value in
+      let s = if partial then s ^ "+" else s in
+      (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
+      ( match unit with
+      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+      ) in
+  freq_opt, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lisql.increment Lis.index) =
+let html_index focus (state : state) (index : Lis.incr_freq_index) =
   let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
   let sorted_index =
     List.sort

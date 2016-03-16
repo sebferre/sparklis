@@ -218,6 +218,17 @@ margin: 0px;
 cursor:pointer;
 }
 
+.frequency-results, .frequency-entities {
+    border-radius:6px;
+    margin-left:10px;
+    padding-left:3px;
+    padding-right:3px;
+    border:1px solid grey;
+    color:grey;
+    font-size:12px;
+}
+			 
+
 .count-incrs
 {
 text-align:right;

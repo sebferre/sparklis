@@ -348,7 +348,7 @@ object (self)
       end)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
-  method private refresh_term_increments_gen ajax_index max_results =
+  method private refresh_term_increments_gen ajax_index =
     let apply_incr elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       let incr_opt = (* retrieving input value for input increments *)
@@ -374,10 +374,10 @@ object (self)
 	jquery "#list-terms" (fun elt_list ->
 	  (*filtering_terms <- true;*)
 	  ajax_index (norm_constr term_constr) [elt_list]
-	    (fun index ->
+	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-terms"
-		(html_count_unit (List.length index) max_results Lisql2nl.config_lang#grammar#entity_entities);
+		(html_count_unit { Lis.value=List.length index; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		apply_incr elt));
@@ -391,24 +391,23 @@ object (self)
 	      self#filter_increments elt_list new_constr;
 	      self#set_term_constr new_constr))))
   method private refresh_term_increments_init =
-    self#refresh_term_increments_gen lis#ajax_index_terms_init 100
+    self#refresh_term_increments_gen lis#ajax_index_terms_init
   method private refresh_term_increments =
     self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms_inputs (fun index_terms_inputs -> k (lis#index_ids @ index_terms_inputs)))
-      Lis.config_max_results#value
+      (fun constr elts k -> lis#index_terms_inputs (fun ~partial index_terms_inputs -> k ~partial (lis#index_ids @ index_terms_inputs)))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
-  method private refresh_property_increments_gen ajax_index max_properties =
+  method private refresh_property_increments_gen ajax_index =
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->
 	jquery "#list-properties" (fun elt_list ->
 	  (*filtering_properties <- true;*)
 	  ajax_index (norm_constr property_constr) elt_list
-	    (fun index ->
+	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-properties"
-		(html_count_unit (List.length index) max_properties Lisql2nl.config_lang#grammar#concept_concepts);
+		(html_count_unit { Lis.value=List.length index; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		navigation#update_focus ~push_in_history:true
 		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
@@ -417,9 +416,9 @@ object (self)
 	      self#filter_increments elt_list new_constr;
 	      self#set_property_constr new_constr))))
   method private refresh_property_increments_init =
-    self#refresh_property_increments_gen lis#ajax_index_properties_init 1000
+    self#refresh_property_increments_gen lis#ajax_index_properties_init
   method private refresh_property_increments =
-    self#refresh_property_increments_gen lis#ajax_index_properties Lis.config_max_properties#value
+    self#refresh_property_increments_gen lis#ajax_index_properties
 
 
   method private refresh_modifier_increments ~(init : bool) =
@@ -430,7 +429,7 @@ object (self)
 	navigation#update_focus ~push_in_history:true
 	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
       jquery_set_innerHTML "#count-modifiers"
-	(html_count_unit (List.length index) max_int Lisql2nl.config_lang#grammar#modifier_modifiers))
+	(html_count_unit { Lis.value=List.length index; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers))
 
   method refresh =
     html_state <- new Html.state lis#id_labelling;
