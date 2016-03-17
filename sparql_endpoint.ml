@@ -244,6 +244,14 @@ object
   method add_elt elt = elts <- elt::elts
   method remove_elt elt = elts <- List.filter ((!=) elt) elts
 
+  val mutable raised_alerts : string list = []
+  method alert (msg : string) : unit =
+    if not (List.mem msg raised_alerts)
+    then begin
+      raised_alerts <- msg::raised_alerts;
+      alert msg
+    end
+    
   method abort_all =
     List.iter
       (fun req ->
@@ -252,7 +260,8 @@ object
       reqs;
     reqs <- [];
     List.iter end_progress elts;
-    elts <- []
+    elts <- [];
+    raised_alerts <- []
 end
 
 let config_proxy = new Config.boolean_input ~key:"proxy" ~input_selector:"#input-proxy" ~default:false ()
@@ -345,12 +354,12 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
 		| 0 ->
 		  if config_proxy#value (* proxy was used *)
 		  then begin
-		    alert "The proxy SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running.";
+		    pool#alert "The proxy SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running.";
 		    k0 code end
 		  else
 		    if config_proxy_url#value = "" (* no proxy allowed *)
 		    then begin
-		      alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can either specify a proxy SPARQL endpoint in configuration panel, or contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
+		      pool#alert "The SPARQL endpoint is not responsive. Check that the URL is correct, and that the server is running. Otherwise, a frequent cause for this error is that the SPARQL endpoint does not allow cross-origin HTTP requests. You can either specify a proxy SPARQL endpoint in configuration panel, or contact and ask the endpoint administrator to use the Cross-Origin Resource Sharing mechanism (CORS).";
 		      k0 code end
 		    else begin
 		      config_proxy#set_value true;
@@ -358,13 +367,13 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
 		    end
 		| 4 ->
 		  if not tentative then
-		    alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		    pool#alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
 		  k0 code
 		| 5 ->
-		  alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
+		  pool#alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
 		  k0 code
 		| _ ->
-		  alert ("Error " ^ string_of_int code);
+		  pool#alert ("Error " ^ string_of_int code);
 		  k0 code )
             | _ -> ()));
       let encode_fields l =
