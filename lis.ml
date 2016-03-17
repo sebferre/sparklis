@@ -350,7 +350,29 @@ object (self)
 
   method ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_class results_prop =
-      let partial = results_class.Sparql_endpoint.length = config_max_classes#value || results_prop.Sparql_endpoint.length = config_max_properties#value in
+      let max_value = None in
+      let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
+      let partial_prop = results_prop.Sparql_endpoint.length = config_max_properties#value in
+      let partial = partial_class || partial_prop in
+      let unit = `Entities in
+      let int_index_class = index_of_results_column "class" results_class in
+      let int_index_prop = index_of_results_column "prop" results_prop in
+      let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_class ~unit
+	(fun c ->
+	  Lexicon.config_class_lexicon#value#enqueue c;
+	  Lisql.IncrType c)
+	int_index_class in
+      let index_has = index_incr_of_index_term_uri ~max_value ~partial:partial_prop ~unit
+	(fun p ->
+	  Lexicon.config_property_lexicon#value#enqueue p;
+	  Lisql.IncrRel (p,Lisql.Fwd))
+	int_index_prop in
+      let index_isof = index_incr_of_index_term_uri ~max_value ~partial:partial_prop ~unit
+	(fun p ->
+	  Lisql.IncrRel (p,Lisql.Bwd))
+	int_index_prop in
+      let index = index_a @ index_has @ index_isof in
+(*	    
       let list_class = list_of_results_column "class" results_class in
       let list_prop = list_of_results_column "prop" results_prop in
       let index = [] in
@@ -370,6 +392,7 @@ object (self)
 	      (Lisql.IncrRel (p,Lisql.Fwd), None) :: (Lisql.IncrRel (p,Lisql.Bwd), None) :: res
 	    | _ -> res)
 	  index list_prop in
+*)
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	Lexicon.config_property_lexicon#value#sync (fun () ->
 	  k ~partial index))
