@@ -410,7 +410,7 @@ and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option 
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
     None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2 :> Sparql.expr) (Sparql.term t :> Sparql.expr))
-and form_aggreg state : annot elt_aggreg -> Sparql.projection * Sparql.expr (* having expr *) = function
+and form_aggreg state : annot elt_aggreg -> Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
@@ -418,7 +418,7 @@ and form_aggreg state : annot elt_aggreg -> Sparql.projection * Sparql.expr (* h
     let v2 = state#id_labelling#get_id_var id2 in
     let sparql_g = sparql_aggreg g in
     let t_v2 = (Sparql.var v2 :> Sparql.term) in
-    (`Aggreg (sparql_g, t_v2), v), Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
+    (`Aggreg (sparql_g, t_v2), v), v2, Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
 and form_expr state : annot elt_expr -> Sparql.expr = function
   | Undef annot -> Sparql.sparql ""
   | Const (annot,t) -> (Sparql.term t :> Sparql.expr)
@@ -468,18 +468,33 @@ and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : seq_
     let l_dims = List.map (form_dim state) dims in
     let l_aggregs = List.map (form_aggreg state) aggregs in
     let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in
-    let projections_aggregs = List.map fst l_aggregs in
+    let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
     let projections = projections_dims @ projections_aggregs in
     let groupings_dims = List.fold_right (fun (_,group_opt,_) res -> match group_opt with None -> res | Some group -> group::res) l_dims [] in
     let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
-    let havings_aggregs = List.map snd l_aggregs in
+    let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
     let f_aggreg =
       fun ?limit () ->
+	let pattern =
+	  Sparql.pattern_of_formula
+	    (Sparql.formula_and_list
+	       (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) () :: lf_dims)) in
+	let pattern = (* special handling of GROUP_CONCAT without grouping, to avoid explosion *)
+	  if groupings_dims = []
+	  && List.exists (function (`Aggreg (Sparql.DistinctCONCAT, _), _) -> true | _ -> false) projections_aggregs
+	  then Sparql.pattern_of_subquery
+	    { Sparql.projections =
+		List.fold_right
+		  (fun (_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
+		  (List.map (fun (_,v2,_) -> (`Bare,v2)) l_aggregs);
+	      pattern = pattern;
+	      groupings = [];
+	      having = Sparql.log_true;
+	      limit = limit }
+	  else pattern in
 	Sparql.Subquery
 	  { Sparql.projections = projections;
-	    pattern = Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) () :: lf_dims));
+	    pattern = pattern;
 	    groupings = List.map (fun v -> Sparql.var v) groupings_dims;
 	    having = Sparql.log_and havings_aggregs;
 	    limit;

@@ -130,7 +130,7 @@ let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are t
   let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
   match g with
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
-  | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator=', ')"
+  | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator='  /  ')"
   | SUM conv -> make_aggreg "SUM(" (conv term) ")"
   | AVG conv -> make_aggreg "AVG(" (conv term) ")"
   | MAX conv -> make_aggreg "MAX(" (conv term) ")"
