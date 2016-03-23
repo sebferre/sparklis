@@ -182,6 +182,8 @@ let config =
   let config_inputs : Config.input list =
     [ (Sparql_endpoint.config_proxy :> Config.input);
       (Sparql_endpoint.config_proxy_url :> Config.input);
+      (Sparql_endpoint.config_method_get :> Config.input);
+      (Sparql_endpoint.config_withCredentials :> Config.input);
       (Sparql_endpoint.config_caching :> Config.input);
       (Lis.config_max_results :> Config.input);
       (Lis.config_max_classes :> Config.input);

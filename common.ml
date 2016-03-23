@@ -17,6 +17,22 @@ let unsome = function
   | Some x -> x
   | None -> invalid_arg "unsome"
 
+let take_rest n l =
+  let rec aux = function
+    | 0, t, r -> t, r
+    | _, t, [] -> t, []
+    | n, t, x::r -> aux (n-1, x::t, r)
+  in
+  let rev_t, r = aux (n,[],l) in
+  List.rev rev_t, r
+
+let rec bin_list n l =
+  if l = []
+  then []
+  else
+    let t, r = take_rest n l in
+    t :: bin_list n r
+
 (* retaining first occurences and removing duplicates *)
 let list_to_set l =
   let rec aux acc = function

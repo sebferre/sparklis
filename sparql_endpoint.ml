@@ -267,6 +267,8 @@ end
 let config_proxy = new Config.boolean_input ~key:"proxy" ~input_selector:"#input-proxy" ~default:false ()
 let config_proxy_url = new Config.string_input ~key:"proxy_url" ~input_selector:"#input-proxy-url" ~default:"" ()
 
+let config_method_get = new Config.boolean_input ~key:"method_get" ~input_selector:"#input-method-get" ~default:false ()
+
 let config_withCredentials = new Config.boolean_input ~key:"withCredentials" ~input_selector:"#input-withCredentials" ~default:false ()
 
 let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#input-caching" ~default:true ()
@@ -295,16 +297,31 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
   match cache#lookup real_endpoint prologue_sparql with
     | Some res -> k1 res
     | None ->
+      let encode_fields l =
+	String.concat "&"
+	  (List.map
+	     (function
+             | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
+             | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
+	     l) in
       let fields : (string * Form.form_elt) list =
 	[("query", `String (string prologue_sparql))] in
       let req = create () in
       pool#add_req req;
       List.iter pool#add_elt elts;
-      req##_open (Js.string "POST", Js.string real_endpoint, Js._true);
-      Unsafe.set req (string "withCredentials") (bool config_withCredentials#value);
-      req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
-  (*  req##setRequestHeader (Js.string "Content-type", Js.string "application/sparql-query"); *)
-      req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml");
+      if config_method_get#value
+      then begin
+	let query_url = real_endpoint ^ "?" ^ encode_fields fields in
+	req##_open (Js.string "GET", Js.string query_url, Js._true);
+	Unsafe.set req (string "withCredentials") (bool config_withCredentials#value);
+	req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml")
+      end
+      else begin
+	req##_open (Js.string "POST", Js.string real_endpoint, Js._true);
+	Unsafe.set req (string "withCredentials") (bool config_withCredentials#value);
+	req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
+	req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml")
+      end;
   (*
     let headers s =
     Opt.case
@@ -376,16 +393,10 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
 		  pool#alert ("Error " ^ string_of_int code);
 		  k0 code )
             | _ -> ()));
-      let encode_fields l =
-	String.concat "&"
-	  (List.map
-	     (function
-               | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
-               | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
-	     l) in
       List.iter start_progress elts;
-      req##send(Js.some (string (encode_fields fields)))
-(*  req##send(Js.some (string sparql)) *)
+      if config_method_get#value
+      then req##send(Js.null)
+      else req##send(Js.some (string (encode_fields fields)))
 
 let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpoint sparql_list k1 k0 =
   match sparql_list with

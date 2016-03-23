@@ -372,27 +372,6 @@ object (self)
 	  Lisql.IncrRel (p,Lisql.Bwd))
 	int_index_prop in
       let index = index_a @ index_has @ index_isof in
-(*	    
-      let list_class = list_of_results_column "class" results_class in
-      let list_prop = list_of_results_column "prop" results_prop in
-      let index = [] in
-      let index =
-	List.fold_left
-	  (fun res -> function
-	    | Rdf.URI c ->
-	      Lexicon.config_class_lexicon#value#enqueue c;
-	      (Lisql.IncrType c, None) :: res
-	    | _ -> res)
-	  index list_class in
-      let index =
-	List.fold_left
-	  (fun res -> function
-	    | Rdf.URI p ->
-	      Lexicon.config_property_lexicon#value#enqueue p;
-	      (Lisql.IncrRel (p,Lisql.Fwd), None) :: (Lisql.IncrRel (p,Lisql.Bwd), None) :: res
-	    | _ -> res)
-	  index list_prop in
-*)
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	Lexicon.config_property_lexicon#value#sync (fun () ->
 	  k ~partial index))
@@ -521,7 +500,10 @@ object (self)
       if some_focus_term_is_blank
       then ajax_intent ()
       else self#ajax_index_properties_init constr elt k
-    else ajax_extent ()
+    else
+      if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
+      then ajax_intent ()
+      else ajax_extent ()
 
   method index_modifiers ~init : incr_freq_index =
     let open Lisql in

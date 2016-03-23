@@ -102,36 +102,46 @@ let sparql_lexicon
     ~(endpoint : string) ~(property : string) ?(language : string option)
     (map : string -> 'a) : 'a lexicon =
   let bind_labels l_uri k =
+    let l_l_uri =
+      if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
+      then Common.bin_list 20 l_uri (* creating bins of 20 uris max *)
+      else [l_uri] in
     let u, l = "u", "l" in
-    let sparql =
+    let l_sparql =
       let open Sparql in
       let v_u, v_l = Sparql.var u, Sparql.var l in
-      select ~projections:[(`Bare,u); (`Bare,l)]
-	(join
-	   [ union
-	       (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
-	     optional
-	       (join
-		  ( triple (v_u :> term) (uri property) (v_l :> term)
-		    :: ( match language with
-		      | None -> []
-		      | Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]) in
+      List.map
+	(fun l_uri ->
+	  select ~projections:[(`Bare,u); (`Bare,l)]
+	    (join
+	       [ union
+		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
+		 optional
+		   (join
+		      ( triple (v_u :> term) (uri property) (v_l :> term)
+			:: ( match language with
+			| None -> []
+			| Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]))
+	l_l_uri in
     let pool = new Sparql_endpoint.ajax_pool in
-    Sparql_endpoint.ajax_in [] pool endpoint (sparql :> string)
-      (fun results ->
+    Sparql_endpoint.ajax_list_in [] pool endpoint (l_sparql :> string list)
+      (fun l_results ->
 	let l_uri_info_opt =
-	  let i = List.assoc u results.Sparql_endpoint.vars in
-	  let j = List.assoc l results.Sparql_endpoint.vars in
 	  List.fold_left
-	    (fun lui binding ->
-	      match binding.(i), binding.(j) with
-		| Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> (uri, Some (map label))::lui
-		| Some (Rdf.URI uri), None -> (uri, None)::lui
-		| _ -> lui)
-	    [] results.Sparql_endpoint.bindings in
+	    (fun lui results ->
+	      let i = List.assoc u results.Sparql_endpoint.vars in
+	      let j = List.assoc l results.Sparql_endpoint.vars in
+	      List.fold_left
+		(fun lui binding ->
+		  match binding.(i), binding.(j) with
+		  | Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> (uri, Some (map label))::lui
+		  | Some (Rdf.URI uri), None -> (uri, None)::lui
+		  | _ -> lui)
+		lui results.Sparql_endpoint.bindings)
+	    [] l_results in
 	k l_uri_info_opt)
       (fun code ->
-	Jsutils.alert "The labels could not be retrieved. This may be because the endpoint does not support the BIND operator.";
+	pool#alert "The labels could not be retrieved. This may be because the endpoint does not support the BIND operator.";
 	k [])
   in
   new tabled_lexicon default_label bind_labels
