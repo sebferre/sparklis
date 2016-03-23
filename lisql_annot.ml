@@ -17,6 +17,10 @@ let focus_term_s2 : elt_s2 -> focus_term = function
   | An (id,_,_) -> `IdIncr id
   | The id -> `IdIncr id
 
+let focus_term_id : focus_term -> id option = function
+  | `IdIncr id -> Some id
+  | `IdNoIncr id -> Some id
+  | _ -> None
   
 (* focus positions *)
     
@@ -56,6 +60,7 @@ type sid = int (* sentence id, position in seq list *)
 type view =
 | Unit
 | Atom of annot_ids * sid (* ids, sid *)
+| InlineAggregs of annot_ids * sid * Ids.t (* ids, sid, ids2 *)
 | Join of annot_ids * view list (* ids, views *)
 | Aggreg of annot_ids * sid * view (* ids, sid, aggregated_view *)
 type seq_view = sid * view
@@ -145,49 +150,81 @@ let clean_list_focus (a,a_x) x (a_ll,a_rr) (ll,rr) =
 let view_ids = function
   | Unit -> empty_ids
   | Atom (ids,_) -> ids
+  | InlineAggregs (ids,_,_) -> ids
   | Join (ids,_) -> ids
   | Aggreg (ids,_,_) -> ids
 
 let rec sid_in_view sid = function
   | Unit -> false
   | Atom (_,sid1) -> sid1 = sid
+  | InlineAggregs (_,sid1,_) -> sid1 = sid
   | Join (_,lv) -> List.exists (fun v -> sid_in_view sid v) lv
   | Aggreg (_,sid1,v) -> sid1 = sid || sid_in_view sid v
 
 let rec top_sid_in_view sid = function
   | Unit -> false
   | Atom (_,sid1) -> sid1 = sid
+  | InlineAggregs (_,sid1,_) -> sid1 = sid
   | Join (_,lv) -> List.exists (fun v -> top_sid_in_view sid v) lv
   | Aggreg (_,sid1,_) -> sid1 = sid
 
 let join_views = function
   | [] -> Unit
   | [v] -> v
-  | lv -> Join (list_union_ids (List.map view_ids lv), lv)
+  | lv -> let ids = list_union_ids (List.map view_ids lv) in
+	  let ids = (* removing locally aggregated ids from defs and dims *)
+	    List.fold_left
+	      (fun ids ->
+		function
+		| InlineAggregs (_,_,ids2) ->
+		  {ids with defs = Ids.diff ids.defs ids2; dims = Ids.diff ids.dims ids2}
+		| _ -> ids)
+	      ids lv in
+	  Join (ids, lv)
 
 let seq_view_defs (_, v : seq_view) : id list =
   Ids.elements (view_ids v).defs
 
-let seq_view_available_dims (focus_sid, v : seq_view) : id list =
+let seq_view_available_dims (focus_sid, v : seq_view) : id list option =
   let rec aux = function
-    | Unit -> []
-    | Atom (ids,_) -> []
-    | Join (ids,lv) -> List.concat (List.map aux lv)
+    | Unit -> None
+    | Atom _ -> None
+    | InlineAggregs _ -> None
+    | Join (ids,lv) ->
+      if List.exists (function InlineAggregs (_,sid,_) -> sid = focus_sid | _ -> false) lv
+      then
+	let ids_defs =
+	  List.fold_left
+	    (fun ids_defs ->
+	      function
+	      | InlineAggregs (ids,_,_) -> Ids.diff (Ids.diff ids_defs ids.defs) ids.refs
+	      | _ -> ids_defs)
+	    ids.defs lv in
+	Some (Ids.elements ids_defs)
+      else
+	List.fold_left
+	  (fun res v ->
+	    match res, aux v with
+	    | None, None -> None
+	    | None, Some lid -> Some lid
+	    | Some lid, None -> Some lid
+	    | Some lid1, Some lid2 -> Some (lid1 @ lid2))
+	  None lv
     | Aggreg (ids,sid,v) ->
       if sid = focus_sid
-      then Ids.elements (Ids.diff (view_ids v).defs ids.refs)
-      else []
+      then Some (Ids.elements (Ids.diff (view_ids v).defs ids.refs))
+      else None
   in
   aux v
 
 
-let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) list -> view list = function
+let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) : (annot * annot elt_s) list -> view list = function
   | [] -> views
   | (a,s)::las ->
     let ids = a#ids in
     match s with
     | Return _ -> (* TODO: handle Return's depending on other sentences *)
-      views_of_seq (Atom (ids, sid) :: views) (sid+1) las
+      views_of_seq focus_id_opt (Atom (ids, sid) :: views) (sid+1) las
     | SExpr _ | SFilter _ ->
       let new_view = Atom (ids, sid) in
       let views =
@@ -197,7 +234,27 @@ let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) lis
 	    then join_views [view; new_view]::views
 	    else view::views)
 	  views [] in
-      views_of_seq views (sid+1) las
+      views_of_seq focus_id_opt views (sid+1) las
+    | SAggreg (_, [ForEachResult _], aggregs) ->
+      let ids2 =
+	List.fold_left
+	  (fun ids2 ->
+	    function
+	    | TheAggreg (_,id,modif,g,rel_opt,id2) -> Ids.add id2 ids2)
+	  Ids.empty aggregs in	  
+      let new_view = InlineAggregs (ids, sid, ids2) in
+      let views =
+	List.fold_right
+	  (fun view views ->
+	    let not_suspended_aggreg =
+	      match focus_id_opt with
+	      | Some focus_id -> not (Ids.mem focus_id ids.refs)
+	      | None -> true in
+	    if Ids.subset ids.refs (view_ids view).defs && not_suspended_aggreg
+	    then join_views [view; new_view]::views
+	    else view::views)
+	  views [] in
+      views_of_seq focus_id_opt views (sid+1) las
     | SAggreg _ ->
       let views =
 	try
@@ -205,16 +262,17 @@ let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) lis
 	    List.find
 	      (fun view -> Ids.subset ids.refs (view_ids view).defs)
 	      views in
-	  let aggregated_view = (* removing unnecessary stuff from aggregated view *)
+	  let aggregated_view = (* removing unnecessary sub-aggregs from aggregated view *)
 	    match aggregated_view with
 	    | Join (_,lv) ->
 	      let _, lv2 =
 		List.fold_right
 		  (fun v (refs,lv2) ->
 		    let v_ids = view_ids v in
-		    if not (Ids.is_empty (Ids.inter refs v_ids.defs))
-		    then (Ids.union v_ids.refs refs, v::lv2)
-		    else (refs,lv2))
+		    if (match v with Aggreg _ -> true | _ -> false)
+		      && Ids.is_empty (Ids.inter refs v_ids.defs)
+		    then (refs,lv2)
+		    else (Ids.union v_ids.refs refs, v::lv2))
 		  lv (ids.refs,[]) in		
 	      join_views lv2
 	    | _ -> aggregated_view in
@@ -233,11 +291,11 @@ let rec views_of_seq (views : view list) (sid : sid) : (annot * annot elt_s) lis
 	  then views
 	  else aggregation_view :: views
 	with Not_found -> views in
-      views_of_seq views (sid+1) las
+      views_of_seq focus_id_opt views (sid+1) las
     | Seq _ -> assert false
 
 let view_of_list a_lr =
-  let views = views_of_seq [] 0 a_lr in
+  let views = views_of_seq None [] 0 a_lr in
   let sid = List.length a_lr - 1 in
   sid,
   (try List.find (top_sid_in_view sid) views
@@ -246,9 +304,9 @@ let view_of_list a_lr =
      | [] -> Unit
      | v::_ -> v)
 
-let view_of_list_focus a_x a_ll_rr =
+let view_of_list_focus ft a_x a_ll_rr =
   (* computing views *)
-  let views = views_of_seq [] 0 (list_of_ctx a_x a_ll_rr) in
+  let views = views_of_seq (focus_term_id ft) [] 0 (list_of_ctx a_x a_ll_rr) in
   let sid = List.length (fst a_ll_rr) in
   sid,
   (try List.find (top_sid_in_view sid) views
@@ -351,8 +409,10 @@ and annot_elt_dim pos dim ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtDim (dim,ctx)) in
   let pos_down = focus_pos_down pos in
   match dim with
+  | ForEachResult _ -> let ids = empty_ids in
+		       let a = annot ~ids () in
+		       a, ForEachResult a
   | ForEach (_,id,modif,rel_opt,id2) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForEachThatX (id,modif,id2,ctx)) in
-					(*let ids = {all = Ids.add id ids_rel.all; defs = Ids.add id ids_rel.defs; dims = Ids.add id2 ids_rel.dims; refs = Ids.add id2 ids_rel.refs} in*)
 					let ids = {all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
 					let a = annot ~ids () in
 					a, ForEach (a, id, modif, a_rel_opt, id2)
@@ -389,7 +449,6 @@ and annot_elt_expr pos expr ctx =
       ~defined:(List.for_all (fun a -> a#defined) la) () in
     a, Apply (a, func, l_a_arg)
 and annot_elt_s pos s ctx =
-  (*let ids = ids_elt_s s in*)
   let annot = new annot ~focus_pos:pos ~focus:(AtS (s,ctx)) in
   let pos_down = focus_pos_down pos in
   match s with
@@ -658,7 +717,7 @@ and annot_ctx_s ft (a1,a_x) x = function
 	| Some (x,ll_rr) -> focus_moves [down_focus] (AtS (x, SeqX (ll_rr,ctx))) in
       annot_focus_aux focus
     | `Unchanged ->
-      let seq_view = view_of_list_focus (a1,a_x) a_ll_rr in
+      let seq_view = view_of_list_focus ft (a1,a_x) a_ll_rr in
       let la, lar = List.split (list_of_ctx (a1,a_x) a_ll_rr) in
       let ids = list_union_ids (List.map (fun a -> a#ids) la) in
       let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids ~seq_view () in
@@ -681,7 +740,7 @@ and annot_focus_aux = function
     let np_annot = annot_elt_s1 ~as_p1 `At np ctx in
     annot_ctx_s1 ft_opt np_annot np ctx
   | AtDim (dim,ctx) ->
-    let ft = match dim with ForEach (_,id,_,_,_) -> `IdIncr id | ForTerm (_,t,_) -> `TermNoIncr t in
+    let ft = match dim with ForEachResult _ -> `Undefined | ForEach (_,id,_,_,_) -> `IdIncr id | ForTerm (_,t,_) -> `TermNoIncr t in
     let dim_annot = annot_elt_dim `At dim ctx in
     annot_ctx_dim ft dim_annot dim ctx
   | AtAggreg (aggreg,ctx) ->

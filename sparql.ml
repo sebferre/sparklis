@@ -239,7 +239,7 @@ let select
     let sel = concat " " (List.map projection projections) in
     let s = "SELECT " ^< (if distinct then "DISTINCT " else "") ^< sel ^^ "\nWHERE { " ^< indent 8 pattern ^> " }" in
     let s =
-      if groupings = []
+      if groupings = [] || not (List.exists (function (`Aggreg _,_) -> true | _ -> false) projections)
       then s
       else s ^^ "\nGROUP BY " ^< concat " " groupings in
     let s =
@@ -256,23 +256,6 @@ let select
 let select_from_service url query : query =
   "SELECT * FROM { SERVICE <" ^< url ^< "> { " ^< query ^> " }}"
 
-type subquery =
-  { projections : projection list;
-    pattern : pattern;
-    groupings : var list;
-    having : expr;
-    limit : int option }
-    
-let subquery_having (sq : subquery) (e : expr) : subquery =
-  { sq with having = log_and [sq.having; e] }
-
-let query_of_subquery : subquery -> query = function
-  | { projections; pattern; groupings; having; limit} ->
-    select ~distinct:true ~projections ~groupings ~having ?limit pattern
-
-let pattern_of_subquery (sq : subquery) : pattern =
-  subquery (query_of_subquery sq)
-
 
 (* formulas *)
       
@@ -283,6 +266,33 @@ type formula =
   | True (* empty binding *)
   | False (* no binding *)
   | Or of pattern * expr (* mixed unions *)
+and subquery =
+  { projections : projection list;
+    formula : formula;
+    groupings : Rdf.var list;
+    having : expr;
+    limit : int option }
+
+let make_subquery ~projections ?(groupings = []) ?(having = log_true) ?limit formula =
+  { projections; formula; groupings; having; limit}
+
+let subquery_having (sq : subquery) (e : expr) : subquery =
+  { sq with having = log_and [sq.having; e] }
+
+let rec pattern_of_formula : formula -> pattern = function
+  | Pattern p -> p
+  | Subquery sq -> pattern_of_subquery sq
+  | Filter e -> filter e (* tentative *)
+  | True -> empty
+  | False -> filter log_false (* tentative *)
+  | Or (p,e) -> union [p; filter e] (* tentative *)
+and query_of_subquery : subquery -> query = function
+  | { projections; formula; groupings; having; limit} ->
+    select ~distinct:true ~projections ~groupings:(List.map var groupings) ~having ?limit (pattern_of_formula formula)
+and pattern_of_subquery (sq : subquery) : pattern =
+  if List.for_all (function (`Bare,_) -> true | _ -> false) sq.projections && sq.limit = None
+  then pattern_of_formula sq.formula
+  else subquery (query_of_subquery sq)
 
 let rec formula_and (f1 : formula) (f2 : formula) : formula =
   match f1, f2 with
@@ -308,6 +318,13 @@ let rec formula_and (f1 : formula) (f2 : formula) : formula =
 
 let formula_and_list (lf : formula list) : formula =
   List.fold_left formula_and True lf
+
+let join_subqueries (lsq : subquery list) : subquery =
+  { projections = Common.list_to_set (List.concat (List.map (fun sq -> sq.projections) lsq));
+    formula = formula_and_list (List.map (fun sq -> sq.formula) lsq);
+    groupings = Common.list_to_set (List.concat (List.map (fun sq -> sq.groupings) lsq));
+    having = log_and (List.map (fun sq -> sq.having) lsq);
+    limit = (match lsq with [] -> None | sq::_ -> sq.limit) }
 
 let formula_or_list (lf : formula list) : formula =
   let lp, le, btrue =
@@ -358,45 +375,26 @@ let expr_of_formula : formula -> expr = function
   | Filter e -> e
   | _ -> log_true (* TODO: dummy default *)
 
-let pattern_of_formula : formula -> pattern = function
-  | Pattern p -> p
-  | Subquery sq -> pattern_of_subquery sq
-  | Filter e -> filter e (* tentative *)
-  | True -> empty
-  | False -> filter log_false (* tentative *)
-  | Or (p,e) -> union [p; filter e] (* tentative *)
 
 (* views *)
 
-type view = Rdf.var list * (?limit:int -> unit -> formula)
+type view = ?limit:int -> unit -> subquery
 
-let view_defs view = fst view
-  
-let empty_view : view = ([], (fun ?limit () -> True))
+let empty_view =
+  (fun ?limit () -> make_subquery ~projections:[] True)
+
+let simple_view (lx : Rdf.var list) (form : formula) : view =
+  (fun ?limit () -> make_subquery
+    ~projections:(List.map (fun x -> (`Bare,x)) lx)
+    ~groupings:lx
+    form)
 
 let join_views (views : view list) : view =
-  let list_defs, list_form = List.split views in
-  Common.list_to_set (List.concat list_defs),
-  (fun ?limit () ->
-    formula_and_list
-      (List.map (fun f -> f ?limit ()) list_form))
-  
-let query_of_view ?distinct ?orderings ?limit (lv, f : view) : query =
-  match f ?limit () with
-  | Subquery sq ->
-    select
-      ?distinct
-      ~projections:sq.projections (*List.filter (fun (_,v) -> List.mem v lv) sq.projections*)
-      ~groupings:sq.groupings
-      ~having:sq.having
-      ?orderings
-      ?limit
-      sq.pattern
-  | form ->
-    select
-      ?distinct
-      ~projections:(List.map (fun v -> (`Bare, v)) lv)
-      ?orderings
-      ?limit
-      (pattern_of_formula form)
+  (fun ?limit () -> join_subqueries (List.map (fun view -> view ?limit ()) views))
 
+let formula_of_view ?limit (view : view) : formula =
+  Subquery (view ?limit ())
+
+let is_empty_view view =
+  let sq = view () in
+  sq.formula = True

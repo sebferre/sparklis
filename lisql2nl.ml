@@ -244,6 +244,7 @@ let word_of_incr grammar = function
   | IncrUnselect -> `Op grammar#any
   | IncrOrder o -> word_of_order grammar o
   | IncrAggreg g -> word_of_aggreg grammar g
+  | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
   | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
 
@@ -374,6 +375,7 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
     let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
 and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
+  | ForEachResult _ -> labelling
   | ForEach (_, id, modif, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls rel_opt in
@@ -658,6 +660,8 @@ and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
 and np_of_elt_dim grammar ~id_labelling : annot elt_dim -> annot np = function
+  | ForEachResult annot ->
+    A (annot, `Qu (`Each, `Nil, X (`That (`Op grammar#result, X `Nil))))
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let qu, adj = qu_adj_of_modif grammar (Some annot) `Each modif in
     A (annot, `Qu (qu, adj, X (`LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))))
@@ -1168,7 +1172,14 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
   | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
   | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Select,order))
-  | IncrForeach id -> Word (`Op grammar#for_) :: Word (`Op grammar#each) :: xml_ng_id grammar ~id_labelling id
+  | IncrForeachResult ->
+    let xml_delete_opt =
+      match focus with
+      | AtDim (ForEachResult _, _)
+      | AtAggreg (_, SAggregX ([ForEachResult _], _, _)) -> [DeleteIncr]
+      | _ -> [] in
+    Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
+  | IncrForeach id -> Kwd grammar#for_ :: Kwd grammar#each :: xml_ng_id grammar ~id_labelling id
 (*  | IncrAggregId (g,id) -> xml_np grammar ~id_labelling (np_of_aggreg grammar ~id_labelling None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
   | IncrFuncArg (is_pred,func,arity,pos) ->
     xml_np grammar ~id_labelling

@@ -218,6 +218,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
     let grammar = Lisql2nl.config_lang#grammar in
     match incr with
       | IncrId _ -> 1, None
+      | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
       | IncrForeach _ -> 1, Some grammar#tooltip_foreach
       | IncrInput _ -> 2, None
       | IncrTerm _ -> 2, None
@@ -237,20 +238,21 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
       | IncrFuncArg _ -> 16, Some grammar#tooltip_func
   in
-  let html_freq =
+  let freq, html_freq =
     match freq_opt with
-    | None -> ""
-    | Some {Lis.value=1} -> ""
+    | None -> 1, ""
+    | Some {Lis.value=1} -> 1, ""
     | Some {Lis.value; max_value; partial; unit} ->
       let s = string_of_int value in
       let s = if partial then s ^ "+" else s in
       (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
+      value,
       ( match unit with
       | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
       | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
       | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
       ) in
-  freq_opt, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  freq, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lis.incr_freq_index) =

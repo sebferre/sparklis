@@ -401,6 +401,7 @@ and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   state#set_aggreg v (vg, g, (d (Sparql.var vg :> Sparql.term)));
   state#set_modif vg modifg
 and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
+  | ForEachResult annot -> assert false
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
@@ -432,123 +433,169 @@ and form_expr state : annot elt_expr -> Sparql.expr = function
       | _ ->
 	let sparql_args = List.map (fun arg -> form_expr state arg) args in
 	expr_apply func sparql_args )
-and form_s state ?(aggregated_view = Sparql.empty_view) (s : annot elt_s) : seq_view * Sparql.view =
+and form_s state (s : annot elt_s) : seq_view * Sparql.view =
+  let (_, view as seq_view), lr =
+    match s with
+    | Return (annot,np) -> (0, Atom (annot#ids,0)), [s]
+    | Seq (annot,lr) -> (match annot#seq_view with Some seq_view -> seq_view | None -> assert false), lr
+    | _ -> assert false in
+  seq_view, form_view state lr view
+and form_view state (lr : annot elt_s list) (v : view) : Sparql.view =
+  let lv =
+    match v with
+    | Unit -> []
+    | Atom _ -> [v]
+    | InlineAggregs _ -> [v]
+    | Aggreg _ -> [v]
+    | Join (_,lv) -> lv in
+  form_view_list state lr Sparql.empty_view lv
+and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view list -> Sparql.view =
   let ids2vars ids = List.map state#id_labelling#get_id_var ids in
-  match s with
-  | Return (annot,np) ->
-    let ids = annot#ids in
-    let lv = ids2vars (Ids.elements ids.defs) in
-    let form = form_s1 state np (fun t -> Sparql.True) in
-    (0,Atom (ids,0)), (lv, (fun ?limit () -> form))
-  | SExpr (annot,id,modif,expr,rel_opt) ->
-    let v = state#id_labelling#get_id_var id in
-    state#set_modif v modif;
-    let sparql_expr = form_expr state expr in
-    let form =
-      if sparql_expr = Sparql.sparql ""
-      then Sparql.True
-      else
-	let d = form_p1_opt state rel_opt in
-	Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var v))) (d (Sparql.var v :> Sparql.term)) in
-    (0,Unit), ([v], (fun ?limit () -> form))
-  | SFilter (annot,id,expr) ->
-    let v = state#id_labelling#get_id_var id in
-    let sparql_expr = form_expr state expr in
-    let lv, form =
-      match annot#focus_pos with
-      | `Above _ -> [v], Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var v))
-      | _ -> [], Sparql.Filter sparql_expr in
-    let form =
-      if sparql_expr = Sparql.sparql ""
-      then Sparql.True
-      else form in
-    (0,Unit), (lv, (fun ?limit () -> form))
-  | SAggreg (annot,dims,aggregs) ->
-    let aggregated_defs, aggregated_f = aggregated_view in
-    let l_dims = List.map (form_dim state) dims in
-    let l_aggregs = List.map (form_aggreg state) aggregs in
-    let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in
-    let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
-    let projections = projections_dims @ projections_aggregs in
-    let groupings_dims = List.fold_right (fun (_,group_opt,_) res -> match group_opt with None -> res | Some group -> group::res) l_dims [] in
-    let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
-    let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
-    let f_aggreg =
-      fun ?limit () ->
-	let pattern =
-	  Sparql.pattern_of_formula
-	    (Sparql.formula_and_list
-	       (aggregated_f ?limit:(match limit with None -> None | Some l -> Some (10*l)) () :: lf_dims)) in
-	let pattern = (* special handling of GROUP_CONCAT without grouping, to avoid explosion *)
-	  if groupings_dims = []
-	  && List.exists (function (`Aggreg (Sparql.DistinctCONCAT, _), _) -> true | _ -> false) projections_aggregs
-	  then Sparql.pattern_of_subquery
-	    { Sparql.projections =
-		List.fold_right
-		  (fun (_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
-		  (List.map (fun (_,v2,_) -> (`Bare,v2)) l_aggregs);
-	      pattern = pattern;
-	      groupings = [];
-	      having = Sparql.log_true;
-	      limit = limit }
-	  else pattern in
-	Sparql.Subquery
-	  { Sparql.projections = projections;
-	    pattern = pattern;
-	    groupings = List.map (fun v -> Sparql.var v) groupings_dims;
-	    having = Sparql.log_and havings_aggregs;
-	    limit;
-	  } in
-    (*let f = fun ?limit () ->
-    	Sparql.formula_and_list (f_aggreg ?limit () :: lf_dims) in *)
-    let lv = List.map snd projections in
-    (0,Unit), (lv, f_aggreg)
-  | Seq (annot,lr) ->
-    let (_, view as seq_view) = match annot#seq_view with Some v -> v | None -> assert false in
-    seq_view, form_seq_view state lr view
-and form_seq_view state (lr : annot elt_s list) : view -> Sparql.view = function
-  | Unit -> Sparql.empty_view
-  | Atom (_, sid) -> snd (form_s state (List.nth lr sid))
-  | Join (_, lv) -> Sparql.join_views (List.map (form_seq_view state lr) lv)
-  | Aggreg (_,sid,v) ->
-    let aggregated_view = form_seq_view state lr v in
-    snd (form_s state ~aggregated_view (List.nth lr sid))
+  function
+  | [] -> view
+  | Unit::lv -> form_view_list state lr view lv
+  | Atom (ids,sid)::lv ->
+    ( match List.nth lr sid with
+    | Return (annot,np) ->
+      let ids = annot#ids in
+      let lx = ids2vars (Ids.elements ids.defs) in
+      let form = form_s1 state np (fun t -> Sparql.True) in
+      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv
+    | SExpr (annot,id,modif,expr,rel_opt) ->
+      let x = state#id_labelling#get_id_var id in
+      state#set_modif x modif;
+      let sparql_expr = form_expr state expr in
+      let form =
+	if sparql_expr = Sparql.sparql ""
+	then Sparql.True
+	else
+	  let d = form_p1_opt state rel_opt in
+	  Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))) (d (Sparql.var x :> Sparql.term)) in
+      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view [x] form]) lv
+    | SFilter (annot,id,expr) ->
+      let x = state#id_labelling#get_id_var id in
+      let sparql_expr = form_expr state expr in
+      let lx, form =
+	match annot#focus_pos with
+	| `Above _ -> [x], Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))
+	| _ -> [], Sparql.Filter sparql_expr in
+      let form =
+	if sparql_expr = Sparql.sparql ""
+	then Sparql.True
+	else form in
+      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv
+    | _ -> assert false )
+  | InlineAggregs (ids,sid,_ids2)::lv ->
+    ( match List.nth lr sid with
+    | SAggreg (annot, [ForEachResult _], aggregs) ->
+      let l_aggregs = List.map (form_aggreg state) aggregs in
+      let lx2 = List.map (fun (_,x2,_) -> x2) l_aggregs in
+      let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
+      let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
+      let view =
+	(fun ?limit () ->
+	  let sq = view ?limit () in
+	  { sq with
+	    Sparql.projections = List.filter (fun (_,x) -> not (List.mem x lx2)) sq.Sparql.projections @ projections_aggregs;
+	    groupings = List.filter (fun x -> not (List.mem x lx2)) sq.Sparql.groupings;
+	    having = Sparql.log_and (sq.Sparql.having :: havings_aggregs) }) in
+      form_view_list state lr view lv
+    | _ -> assert false )
+  | Aggreg (ids,sid,v2)::lv ->
+    let aggregated_view = form_view state lr v2 in
+    ( match List.nth lr sid with
+    | SAggreg (annot,dims,aggregs) ->
+      let l_dims = List.map (form_dim state) dims in
+      let l_aggregs = List.map (form_aggreg state) aggregs in
+      let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in
+      let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
+      let projections = projections_dims @ projections_aggregs in
+      let groupings_dims = List.fold_right (fun (_,group_opt,_) res -> match group_opt with None -> res | Some group -> group::res) l_dims [] in
+      let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
+      let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
+      let view_aggreg =
+	(fun ?limit () ->
+	  let form =
+	    Sparql.formula_and_list
+	      (Sparql.formula_of_view ?limit:(match limit with None -> None | Some l -> Some (10*l)) aggregated_view :: lf_dims) in
+	  let form = (* special handling of GROUP_CONCAT without grouping, to avoid explosion *)
+	    if groupings_dims = []
+	    && List.exists (function (`Aggreg (Sparql.DistinctCONCAT, _), _) -> true | _ -> false) projections_aggregs
+	    then Sparql.Subquery
+	      (Sparql.make_subquery
+		 ~projections:(List.fold_right
+				 (fun (_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
+				 (List.map (fun (_,v2,_) -> (`Bare,v2)) l_aggregs))
+		 ~groupings:[]
+		 ~having:Sparql.log_true
+		 ?limit
+		 form)
+	    else form in
+	  let sq_aggreg =
+	    Sparql.make_subquery
+	      ~projections
+	      ~groupings:groupings_dims
+	      ~having:(Sparql.log_and havings_aggregs)
+	      ?limit
+	      form in
+	  if view = Sparql.empty_view && lv = []
+	  then sq_aggreg (* isolated aggregation *)
+	  else
+	    Sparql.make_subquery
+	      ~projections:(List.map (fun (_,x) -> (`Bare,x)) sq_aggreg.Sparql.projections)
+	      ~groupings:(List.map (fun (_,x) -> x) sq_aggreg.Sparql.projections)
+	      (Sparql.Subquery sq_aggreg)) in
+      form_view_list state lr (Sparql.join_views [view; view_aggreg]) lv
+    | _ -> assert false)
+  | Join (_,lv1)::lv -> form_view_list state lr view (lv1@lv)
 
 
 type template = ?constr:constr -> limit:int -> string
 
-let make_query state t_list (defs, f : Sparql.view) : template =
-  let visible_defs =
-    List.filter
-      (fun v -> state#project v = Select || List.mem (Rdf.Var v) t_list)
-      defs in
-  let orderings =
-    List.fold_right
-      (fun v orderings ->
-	match sparql_order (state#order v) with
-	| None -> orderings
-	| Some order -> (order, Sparql.var v)::orderings)
-      defs [] in
+let make_query state t_list (view : Sparql.view) : template =
   (fun ?constr ~limit ->
-    let f_constr =
-      fun ?limit () ->
-	match t_list, constr with
-	| [(Rdf.Var _ as t)], Some c -> Sparql.formula_and (f ?limit ()) (filter_constr_entity (Sparql.term t) c)
-	| _ -> f ?limit () in
-    (Sparql.query_of_view ~distinct:true ~orderings ~limit (visible_defs, f_constr) :> string))
+    let sq_view = view ~limit () in
+    let visible_projections =
+      List.filter
+	(fun (_,v) -> state#project v = Select || List.mem (Rdf.Var v) t_list)
+	sq_view.Sparql.projections in
+    let form_constr =
+      match t_list, constr with
+      | [(Rdf.Var _ as t)], Some c ->
+	Sparql.formula_and sq_view.Sparql.formula (filter_constr_entity (Sparql.term t) c)
+      | _ -> sq_view.Sparql.formula in
+    let sq = { sq_view with
+      Sparql.projections = visible_projections;
+      Sparql.formula = form_constr } in
+    let orderings =
+      List.fold_right
+	(fun (_,v) orderings ->
+	  match sparql_order (state#order v) with
+	  | None -> orderings
+	  | Some order -> (order, Sparql.var v)::orderings)
+	sq_view.Sparql.projections [] in
+    let query = Sparql.select
+      ~distinct:true
+      ~projections:visible_projections
+      ~groupings:(List.map Sparql.var sq.Sparql.groupings)
+      ~having:sq.Sparql.having
+      ~limit
+      ~orderings
+      (Sparql.pattern_of_formula form_constr) in
+    (query :> string))
 
       
 let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s)
     : Rdf.term list * template option * template option * template option * template option * seq_view =
   let state = new state id_labelling in
-  let annot_view, (defs, f as view) = form_s state s_annot in
+  let annot_view, view = form_s state s_annot in
   let t_list =
     match ft with
     | `TermIncr t | `TermNoIncr t -> [t]
     | `IdIncr id | `IdNoIncr id -> [Rdf.Var (id_labelling#get_id_var id)]
     | `Undefined -> [] in
   let query_opt =
-    if f () = Sparql.True
+    if Sparql.is_empty_view view
     then None
     else Some (make_query state t_list view) in
   let query_incr_opt (x : Rdf.var) filter_constr triple =
@@ -561,7 +608,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
 	  let form_x =
 	    match t with
 	    | Rdf.Var _
-	    | Rdf.Bnode _ -> Sparql.formula_and (f ~limit ()) (triple term_t tx)
+	    | Rdf.Bnode _ -> Sparql.formula_and (Sparql.formula_of_view ~limit view) (triple term_t tx)
 	    | _ -> triple term_t tx in
 	  (Sparql.select ~projections:[(`Bare,x)] ~limit
 	    (Sparql.pattern_of_formula

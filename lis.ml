@@ -541,9 +541,13 @@ object (self)
 	    incrs
 	    [ Highest None; Lowest None ] in
 	let incrs =
-	  List.fold_left
-	    (fun incrs id -> IncrForeach id :: incrs)
-	    incrs (Lisql_annot.seq_view_available_dims seq_view) in
+	  match Lisql_annot.seq_view_available_dims seq_view with
+	  | None -> incrs
+	  | Some ids ->
+	      IncrForeachResult ::
+	      List.fold_left
+	      (fun incrs id -> IncrForeach id :: incrs)
+	      incrs ids in
 	let incrs =
 	  List.fold_left
 	    (fun incrs aggreg ->

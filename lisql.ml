@@ -78,6 +78,7 @@ and elt_head =
   | Thing
   | Class of Rdf.uri
 and 'a elt_dim =
+  | ForEachResult of 'a
   | ForEach of 'a * id * modif_s2 * 'a elt_p1 option * id
   | ForTerm of 'a * Rdf.term * id
 and 'a elt_aggreg =
@@ -177,7 +178,8 @@ object (self)
   method top_s2 = An (self#new_id, self#top_modif, Thing)
   method top_s1 = Det ((), self#top_s2, None)
   method top_expr = Undef ()
-  method top_dim id2 = ForEach ((), self#new_id, self#top_modif, None, id2)
+  method top_dim = ForEachResult ()
+  method top_dim_foreach id2 = ForEach ((), self#new_id, self#top_modif, None, id2)
   method top_s = Return ((), self#top_s1)
   method home_focus = AtS1 (self#top_s1, ReturnX Root)
 end
@@ -255,6 +257,7 @@ let id_of_s1 = function
   | AnAggreg (_,id,_,_,_,_) -> Some id
   | _ -> None
 let id_of_dim = function
+  | ForEachResult _ -> None
   | ForEach (_,id,_,_,_) -> Some id
   | ForTerm _ -> None
 let id_of_aggreg = function
@@ -297,6 +300,7 @@ and annot_s1 = function
   | NMaybe (a,f) -> a
   | NNot (a,f) -> a
 and annot_dim = function
+  | ForEachResult a -> a
   | ForEach (a,id,modif,rel_opt,id2) -> a
   | ForTerm (a,t,id2) -> a
 and annot_aggreg = function
@@ -392,6 +396,7 @@ let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
   | NMaybe (_,elt) -> Some (AtS1 (elt, NMaybeX ctx))
   | NNot (_,elt) -> Some (AtS1 (elt, NNotX ctx))
 let down_dim (ctx : ctx_dim) : unit elt_dim -> focus option = function
+  | ForEachResult _ -> None
   | ForEach (_,id,modif,rel_opt,id2) -> down_p1_opt (ForEachThatX (id,modif,id2,ctx)) rel_opt
   | ForTerm (_,t,id2) -> None
 let down_aggreg (ctx : ctx_aggreg) : unit elt_aggreg -> focus option = function
@@ -404,9 +409,8 @@ let down_expr (ctx : ctx_expr) : unit elt_expr -> focus option = function
   | Apply (_,func,arg::args) -> Some (AtExpr (arg, ApplyX (func, ([],args), ctx)))
 let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
   | Return (_,np) -> Some (AtS1 (np,ReturnX ctx))
-  | SAggreg (_,[],[]) -> None
-  | SAggreg (_,[],aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX ([], ([],aggregs), ctx)))
-  | SAggreg (_,dim::dims,aggregs) -> Some (AtDim (dim, SAggregForX (([],dims),aggregs,ctx)))
+  | SAggreg (_,_,[]) -> None
+  | SAggreg (_,dims,aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX (dims, ([],aggregs), ctx)))
   | SExpr (_,id,modif,expr,rel_opt) -> Some (AtExpr (expr, SExprX (id,modif,rel_opt,ctx)))
   | SFilter (_,id,expr) -> Some (AtExpr (expr, SFilterX (id,ctx)))
   | Seq (_,[]) -> None
@@ -616,6 +620,7 @@ type increment =
   | IncrUnselect
   | IncrOrder of order
   | IncrAggreg of aggreg
+  | IncrForeachResult
   | IncrForeach of id
   (*  | IncrAggregId of aggreg * id *)
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *)
@@ -873,16 +878,37 @@ let insert_aggreg_bis g focus =
   | None -> None
   | Some id2 ->
     let s = elt_s_of_focus focus in
-    let focus2 = append_seq_s Root (SAggreg ((), [], [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)])) s in
+    let dims =
+      match focus with
+      | AtS1 _ -> [ForEachResult ()]
+      | _ -> [] in
+    let focus2 = append_seq_s Root
+      (SAggreg ((), dims, [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)]))
+      s in
     down_focus focus2
+
+let insert_foreach_result = function (* restricted to removal of ForEachResult *)
+  (*  | AtS (SAggreg (_,_dims,aggregs), ctx) -> Some (AtS (SAggreg ((), [ForEachResult ()], aggregs), ctx)) *)
+  | AtDim (ForEachResult _, SAggregForX (_, aggregs, ctx)) -> Some (AtS (SAggreg ((), [], aggregs), ctx))
+  (*  | AtDim (_dim, SAggregForX (_, aggregs, ctx)) -> Some (AtS (SAggreg ((), [ForEachResult ()], aggregs), ctx)) *)
+  | AtAggreg (aggreg, SAggregX ([ForEachResult _], ll_rr, ctx)) -> Some (AtAggreg (aggreg, SAggregX ([], ll_rr, ctx)))
+  (*  | AtAggreg (aggreg, SAggregX (_dims, ll_rr, ctx)) -> Some (AtAggreg (aggreg, SAggregX ([ForEachResult ()], ll_rr, ctx))) *)
+  | _ -> None
 
 let insert_foreach id2 = function
   | AtS (SAggreg (_,dims,aggregs), ctx) ->
-    Some (AtDim (factory#top_dim id2, SAggregForX ((List.rev dims, []), aggregs, ctx)))
+    let ll_rr = if dims = [ForEachResult ()] then [], [] else List.rev dims, [] in
+    Some (AtDim (factory#top_dim_foreach id2, SAggregForX (ll_rr, aggregs, ctx)))
   | AtDim (dim, SAggregForX ((ll,rr), aggregs, ctx)) ->
-    Some (AtDim (factory#top_dim id2, SAggregForX ((dim::ll,rr), aggregs, ctx)))
+    let ll_rr =
+      if dim = ForEachResult () && ll=[] && rr=[]
+      then [], []
+      else dim::ll, rr in
+    Some (AtDim (factory#top_dim_foreach id2, SAggregForX (ll_rr, aggregs, ctx)))
   | AtAggreg (aggreg, SAggregX (dims, ll_rr, ctx)) ->
-    Some (AtDim (factory#top_dim id2, SAggregForX ((List.rev dims, []), list_of_ctx aggreg ll_rr, ctx)))
+    let new_dim = factory#top_dim_foreach id2 in
+    let dims = if dims = [ForEachResult ()] then [new_dim] else dims @ [new_dim] in
+    Some (AtAggreg (aggreg, SAggregX (dims, ll_rr, ctx)))
   | _ -> None
 
 let insert_aggreg_id g id2 = function
@@ -944,6 +970,7 @@ let insert_increment incr focus =
 	  else proj, order)
 	focus
     | IncrAggreg g -> insert_aggreg_bis g focus
+    | IncrForeachResult -> insert_foreach_result focus
     | IncrForeach id -> insert_foreach id focus
     (*    | IncrAggregId (g,id) -> insert_aggreg_id g id focus *)
     | IncrFuncArg (is_pred,func,arity,pos) -> insert_func_arg is_pred func arity pos focus
@@ -1034,7 +1061,7 @@ and delete_ctx_s ctx =
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
   | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
-  | AtDim (ForTerm (_,t,id2), ctx) -> Some (AtDim (factory#top_dim id2, ctx))
+  | AtDim (ForTerm (_,t,id2), ctx) -> Some (AtDim (factory#top_dim_foreach id2, ctx))
   | AtDim (f, ctx) -> delete_ctx_dim ctx
   | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
   | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
