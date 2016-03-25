@@ -101,6 +101,7 @@ let sparql_lexicon
     ~(default_label : Rdf.uri -> 'a)
     ~(endpoint : string) ~(property : string) ?(language : string option)
     (map : string -> 'a) : 'a lexicon =
+  let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_labels l_uri k =
     let l_l_uri =
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
@@ -123,8 +124,7 @@ let sparql_lexicon
 			| None -> []
 			| Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]))
 	l_l_uri in
-    let pool = new Sparql_endpoint.ajax_pool in
-    Sparql_endpoint.ajax_list_in [] pool endpoint (l_sparql :> string list)
+    Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
       (fun l_results ->
 	let l_uri_info_opt =
 	  List.fold_left
@@ -141,7 +141,9 @@ let sparql_lexicon
 	    [] l_results in
 	k l_uri_info_opt)
       (fun code ->
-	pool#alert "The labels could not be retrieved. This may be because the endpoint does not support the BIND operator.";
+	ajax_pool#alert ("The labels could not be retrieved for property <"
+			 ^ property ^ (match language with None -> ">." | Some lang -> "> and for language tag @" ^ lang ^ ".")
+			 ^ " This may be because the endpoint does not support the BIND operator.");
 	k [])
   in
   new tabled_lexicon default_label bind_labels
