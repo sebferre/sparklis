@@ -1013,7 +1013,7 @@ and delete_ctx_s1 f_opt ctx =
 	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | ReturnX ctx2 ->
       ( match f_opt with
-	| None -> delete_ctx_s ctx2
+	| None -> delete_ctx_s None ctx2
 	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
     | NAndX (ll_rr,ctx2) ->
@@ -1037,8 +1037,8 @@ and delete_ctx_dim ctx =
     | `List (elt,ll2,rr2) -> Some (AtDim (elt, SAggregForX ((ll2,rr2),aggregs,ctx))) )
 and delete_ctx_expr f_opt ctx =
   match ctx with
-  | SExprX (id,modif,rel_opt,ctx2) -> delete_ctx_s ctx2
-  | SFilterX (id,ctx2) -> delete_ctx_s ctx2
+  | SExprX (id,modif,rel_opt,ctx2) -> delete_ctx_s None ctx2
+  | SFilterX (id,ctx2) -> delete_ctx_s None ctx2
   | ApplyX (func,ll_rr,ctx2) ->
     ( match f_opt with
     | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx factory#top_expr ll_rr))) ctx2
@@ -1047,15 +1047,18 @@ and delete_ctx_aggreg ctx =
   match ctx with
   | SAggregX (dims,ll_rr,ctx) ->
     ( match delete_list ll_rr with
-    | `Empty -> delete_ctx_s ctx (* the list of aggregations should not be empty *)
+    | `Empty -> delete_ctx_s None ctx (* the list of aggregations should not be empty *)
     | `Single elt -> Some (AtAggreg (elt, SAggregX (dims,([],[]),ctx)))
     | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX (dims, (ll2,rr2), ctx))) )
-and delete_ctx_s ctx =
+and delete_ctx_s f_opt ctx =
   match ctx with
-  | Root -> None
+  | Root ->
+    if f_opt = None
+    then None
+    else Some factory#home_focus
   | SeqX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
-    | `Empty -> delete_ctx_s ctx2
+    | `Empty -> delete_ctx_s None ctx2
     | `Single elt -> Some (AtS (elt,ctx2))
     | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2))) )
 
@@ -1066,7 +1069,7 @@ let delete_focus = function
   | AtDim (f, ctx) -> delete_ctx_dim ctx
   | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
   | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
-  | AtS (f, ctx) -> delete_ctx_s ctx
+  | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx
 
 (* goto to query *)
 
