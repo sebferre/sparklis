@@ -118,7 +118,7 @@ let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql
 
 class place (endpoint : string) (focus : Lisql.focus) =
   let focus_term, s_annot = Lisql_annot.annot_focus focus in
-  let focus_no_incr = match focus_term with `IdNoIncr _ -> true | _ -> false in
+  let focus_incr = match focus_term with `IdIncr _ | `TermIncr _ -> true | _ -> false in
 object (self)
   (* essential state *)
 
@@ -245,7 +245,7 @@ object (self)
     match focus_term_list with
       | [term] ->
 	let index =
-	  if not focus_no_incr
+	  if focus_incr
 	  then begin
 	    let dim = results.Sparql_endpoint.dim in
 	    let vars = results.Sparql_endpoint.vars in
@@ -495,7 +495,7 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
-    if focus_no_incr (*Lisql.is_aggregation_focus focus*) then k ~partial:false [] (* only constraints on aggregations (HAVING clause) *)
+    if not focus_incr then k ~partial:false [] (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index = [] then
       if some_focus_term_is_blank
       then ajax_intent ()

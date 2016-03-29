@@ -600,8 +600,9 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     else Some (make_query state t_list view) in
   let query_incr_opt (x : Rdf.var) filter_constr triple =
     match ft, t_list with
-      | `IdNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
-      | _, [t] ->
+    | `IdNoIncr _, _
+    | `TermNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
+    | _, [t] ->
 	let term_t = Sparql.term t in
 	let tx = (Sparql.var x :> Sparql.term) in
 	Some (fun ?(constr=True) ~limit ->

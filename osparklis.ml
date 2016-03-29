@@ -287,7 +287,7 @@ object (self)
 	    Html.html_id html_state id
 	   with _ -> escapeHTML v (* should not happen *))
 	| [t] -> Html.html_term t
-	| _ -> "" in
+	| _ -> Lisql2nl.config_lang#grammar#undefined in
     jquery "#increments-focus" (fun elt ->
       elt##innerHTML <- string html_focus)
 
@@ -397,15 +397,18 @@ object (self)
   method private refresh_term_increments =
     self#refresh_term_increments_gen
       (fun constr elts k -> lis#index_terms_inputs (fun ~partial index_terms_inputs -> k ~partial (lis#index_ids @ index_terms_inputs)))
+  method private refresh_term_increments_undefined =
+    self#refresh_term_increments_gen
+      (fun constr elts k -> k ~partial:false [])
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
-  method private refresh_property_increments_gen ajax_index =
+  method private refresh_property_increments_gen process_index =
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->
 	jquery "#list-properties" (fun elt_list ->
 	  (*filtering_properties <- true;*)
-	  ajax_index (norm_constr property_constr) elt_list
+	  process_index elt_list
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-properties"
@@ -418,9 +421,11 @@ object (self)
 	      self#filter_increments elt_list new_constr;
 	      self#set_property_constr new_constr))))
   method private refresh_property_increments_init =
-    self#refresh_property_increments_gen lis#ajax_index_properties_init
+    self#refresh_property_increments_gen (fun elt_list k -> lis#ajax_index_properties_init (norm_constr property_constr) elt_list k)
   method private refresh_property_increments =
-    self#refresh_property_increments_gen lis#ajax_index_properties
+    self#refresh_property_increments_gen (fun elt_list k -> lis#ajax_index_properties (norm_constr property_constr) elt_list k)
+  method private refresh_property_increments_undefined =
+    self#refresh_property_increments_gen (fun elt_list k -> k ~partial:true [])
 
 
   method private refresh_modifier_increments ~(init : bool) =
@@ -448,9 +453,6 @@ object (self)
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#results" (fun elt_res ->
-	( match lis#focus_term_list with
-	  | [] -> elt_incrs##style##display <- string "none"
-	  | _::_ -> elt_incrs##style##display <- string "block" );
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  (function
 	    | None ->
@@ -461,26 +463,32 @@ object (self)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      ( match lis#focus_term_list with
-		| [] -> ()
-		| [Rdf.Var v] ->
-		  self#refresh_term_increments_init;
-		  self#refresh_property_increments_init;
-		  self#refresh_modifier_increments ~init:true
-		| _ ->
-		  self#refresh_term_increments;
-		  self#refresh_property_increments;
-		  self#refresh_modifier_increments ~init:false)
+	      | [] ->
+		self#refresh_term_increments_undefined;
+		self#refresh_property_increments_undefined;
+		self#refresh_modifier_increments ~init:true
+	      | [Rdf.Var v] ->
+		self#refresh_term_increments_init;
+		self#refresh_property_increments_init;
+		self#refresh_modifier_increments ~init:true
+	      | _ ->
+		self#refresh_term_increments;
+		self#refresh_property_increments;
+		self#refresh_modifier_increments ~init:false)
 	    | Some sparql ->
 	      jquery_set_innerHTML "#sparql-query" (html_pre (Sparql.prologue#add_declarations_to_query sparql));
 	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      ( match lis#focus_term_list with
-		| [] -> ()
-		| _ ->
-		  self#refresh_term_increments;
-		  self#refresh_property_increments;
-		  self#refresh_modifier_increments ~init:false ))))
+	      | [] ->
+		self#refresh_term_increments_undefined;
+		self#refresh_property_increments_undefined;
+		self#refresh_modifier_increments ~init:false
+	      | _ ->
+		self#refresh_term_increments;
+		self#refresh_property_increments;
+		self#refresh_modifier_increments ~init:false ))))
 
   method private filter_increments elt_list constr =
     let matcher = compile_constr constr in

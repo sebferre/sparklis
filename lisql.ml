@@ -888,6 +888,7 @@ let insert_aggreg_bis g focus =
     down_focus focus2
 
 let insert_foreach_result = function (* restricted to removal of ForEachResult *)
+  | AtS (SAggreg (_, [ForEachResult _], aggregs), ctx) -> Some (AtS (SAggreg ((), [], aggregs), ctx))
   (*  | AtS (SAggreg (_,_dims,aggregs), ctx) -> Some (AtS (SAggreg ((), [ForEachResult ()], aggregs), ctx)) *)
   | AtDim (ForEachResult _, SAggregForX (_, aggregs, ctx)) -> Some (AtS (SAggreg ((), [], aggregs), ctx))
   (*  | AtDim (_dim, SAggregForX (_, aggregs, ctx)) -> Some (AtS (SAggreg ((), [ForEachResult ()], aggregs), ctx)) *)

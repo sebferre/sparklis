@@ -81,6 +81,7 @@ object
   method virtual there_is : string
   method virtual it_is_true_that : string
   method virtual where : string
+  method virtual undefined : string
 
   method virtual tooltip_open_resource : string
   method virtual tooltip_delete_current_focus : string
@@ -262,6 +263,7 @@ object
   method there_is = "there is"
   method it_is_true_that = "it is true that"
   method where = "where"
+  method undefined = "undefined"
 
   method tooltip_open_resource = "Open resource in new window"
   method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
@@ -433,6 +435,7 @@ object
   method there_is = "il y a"
   method it_is_true_that = "il est vrai que"
   method where = "où"
+  method undefined = "indéfini"
 
   method tooltip_open_resource = "Ouvrir la ressource dans une nouvelle fenêtre"
   method tooltip_delete_current_focus = "Cliquer sur la croix rouge pour supprimer le focus actuel"
