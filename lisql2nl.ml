@@ -1175,6 +1175,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrForeachResult ->
     let xml_delete_opt =
       match focus with
+      | AtS (SAggreg (_, [ForEachResult _], _), _)
       | AtDim (ForEachResult _, _)
       | AtAggreg (_, SAggregX ([ForEachResult _], _, _)) -> [DeleteIncr]
       | _ -> [] in
