@@ -151,6 +151,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
     | Input dt -> html_input dt
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
+    | Quote (left, xml, right) -> left ^ html_of_nl_xml ~highlight state xml ^ right
     | Coord (coord,lxml) ->
       "<ul class=\"coordination\"><li>"
       ^ String.concat ("</li><li> " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
@@ -335,10 +336,10 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
-	   (Lisql2nl.xml_ng_label
+	   (Lisql2nl.xml_ng_id ~isolated:true
 	      Lisql2nl.config_lang#grammar
 	      ~id_labelling:(state#id_labelling)
-	      (state#id_labelling#get_id_label id)));
+	      id));
       Buffer.add_string buf "</th>")
     id_i_list;
   Buffer.add_string buf "</tr>";

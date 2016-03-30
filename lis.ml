@@ -527,9 +527,9 @@ object (self)
 	  | None -> incrs
 	  | Some ids ->
 	      IncrForeachResult ::
-	      List.fold_left
-	      (fun incrs id -> IncrForeach id :: incrs)
-	      incrs ids in
+	      List.fold_right
+	      (fun id incrs -> IncrForeach id :: incrs)
+	      ids incrs in
 	let incrs =
 	  List.fold_left
 	    (fun incrs aggreg ->

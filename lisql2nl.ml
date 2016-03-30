@@ -103,7 +103,7 @@ and 'a np = ('a, 'a nl_np) annotated
 and 'a nl_np =
   [ `Void
   | `PN of word * 'a rel
-  | `LabelWord of ng_label * word
+  | `Label of ng_label * word option
   | `Qu of qu * adj * 'a ng
   | `QuOneOf of qu * word list
   | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
@@ -666,7 +666,7 @@ and np_of_elt_dim grammar ~id_labelling : annot elt_dim -> annot np = function
     let qu, adj = qu_adj_of_modif grammar (Some annot) `Each modif in
     A (annot, `Qu (qu, adj, X (`LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))))
   | ForTerm (annot,t,id2) ->
-    A (annot, `LabelWord (id_labelling#get_id_label id2, word_of_term t))
+    A (annot, `Label (id_labelling#get_id_label id2, Some (word_of_term t)))
 and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     np_of_aggreg grammar (Some annot) `The modif g
@@ -675,7 +675,10 @@ and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = func
 and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = function
   | Undef annot -> A (annot, `PN (`Undefined, rel))
   | Const (annot,t) -> A (annot, `PN (word_of_term t, rel))
-  | Var (annot,id) -> det_of_elt_s2 grammar ~id_labelling annot rel (The id)
+  | Var (annot,id) ->
+    if rel = top_rel
+    then A (annot, `Label (id_labelling#get_id_label id, None))
+    else det_of_elt_s2 grammar ~id_labelling annot rel (The id)
   | Apply (annot,func,args) ->
     np_of_apply grammar (Some annot)
       adj
@@ -741,7 +744,7 @@ and map_np transf np =
     ( function
     | `Void -> `Void
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
-    | `LabelWord (l,w) -> `LabelWord (l,w)
+    | `Label (l,w_opt) -> `Label (l,w_opt)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
     | `And (lr) -> `And (List.map (map_np transf) lr)
@@ -865,6 +868,7 @@ and node =
   | Input of input_type
   | Suffix of xml * string (* suffix: eg. !, 's *)
   | Enum of string * xml list (* separator: eg. commas *)
+  | Quote of string * xml * string (* quoted xml *)
   | Coord of xml * xml list (* coordination: eg. 'and' *)
   | Focus of focus * xml
   | Highlight of xml
@@ -880,6 +884,7 @@ and xml_node_text_content grammar = function
   | Input typ -> ""
   | Suffix (x,suf) -> xml_text_content grammar x ^ suf
   | Enum (sep, xs) -> String.concat sep (List.map (xml_text_content grammar) xs)
+  | Quote (left, x, right) -> left ^ xml_text_content grammar x ^ right
   | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content grammar xsep ^ " ") (List.map (xml_text_content grammar) xs)
   | Focus (foc,x) -> xml_text_content grammar x
   | Highlight x -> xml_text_content grammar x
@@ -887,6 +892,25 @@ and xml_node_text_content grammar = function
   | DeleteCurrentFocus -> ""
   | DeleteIncr -> ""
 
+let rec xml_label_prune ~quoted l =
+  List.concat (List.map (xml_node_label_prune ~quoted) l)
+and xml_node_label_prune ~quoted node =
+  match node with
+  | Kwd _
+  | Word _
+  | Input _ -> [node]
+  | Suffix (x,suf) -> [Suffix (xml_label_prune ~quoted x, suf)]
+  | Enum (sep, xs) -> [Enum (sep, List.map (xml_label_prune ~quoted) xs)]
+  | Quote (left, x, right) ->
+    if quoted
+    then xml_label_prune ~quoted x
+    else [Quote (left, xml_label_prune ~quoted:true x, right)]
+  | Coord (xsep, xs) -> [Coord (xml_label_prune ~quoted xsep, List.map (xml_label_prune ~quoted) xs)]
+  | Focus (foc, x) -> xml_label_prune ~quoted x
+  | Highlight x -> xml_label_prune ~quoted x
+  | Suspended x -> [Suspended (xml_label_prune ~quoted x)]
+  | DeleteCurrentFocus
+  | DeleteIncr -> [node]
 
 
 let xml_a_an grammar xml =
@@ -954,7 +978,7 @@ and xml_np grammar ~id_labelling np =
     ( fun annot_opt -> function
     | `Void -> []
     | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
-    | `LabelWord (l,w) -> xml_ng_label grammar ~id_labelling l @ Word w :: []
+    | `Label (l,w_opt) -> xml_np_label grammar ~id_labelling l @ (match w_opt with None -> [] | Some w -> [Word w])
     | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
     | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
     | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
@@ -1071,9 +1095,13 @@ and xml_pp_list grammar ~id_labelling lpp =
 and xml_pp grammar ~id_labelling = function
   | `Prep (prep,np) -> Word prep :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
-and xml_ng_label grammar ~id_labelling = function
+and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
   | `Word w -> [Word w]
-  | `Expr expr -> Kwd grammar#value_ :: Kwd grammar#of_ :: xml_np_label grammar ~id_labelling (`Expr expr)
+  | `Expr expr ->
+    let xml = xml_np_label ~isolated grammar ~id_labelling (`Expr expr) in
+    if isolated
+    then xml
+    else Kwd grammar#value_ :: Kwd grammar#of_ :: xml
   | `Nth (k, `Expr expr) -> xml_ng_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | `Gen (ng, w) ->
     ( match grammar#genetive_suffix with
@@ -1086,16 +1114,19 @@ and xml_ng_label grammar ~id_labelling = function
     then Word w :: xml_ng_label grammar ~id_labelling ng
     else xml_ng_label grammar ~id_labelling ng @ [Word w]
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
-and xml_np_label grammar ~id_labelling ng =
+and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
   match ng with
   | `Expr expr ->
     let np = np_of_elt_expr grammar ~id_labelling top_adj top_rel expr in
-    xml_np grammar ~id_labelling np
+    let xml ~quoted = xml_label_prune ~quoted (xml_np grammar ~id_labelling np) in
+    if isolated
+    then xml ~quoted:false
+    else [Quote ("``", xml ~quoted:true, "''")]
   | `Nth (k, `Expr expr) -> xml_np_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | _ -> Word (`Op grammar#the) :: xml_ng_label grammar ~id_labelling ng
 
-let xml_ng_id grammar ~id_labelling id = xml_ng_label grammar ~id_labelling (id_labelling#get_id_label id)
-let xml_np_id grammar ~id_labelling id = xml_np_label grammar ~id_labelling (id_labelling#get_id_label id)
+let xml_ng_id ?isolated grammar ~id_labelling id = xml_ng_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
+let xml_np_id ?isolated grammar ~id_labelling id = xml_np_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
 
 let xml_incr_coordinate grammar focus xml =
   match focus with
