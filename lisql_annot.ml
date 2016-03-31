@@ -467,12 +467,12 @@ and annot_elt_s pos s ctx =
 		    (ctx_of_list aggregs)) in
     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) (la1@la2))) () in
     a, SAggreg (a, l_a_dim, l_a_aggreg)
-  | SExpr (_,id,modif,expr,rel_opt) ->
-    let a1, a_expr = annot_elt_expr pos_down expr (SExprX (id,modif,rel_opt,ctx)) in
-    let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (SExprThatX (id,modif,expr,ctx)) in
+  | SExpr (_,name,id,modif,expr,rel_opt) ->
+    let a1, a_expr = annot_elt_expr pos_down expr (SExprX (name,id,modif,rel_opt,ctx)) in
+    let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (SExprThatX (name,id,modif,expr,ctx)) in
     let ids = union_ids a1#ids ids_rel in
     let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} () in
-    a, SExpr (a, id,modif, a_expr, a_rel_opt)
+    a, SExpr (a, name, id, modif, a_expr, a_rel_opt)
   | SFilter (_,id,expr) ->
     let a1, a_expr = annot_elt_expr pos_down expr (SFilterX (id,ctx)) in
     let ids = a1#ids in
@@ -526,14 +526,14 @@ let rec annot_ctx_p1 ft_opt (a1,a_x) x = function
     let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtAggreg (f,ctx)) ~ids () in
     annot_ctx_aggreg ft (a, TheAggreg (a, id, modif, g, Some a_x, id2)) f ctx
-  | SExprThatX (id,modif,expr,ctx) ->
+  | SExprThatX (name,id,modif,expr,ctx) ->
     let ft = define_focus_term (`IdNoIncr id) ft_opt in
-    let f = SExpr ((), id, modif, expr, Some x) in
-    let a2, a_expr = annot_elt_expr (`Aside false) expr (SExprX (id,modif,Some x,ctx)) in
+    let f = SExpr ((), name, id, modif, expr, Some x) in
+    let a2, a_expr = annot_elt_expr (`Aside false) expr (SExprX (name,id,modif,Some x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let ids = {ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft (a, SExpr (a, id, modif, a_expr, Some a_x)) f ctx
+    annot_ctx_s ft (a, SExpr (a, name, id, modif, a_expr, Some a_x)) f ctx
   | AndX (ll_rr,ctx) ->
     let f = And ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -675,14 +675,14 @@ and annot_ctx_aggreg ft (a1,a_x) x = function
     annot_ctx_s ft (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
 and annot_ctx_expr defined (a1,a_x) x = function
 (* 'defined' is about the sub-expression at focus *)
-  | SExprX (id,modif,rel_opt,ctx) ->
+  | SExprX (name,id,modif,rel_opt,ctx) ->
     let ft = `IdNoIncr id in
-    let f = SExpr ((),id,modif,x,rel_opt) in
-    let ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (id,modif,x,ctx)) in
+    let f = SExpr ((),name,id,modif,x,rel_opt) in
+    let ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (name,id,modif,x,ctx)) in
     let ids = union_ids a1#ids ids_rel in
     let ids = {ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft (a, SExpr (a, id, modif, a_x, a_rel_opt)) f ctx
+    annot_ctx_s ft (a, SExpr (a, name, id, modif, a_x, a_rel_opt)) f ctx
   | SFilterX (id,ctx) ->
     let ft = `IdNoIncr id in
     let f = SFilter ((),id,x) in

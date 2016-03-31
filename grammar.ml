@@ -93,6 +93,7 @@ object
   method virtual tooltip_any : string
   method virtual tooltip_aggreg : string
   method virtual tooltip_func : string
+  method virtual tooltip_input_name : string
   method virtual tooltip_foreach_result : string
   method virtual tooltip_foreach : string
   method virtual tooltip_highest : string
@@ -275,6 +276,7 @@ object
   method tooltip_any = "Hide the focus column in the table of results"
   method tooltip_aggreg = "Aggregate the focus column in the table of results" (*, for each solution on other columns *)
   method tooltip_func = "Apply the function to the current focus"
+  method tooltip_input_name = "Input a (new) name for the expression result"
   method tooltip_foreach_result = "Compute the aggregation for each result of the related query"
   method tooltip_foreach = "Compute the aggregation for each value of this entity"
   method tooltip_highest = "Sort the focus column in decreasing order"
@@ -447,6 +449,7 @@ object
   method tooltip_any = "Cacher la colonne du focus actuel dans la table des résultats"
   method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Appliquer cette fonction au focus actuel"
+  method tooltip_input_name = "Entrer un (nouveau) nom pour le résultat de l'expression"
   method tooltip_foreach_result = "Calculer l'agrégation pour chaque résultat de la requête associée"
   method tooltip_foreach = "Calculer l'agrégation pour chaque valeur de cette entité"
   method tooltip_highest = "Trier la colonne du focus actuel en ordre décroissant"

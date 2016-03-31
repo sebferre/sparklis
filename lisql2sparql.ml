@@ -461,7 +461,7 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
       let lx = ids2vars (Ids.elements ids.defs) in
       let form = form_s1 state np (fun t -> Sparql.True) in
       form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv
-    | SExpr (annot,id,modif,expr,rel_opt) ->
+    | SExpr (annot,name,id,modif,expr,rel_opt) ->
       let x = state#id_labelling#get_id_var id in
       state#set_modif x modif;
       let sparql_expr = form_expr state expr in

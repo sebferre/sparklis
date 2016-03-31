@@ -429,14 +429,32 @@ object (self)
 
 
   method private refresh_modifier_increments ~(init : bool) =
-    jquery "#list-modifiers" (fun elt ->
+    let apply_incr elt =
+      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr =
+	match incr with
+	| Lisql.IncrName name ->
+	  let ref_name = ref name in
+	  jquery_input_from elt ".term-input" (fun input ->
+	    ref_name := to_string input##value);
+	  let name = !ref_name in
+	  Lisql.IncrName name
+	| _ -> incr in
+      navigation#update_focus ~push_in_history:true (Lisql.insert_increment incr)
+    in
+    jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers ~init in
-      elt##innerHTML <- string (html_index lis#focus html_state index);
-      jquery_all_from elt ".increment" (onclick (fun elt ev ->
-	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+      elt_list##innerHTML <- string (html_index lis#focus html_state index);
       jquery_set_innerHTML "#count-modifiers"
-	(html_count_unit { Lis.value=List.length index; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers))
+	(html_count_unit { Lis.value=List.length index; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+      stop_propagation_from elt_list ".term-input";
+      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+	apply_incr elt));
+      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
+	Opt.iter (elt##parentNode) (fun node ->
+	  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
+	    let incr_elt = Dom_html.element dom_elt in
+	    apply_incr incr_elt)))))
 
   method refresh =
     html_state <- new Html.state lis#id_labelling;

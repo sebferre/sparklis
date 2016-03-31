@@ -513,7 +513,7 @@ object (self)
       else
 	let incrs = [] in
 	let incrs =
-	  IncrIs :: IncrTriplify ::
+	  IncrIs :: IncrName "" :: IncrTriplify ::
 	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot ::
 	    IncrUnselect ::
 	    incrs in

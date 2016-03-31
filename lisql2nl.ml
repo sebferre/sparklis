@@ -247,6 +247,7 @@ let word_of_incr grammar = function
   | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
   | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
+  | IncrName name -> `Op "="
 
 (* verbalization of IDs *)
 
@@ -409,9 +410,10 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
     let lab2 = List.fold_left (fun labelling dim -> labelling_dim grammar ~labelling dim) lab1 dims in
     let lab3 = List.fold_left (fun labelling aggreg -> labelling_aggreg grammar ~labelling aggreg) lab2 aggregs in
     lab3
-  | SExpr (_,id,modif,expr,rel_opt) ->
+  | SExpr (_,name,id,modif,expr,rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
-    labelling @ (id, `Labels [("expr", `Expr expr)]) :: lab_rel
+    let expr_label = if name="" then `Expr expr else `Word (`Func name) in
+    labelling @ (id, `Labels [("expr", expr_label)]) :: lab_rel
   | SFilter (_,id,expr) ->
     labelling @ (id, `Labels [("expr", `Expr expr)]) :: []
   | Seq (_, lr) ->
@@ -697,10 +699,14 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
     else
       let np_dims = nl_and (List.map (np_of_elt_dim grammar ~id_labelling) dims) in
       A (annot, `For (np_dims, X nl_s_aggregs))
-  | SExpr (annot,id,modif,expr,rel_opt) ->
+  | SExpr (annot,name,id,modif,expr,rel_opt) ->
     let _qu, adj = qu_adj_of_modif grammar (Some annot) `The modif in
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
-    let np = np_of_elt_expr grammar ~id_labelling adj rel expr in
+    let np_expr = np_of_elt_expr grammar ~id_labelling adj rel expr in
+    let np =
+      if name=""
+      then np_expr
+      else X (`PN (`Func name, X (`Ing (`Op "=", np_expr)))) in
     A (annot, `Return np)
   | SFilter (annot,id,expr) ->
     let s = s_of_elt_expr grammar ~id_labelling expr in
@@ -1222,3 +1228,4 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
 	    (fun i -> if i=pos then dummy_np else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
+  | IncrName name -> [Input `String; Word (`Op "="); Word dummy_word]

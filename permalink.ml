@@ -125,7 +125,8 @@ let rec print s =
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
   | SAggreg (_,dims,aggregs) -> print_bin "SAggreg" (print_list print_dim "Dims" dims) (print_list print_aggreg "Aggregs" aggregs)
-  | SExpr (_,id,modif,expr,rel_opt) -> print_nary "SExpr" [print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
+  | SExpr (_,"",id,modif,expr,rel_opt) -> print_nary "SExpr" [print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
+  | SExpr (_,name,id,modif,expr,rel_opt) -> print_nary "SExprNamed" [print_string name; print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | SFilter (_,id,expr) -> print_bin "SFilter" (print_id id) (print_expr expr)
   | Seq (_,lr) -> print_lr print_s "Seq" lr
 and print_dim = function
@@ -267,7 +268,8 @@ let rec parse = parser
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
     | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_dim ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((),dims,aggregs)
-    | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), id, modif, expr, rel_opt)
+    | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), "", id, modif, expr, rel_opt)
+    | [< name, id, modif, expr, rel_opt = parse_quin ~version "SExprNamed" parse_string parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), name, id, modif, expr, rel_opt)
     | [< id, expr = parse_bin ~version "SFilter" parse_id parse_expr >] -> SFilter ((), id, expr)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
     | [<>] -> syntax_error "invalid s"
