@@ -105,6 +105,8 @@ let uri (uri : Rdf.uri) : term =
     | None -> sparql ("<" ^ uri ^ ">")
     | Some qname -> sparql qname
 
+let qname (qn : string) : term = sparql qn
+
 let bnode (name : string) : term = sparql (if name="" then "[]" else "_:" ^ name)
     
 let var (v : Rdf.var) : var = sparql ("?" ^ v)
@@ -191,6 +193,8 @@ let not_exists (p : pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
 
 let subquery (q : query) : pattern = "{ " ^< indent 2 q ^> " }"
 
+let service (s : term) (p : pattern) : pattern = "SERVICE " ^< s ^^ " { " ^< p ^> " }"
+  
 let search_label (t : term) (l : term) : pattern =
   t ^^ " rdfs:label " ^< l ^> " ." (* ^ sparql_constr l (HasLang "en") *)
 let search_contains (l : term) (w : string) : pattern =
