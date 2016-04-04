@@ -198,7 +198,7 @@ object (self)
       | Some query ->
 	let limit = config_max_results#value in
 	let sparql = query ~constr:term_constr ~limit in
-	Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
+	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
 	    results_typing <- Lisql_type.of_sparql_results res;

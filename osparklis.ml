@@ -197,17 +197,25 @@ let config =
 object (self)
   method set_endpoint (endpoint : string) : unit =
     Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
-    List.iter (fun input -> input#set_endpoint endpoint) config_inputs
+    List.iter (fun input -> input#set_endpoint endpoint) config_inputs;
+    Jsutils.yasgui#set_endpoint endpoint
 
   method get_permalink : (string * string) list =
     List.concat (List.map (fun input -> input#get_permalink) config_inputs)
   method set_permalink (args : (string * string) list) : unit =
     List.iter (fun input -> input#set_permalink args) config_inputs
 
+  method private set_yasgui_options =
+    Jsutils.yasgui#set_corsProxy
+      (if Sparql_endpoint.config_proxy#value then Some Sparql_endpoint.config_proxy_url#value else None);
+    Jsutils.yasgui#set_requestMethod
+      (if Sparql_endpoint.config_method_get#value then `GET else `POST)
+
   method if_has_changed ~(translate : unit -> unit) ~(refresh : unit -> unit) : unit =
     let has_changed = List.exists (fun input -> input#has_changed) config_inputs in
     if has_changed then begin
       if Lisql2nl.config_lang#has_changed then translate ();
+      self#set_yasgui_options;
       refresh ();
       List.iter (fun input -> input#reset_changed) config_inputs
     end
@@ -216,6 +224,7 @@ object (self)
     self#set_endpoint endpoint;
     List.iter (fun input -> input#init) config_inputs;
     self#set_permalink args;
+    self#set_yasgui_options;
     jquery "#config-reset-button" (onclick (fun elt ev ->
       List.iter (fun input -> input#reset) config_inputs));
     jquery "#button-clear-cache" (onclick (fun elt ev -> Sparql_endpoint.cache#clear))
@@ -474,8 +483,8 @@ object (self)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  (function
 	    | None ->
-	      jquery_set_innerHTML "#sparql-query" "";
-	      jquery "#sparql" (fun elt -> elt##style##display <- string "none");
+	      Jsutils.yasgui#set_query "SELECT * WHERE { }";
+	      Jsutils.yasgui#set_response "";
 	      jquery "#results" (fun elt -> elt##style##display <- string "none");
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
@@ -494,8 +503,8 @@ object (self)
 		self#refresh_property_increments;
 		self#refresh_modifier_increments ~init:false)
 	    | Some sparql ->
-	      jquery_set_innerHTML "#sparql-query" (html_pre (Sparql.prologue#add_declarations_to_query sparql));
-	      jquery "#sparql" (fun elt -> elt##style##display <- string "block");
+	      let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
+	      Jsutils.yasgui#set_query sparql_with_prefixes;
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      ( match lis#focus_term_list with
@@ -752,6 +761,8 @@ let _ =
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
+    (* initializing YASGUI *)
+    Jsutils.yasgui#init;
     (* defining navigation history *)
     let default_endpoint = ref "" in
     let default_focus = ref Lisql.factory#home_focus in
@@ -823,18 +834,23 @@ let _ =
 	  config#if_has_changed
 	    ~translate
 	    ~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus)))));
+    jquery "#switch-view" (onclick (fun elt ev ->
+      jquery_toggle "#sparklis-view";
+      jquery_toggle "#yasgui-view";
+      let view = jquery_toggle_innerHTML "#switch-view" "YASGUI view" "SPARKLIS view" in
+      if view = "SPARKLIS view" then Jsutils.yasgui#refresh));
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
     jquery "#show-hide-increments" (onclick (fun elt ev ->
       jquery_toggle "#increments-body";
-      jquery_toggle_innerHTML "#show-hide-increments" "+" "-"));
+      ignore (jquery_toggle_innerHTML "#show-hide-increments" "+" "-")));
     jquery "#show-hide-results" (onclick (fun elt ev ->
       jquery_toggle "#results-body";
-      jquery_toggle_innerHTML "#show-hide-results" "+" "-"));
-    jquery "#show-hide-sparql" (onclick (fun elt ev ->
+      ignore (jquery_toggle_innerHTML "#show-hide-results" "+" "-")));
+    (*jquery "#show-hide-sparql" (onclick (fun elt ev ->
       jquery_toggle "#sparql-body";
-      jquery_toggle_innerHTML "#show-hide-sparql" "+" "-"));
+      jquery_toggle_innerHTML "#show-hide-sparql" "+" "-"));*)
 
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->

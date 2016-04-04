@@ -35,9 +35,12 @@ let jquery_all s k = jquery_all_from Dom_html.document s k
 
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
-let jquery_toggle_innerHTML sel s1 s2 =
+let jquery_toggle_innerHTML sel (s1 : string) (s2 : string) : string =
+  let new_s = ref "" in
   jquery sel (fun elt ->
-    elt##innerHTML <- string (if to_string elt##innerHTML = s1 then s2 else s1))
+    new_s := (if to_string elt##innerHTML = s1 then s2 else s1);
+    elt##innerHTML <- string !new_s);
+  !new_s
 
 let jquery_show sel = jquery sel (fun elt -> elt##style##display <- string "block")
 let jquery_hide sel = jquery sel (fun elt -> elt##style##display <- string "none")
@@ -101,3 +104,62 @@ let getElementsByTagNameNS (elt : Dom.element t) (ns : js_string t) (name : js_s
 let lookupPrefix (elt : Dom.element t) (ns : js_string t) : js_string t opt =
   (* not working in Internet Explorer *)
   some (Unsafe.coerce (Unsafe.meth_call elt "lookupPrefix" [|Unsafe.inject ns|]))
+
+(* YASGUI bindings *)
+
+let yasgui =
+object (self)
+  val mutable this_opt = None
+
+  method init =
+    try this_opt <- Some (jsnew (Unsafe.global##_YASGUI) (Dom_html.getElementById "sparklis-yasgui"))
+    with exn -> alert ("Warning: YASGUI could not be initialized for some reason. SPARQL queries will be displayed as mere text at the bottom of the page.")
+
+  method set_corsProxy (url_opt : string option) : unit =
+    match this_opt with
+    | None -> ()
+    | Some yasgui -> yasgui##options##api##corsProxy <- (match url_opt with None -> null | Some url -> some (string url))
+
+  method private yasqe yasgui = yasgui##current()##yasqe
+  method private yasr yasgui = yasgui##current()##yasr
+
+  method set_endpoint (endpoint : string) : unit =
+    match this_opt with
+    | None -> ()
+    | Some yasgui ->
+      let yasqe = self#yasqe yasgui in
+      yasqe##options##sparql##endpoint <- string endpoint;
+      jquery_set_innerHTML ".yasgui .endpointText .item" endpoint
+
+  method set_requestMethod (meth : [`GET | `POST]) : unit =
+    match this_opt with
+    | None -> ()
+    | Some yasgui ->
+      let yasqe = self#yasqe yasgui in
+      yasqe##options##sparql##requestMethod <- string (match meth with `GET -> "GET" | `POST -> "POST")
+
+  method set_query (sparql : string) : unit =
+    match this_opt with
+    | None ->
+      let html = "<xmp>" ^ sparql ^ "</xmp>" in
+      jquery_set_innerHTML "#sparql-query" html
+    | Some yasgui ->
+      let yasqe = self#yasqe yasgui in
+      yasqe##setValue(string sparql)
+
+  method set_response (resp : string) : unit =
+    match this_opt with
+    | None -> ()
+    | Some yasgui ->
+      let yasr = self#yasr yasgui in
+      yasr##setResponse(string resp)
+
+  method refresh : unit =
+    match this_opt with
+    | None -> ()
+    | Some yasgui ->
+      let yasqe = self#yasqe yasgui in
+      let yasr = self#yasr yasgui in
+      yasqe##setValue(yasqe##getValue());
+      yasr##draw()
+end

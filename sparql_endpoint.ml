@@ -275,10 +275,10 @@ let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#i
 
 let cache =
 object
-  val ht : (string * string, results) Hashtbl.t = Hashtbl.create 101
-  method replace endpoint sparql results =
+  val ht : (string * string, string * results) Hashtbl.t = Hashtbl.create 101
+  method replace endpoint sparql responseText_results =
     if config_caching#value
-    then Hashtbl.replace ht (endpoint,sparql) results
+    then Hashtbl.replace ht (endpoint,sparql) responseText_results
   method lookup endpoint sparql =
     if config_caching#value
     then try Some (Hashtbl.find ht (endpoint,sparql)) with _ -> None
@@ -286,7 +286,7 @@ object
   method clear = Hashtbl.clear ht
 end
 
-let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
   let real_endpoint, real_sparql = (* use of proxy, if defined *)
@@ -295,7 +295,9 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
     else endpoint, sparql in
   let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
   match cache#lookup real_endpoint prologue_sparql with
-    | Some res -> k1 res
+    | Some (response_text, results) ->
+      if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
+      k1 results
     | None ->
       let encode_fields l =
 	String.concat "&"
@@ -356,16 +358,20 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) (elts : Do
                       | Some doc ->
 			if (Js.some doc##documentElement) == Js.null
 			then None
-			else Some (results_of_xml doc) in
+			else begin
+			  let response_text = to_string req##responseText in
+			  if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
+			  Some (response_text, results_of_xml doc)
+			end in
 		  ( match results_opt with
 		    | None ->
 		      Firebug.console##log(string "No XML content");
 		      k0 code
-		    | Some results ->
+		    | Some (response_text, results) ->
 		      if fail_on_empty_results && results.length = 0
 		      then k0 code
 		      else begin
-			cache#replace real_endpoint prologue_sparql results;
+			cache#replace real_endpoint prologue_sparql (response_text, results);
 			k1 results
 		      end)
 		| 0 ->

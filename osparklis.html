@@ -6,9 +6,10 @@
 <meta name="description" content="Sparklis lets you explore a RDF dataset through a SPARQL endpoint without the need to read or write SPARQL queries. Queries are displayed in natural language syntax, and are incrementally built by clicking suggested query elements, and by inserting them at the current focus. Only relevant suggestions are made, so that empty results are avoided."/>
 <meta name="keywords" content="SPARQL, faceted search, semantic search, exploratory search, complex queries, natural language interface, logical information systems"/>
 <meta charset="UTF-8"/>
+<link href="yasgui.min.css" rel="stylesheet" type="text/css"/>
+<script src="yasgui.min.js"></script>
 <link rel="stylesheet" type="text/css" href="osparklis.css">
-<script src="osparklis.js">
-</script>
+<script src="osparklis.js"></script>
 </head>
 
 <body>
@@ -98,6 +99,11 @@
 	<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
 	<span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
 	<button id="sparql-endpoint-button">Go</button>
+      </span>
+      <span class="tooltiped">
+	<span class="tooltip lang-en">Click to switch between SPARKLIS and YASGUI views</span>
+	<span class="tooltip lang-fr">Cliquer pour commuter entre les vues SPARKLIS et YASGUI</span>
+	<button id="switch-view">YASGUI view</button>
       </span>
     </span>
     <span class="tooltiped">
@@ -320,6 +326,7 @@
     </em>
   </div>
 
+<div id="sparklis-view">
   <div id="query">
     <div class="heading">
       <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
@@ -521,22 +528,16 @@
     </div>
     </div>
   </div>
+</div>
 
-  <div id="sparql">
-    <div class="heading">
-      <button id="show-hide-sparql">+</button>
-      <span class="texte lang-en">Your query in SPARQL</span>
-      <span class="texte lang-fr">Votre requête en SPARQL</span>
-    </div>
-    <div id="sparql-body" style="display:none">
-      <span class="tooltiped">
-	<span class="tooltip lang-en">This is the SPARQL version of your query</span>
-	<span class="tooltip lang-fr">Ceci est la version SPARQL de votre requête</span>
-	<div id="sparql-query">
-	</div>
-      </span>
-    </div>
+<div id="yasgui-view" style="display:none">
+  <div class="heading">
+    <span class="texte lang-en">Your query in SPARQL + results (with YASGUI)</span>
+    <span class="texte lang-fr">Votre requête en SPARQL + résultats (avec YASGUI)</span>
   </div>
+  <div id="sparql-query"></div>
+  <div id="sparklis-yasgui"></div>
+</div>
 
   <footer>
     <hr/>
