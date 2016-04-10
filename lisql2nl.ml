@@ -117,7 +117,7 @@ and 'a nl_ng =
   | `LabelThat of ng_label * 'a rel
   | `OfThat of word * 'a np * 'a rel
   | `Aggreg of bool * 'a ng_aggreg * 'a ng ] (* the bool indicates suspension *)
-and qu = [ `A | `Any of bool | `The | `AllThe | `Each | `All | `One | `No of bool ]
+and qu = [ `A | `Any of bool | `The | `Every | `Each | `All | `One | `No of bool ]
 and adj =
   [ `Nil
   | `Order of word
@@ -820,7 +820,7 @@ object (self)
       | `Return (A (a2, `PN (w, X (`That vp))))
 	-> `Truth (A (a2, `PN (w, top_rel)), vp)
       | `Return (A (a2, `Qu (`A, adj, (X (`That ((`Thing | `Class _), _)) as ng))))
-	-> `Return (A (a2, `Qu (`AllThe, adj, ng)))
+	-> `Return (A (a2, `Qu (`Every, adj, ng)))
       | nl -> nl)
   method np = function
   | A (a1, `Qu (_, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu (qu, `Nil, X ng)), []))))))))
@@ -921,8 +921,8 @@ and xml_node_label_prune ~quoted node =
 
 let xml_a_an grammar xml =
   Kwd (grammar#a_an ~following:(xml_text_content grammar xml)) :: xml
-let xml_all_the grammar xml =
-  Kwd grammar#all_the :: xml
+let xml_every grammar xml =
+  Kwd grammar#every :: xml
 
 let xml_suspended susp xml =
   if susp
@@ -1020,7 +1020,7 @@ and xml_qu grammar qu xml =
 	| `A -> Kwd grammar#something :: xml_rem
 	| `Any susp -> xml_suspended susp [Word (`Op grammar#anything)] @ xml_rem
 	| `The -> Kwd grammar#the :: xml
-	| `AllThe -> Kwd grammar#everything :: xml_rem
+	| `Every -> Kwd grammar#everything :: xml_rem
 	| `Each -> Kwd grammar#each :: xml
 	| `All -> Kwd grammar#everything :: xml_rem
 	| `One -> Kwd grammar#quantif_one :: xml
@@ -1030,7 +1030,7 @@ and xml_qu grammar qu xml =
 	| `A -> xml_a_an grammar xml
 	| `Any susp -> xml_suspended susp [Word (`Op grammar#any)] @ xml
 	| `The -> Kwd grammar#the :: xml
-	| `AllThe -> Kwd grammar#all_the :: xml
+	| `Every -> Kwd grammar#every :: xml
 	| `Each -> Kwd grammar#each :: xml
 	| `All -> Kwd grammar#all :: xml
 	| `One -> Kwd grammar#quantif_one :: xml
@@ -1166,7 +1166,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
       | AtS1 (np,ctx) ->
 	let xml_qu =
 	  match ctx with
-	  | ReturnX _ -> xml_all_the
+	  | ReturnX _ -> xml_every
 	  | _ -> xml_a_an in
 	let xml_delete_opt =
 	  match np with
