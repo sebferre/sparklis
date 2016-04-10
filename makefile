@@ -7,6 +7,8 @@ osparklis: $(OBJ)
 
 install:
 	cp log/*.php /local/ferre/web/ferre/sparklis/log
+	cp yasgui.min.css /local/ferre/web/ferre/sparklis
+	cp yasgui.min.js /local/ferre/web/ferre/sparklis
 	cp osparklis.html /local/ferre/web/ferre/sparklis
 	cp osparklis.html /local/ferre/web/ferre/sparklis/index.html
 	cp osparklis.css /local/ferre/web/ferre/sparklis
@@ -16,6 +18,8 @@ install:
 	cp examples.html /local/ferre/web/ferre/sparklis
 
 install-dev:
+	cp yasgui.min.css /local/ferre/web/ferre/sparklis-dev
+	cp yasgui.min.js /local/ferre/web/ferre/sparklis-dev
 	cp osparklis.html /local/ferre/web/ferre/sparklis-dev
 	cp osparklis.html /local/ferre/web/ferre/sparklis-dev/index.html
 	cp osparklis.css /local/ferre/web/ferre/sparklis-dev
