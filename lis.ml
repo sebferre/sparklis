@@ -376,34 +376,41 @@ object (self)
 	Lexicon.config_property_lexicon#value#sync (fun () ->
 	  k ~partial index))
     in
-    let sparql_class =
-      "SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
-	(* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
+    let ajax_extent () =
+      let sparql_class =
+	"SELECT DISTINCT ?class WHERE { [] a ?class " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
-    let sparql_prop =
-      "SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
+      let sparql_prop =
+	"SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
+	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
+	  " } LIMIT " ^ string_of_int config_max_properties#value in
+      Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+	(function
+	| [results_class; results_prop] -> process results_class results_prop
+	| _ -> assert false)
+	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+    in
+    let ajax_intent () =
+      let sparql_class =
+	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
+	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
+	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
+	  " } LIMIT " ^ string_of_int config_max_classes#value in
+      let sparql_prop =
+	"SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
-	(Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
-	" } LIMIT " ^ string_of_int config_max_properties#value in
-    Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop]
-      (function
-      | [results_class; results_prop] -> process results_class results_prop
-      | _ -> assert false)
-      (fun _ -> (* looking at facts *)
-	let sparql_class =
-	  "SELECT DISTINCT ?class WHERE { [] a ?class " ^
-	    (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
-	    " } LIMIT " ^ string_of_int config_max_classes#value in
-	let sparql_prop =
-	  "SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
-	    (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
-	    " } LIMIT " ^ string_of_int config_max_properties#value in
-	Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
-	  (function
-	  | [results_class; results_prop] -> process results_class results_prop
-	  | _ -> assert false)
-	  (fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results))
+	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
+	  " } LIMIT " ^ string_of_int config_max_properties#value in
+      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop]
+	(function
+	| [results_class; results_prop] -> process results_class results_prop
+	| _ -> assert false)
+	(fun _ -> ajax_extent ()) (* looking at facts *)
+    in
+    if endpoint = Sparql_endpoint.wikidata_endpoint (* TODO: generalize with configuration *)
+    then ajax_extent ()
+    else ajax_intent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process ~max_value ~partial ~unit results_a results_has results_isof =

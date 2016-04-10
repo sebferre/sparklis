@@ -45,7 +45,9 @@ object (self)
       Firebug.console##log(Js.string ("Synchronizing " ^ string_of_int (List.length l_uri) ^ " URI labels"));
       bind_labels l_uri
 	(fun l_uri_info_opt ->
-	  List.iter (fun (uri,info_opt) -> Hashtbl.add h uri info_opt) l_uri_info_opt;
+	  List.iter
+	    (fun (uri,info_opt) -> Hashtbl.add h uri info_opt)
+	    l_uri_info_opt;
 	  todo <- UriSet.empty;
 	  k ())
     end
@@ -96,14 +98,34 @@ let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
 
 (* lexicon retrieving labels from a SPARQL endpoint *)
 
+let wikidata_entity_of_predicate uri =
+  let prefix_predicate = "http://www.wikidata.org/prop/" in
+  if Common.has_prefix uri prefix_predicate
+  then 
+    (*let prefix_length = String.length prefix_predicate in
+    let suffix_predicate = String.sub uri prefix_length (String.length uri - prefix_length) in
+    let l_middle_predicate =
+      ["direct/"; "novalue/";
+       "statement/"; "statement/value/";
+       "qualifier/"; "qualifier/value/";
+       "reference/"; "reference/value/"] in
+    let middle_predicate = try List.find (fun middle -> Common.has_prefix suffix_predicate middle) l_middle_predicate with _ -> "" in
+    let middle_length = String.length middle_predicate in
+      let property_id = String.sub suffix_predicate middle_length (String.length suffix_predicate middle_length) in*)
+    "http://www.wikidata.org/entity/" ^ name_of_uri uri
+  else uri
+  
 (* from label property and optional language *)
 let sparql_lexicon
     ~(default_label : Rdf.uri -> 'a)
     ~(endpoint : string) ~(property : string) ?(language : string option)
     (map : string -> 'a) : 'a lexicon =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
-  let wikidata_special = false && (endpoint = "https://query.wikidata.org/sparql") in (* experimental, desactivated *)
   let bind_labels l_uri k =
+    let l_uri =
+      if endpoint = Sparql_endpoint.wikidata_endpoint
+      then List.map wikidata_entity_of_predicate l_uri (* converting Wikidata predicates to entities *)
+      else l_uri in
     let l_l_uri =
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then Common.bin_list 20 l_uri (* creating bins of 20 uris max *)
@@ -125,6 +147,40 @@ let sparql_lexicon
 			| None -> []
 			| Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]))
 	l_l_uri in
+    let add_uri_label uri label_opt lui =
+      if Common.has_prefix uri "http://www.wikidata.org/entity/P"
+      then
+	let p_id = String.sub uri 31 (String.length uri - 31) in
+	List.fold_left
+	  (fun lui middle ->
+	    let uri_pred = "http://www.wikidata.org/prop/" ^ middle ^ p_id in
+	    let info_opt =
+	      match label_opt with
+	      | None -> None
+	      | Some label ->
+		let label_pred =
+		  match middle with
+		  | "direct/" -> label
+		  | "novalue/" -> label ^ " (novalue)"
+		  | "" -> label ^ " (statement)"
+		  | "statement/" -> label ^ " (object)"
+		  | "statement/value/" -> label ^ " (object value)"
+		  | "qualifier/" -> label ^ " (qualifier)"
+		  | "qualifier/value/" -> label ^ " (qualifier value)"
+		  | "reference/" -> label ^ " (reference)"
+		  | "reference/value/" -> label ^ " (reference value)"
+		  | _ -> label in
+		Some (map label_pred) in
+	    (uri_pred,info_opt)::lui)
+	  lui
+	  ["direct/"; "novalue/"; "";
+	   "statement/"; "statement/value/";
+	   "qualifier/"; "qualifier/value/";
+	   "reference/"; "reference/value/"]
+      else
+	let info_opt = match label_opt with None -> None | Some l -> Some (map l) in
+	(uri,info_opt)::lui
+    in
     Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
       (fun l_results ->
 	let l_uri_info_opt =
@@ -135,8 +191,8 @@ let sparql_lexicon
 	      List.fold_left
 		(fun lui binding ->
 		  match binding.(i), binding.(j) with
-		  | Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> (uri, Some (map label))::lui
-		  | Some (Rdf.URI uri), None -> (uri, None)::lui
+		  | Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> add_uri_label uri (Some label) lui
+		  | Some (Rdf.URI uri), None -> add_uri_label uri None lui
 		  | _ -> lui)
 		lui results.Sparql_endpoint.bindings)
 	    [] l_results in
@@ -147,6 +203,7 @@ let sparql_lexicon
 			 ^ " This may be because the endpoint does not support the BIND operator.");
 	k [])
   in
+(*
   let bind_labels_wikidata l_uri k =
     let l_l_uri = Common.bin_list 20 l_uri in
     let l_l_var_uri_sparql =
@@ -193,7 +250,8 @@ let sparql_lexicon
 			 ^ property ^ (match language with None -> ">." | Some lang -> "> and for language tag @" ^ lang ^ "."));
 	k [])
   in
-  new tabled_lexicon default_label (if wikidata_special then bind_labels_wikidata else bind_labels)
+*)
+  new tabled_lexicon default_label bind_labels
 
 let sparql_entity_lexicon ~endpoint ~property ?language () =
   sparql_lexicon ~default_label:name_of_uri_entity ~endpoint ~property ?language (fun l -> l)

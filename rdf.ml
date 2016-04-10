@@ -16,7 +16,6 @@ let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
 let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
-
 (* ------------------------- *)
 
 type var = string
