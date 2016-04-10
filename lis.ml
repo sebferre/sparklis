@@ -11,6 +11,7 @@ type incr_freq_index = (Lisql.increment, freq option) index
   
 (* configuration *)
 
+let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
 let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
@@ -408,9 +409,9 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_extent ()) (* looking at facts *)
     in
-    if endpoint = Sparql_endpoint.wikidata_endpoint (* TODO: generalize with configuration *)
-    then ajax_extent ()
-    else ajax_intent ()
+    if config_intentional_init_concepts#value
+    then ajax_intent ()
+    else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process ~max_value ~partial ~unit results_a results_has results_isof =
