@@ -220,7 +220,8 @@ and name_func = function
   | `Seconds -> "seconds"
   | `TODAY -> invalid_arg "Lisql2sparql.name_func: TODAY"
   | `NOW -> "NOW"
-  | `And | `Or | `Not
+  | `Not -> "!"
+  | `And | `Or
   | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ -> invalid_arg "Lisql2sparql.name_func"
   | `BOUND -> "BOUND"
   | `IF -> "IF"
