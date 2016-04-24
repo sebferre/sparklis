@@ -37,7 +37,7 @@ type func =
 | `IRI | `STRDT | `STRLANG
 | `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
 | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
-| `Integer | `Decimal | `Double
+| `Integer | `Decimal | `Double | `Indicator
 | `Add | `Sub | `Mul | `Div | `Neg
 | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
 | `Date | `Time
@@ -88,6 +88,8 @@ and 'a elt_expr =
   | Const of 'a * Rdf.term
   | Var of 'a * id
   | Apply of 'a * func * 'a elt_expr list
+(*and 'a elt_s1_expr =
+  | NExpr of 'a * string * id * modif_s2 * 'a elt_expr * 'a elt_p1 option (* string : user label *) *)
 and 'a elt_s =
   | Return of 'a * 'a elt_s1
   | SAggreg of 'a * 'a elt_dim list * 'a elt_aggreg list
@@ -927,9 +929,23 @@ let insert_func_arg is_pred func arity pos =
     List.map (fun _ -> factory#top_expr) (Common.from_downto (pos-1) 1),
     List.map (fun _ -> factory#top_expr) (Common.from_to (pos+1) arity) in
   function
-  | AtExpr (_, ctx) when arity=0 -> next_undef_focus (AtExpr (Apply ((), func, []), ctx))
-  | AtExpr (expr,ctx) when (match ctx with SExprX _ -> not is_pred | _ -> true) ->
-    next_undef_focus (AtExpr (Apply ((), func, list_of_ctx expr ll_rr), ctx))
+  | AtExpr (expr,ctx) ->
+    let ctx =
+      match ctx with
+      | SExprX (name,id,modif,rel_opt,ctx2) ->
+	if is_pred
+	then SFilterX (id, ctx2)
+	else ctx
+      | SFilterX (id,ctx2) ->
+	if is_pred
+	then ctx
+	else SExprX ("", id, factory#top_modif, None, ctx2)
+      | _ -> ctx in
+    let args =
+      if arity = 0
+      then []
+      else list_of_ctx expr ll_rr in
+    next_undef_focus (AtExpr (Apply ((), func, args), ctx))
   | focus ->
     ( match id_of_focus focus with
     | None -> None
@@ -940,7 +956,7 @@ let insert_func_arg is_pred func arity pos =
 	let expr = Apply ((), func, args) in
 	if is_pred
 	then SFilter ((), factory#new_id, expr)
-	else SExpr ((), "", factory#new_id, factory#top_modif, Apply ((), func, args), None) in
+	else SExpr ((), "", factory#new_id, factory#top_modif, expr, None) in
       let focus2 = append_seq_s Root s2 s in
       move_seq down_focus next_undef_focus focus2 )
 

@@ -203,6 +203,7 @@ and name_func = function
   | `Integer -> "xsd:integer"
   | `Decimal -> "xsd:decimal"
   | `Double -> "xsd:double"
+  | `Indicator -> "xsd:integer"
   | `Add | `Sub | `Mul | `Div -> invalid_arg "Lisql2sparql.name_func"
   | `Neg -> "-"
   | `Abs -> "abs"

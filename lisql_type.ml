@@ -36,7 +36,7 @@ let inheritance : (datatype * datatype list) list =
       | `Date -> aux `Literal
       | `Time -> aux `Literal
       | `DateTime -> aux `Date
-      | `Boolean -> aux `Literal
+      | `Boolean -> [] (* type `Boolean used for filtering conditions, use function `Indicator to manipulate Boolean values *)
       | `Conversion _ -> assert false
   in
   List.map (fun dt -> (dt, aux dt))
@@ -160,6 +160,7 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `Integer -> [ [`Literal], `Integer ]
   | `Decimal -> [ [`Literal], `Decimal ]
   | `Double -> [ [`Literal], `Float ]
+  | `Indicator -> [ [`Boolean], `Integer ]
   | `Add
   | `Sub
   | `Mul -> [ [`Integer; `Integer], `Integer;
@@ -193,8 +194,7 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `LEQ | `LT -> [ [`Float; `Float], `Boolean;
 		    [`StringLiteral; `StringLiteral], `Boolean;
 		    [`DateTime; `DateTime], `Boolean;
-		    [`Date; `Date], `Boolean;
-		    [`Boolean; `Boolean], `Boolean ]
+		    [`Date; `Date], `Boolean ]
   | `BOUND -> [ [`Term], `Boolean ] (* should be `Var instead of `Term *)
   | `IF ->
     List.map (fun dt -> [`Boolean; dt; dt], dt)
@@ -269,7 +269,7 @@ let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_c
 
 let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_constraint (* raise TypeError *) = function
   | SExprX _ -> None
-  | SFilterX _ -> Some [`Boolean]
+  | SFilterX _ -> None
   | ApplyX (func,ll_rr,ctx) ->
     let pos = 1 + List.length (fst ll_rr) in
     let output_constr = constr_of_ctx_expr env ctx in
@@ -335,12 +335,18 @@ let find_insertable_aggreg aggreg focus_type_constraints : Lisql.aggreg option =
     else None
   in
   match aggreg with
-  | NumberOf -> Some NumberOf
+  | NumberOf ->
+    if check_input_constraint focus_type_constraints.input_constr `IRI_Literal
+    then Some NumberOf
+    else None
   | ListOf ->
     if check_input_constraint focus_type_constraints.input_constr `Literal
     then Some ListOf
     else None
-  | Sample -> Some Sample
+  | Sample ->
+    if check_input_constraint focus_type_constraints.input_constr `IRI_Literal
+    then Some Sample
+    else None
   | Total _ -> aux_num (fun conv_opt -> Total conv_opt) 
   | Average _ -> aux_num (fun conv_opt -> Average conv_opt) 
   | Maximum _ -> aux_num (fun conv_opt -> Maximum conv_opt) 

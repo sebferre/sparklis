@@ -581,6 +581,7 @@ object (self)
 	      `Integer, 1, 1;
 	      `Decimal, 1, 1;
 	      `Double, 1, 1;
+	      `Indicator, 1, 1;
 	      `Add, 2, 1;
 	      `Add, 2, 2;
 	      `Sub, 2, 1;
@@ -618,7 +619,9 @@ object (self)
 	      `LT, 2, 1;
 	      `LEQ, 2, 1;
 	      `BOUND, 1, 1;
+	      `IF, 3, 1;
 	      `IF, 3, 2;
+	      `IF, 3, 3;
 	      `IsIRI, 1, 1;
 	      `IsBlank, 1, 1;
 	      `IsLiteral, 1, 1;

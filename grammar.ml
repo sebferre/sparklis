@@ -203,6 +203,7 @@ object
   | `Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
   | `Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
   | `Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
+  | `Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
   | `Add -> `Infix " + "
   | `Sub -> `Infix " - "
   | `Mul -> `Infix " * "
@@ -376,6 +377,7 @@ object
   | `Integer -> `Pattern [`Arg 1; `Kwd "comme"; `Func "entier"]
   | `Decimal -> `Pattern [`Arg 1; `Kwd "comme"; `Func "décimal"]
   | `Double -> `Pattern [`Arg 1; `Kwd "comme"; `Func "flottant"]
+  | `Indicator -> `Pattern [`Kwd "1 ou 0"; `Kwd "selon"; `Kwd "que"; `Arg 1]
   | `Add -> `Infix " + "
   | `Sub -> `Infix " - "
   | `Mul -> `Infix " * "
