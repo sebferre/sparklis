@@ -32,6 +32,7 @@ let list_func_atom =
     `Integer, "Integer";
     `Decimal, "Decimal";
     `Double, "Double";
+    `Indicator, "Indicator";
     `Add, "Add";
     `Sub, "Sub";
     `Mul, "Mul";
