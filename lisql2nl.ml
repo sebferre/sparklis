@@ -18,8 +18,9 @@ object (self)
   method value : string = current_v
   method grammar : Grammar.grammar =
     match current_v with
-      | "fr" -> Grammar.french
-      | _ -> Grammar.english
+    | "fr" -> Grammar.french
+    | "es" -> Grammar.spanish
+    | _ -> Grammar.english
 
   method private set_select (v : string) : unit =
     if v <> current_v then begin

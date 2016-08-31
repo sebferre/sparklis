@@ -465,3 +465,178 @@ object
   method concept_concepts = "concept", "concepts"
   method modifier_modifiers = "modifieur", "modifieurs"
 end
+
+
+let spanish =
+object
+  inherit grammar
+
+  method adjective_before_noun = false
+
+  method thing = "cosa"
+  method relation = "relación"
+  method value_ = "valor"
+  method result = "resultado"
+  method is = "es"
+  method has = "tiene"
+  method has_as_a = "tiene como"
+  method relative_that = "que"
+  method whose = "cuyo"
+
+  method and_ = "y"
+  method or_ = "o"
+  method not_ = "no"
+  method optionally = "opcionalmente"
+  method optional = "opcional"
+
+  method of_ = "de"
+  method genetive_suffix = None
+  method rel_from = "de"
+  method rel_to = "a"
+
+  method a_an ~following = "un(a)"
+  method the = "la"
+  method every = "cada"
+  method each = "cada"
+  method no = "no"
+  method any = "cualquier"
+  method all = "todos"
+  method quantif_one = "un(a)"
+  method quantif_of = "de"
+  method something = "algo"
+  method anything = "cualquier cosa"
+  method everything = "todo"
+  method nothing = "nada"
+  method for_ = "para"
+
+  method n_th n =
+    let suffix =
+      if n = 1 then "o/a"
+      else "o" in
+    string_of_int n ^ suffix
+
+  method string = "cadena"
+  method integer = "entero"
+  method number = "número"
+  method date = "fecha"
+  method time = "hora"
+  method date_and_time = "fecha y hora"
+  method uri = "URI"
+
+  method aggreg_syntax = function
+  | Lisql.NumberOf -> `The, "número", None
+  | Lisql.ListOf -> `The, "lista", None
+  | Lisql.Sample -> `A, "muestra", None
+  | Lisql.Total _ -> `The, "suma", Some "total"
+  | Lisql.Average _ -> `The, "promedio", Some "promedio"
+  | Lisql.Maximum _ -> `The, "máximo", Some "máximo"
+  | Lisql.Minimum _ -> `The, "mínimo", Some "mínimo"
+
+  method func_syntax = function
+  | `Str -> `Pattern [`Kwd "la"; `Func "cadena"; `Kwd "de"; `Arg 1]
+  | `Lang -> `Pattern [`Kwd "el"; `Func "idioma"; `Kwd "de"; `Arg 1]
+  | `Datatype -> `Pattern [`Kwd "el"; `Func "tipo"; `Kwd "de"; `Arg 1]
+  | `IRI -> `Pattern [`Kwd "la"; `Func "IRI"; `Arg 1]
+  | `STRDT -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "con";  `Func "tipo"; `Arg 2]
+  | `STRLANG -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "con"; `Func "idioma"; `Arg 2]
+  | `Strlen -> `Pattern [`Kwd "la"; `Func "longitud"; `Kwd "de"; `Arg 1]
+  | `Substr2 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2]
+  | `Substr3 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2; `Kwd "y de longitud"; `Arg 3]
+  | `Strbefore -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "antes"; `Arg 2]
+  | `Strafter -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "depués"; `Arg 2]
+  | `Concat -> `Infix " ++ "
+  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "mayúscula"]
+  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minúscula"]
+  | `Encode_for_URI -> `Pattern [`Kwd "la"; `Func "codificación de la URL"; `Kwd "de"; `Arg 1]
+  | `Replace -> `Pattern [`Kwd "el"; `Func "reemplazo"; `Kwd "en"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "por"; `Arg 3]
+  | `Integer -> `Pattern [`Arg 1; `Kwd "como"; `Func "entero"]
+  | `Decimal -> `Pattern [`Arg 1; `Kwd "como"; `Func "decimal"]
+  | `Double -> `Pattern [`Arg 1; `Kwd "como"; `Func "flotante"]
+  | `Indicator -> `Pattern [`Kwd "1 o 0"; `Kwd "dependiendo"; `Kwd "si"; `Arg 1]
+  | `Add -> `Infix " + "
+  | `Sub -> `Infix " - "
+  | `Mul -> `Infix " * "
+  | `Div -> `Infix " / "
+  | `Neg -> `Prefix "- "
+  | `Abs -> `Brackets ("|","|")
+  | `Round -> `Pattern [`Kwd "el"; `Func "redondeo"; `Kwd "de"; `Arg 1]
+  | `Ceil -> `Pattern [`Kwd "la"; `Func "parte entera por exceso"; `Kwd "de"; `Arg 1]
+  | `Floor -> `Pattern [`Kwd "la"; `Func "parte entera por defecto"; `Kwd "de"; `Arg 1]
+  | `Random2 -> `Pattern [`Kwd "un"; `Func "número aleatorio"; `Kwd "entre"; `Arg 1; `Kwd "y"; `Arg 2]
+  | `Date -> `Pattern [`Kwd "la"; `Func "fecha"; `Kwd "de"; `Arg 1]
+  | `Time -> `Pattern [`Kwd "la"; `Func "hora"; `Kwd "de"; `Arg 1]
+  | `Year -> `Pattern [`Kwd "el"; `Func "año"; `Kwd "de"; `Arg 1]
+  | `Month -> `Pattern [`Kwd "el"; `Func "mes"; `Kwd "de"; `Arg 1]
+  | `Day -> `Pattern [`Kwd "el"; `Func "día"; `Kwd "de"; `Arg 1]
+  | `Hours -> `Pattern [`Kwd "las"; `Func "horas"; `Kwd "de"; `Arg 1]
+  | `Minutes -> `Pattern [`Kwd "los"; `Func "minutos"; `Kwd "de"; `Arg 1]
+  | `Seconds -> `Pattern [`Kwd "los"; `Func "segundos"; `Kwd "de"; `Arg 1]
+  | `TODAY -> `Pattern [`Func "hoy"]
+  | `NOW -> `Pattern [`Func "ahora"]
+  | `And -> `Infix " y "
+  | `Or -> `Infix " o "
+  | `Not -> `Prefix "no es verdad que "
+  | `EQ -> `Infix " = "
+  | `NEQ -> `Infix " ≠ "
+  | `GT -> `Infix " > "
+  | `GEQ -> `Infix " ≥ "
+  | `LT -> `Infix " < "
+  | `LEQ -> `Infix " ≤ "
+  | `BOUND -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "valor"]
+  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "caso contrario"; `Arg 3]
+  | `IsIRI -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "una"; `Func "IRI"]
+  | `IsBlank -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "nodo anónimo"]
+  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "literal"]
+  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "número"]
+  | `StrStarts -> `Pattern [`Arg 1; `Func "comienza por"; `Arg 2]
+  | `StrEnds -> `Pattern [`Arg 1; `Func "termina en"; `Arg 2]
+  | `Contains -> `Pattern [`Arg 1; `Func "contiene"; `Arg 2]
+  | `REGEX -> `Pattern [`Arg 1; `Func "coincide con la expresión regular"; `Arg 2]
+  | `LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincida con"; `Arg 2]
+ 
+  method order_highest = "en orden descendente"
+  method order_lowest = "en orden ascendente"
+
+  method matches = "contiene"
+  method after = "después"
+  method before = "antes"
+  method interval_from = "desde"
+  method interval_to = "hasta"
+  method higher_or_equal_to = "mayor o igual a"
+  method lower_or_equal_to = "menor o igual a"
+  method interval_between = "entre"
+  method interval_and = "y"
+  method language = "idioma"
+  method datatype = "tipo de datos"
+  method matching = "que contiene"
+
+  method give_me = "dame"
+  method there_is = "hay"
+  method it_is_true_that = "es verdad que"
+  method where = "donde"
+  method undefined = "indefinido"
+
+  method tooltip_open_resource = "Abrir el recurso en una nueva ventana"
+  method tooltip_delete_current_focus = "Haga clic en la X roja para eliminar el foco actual"
+  method tooltip_remove_element_at_focus = "Eliminar el elemento en el foco actual de consulta"
+  method tooltip_focus_on_property = "Insertar un foco sobre la propiedad para refinarla"
+  method tooltip_or = "Insertar una alternativa en el foco actual"
+  method tooltip_optionally = "Hacer al foco actual opcional"
+  method tooltip_not = "Aplicar una negación en el foco actual"
+  method tooltip_any = "Ocultar la columna del foco actual en la tabla de resultados"
+  method tooltip_aggreg = "Totalizar la columna del foco actual en la tabla de resultados" (* pour chaque valuation des autres colonnes *)
+  method tooltip_func = "Aplicar esta función en el foco actual"
+  method tooltip_input_name = "Introduzca un nombre (nuevo) para el resultado de la expresión"
+  method tooltip_foreach_result = "Calcular la agregación para cada resultado de la consulta asociada"
+  method tooltip_foreach = "Calcular la agregación para cada valor de esta entidad"
+  method tooltip_highest = "Ordenar la columna del foco actual en forma descendente"
+  method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"
+  method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
+  method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
+
+  method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
+  method result_results = "resultado", "resultados"
+  method entity_entities = "entidad", "entidades"
+  method concept_concepts = "concepto", "conceptos"
+  method modifier_modifiers = "modificador", "modificadores"
+end
