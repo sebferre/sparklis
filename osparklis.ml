@@ -176,6 +176,18 @@ let subsumed_constr constr1 constr2 : bool =
   | _ -> false
 
 
+(* input checking *)
+
+let check_input s = function
+  | `IRI -> true
+  | `String -> true
+  | `Float -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d*)?([eE][-+]?\\d+)?$") s 0 <> None
+  (*  | `Decimal -> Regexp.string_match (Regexp.regexp "[-+]?\\d+([.]\\d* )?$") s 0 <> None *)
+  | `Integer -> Regexp.string_match (Regexp.regexp "[-+]?\\d+$") s 0 <> None
+  | `Date -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}$") s 0 <> None
+  | `Time -> Regexp.string_match (Regexp.regexp "\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
+  | `DateTime -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
+    
 (* configuration *)
 
 let config =
@@ -370,7 +382,7 @@ object (self)
 	  jquery_input_from elt ".term-input" (fun input ->
 	    ref_s := to_string input##value);
 	  let s = !ref_s in
-	  if Lisql.check_input s dt
+	  if check_input s dt
 	  then Some (Lisql.IncrInput (s,dt))
 	  else begin alert "Invalid input"; None end
 	| _ -> Some incr in
