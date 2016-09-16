@@ -93,16 +93,33 @@ let process_hitlog () =
 
 open Lisql
 
+let sum f l = List.fold_left (fun res x -> res + f x) 0 l
+let sum_array f ar = Array.fold_left (fun res x -> res + f x) 0 ar
+  
 let rec size_s = function
-  | Return np -> size_s1 np
-  | Seq ar -> Array.fold_left (fun res s -> res + size_s s) 0 ar
+  | Return (_,np) -> size_s1 np
+  | SAggreg (_,dims,aggregs) -> sum size_dim dims + sum size_aggreg aggregs
+  | SExpr (_,name,id,modif,expr,rel_opt) -> 1 + size_modif_s2 modif + size_expr expr + size_p1_opt rel_opt
+  | SFilter (_,id,expr) -> 1 + size_expr expr
+  | Seq (_,l) -> sum size_s l
+and size_dim = function
+  | ForEachResult _ -> 1
+  | ForEach (_,id,modif,rel_opt,id2) -> 1 + size_modif_s2 modif + size_p1_opt rel_opt + 1
+  | ForTerm (_,t,id2) -> 1 + 1
+and size_aggreg = function
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> 1 + size_modif_s2 modif + 1 + size_p1_opt rel_opt + 1
+and size_expr = function
+  | Undef _ -> 1
+  | Const (_,t) -> 1
+  | Var (_,id) -> 1
+  | Apply (_,func,le) -> 1 + sum size_expr le
 and size_s1 = function
-  | Det (det, rel_opt) -> size_s2 det + size_p1_opt rel_opt
-  | AnAggreg (idg,mg,g,relg_opt,np) -> 1 + size_modif_s2 mg + size_p1_opt relg_opt + size_s1 np
-  | NAnd ar -> Array.fold_left (fun res np -> res + 1 + size_s1 np) (-1) ar
-  | NOr ar -> Array.fold_left (fun res np -> res + 1 + size_s1 np) (-1) ar
-  | NMaybe np -> 1 + size_s1 np
-  | NNot np -> 1 + size_s1 np
+  | Det (_,det,rel_opt) -> size_s2 det + size_p1_opt rel_opt
+  | AnAggreg (_,idg,mg,g,relg_opt,np) -> 1 + size_modif_s2 mg + size_p1_opt relg_opt + size_s1 np
+  | NAnd (_,l) -> sum (fun np -> 1 + size_s1 np) l - 1
+  | NOr (_,l) -> sum (fun np -> 1 + size_s1 np) l - 1
+  | NMaybe (_,np) -> 1 + size_s1 np
+  | NNot (_,np) -> 1 + size_s1 np
 and size_s2 = function
   | Term t -> 1
   | An (id,m,head) -> size_modif_s2 m + size_head head
@@ -121,19 +138,20 @@ and size_p1_opt = function
   | None -> 0
   | Some vp -> size_p1 vp
 and size_p1 = function
-  | Is np -> 1 + size_s1 np
-  | Type uri -> 1
-  | Rel (uri,_,np) -> 1 + size_s1 np
-  | Triple (_,np1,np2) -> 1 + size_s1 np1 + size_s1 np2
+  | Is (_,np) -> 1 + size_s1 np
+  | Type (_,uri) -> 1
+  | Rel (_,uri,_,np) -> 1 + size_s1 np
+  | Triple (_,_,np1,np2) -> 1 + size_s1 np1 + size_s1 np2
   | Search _ -> 1
   | Filter _ -> 1
-  | And ar -> Array.fold_left (fun res vp -> res + size_p1 vp) 0 ar
-  | Or ar -> Array.fold_left (fun res vp -> res + 1 + size_p1 vp) (-1) ar
-  | Maybe vp -> 1 + size_p1 vp
-  | Not vp -> 1 + size_p1 vp
-  | IsThere -> 0
+  | And (_,l) -> sum size_p1 l
+  | Or (_,l) -> sum (fun vp -> 1 + size_p1 vp) l - 1
+  | Maybe (_,vp) -> 1 + size_p1 vp
+  | Not (_,vp) -> 1 + size_p1 vp
+  | IsThere _ -> 0
 
-type query_feature = [ `Term | `The | `Class | `ThatIs | `ThatIsA | `ThatHas | `ThatIsOf | `ThatHasARelation | `Filter | `And | `Or | `Maybe | `Not | `Aggreg of aggreg | `Any | `Order ]
+type query_feature = [ `Term | `The | `Class | `ThatIs | `ThatIsA | `ThatHas | `ThatIsOf | `ThatHasARelation | `Filter | `And | `Or | `Maybe | `Not
+		     | `ForEachResult | `ForEach | `ForTerm | `Aggreg of aggreg | `ExprName | `Undef | `Const | `Var | `Func of func | `Any | `Order ]
 
 let string_of_feature : query_feature -> string = function
   | `Term -> "RDF term"
@@ -149,20 +167,44 @@ let string_of_feature : query_feature -> string = function
   | `Or -> "disjunction"
   | `Maybe -> "optional"
   | `Not -> "negation"
+  | `ForEachResult -> "for each result"
+  | `ForEach -> "for each"
+  | `ForTerm -> "for some term"
   | `Aggreg g -> "aggregation"
+  | `ExprName -> "expression name"
+  | `Undef -> "undefined"
+  | `Const -> "constant"
+  | `Var -> "variable"
+  | `Func f -> "function"
   | `Any -> "hidden column"
   | `Order -> "ordering"
-  
-let rec features_s = function
-  | Return np -> features_s1 np
-  | Seq ar -> Array.fold_left (fun res s -> res @ features_s s) [] ar
+
+let collect f l = List.concat (List.map f l)
+    
+let rec features_s : 'a elt_s -> query_feature list = function
+  | Return (_,np) -> features_s1 np
+  | SAggreg (_,dims,aggregs) -> collect features_dim dims @ collect features_aggreg aggregs
+  | SExpr (_,name,id,modif,expr,rel_opt) -> (if name="" then [] else [`ExprName]) @ features_modif_s2 modif @ features_expr expr @ features_p1_opt rel_opt
+  | SFilter (_,id,expr) -> features_expr expr
+  | Seq (_,l) -> collect features_s l
+and features_dim = function
+  | ForEachResult _ -> [`ForEachResult]
+  | ForEach (_,id,modif,rel_opt,id2) -> `ForEach :: features_modif_s2 modif @ features_p1_opt rel_opt
+  | ForTerm (_,t,id2) -> `ForTerm :: []
+and features_aggreg = function
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> `Aggreg g :: features_modif_s2 modif @ features_p1_opt rel_opt
+and features_expr = function
+  | Undef _ -> [`Undef]
+  | Const _ -> [`Const]
+  | Var _ -> [`Var]
+  | Apply (_,func,le) -> `Func func :: collect features_expr le
 and features_s1 = function
-  | Det (det, rel_opt) -> features_s2 det @ features_p1_opt rel_opt
-  | AnAggreg (idg,mg,g,relg_opt,np) -> `Aggreg g :: features_modif_s2 mg @ features_p1_opt relg_opt @ features_s1 np
-  | NAnd ar -> `And :: Array.fold_left (fun res np -> res @ features_s1 np) [] ar
-  | NOr ar -> `Or :: Array.fold_left (fun res np -> res @ features_s1 np) [] ar
-  | NMaybe np -> `Maybe :: features_s1 np
-  | NNot np -> `Not :: features_s1 np
+  | Det (_,det, rel_opt) -> features_s2 det @ features_p1_opt rel_opt
+  | AnAggreg (_,idg,mg,g,relg_opt,np) -> `Aggreg g :: features_modif_s2 mg @ features_p1_opt relg_opt @ features_s1 np
+  | NAnd (_,l) -> `And :: collect features_s1 l
+  | NOr (_,l) -> `Or :: collect features_s1 l
+  | NMaybe (_,np) -> `Maybe :: features_s1 np
+  | NNot (_,np) -> `Not :: features_s1 np
 and features_s2 = function
   | Term t -> [`Term]
   | An (id,m,head) -> features_modif_s2 m @ features_head head
@@ -181,18 +223,18 @@ and features_p1_opt = function
   | None -> []
   | Some vp -> features_p1 vp
 and features_p1 = function
-  | Is np -> `ThatIs :: features_s1 np
-  | Type uri -> `ThatIsA :: []
-  | Rel (uri,Fwd,np) -> `ThatHas :: features_s1 np
-  | Rel (uri,Bwd,np) -> `ThatIsOf :: features_s1 np
-  | Triple (_,np1,np2) -> `ThatHasARelation :: features_s1 np1 @ features_s1 np2
+  | Is (_,np) -> `ThatIs :: features_s1 np
+  | Type (_,uri) -> `ThatIsA :: []
+  | Rel (_,uri,Fwd,np) -> `ThatHas :: features_s1 np
+  | Rel (_,uri,Bwd,np) -> `ThatIsOf :: features_s1 np
+  | Triple (_,_,np1,np2) -> `ThatHasARelation :: features_s1 np1 @ features_s1 np2
   | Search _ -> [`Filter]
   | Filter _ -> [`Filter]
-  | And ar -> Array.fold_left (fun res vp -> res @ features_p1 vp) [] ar
-  | Or ar -> `Or :: Array.fold_left (fun res vp -> res @ features_p1 vp) [] ar
-  | Maybe vp -> `Maybe :: features_p1 vp
-  | Not vp -> `Not :: features_p1 vp
-  | IsThere -> []
+  | And (_,l) -> collect features_p1 l
+  | Or (_,l) -> `Or :: collect features_p1 l
+  | Maybe (_,vp) -> `Maybe :: features_p1 vp
+  | Not (_,vp) -> `Not :: features_p1 vp
+  | IsThere _ -> []
 
 let rec undup_features = function
   | [] -> []
@@ -202,15 +244,29 @@ let rec undup_features = function
     else x :: undup_features l
 
 let rec print_s = function
-  | Return np -> "Give me " ^ print_s1 np
-  | Seq ar -> print_and (Array.map print_s ar)
+  | Return (_,np) -> "give me " ^ print_s1 np
+  | SAggreg (_,dims,aggregs) -> "give me " ^ String.concat ", " (List.map print_dim dims) ^ ", " ^ String.concat " and " (List.map print_the_aggreg aggregs)
+  | SExpr (_,name,id,modif,expr,rel_opt) -> "give me " ^ (if name="" then "" else name ^ " = ") ^ print_id id ^ " " ^ print_expr expr ^ print_p1_opt rel_opt
+  | SFilter (_,id,expr) -> "where " ^ print_id id ^ " " ^ print_expr expr
+  | Seq (_,l) -> print_and (List.map print_s l)
+and print_dim = function
+  | ForEachResult _ -> "for each result"
+  | ForEach (_,id,modif,rel_opt,id2) -> "for each " ^ print_modif_s2 modif ^ print_id id2 ^ print_p1_opt rel_opt ^ " as " ^ print_id id
+  | ForTerm (_,t,id2) -> "for " ^ print_id id2 ^ " = " ^ print_term t
+and print_the_aggreg = function
+  | TheAggreg (_,id,modif,g,rel_opt,id2) -> "the " ^ print_modif_s2 modif ^ print_aggreg g ^ " " ^ print_id id ^ print_p1_opt rel_opt ^ " of " ^ print_id id2
+and print_expr = function
+  | Undef _ -> "_"
+  | Const (_,t) -> print_term t
+  | Var (_,id) -> print_id id
+  | Apply (_,func,le) -> print_func func ^ "(" ^ String.concat ", " (List.map print_expr le) ^ ")"
 and print_s1 = function
-  | Det (det, rel_opt) -> print_s2 det ^ print_p1_opt rel_opt
-  | AnAggreg (idg,mg,g,relg_opt,np) -> "a " ^ print_modif_s2 mg ^ print_aggreg g ^ " " ^ print_id idg ^ print_p1_opt relg_opt ^ " [" ^ print_s1 np ^ "]"
-  | NAnd ar -> print_and (Array.map print_s1 ar)
-  | NOr ar -> print_or (Array.map print_s1 ar)
-  | NMaybe np -> print_maybe (print_s1 np)
-  | NNot np -> print_not (print_s1 np)
+  | Det (_,det,rel_opt) -> print_s2 det ^ print_p1_opt rel_opt
+  | AnAggreg (_,idg,mg,g,relg_opt,np) -> "a " ^ print_modif_s2 mg ^ print_aggreg g ^ " " ^ print_id idg ^ print_p1_opt relg_opt ^ " [" ^ print_s1 np ^ "]"
+  | NAnd (_,l) -> print_and (List.map print_s1 l)
+  | NOr (_,l) -> print_or (List.map print_s1 l)
+  | NMaybe (_,np) -> print_maybe (print_s1 np)
+  | NNot (_,np) -> print_not (print_s1 np)
 and print_s2 = function
   | Term t -> print_term t
   | An (id,m,head) -> "a " ^ print_modif_s2 m ^ print_head head ^ " " ^ print_id id
@@ -225,34 +281,36 @@ and print_project = function
   | Select -> ""
 and print_order = function
   | Unordered -> ""
-  | Highest -> "highest "
-  | Lowest -> "lowest "
+  | Highest _ -> "highest "
+  | Lowest _ -> "lowest "
 and print_aggreg = function
-  | NumberOf -> "number of"
-  | ListOf -> "list of"
-  | Total -> "total"
-  | Average -> "average"
-  | Maximum -> "maximum"
-  | Minimum -> "minimum"
-  | Given -> "given"
+  | NumberOf -> "number"
+  | ListOf -> "list"
+  | Sample -> "sample"
+  | Total _ -> "sum"
+  | Average _ -> "average"
+  | Maximum _ -> "maximum"
+  | Minimum _ -> "minimum"
+and print_func f =
+  try List.assoc f Permalink.list_func_atom with _ -> "unknown_func"
 and print_p1_opt = function
   | None -> ""
   | Some vp -> " that " ^ print_p1 vp
 and print_p1 = function
-  | Is np -> "is " ^ print_s1 np
-  | Type uri -> "is a " ^ print_uri uri
-  | Rel (uri,Fwd,np) -> "has " ^ print_uri uri ^ " " ^ print_s1 np
-  | Rel (uri,Bwd,np) -> "is the " ^ print_uri uri ^ " of " ^ print_s1 np
-  | Triple (S,npp,npo) -> "has relation " ^ print_s1 npp ^ " to " ^ print_s1 npo
-  | Triple (O,nps,npp) -> "has relation " ^ print_s1 npp ^ " from " ^ print_s1 nps
-  | Triple (P,nps,npo) -> "is a relation from " ^ print_s1 nps ^ " to " ^ print_s1 npo
-  | Search constr -> print_constr constr
-  | Filter constr -> print_constr constr
-  | And ar -> print_and (Array.map print_p1 ar)
-  | Or ar -> print_or (Array.map print_p1 ar)
-  | Maybe vp -> print_maybe (print_p1 vp)
-  | Not vp -> print_not (print_p1 vp)
-  | IsThere -> "..."
+  | Is (_,np) -> "is " ^ print_s1 np
+  | Type (_,uri) -> "is a " ^ print_uri uri
+  | Rel (_,uri,Fwd,np) -> "has " ^ print_uri uri ^ " " ^ print_s1 np
+  | Rel (_,uri,Bwd,np) -> "is the " ^ print_uri uri ^ " of " ^ print_s1 np
+  | Triple (_,S,npp,npo) -> "has relation " ^ print_s1 npp ^ " to " ^ print_s1 npo
+  | Triple (_,O,nps,npp) -> "has relation " ^ print_s1 npp ^ " from " ^ print_s1 nps
+  | Triple (_,P,nps,npo) -> "is a relation from " ^ print_s1 nps ^ " to " ^ print_s1 npo
+  | Search (_,constr) -> print_constr constr
+  | Filter (_,constr) -> print_constr constr
+  | And (_,l) -> print_and (List.map print_p1 l)
+  | Or (_,l) -> print_or (List.map print_p1 l)
+  | Maybe (_,vp) -> print_maybe (print_p1 vp)
+  | Not (_,vp) -> print_not (print_p1 vp)
+  | IsThere _ -> "..."
 and print_constr = function
   | True -> "is true"
   | MatchesAll lw -> "matches all of " ^ String.concat ", " lw
@@ -265,8 +323,8 @@ and print_constr = function
   | Between (w1,w2) -> "is between " ^ w1 ^ " and " ^ w2
   | HasLang w -> "has language " ^ w
   | HasDatatype w -> "has datatype " ^ w
-and print_and ar = "(" ^ String.concat " and " (Array.to_list ar) ^ ")"
-and print_or ar = "(" ^ String.concat " or " (Array.to_list ar) ^ ")"
+and print_and l = "(" ^ String.concat " and " l ^ ")"
+and print_or l = "(" ^ String.concat " or " l ^ ")"
 and print_maybe s = "maybe " ^ s
 and print_not s = "not " ^ s
 and print_term = function
@@ -283,7 +341,9 @@ and print_uri uri =
   with _ -> uri
 
 let escape_string s =
-  Str.global_replace (Str.regexp "\"") "\\\"" s
+  let s = Str.global_replace (Str.regexp "\\\\") "" s in
+  let s = Str.global_replace (Str.regexp "\"") "\\\"" s in
+  s
 
 let rec output_object_list out_ttl pr = function
   | [] -> failwith "output_object_list: empty list"
@@ -300,6 +360,7 @@ let process_querylog () =
   let current_session_last_elapsed = ref 0 in
   let current_session_max_size_query = ref 0 in
   let nb_sessions = ref 0 in
+  let nb_step = ref 0 in
   print_endline "Processing data/querylog.txt > result in data/querylog_processed.txt/.ttl";
   ignore (Sys.command "sort -k2,1 -t , < data/querylog.txt > data/querylog_grouped.txt");
   output_string out_txt "# session\ttimestamp\tendpoint\tquery\n";
@@ -332,7 +393,8 @@ let process_querylog () =
 	      end
 	  end;
 	  begin
-	    output_string out_ttl "[] a :Step ; ";
+	    incr nb_step;
+	    output_string out_ttl (":step" ^ string_of_int !nb_step ^ " a :Step ; ");
 	    output_string out_ttl ":timestamp \""; output_string out_ttl dt; output_string out_ttl "\"^^xsd:dateTime ; ";
 	    output_string out_ttl ":date \""; output_string out_ttl (try String.sub dt 0 10 with _ -> ""); output_string out_ttl "\"^^xsd:date ; ";
 	    output_string out_ttl ":userIP \""; output_string out_ttl ip; output_string out_ttl "\" ; ";
