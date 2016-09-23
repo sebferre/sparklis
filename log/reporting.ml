@@ -343,6 +343,7 @@ and print_uri uri =
 let escape_string s =
   let s = Str.global_replace (Str.regexp "\\\\") "" s in
   let s = Str.global_replace (Str.regexp "\"") "\\\"" s in
+  let s = Str.global_replace (Str.regexp "[\n\r]") "\t" s in
   s
 
 let rec output_object_list out_ttl pr = function
