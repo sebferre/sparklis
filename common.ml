@@ -41,6 +41,9 @@ let list_to_set l =
   in
   aux [] l
 
+let equal_lists_as_sets l1 l2 =
+  List.sort Pervasives.compare l1 = List.sort Pervasives.compare l2
+    
 let unobfuscate_string s = (* symmetric, to be used for obfuscation *)
   String.map
     (fun oc ->

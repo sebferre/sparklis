@@ -156,7 +156,7 @@ let log_not (e : expr) : expr =
 let log_and (le : expr list) : expr = 
   if List.mem log_false le then log_false
   else
-    let le = List.filter ((<>) log_true) le in
+    let le = List.filter ((<>) log_true) (Common.list_to_set le) in
     match le with
       | [] -> log_true
       | [e] -> e
@@ -164,7 +164,7 @@ let log_and (le : expr list) : expr =
 let log_or (le : expr list) : expr =
   if List.mem log_true le then log_true
   else
-    let le = List.filter ((<>) log_false) le in
+    let le = List.filter ((<>) log_false) (Common.list_to_set le) in
     match le with
       | [] -> log_false
       | [e] -> e
@@ -179,10 +179,10 @@ let filter (e : expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^< indent 9 e ^> " )"
 let join (lp : pattern list) : pattern =
-  concat "\n" (List.filter ((<>) empty) lp)
+  concat "\n" (List.filter ((<>) empty) (Common.list_to_set lp))
 let union (lp : pattern list) : pattern =
   if List.mem empty lp then invalid_arg "Sparql.union: empty pattern";
-  match lp with
+  match Common.list_to_set lp with
     | [] -> invalid_arg "Sparql.union: empty list"
     | [p] -> p
     | p::lp1 -> "{ " ^< indent 2 p ^^ " }\nUNION " ^< concat "\nUNION " (List.map (fun p -> "{ " ^< indent 8 p ^> " }") lp1)
@@ -308,6 +308,10 @@ let rec formula_and (f1 : formula) (f2 : formula) : formula =
     | Subquery sq1, Filter e2 -> Subquery (subquery_having sq1 e2) (* kind of unsafe *)
     | Filter e1, Subquery sq2 -> Subquery (subquery_having sq2 e1) (* kind of unsafe *)
 *)
+    | Subquery sq1, Subquery sq2
+      when Common.equal_lists_as_sets sq1.groupings sq2.groupings
+	&& sq1.formula = sq2.formula -> Subquery (join_subqueries [sq1; sq2])
+    (* TODO: improve as mergeable subqueries may not be contiguous in formula list *)
     | Subquery sq1, _ -> formula_and (Pattern (pattern_of_subquery sq1)) f2
     | _, Subquery sq2 -> formula_and f1 (Pattern (pattern_of_subquery sq2))
     | Pattern p1, Pattern p2 -> Pattern (join [p1;p2])
@@ -319,16 +323,15 @@ let rec formula_and (f1 : formula) (f2 : formula) : formula =
     | Or (p1,e1), Pattern p2 -> Pattern (union [join [p1;p2]; join [p2; filter e1]])
     | Or (p1,e1), Filter e2 -> Or (join [p1; filter e2], log_and [e1; e2])
     | Or (p1,e1), Or (p2,e2) -> Or (union [join [p1; p2]; join [p1; filter e2]; join [p2; filter e1]], log_and [e1;e2])
-
-let formula_and_list (lf : formula list) : formula =
+and formula_and_list (lf : formula list) : formula =
   List.fold_left formula_and True lf
-
-let join_subqueries (lsq : subquery list) : subquery =
+and join_subqueries (lsq : subquery list) : subquery =
   { projections = Common.list_to_set (List.concat (List.map (fun sq -> sq.projections) lsq));
     formula = formula_and_list (List.map (fun sq -> sq.formula) lsq);
     groupings = Common.list_to_set (List.concat (List.map (fun sq -> sq.groupings) lsq));
     having = log_and (List.map (fun sq -> sq.having) lsq);
     limit = (match lsq with [] -> None | sq::_ -> sq.limit) }
+
 
 let formula_or_list (lf : formula list) : formula =
   let lp, le, btrue =

@@ -557,6 +557,14 @@ type template = ?hook:(Sparql.term -> Sparql.formula) -> limit:int -> string
 let make_query state t_list (view : Sparql.view) : template =
   (fun ?hook ~limit ->
     let sq_view = view ~limit () in
+    let sq_view = (* when sq_view makes no proper computation *)
+      if sq_view.Sparql.having = Sparql.log_true &&
+	List.for_all (function (`Bare,_) -> true | _ -> false) sq_view.Sparql.projections (* implies there are no relevant group-by *)
+      then (* and its contents is itself a subquery *)
+	match sq_view.Sparql.formula with
+	| Sparql.Subquery sq -> sq (* use that subquery instead *)
+	| _ -> sq_view
+      else sq_view in
     let visible_projections =
       List.filter
 	(fun (_,v) -> state#project v = Select || List.mem (Rdf.Var v) t_list)
@@ -566,9 +574,6 @@ let make_query state t_list (view : Sparql.view) : template =
       | [(Rdf.Var _ as t)], Some f_hook ->
 	Sparql.formula_and sq_view.Sparql.formula (f_hook (Sparql.term t))
       | _ -> sq_view.Sparql.formula in
-    let sq = { sq_view with
-      Sparql.projections = visible_projections;
-      Sparql.formula = form_hook } in
     let orderings =
       List.fold_right
 	(fun (_,v) orderings ->
@@ -579,8 +584,8 @@ let make_query state t_list (view : Sparql.view) : template =
     let query = Sparql.select
       ~distinct:true
       ~projections:visible_projections
-      ~groupings:(List.map Sparql.var sq.Sparql.groupings)
-      ~having:sq.Sparql.having
+      ~groupings:(List.map Sparql.var sq_view.Sparql.groupings)
+      ~having:sq_view.Sparql.having
       ~limit
       ~orderings
       (Sparql.pattern_of_formula form_hook) in
