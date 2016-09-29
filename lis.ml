@@ -12,10 +12,22 @@ type incr_freq_index = (Lisql.increment, freq option) index
 (* configuration *)
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
+let config_regexp_hidden_URIs = new Config.string_input ~key:"regexp_hidden_URIs" ~input_selector:"#input-regexp-hidden-uris" ~default:"^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)" ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
 let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
 
+
+let formula_hidden_URIs_term (tx : Sparql.term) : Sparql.formula =
+  match config_regexp_hidden_URIs#value with
+  | "" -> Sparql.True
+  | re -> Sparql.(Filter (log_not (expr_regex (expr_func "str" [(tx :> expr)]) re)))
+let formula_hidden_URIs (v : string) : Sparql.formula =
+  formula_hidden_URIs_term (Sparql.var v :> Sparql.term)
+
+let filter_hidden_URIs (v : string) : string =
+  (Sparql.pattern_of_formula (formula_hidden_URIs v) :> string)
+    
 (* extraction of the extension and indexes *)
 
 let lexicon_enqueue_term = function
@@ -198,7 +210,7 @@ object (self)
 	k None
       | Some query ->
 	let limit = config_max_results#value in
-	let sparql = query ~constr:term_constr ~limit in
+	let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity tx term_constr) ~limit in
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
@@ -334,6 +346,7 @@ object (self)
     let sparql_term =
 	"SELECT DISTINCT ?term WHERE { " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.search_constr (Sparql.var "term" :> Sparql.term) constr) :> string) ^
+	  filter_hidden_URIs "term" ^
 	  " FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
@@ -341,9 +354,10 @@ object (self)
 	let sparql_term =
 	  "SELECT DISTINCT ?term WHERE { " ^
 	    (Sparql.pattern_of_formula
-	       (Sparql.formula_and
-		  (Sparql.Pattern (Sparql.something (Sparql.var "term" :> Sparql.term)))
-		  (Lisql2sparql.filter_constr_entity (Sparql.var "term" :> Sparql.term) constr)) :> string) ^
+	       (Sparql.formula_and_list
+		  [ Sparql.Pattern (Sparql.something (Sparql.var "term" :> Sparql.term));
+		    Lisql2sparql.filter_constr_entity (Sparql.var "term" :> Sparql.term) constr;
+		    formula_hidden_URIs "term" ]) :> string) ^
 	    " } LIMIT " ^  string_of_int config_max_results#value in
 	Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
 	  (fun results_term -> process results_term)
@@ -381,10 +395,12 @@ object (self)
       let sparql_class =
 	"SELECT DISTINCT ?class WHERE { [] a ?class " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
+	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop WHERE { [] ?prop [] " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
+	  filter_hidden_URIs "prop" ^
 	  " } LIMIT " ^ string_of_int config_max_properties#value in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	(function
@@ -397,11 +413,13 @@ object (self)
 	"SELECT DISTINCT ?class WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
+	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
-	(* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
+	  (* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
+	  filter_hidden_URIs "prop" ^
 	  " } LIMIT " ^ string_of_int config_max_properties#value in
       Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	(function
@@ -448,9 +466,15 @@ object (self)
       match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
 	| None, None, None -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
 	| Some query_a, Some query_has, Some query_isof ->
-	  let sparql_a = query_a ~constr ~limit:config_max_classes#value in
-	  let sparql_has = query_has ~constr ~limit:config_max_properties#value in
-	  let sparql_isof = query_isof ~constr ~limit:config_max_properties#value in
+	  let sparql_a = query_a
+	    ~hook:(fun tx -> Sparql.formula_and (Lisql2sparql.filter_constr_class tx constr) (formula_hidden_URIs_term tx))
+	    ~limit:config_max_classes#value in
+	  let sparql_has = query_has
+	    ~hook:(fun tx -> Sparql.formula_and (Lisql2sparql.filter_constr_property tx constr) (formula_hidden_URIs_term tx))
+	    ~limit:config_max_properties#value in
+	  let sparql_isof = query_isof
+	    ~hook:(fun tx -> Sparql.formula_and (Lisql2sparql.filter_constr_property tx constr) (formula_hidden_URIs_term tx))
+	    ~limit:config_max_properties#value in
 	  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	    (function
 	      | [results_a; results_has; results_isof] -> process ~max_value ~partial ~unit results_a results_has results_isof
@@ -472,7 +496,10 @@ object (self)
 				 focus_term_index) in
 	(Sparql.select ~projections:[`Bare, "class"] ~limit:config_max_classes#value
 	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr)))
+	      (Sparql.formula_and_list
+		 [ Sparql.Pattern gp;
+		   (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr);
+		   formula_hidden_URIs "class" ]))
 	 :> string) in
       let sparql_has =
 	let gp =
@@ -484,7 +511,10 @@ object (self)
 			  focus_term_index) in
 	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr)))
+	      (Sparql.formula_and_list
+		 [ Sparql.Pattern gp;
+		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
+		   formula_hidden_URIs "prop" ]))
 	 :> string) in
       let sparql_isof =
 	let gp = Sparql.union (List.map
@@ -495,7 +525,10 @@ object (self)
 				 focus_term_index) in
 	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and (Sparql.Pattern gp) (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr)))
+	      (Sparql.formula_and_list
+		 [ Sparql.Pattern gp;
+		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
+		   formula_hidden_URIs "prop" ]))
 	 :> string) in
       Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	(function

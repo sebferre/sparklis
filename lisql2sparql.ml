@@ -552,23 +552,23 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
   | Join (_,lv1)::lv -> form_view_list state lr view (lv1@lv)
 
 
-type template = ?constr:constr -> limit:int -> string
+type template = ?hook:(Sparql.term -> Sparql.formula) -> limit:int -> string
 
 let make_query state t_list (view : Sparql.view) : template =
-  (fun ?constr ~limit ->
+  (fun ?hook ~limit ->
     let sq_view = view ~limit () in
     let visible_projections =
       List.filter
 	(fun (_,v) -> state#project v = Select || List.mem (Rdf.Var v) t_list)
 	sq_view.Sparql.projections in
-    let form_constr =
-      match t_list, constr with
-      | [(Rdf.Var _ as t)], Some c ->
-	Sparql.formula_and sq_view.Sparql.formula (filter_constr_entity (Sparql.term t) c)
+    let form_hook =
+      match t_list, hook with
+      | [(Rdf.Var _ as t)], Some f_hook ->
+	Sparql.formula_and sq_view.Sparql.formula (f_hook (Sparql.term t))
       | _ -> sq_view.Sparql.formula in
     let sq = { sq_view with
       Sparql.projections = visible_projections;
-      Sparql.formula = form_constr } in
+      Sparql.formula = form_hook } in
     let orderings =
       List.fold_right
 	(fun (_,v) orderings ->
@@ -583,7 +583,7 @@ let make_query state t_list (view : Sparql.view) : template =
       ~having:sq.Sparql.having
       ~limit
       ~orderings
-      (Sparql.pattern_of_formula form_constr) in
+      (Sparql.pattern_of_formula form_hook) in
     (query :> string))
 
       
@@ -600,14 +600,14 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     if Sparql.is_empty_view view
     then None
     else Some (make_query state t_list view) in
-  let query_incr_opt (x : Rdf.var) filter_constr triple =
+  let query_incr_opt (x : Rdf.var) triple =
     match ft, t_list with
     | `IdNoIncr _, _
     | `TermNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
     | _, [t] ->
 	let term_t = Sparql.term t in
 	let tx = (Sparql.var x :> Sparql.term) in
-	Some (fun ?(constr=True) ~limit ->
+	Some (fun ?(hook=(fun tx -> Sparql.True)) ~limit ->
 	  let form_x =
 	    match t with
 	    | Rdf.Var _
@@ -615,9 +615,9 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
 	    | _ -> triple term_t tx in
 	  (Sparql.select ~projections:[(`Bare,x)] ~limit
 	    (Sparql.pattern_of_formula
-	       (Sparql.formula_and form_x (filter_constr tx constr))) :> string))
+	       (Sparql.formula_and form_x (hook tx))) :> string))
       | _ -> None in
-  let query_class_opt = query_incr_opt "class" filter_constr_class (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
-  let query_prop_has_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
-  let query_prop_isof_opt = query_incr_opt "prop" filter_constr_property (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
+  let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
+  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
+  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
   t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt, annot_view

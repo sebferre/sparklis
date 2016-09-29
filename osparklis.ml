@@ -198,6 +198,7 @@ let config =
       (Sparql_endpoint.config_withCredentials :> Config.input);
       (Sparql_endpoint.config_caching :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
+      (Lis.config_regexp_hidden_URIs :> Config.input);
       (Lis.config_max_results :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
