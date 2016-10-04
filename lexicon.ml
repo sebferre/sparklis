@@ -1,12 +1,9 @@
 
 (* URI lexicon definitions *)
 
-class virtual ['a] lexicon =
-object
-  method virtual info : Rdf.uri -> 'a
-  method virtual enqueue : Rdf.uri -> unit
-  method virtual sync : (unit -> unit) -> unit
-end
+class virtual ['a] lexicon = [Rdf.uri,'a] Cache.cache
+class ['a] pure_lexicon get_label = [Rdf.uri,'a] Cache.pure_cache ~get:get_label
+class ['a] tabled_lexicon default_label bind_labels = [Rdf.uri,'a] Cache.tabled_cache ~default:default_label ~bind:bind_labels
 
 type property_syntagm = [ `Noun | `InvNoun | `TransVerb | `TransAdj ]
 
@@ -14,44 +11,6 @@ type entity_lexicon = string lexicon
 type class_lexicon = string lexicon
 type property_lexicon = (property_syntagm * string) lexicon
 
-(* URI lexicon templates *)
-
-class ['a] pure_lexicon (get_label : Rdf.uri -> 'a) =
-object
-  inherit ['a] lexicon
-  method info uri = get_label uri
-  method enqueue uri = ()
-  method sync k = k ()
-end
-
-module UriSet = Set.Make(String)
-
-class ['a] tabled_lexicon (default_label : Rdf.uri -> 'a) (bind_labels : Rdf.uri list -> ((Rdf.uri * 'a option) list -> unit) -> unit) =
-object (self)
-  val h : (Rdf.uri,'a option) Hashtbl.t = Hashtbl.create 1001
-  method info (uri : Rdf.uri) : 'a =
-    try Common.unsome (Hashtbl.find h uri)
-    with _ -> self#enqueue uri; default_label uri
-
-  val mutable todo : UriSet.t = UriSet.empty
-  method enqueue (uri : Rdf.uri) : unit =
-    if not (UriSet.mem uri todo || Hashtbl.mem h uri)
-    then todo <- UriSet.add uri todo
-  method sync (k : unit -> unit) : unit =
-    if UriSet.is_empty todo
-    then k ()
-    else begin
-      let l_uri = UriSet.elements todo in
-      Firebug.console##log(Js.string ("Synchronizing " ^ string_of_int (List.length l_uri) ^ " URI labels"));
-      bind_labels l_uri
-	(fun l_uri_info_opt ->
-	  List.iter
-	    (fun (uri,info_opt) -> Hashtbl.add h uri info_opt)
-	    l_uri_info_opt;
-	  todo <- UriSet.empty;
-	  k ())
-    end
-end
 
 (* default lexicon *)
 
