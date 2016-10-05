@@ -583,9 +583,9 @@ object (self)
 	let gp = Sparql.union (focus_term_index#map
 				 (fun (t,_) ->
 				   Sparql.subquery
-				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:(config_max_classes#value / min 10 nb_focus_term)
+				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:config_max_classes#value
 					(Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term))))) in
-	(Sparql.select ~projections:[`Bare, "class"] ~limit:config_max_classes#value
+	(Sparql.select ~projections:[`Bare, "class"] ~limit:(config_max_classes#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
 		 [ Sparql.Pattern gp;
@@ -597,9 +597,9 @@ object (self)
 	  Sparql.union (focus_term_index#map
 			  (fun (t,_) ->
 			    Sparql.subquery
-			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value / min 10 nb_focus_term)
+			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 				 (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode ""))))) in
-	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
+	(Sparql.select ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
 		 [ Sparql.Pattern gp;
@@ -610,9 +610,9 @@ object (self)
 	let gp = Sparql.union (focus_term_index#map
 				 (fun (t,_) ->
 				   Sparql.subquery
-				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value / min 10 nb_focus_term)
+				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 					(Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t))))) in
-	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
+	(Sparql.select ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
 		 [ Sparql.Pattern gp;
