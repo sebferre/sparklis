@@ -1,14 +1,26 @@
 
 open Js
 
-type ('a, 'b) index = ('a * 'b) list
-
-type 'a int_index = ('a,int) index
+class ['a,'b] index =
+object
+  val mutable l : ('a * 'b) list = []
+  method is_empty : bool = (l=[])
+  method length : int = List.length l
+  method add (elt_info : 'a * 'b) : unit = l <- elt_info::l
+  method fold : 'c. ('c -> 'a * 'b -> 'c) -> 'c -> 'c =
+    fun f init -> List.fold_left f init l
+  method iter : ('a * 'b -> unit) -> unit =
+    fun f -> List.iter f l
+  method map : 'c. ('a * 'b -> 'c) -> 'c list =
+    fun f -> List.map f l
+end
+  
+class ['a] int_index = ['a,int] index
 
 type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
-type incr_freq_index = (Lisql.increment, freq option) index
-  
+class incr_freq_index = [Lisql.increment, freq option] index
+
 (* configuration *)
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
@@ -71,6 +83,7 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
 
 let index_of_results_column (var : Rdf.var) results : Rdf.term int_index =
   let open Sparql_endpoint in
+  let index = new int_index in
   try
     let i = List.assoc var results.vars in
     let ht = Hashtbl.create 1000 in
@@ -85,48 +98,50 @@ let index_of_results_column (var : Rdf.var) results : Rdf.term int_index =
 	    with Not_found ->
 	      Hashtbl.add ht term (ref 1))
       results.bindings;
-    let index =
-      Hashtbl.fold
-	(fun term cpt res -> (term,!cpt)::res)
-	ht [] in
+    Hashtbl.iter
+      (fun term cpt -> index#add (term,!cpt))
+      ht;
     index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
-    []
+    index
 
 let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : Rdf.term int_index =
   let open Sparql_endpoint in
+  let index = new int_index in
   try
     let i_x = List.assoc var_x results.vars in
     let i_count = try List.assoc var_count results.vars with _ -> -1 in
-    let index =
-      List.fold_left
-	(fun res binding ->
-	  match binding.(i_x) with
-	    | None -> res
-	    | Some x ->
-	      let count =
-		if i_count < 0
-		then 1
-		else
-		  match binding.(i_count) with
-		    | Some (Rdf.Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
-		    | Some (Rdf.TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
-		    | _ -> 0 in
-	      (x, count)::res)
-	[] results.bindings in
+    List.iter
+      (fun binding ->
+	match binding.(i_x) with
+	| None -> ()
+	| Some x ->
+	  let count =
+	    if i_count < 0
+	    then 1
+	    else
+	      match binding.(i_count) with
+	      | Some (Rdf.Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
+	      | Some (Rdf.TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
+	      | _ -> 0 in
+	  index#add (x, count))
+      results.bindings;
     index
   with Not_found ->
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
-    []
+    index
 
-let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql.increment) (l : Rdf.term int_index) : incr_freq_index =
-  List.fold_left
-    (fun res -> function
-      | (Rdf.URI uri, freq) -> (f uri, Some { value=freq; max_value; partial; unit })::res
-      | _ -> res)
-    [] l
-
+(*      
+let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql.increment) (int_index : Rdf.term int_index) : incr_freq_index =
+  let incr_index = new incr_freq_index in
+  int_index#iter
+    (function
+      | (Rdf.URI uri, freq) -> incr_index#add (f uri, Some { value=freq; max_value; partial; unit })
+      | _ -> ());
+  incr_index
+*)
+      
 (* LIS navigation places *)
 
 class place (endpoint : string) (focus : Lisql.focus) =
@@ -181,7 +196,7 @@ object (self)
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
   val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
-  val mutable focus_term_index : (Rdf.term * int) list = []
+  val mutable focus_term_index : Rdf.term int_index = new int_index
   val mutable some_focus_term_is_blank : bool = false
 
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
@@ -194,19 +209,21 @@ object (self)
       []
     
   method ajax_sparql_results term_constr elts (k : string option -> unit) =
+    (* re-initializing *)
+    results <- Sparql_endpoint.empty_results;
+    results_typing <- [||];
+    focus_term_index <- new int_index;
+    some_focus_term_is_blank <- false;
+    (* computing results and derived attributes *)
     match query_opt with
       | None ->
-	results <- Sparql_endpoint.empty_results;
-	let fti, sftib =
-	  match focus_term_list with
-	    | [Rdf.Var _] -> [], false
-	    | [Rdf.Bnode _] ->
-	      Firebug.console##log(string "no query and focus_term_list is a Bnode");
-	      [], true (* should not happen *)
-	    | [term] -> [(term,1)], false
-	    | _ -> [], false in
-	focus_term_index <- fti;
-	some_focus_term_is_blank <- sftib;
+	( match focus_term_list with
+	| [Rdf.Var _] -> ()
+	| [Rdf.Bnode _] ->  (* should not happen *)
+	  Firebug.console##log(string "no query and focus_term_list is a Bnode");
+	  some_focus_term_is_blank <- true
+	| [term] -> focus_term_index#add (term,1)
+	| _ -> () );
 	k None
       | Some query ->
 	let limit = config_max_results#value in
@@ -218,34 +235,24 @@ object (self)
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
 	      focus;
-	    let fti, sftib =
-	      match focus_term_list with
-		| [Rdf.Var v] ->
-		  let index = index_of_results_column v results in
-		  let rev_fti, sftib =
-		    List.fold_left (* avoiding non recursive terminal fold_right *)
-		      (fun (rev_fti,sftib) (t,freq) ->
-			match t with
-			| Rdf.URI uri when String.contains uri ' ' -> (rev_fti,sftib)
-	                  (* URIs with spaces inside are not allowed in SPARQL queries *)
-			| Rdf.Bnode _ -> (rev_fti,true)
-		          (* blank nodes are not allowed in SPARQL queries *)
-			| _ -> ((t,freq)::rev_fti, sftib))
-		      ([],false) index in
-		  List.rev rev_fti, sftib
-		| [Rdf.Bnode _] ->
-		  Firebug.console##log(string "focus_term_list is a Bnode");
-		  [], true (* should not happen *)
-		| [t] -> [(t, 1)], false
-		| _ -> [], false in
-	    focus_term_index <- fti;
-	    some_focus_term_is_blank <- sftib;
+	    ( match focus_term_list with
+	    | [Rdf.Var v] ->
+	      let index = index_of_results_column v results in
+	      index#iter (* avoiding non recursive terminal fold_right *)
+		(fun (t,freq) ->
+		  match t with
+		  | Rdf.URI uri when String.contains uri ' ' -> ()
+	              (* URIs with spaces inside are not allowed in SPARQL queries *)
+		  | Rdf.Bnode _ -> some_focus_term_is_blank <- true
+		      (* blank nodes are not allowed in SPARQL queries *)
+		  | _ -> focus_term_index#add (t,freq))
+	    | [Rdf.Bnode _] ->
+	      Firebug.console##log(string "focus_term_list is a Bnode");
+	      some_focus_term_is_blank <- true (* should not happen *)
+	    | [t] -> focus_term_index#add (t, 1)
+	    | _ -> () );
 	    k (Some sparql))
-	  (fun code ->
-	    results <- Sparql_endpoint.empty_results;
-	    focus_term_index <- [];
-	    some_focus_term_is_blank <- false;
-	    k (Some sparql))
+	  (fun code -> k (Some sparql))
 
   method partial_results = (results.Sparql_endpoint.length = config_max_results#value)
   method results_dim = results.Sparql_endpoint.dim
@@ -254,79 +261,119 @@ object (self)
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
+(* moved to next method *)
+(*
   method index_ids : incr_freq_index =
-    match focus_term_list with
-      | [term] ->
-	let index =
-	  if focus_incr
-	  then begin
-	    let dim = results.Sparql_endpoint.dim in
-	    let vars = results.Sparql_endpoint.vars in
-	    let freqs = Array.make dim 0 in
-	    List.iter
-	      (fun binding ->
-		let t_focus_opt =
-		  match term with
-		  | Rdf.Var v -> binding.(List.assoc v vars)
-		  | _ -> Some term in
-		Array.iteri
-		  (fun i t_opt ->
-		    match t_opt, t_focus_opt with
-		    | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		    | _ -> ())
-		  binding)
-	      results.Sparql_endpoint.bindings;
-	    let max_value = None (*Some results.Sparql_endpoint.length*) in
-	    let partial = self#partial_results in
-	    let unit = `Results in
-	    List.fold_left
-	      (fun index i ->
-		if freqs.(i) <> 0
-		then
-		  let v = try Common.list_rev_assoc i vars with _ -> assert false in
-		  if term <> (Rdf.Var v)
-		  then begin
-		    try
-		      let id = id_labelling#get_var_id v in
-		      (Lisql.IncrId id, Some { value=freqs.(i); max_value; partial; unit })::index
-		    with _ -> index end (* ex: aggregation variables *)
-		  else index
-		else index)
-	      [] (Common.from_downto (dim-1) 0) end
-	  else [] in
-	let index =
-	  if Lisql.is_undef_expr_focus focus
-	  then
-	    List.fold_left
-	      (fun index id -> (* TODO: filter according to empirical type *)
-		(*let id = id_labelling#get_var_id v in*)
-		let ldt = self#id_typing id in
-		if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt
-		then (Lisql.IncrId id, None)::index
-		else index)
-	      index (Lisql_annot.seq_view_defs seq_view)
-	  else index in
-	index
-      | _ -> []
+    let index = new incr_freq_index in
+    ( match focus_term_list with
+    | [term] ->
+      if focus_incr then
+	begin
+	  let dim = results.Sparql_endpoint.dim in
+	  let vars = results.Sparql_endpoint.vars in
+	  let freqs = Array.make dim 0 in
+	  List.iter
+	    (fun binding ->
+	      let t_focus_opt =
+		match term with
+		| Rdf.Var v -> binding.(List.assoc v vars)
+		| _ -> Some term in
+	      Array.iteri
+		(fun i t_opt ->
+		  match t_opt, t_focus_opt with
+		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		  | _ -> ())
+		binding)
+	    results.Sparql_endpoint.bindings;
+	  let max_value = None (*Some results.Sparql_endpoint.length*) in
+	  let partial = self#partial_results in
+	  let unit = `Results in
+	  List.iter
+	    (fun i ->
+	      if freqs.(i) <> 0 then
+		let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		if term <> (Rdf.Var v) then
+		  (try
+		     let id = id_labelling#get_var_id v in
+		     index#add (Lisql.IncrId id, Some { value=freqs.(i); max_value; partial; unit })
+		   with _ -> ()))  (* ex: aggregation variables *)
+	    (Common.from_downto (dim-1) 0)
+	end;
+      if Lisql.is_undef_expr_focus focus then
+	begin
+	  List.iter
+	    (fun id -> (* TODO: filter according to empirical type *)
+	    (*let id = id_labelling#get_var_id v in*)
+	      let ldt = self#id_typing id in
+	      if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt then
+		index#add (Lisql.IncrId id, None))
+	    (Lisql_annot.seq_view_defs seq_view)
+	end
+    | _ -> () );
+    index
+*)
 
-  method index_terms_inputs (k : partial:bool -> incr_freq_index -> unit) =
+  method index_terms_inputs_ids (k : partial:bool -> incr_freq_index -> unit) =
     let max_value = None (*Some self#results_nb*) in
     let partial = self#partial_results in
     let unit = `Results in
-    let incr_index =
-      List.rev_map
-	(fun (t,freq) -> lexicon_enqueue_term t; (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }))
-	focus_term_index in
-    let incr_index =
-      if Lisql.is_undef_expr_focus focus
-      then
-	List.fold_left
-	  (fun incr_index (dt : Lisql.input_type) ->
-	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints
-	    then (Lisql.IncrInput ("",dt), None) :: incr_index
-	    else incr_index)
-	  incr_index [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime]
-      else incr_index in
+    let incr_index = new incr_freq_index in
+    (* adding term increments *)
+    focus_term_index#iter (*rev_map*)
+      (fun (t,freq) ->
+	lexicon_enqueue_term t;
+	incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
+    (* adding input increments *)
+    if Lisql.is_undef_expr_focus focus then
+      List.iter
+	(fun (dt : Lisql.input_type) ->
+	  if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints then
+	    incr_index#add (Lisql.IncrInput ("",dt), None))
+	[`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
+    (* adding ids *)
+    ( match focus_term_list with
+    | [term] ->
+      if focus_incr then
+	begin
+	  let dim = results.Sparql_endpoint.dim in
+	  let vars = results.Sparql_endpoint.vars in
+	  let freqs = Array.make dim 0 in
+	  List.iter
+	    (fun binding ->
+	      let t_focus_opt =
+		match term with
+		| Rdf.Var v -> binding.(List.assoc v vars)
+		| _ -> Some term in
+	      Array.iteri
+		(fun i t_opt ->
+		  match t_opt, t_focus_opt with
+		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		  | _ -> ())
+		binding)
+	    results.Sparql_endpoint.bindings;
+	  List.iter
+	    (fun i ->
+	      if freqs.(i) <> 0 then
+		let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		if term <> (Rdf.Var v) then
+		  (try
+		     let id = id_labelling#get_var_id v in
+		     incr_index#add (Lisql.IncrId id, Some { value=freqs.(i); max_value; partial; unit })
+		   with _ -> ()))  (* ex: aggregation variables *)
+	    (Common.from_downto (dim-1) 0)
+	end;
+      if Lisql.is_undef_expr_focus focus then
+	begin
+	  List.iter
+	    (fun id -> (* TODO: filter according to empirical type *)
+	    (*let id = id_labelling#get_var_id v in*)
+	      let ldt = self#id_typing id in
+	      if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt then
+		incr_index#add (Lisql.IncrId id, None))
+	    (Lisql_annot.seq_view_defs seq_view)
+	end
+    | _ -> () );
+    (* synchronizing lexicons and continuing *)
     Lexicon.config_entity_lexicon#value#sync (fun () ->
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	k ~partial incr_index))
@@ -337,11 +384,11 @@ object (self)
       let max_value = None in
       let partial = results_term.Sparql_endpoint.length = config_max_results#value in
       let unit = `Results in
-      let index =
-	List.fold_left
-	  (fun res t -> (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }) :: res)
-	  [] list_term in
-      k ~partial index
+      let incr_index = new incr_freq_index in
+      List.iter
+	(fun t -> incr_index#add (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }))
+	list_term;
+      k ~partial incr_index
     in
     let sparql_term =
 	"SELECT DISTINCT ?term WHERE { " ^
@@ -372,6 +419,22 @@ object (self)
       let unit = `Entities in
       let int_index_class = index_of_results_column "class" results_class in
       let int_index_prop = index_of_results_column "prop" results_prop in
+      let incr_index = new incr_freq_index in
+      int_index_class#iter
+	(function
+	| (Rdf.URI uri, count) ->
+	  Lexicon.config_class_lexicon#value#enqueue uri;
+	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_prop; unit })
+	| _ -> ());
+      int_index_prop#iter
+	(function
+	| (Rdf.URI uri, count) ->
+	  Lexicon.config_property_lexicon#value#enqueue uri;
+	  let freq = { value=count; max_value; partial=partial_prop; unit } in
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some freq);
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some freq)
+	| _ -> ());
+  (*
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_class ~unit
 	(fun c ->
 	  Lexicon.config_class_lexicon#value#enqueue c;
@@ -387,9 +450,10 @@ object (self)
 	  Lisql.IncrRel (p,Lisql.Bwd))
 	int_index_prop in
       let index = index_a @ index_has @ index_isof in
+  *)
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	Lexicon.config_property_lexicon#value#sync (fun () ->
-	  k ~partial index))
+	  k ~partial incr_index))
     in
     let ajax_extent () =
       let sparql_class =
@@ -437,6 +501,29 @@ object (self)
       let partial_has = partial || results_has.Sparql_endpoint.length = config_max_properties#value in
       let partial_isof = partial || results_isof.Sparql_endpoint.length = config_max_properties#value in
       let partial = partial_a || partial_has || partial_isof in
+      let int_index_a = index_of_results_column "class" results_a in
+      let int_index_has = index_of_results_column "prop" results_has in
+      let int_index_isof = index_of_results_column "prop" results_isof in
+      let incr_index = new incr_freq_index in
+      int_index_a#iter
+	(function
+	| (Rdf.URI uri, count) ->
+	  Lexicon.config_class_lexicon#value#enqueue uri;
+	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_a; unit })
+	| _ -> ());
+      int_index_has#iter
+	(function
+	| (Rdf.URI uri, count) ->
+	  Lexicon.config_property_lexicon#value#enqueue uri;
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some { value=count; max_value; partial=partial_has; unit })
+	| _ -> ());
+      int_index_isof#iter
+	(function
+	| (Rdf.URI uri, count) ->
+	  Lexicon.config_property_lexicon#value#enqueue uri;
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some { value=count; max_value; partial=partial_has; unit })
+	| _ -> ());
+(*	
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_a ~unit
 	(fun c ->
 	  Lexicon.config_class_lexicon#value#enqueue c;
@@ -453,11 +540,16 @@ object (self)
 	  Lisql.IncrRel (p,Lisql.Bwd))
 	(index_of_results_column "prop" results_isof) in (* increasing *)
       let index = index_a @ index_has @ index_isof in
-      let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, None) :: index in
+*)
+      if not int_index_isof#is_empty then incr_index#add (Lisql.IncrTriple Lisql.O, None);
+      if not int_index_has#is_empty then incr_index#add (Lisql.IncrTriple Lisql.S, None);
+      (*
+	    let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, None) :: index in
       let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, None) :: index in
+      *)
       Lexicon.config_class_lexicon#value#sync (fun () ->
 	Lexicon.config_property_lexicon#value#sync (fun () ->
-	  k ~partial index))
+	  k ~partial incr_index))
     in
     let ajax_intent () =
       let max_value = None in
@@ -483,17 +575,16 @@ object (self)
 	| _ -> assert false
     in
     let ajax_extent () =
-      let nb_focus_term = List.length focus_term_index in
+      let nb_focus_term = focus_term_index#length in
       let max_value = Some nb_focus_term in
       let partial = false in (* relative to computed entities *)
       let unit = `Entities in
       let sparql_a =
-	let gp = Sparql.union (List.map
+	let gp = Sparql.union (focus_term_index#map
 				 (fun (t,_) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:(config_max_classes#value / min 10 nb_focus_term)
-					(Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term))))
-				 focus_term_index) in
+					(Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term))))) in
 	(Sparql.select ~projections:[`Bare, "class"] ~limit:config_max_classes#value
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
@@ -503,12 +594,11 @@ object (self)
 	 :> string) in
       let sparql_has =
 	let gp =
-	  Sparql.union (List.map
+	  Sparql.union (focus_term_index#map
 			  (fun (t,_) ->
 			    Sparql.subquery
 			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value / min 10 nb_focus_term)
-				 (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode ""))))
-			  focus_term_index) in
+				 (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode ""))))) in
 	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
@@ -517,12 +607,11 @@ object (self)
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in
       let sparql_isof =
-	let gp = Sparql.union (List.map
+	let gp = Sparql.union (focus_term_index#map
 				 (fun (t,_) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value / min 10 nb_focus_term)
-					(Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t))))
-				 focus_term_index) in
+					(Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t))))) in
 	(Sparql.select ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
@@ -536,8 +625,8 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
-    if not focus_incr then k ~partial:false [] (* only constraints on aggregations (HAVING clause) *)
-    else if focus_term_index = [] then
+    if not focus_incr then k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
+    else if focus_term_index#is_empty then
       if some_focus_term_is_blank
       then ajax_intent ()
       else self#ajax_index_properties_init constr elt k
@@ -670,6 +759,8 @@ object (self)
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)
 	incrs in
-    List.map (fun incr -> (incr,None)) valid_incrs
+    let incr_index = new incr_freq_index in
+    List.iter (fun incr -> incr_index#add (incr,None)) valid_incrs;
+    incr_index
 	  
 end

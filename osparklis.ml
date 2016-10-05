@@ -402,7 +402,7 @@ object (self)
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-terms"
-		(html_count_unit { Lis.value=List.length index; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		apply_incr elt));
@@ -419,10 +419,10 @@ object (self)
     self#refresh_term_increments_gen lis#ajax_index_terms_init
   method private refresh_term_increments =
     self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms_inputs (fun ~partial index_terms_inputs -> k ~partial (lis#index_ids @ index_terms_inputs)))
+      (fun constr elts k -> lis#index_terms_inputs_ids k)
   method private refresh_term_increments_undefined =
     self#refresh_term_increments_gen
-      (fun constr elts k -> k ~partial:false [])
+      (fun constr elts k -> k ~partial:false (new Lis.incr_freq_index))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments_gen process_index =
@@ -435,7 +435,7 @@ object (self)
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-properties"
-		(html_count_unit { Lis.value=List.length index; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		navigation#update_focus ~push_in_history:true
 		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
@@ -448,7 +448,7 @@ object (self)
   method private refresh_property_increments =
     self#refresh_property_increments_gen (fun elt_list k -> lis#ajax_index_properties (norm_constr property_constr) elt_list k)
   method private refresh_property_increments_undefined =
-    self#refresh_property_increments_gen (fun elt_list k -> k ~partial:true [])
+    self#refresh_property_increments_gen (fun elt_list k -> k ~partial:true (new Lis.incr_freq_index))
 
 
   method private refresh_modifier_increments ~(init : bool) =
@@ -469,7 +469,7 @@ object (self)
       let index = lis#index_modifiers ~init in
       elt_list##innerHTML <- string (html_index lis#focus html_state index);
       jquery_set_innerHTML "#count-modifiers"
-	(html_count_unit { Lis.value=List.length index; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+	(html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
       stop_propagation_from elt_list ".term-input";
       jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 	apply_incr elt));

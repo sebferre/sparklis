@@ -258,7 +258,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lis.incr_freq_index) =
-  let enriched_index = List.map (freq_text_html_increment_frequency focus state) index in
+  let enriched_index = index#map (freq_text_html_increment_frequency focus state) in
   let sorted_index =
     List.sort
       (fun (f1,r1,data1,_) (f2,r2,data2,_) ->
