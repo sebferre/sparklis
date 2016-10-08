@@ -212,6 +212,19 @@ list-style-type: none;
 padding: 10px;
 margin: 0px;
 }
+.list-incrs.css-treeview ul {
+    list-style-type: none;
+    padding: 0px;
+}
+.list-incrs.css-treeview > ul {
+    padding-top: 10px;
+}
+.list-incrs.css-treeview ul ul {
+    padding-left: 20px;
+}
+.list-incrs.css-treeview li {
+    left-margin: 0px;
+}
 
 .increment
 {
@@ -233,6 +246,23 @@ cursor:pointer;
 {
 text-align:right;
 }
+
+.css-treeview input ~ ul {
+    display: none; /* hiding sublists of unckecked increments */
+}
+.css-treeview input:checked ~ ul {
+    display: block; /* showing sublists of checked increments */
+}
+.css-treeview input
+{
+  position: absolute;
+  opacity: 0;
+}
+/* showing/hiding arrow labels depending on check status */
+.css-treeview input ~ .label-checked { display:none; }
+.css-treeview input:checked ~ .label-unchecked { display:none; }
+.css-treeview input:checked ~ .label-checked { display:inline; }
+
 
 #current-focus
 {

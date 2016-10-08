@@ -16,6 +16,11 @@ let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
 let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
+let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
+  
+let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
+  
 (* ------------------------- *)
 
 type var = string

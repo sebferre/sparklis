@@ -9,7 +9,7 @@ end
 class ['a,'b] pure_cache ~(get : 'a -> 'b) =
 object
   inherit ['a,'b] cache
-  method info key = get key
+  method info key = get key (* TODO: memoize results of calls to get *)
   method enqueue key = ()
   method sync k = k ()
 end

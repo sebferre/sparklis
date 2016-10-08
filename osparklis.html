@@ -199,22 +199,6 @@
 	</div>
       </li>
       <li>
-	<div id="config-intentional-init-concepts" class="config-param">
-	  <input id="input-intentional-init-concepts" type="checkbox" checked>
-	  <span class="texte lang-en">Get initial concepts as instances of <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, and <code>owl:DatatypeProperty</code> (more efficient), instead of from fact triples (more accurate)</span>
-	  <span class="texte lang-fr">Obtenir les concepts initiaux en tant qu'instances de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code> et <code>owl:DatatypeProperty</code> (plus efficace), plutôt qu'à partir des triplets de faits (plus précis)</span>
-	  <span class="texte lang-es">Obtener los conceptos iniciales como instancias de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, y <code>owl:DatatypeProperty</code> (más eficiente), en lugar de a partir de las triples de datos (más preciso)</span>
-	</div>
-      </li>
-      <li>
-	<span class="texte lang-en">Exclude suggestions whose URI matches regexp: </span>
-	<span class="texte lang-fr">Exclure les suggestions dont l'URI matche la regexp : </span>
-	<span class="texte lang-es">Excluir sugerencias cuyo URI coincida con la expresión regular : </span>
-	<div id="config-regexp-hidden-uris" class="config-param">
-	  <input id="input-regexp-hidden-uris" type="text" size="100" value="^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)"> <!-- Edit to change default value -->
-	</div>
-      </li>
-      <li>
 	<div id="config-max-results" class="config-param">
 	  <span class="texte lang-en">Compute at most </span>
 	  <span class="texte lang-fr">Calculer au plus </span>
@@ -248,6 +232,46 @@
 	</div>
       </li>
     </ul>
+    <div class="config-heading">
+      <span class="texte lang-en">Ontology:</span>
+      <span class="texte lang-fr">Ontologie :</span>
+      <span class="texte lang-es">Ontología:</span>
+    </div>
+    <ul>
+      <li>
+	<div id="config-intentional-init-concepts" class="config-param">
+	  <input id="input-intentional-init-concepts" type="checkbox" checked>
+	  <span class="texte lang-en">Get initial concepts as instances of <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, and <code>owl:DatatypeProperty</code> (more efficient), instead of from fact triples (more accurate)</span>
+	  <span class="texte lang-fr">Obtenir les concepts initiaux en tant qu'instances de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code> et <code>owl:DatatypeProperty</code> (plus efficace), plutôt qu'à partir des triplets de faits (plus précis)</span>
+	  <span class="texte lang-es">Obtener los conceptos iniciales como instancias de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, y <code>owl:DatatypeProperty</code> (más eficiente), en lugar de a partir de las triples de datos (más preciso)</span>
+	</div>
+      </li>
+      <li>
+	<span class="texte lang-en">Exclude suggestions whose URI matches regexp: </span>
+	<span class="texte lang-fr">Exclure les suggestions dont l'URI matche la regexp : </span>
+	<span class="texte lang-es">Excluir sugerencias cuyo URI coincida con la expresión regular : </span>
+	<div id="config-regexp-hidden-uris" class="config-param">
+	  <input id="input-regexp-hidden-uris" type="text" size="100" value="^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)"> <!-- Edit to change default value -->
+	</div>
+      </li>
+      <li>
+	<div id="config-class-hierarchy" class="config-param">
+	  <input id="input-class-hierarchy" type="checkbox" checked> <!-- Edit to change default value -->
+	  <span class="texte lang-en">Organize classes into a hierarchy using <code>rdfs:subClassOf</code> </span>
+	  <span class="texte lang-fr">Organiser les classes en une hiérarchie utilisant <code>rdfs:subClassOf</code></span>
+	  <span class="texte lang-es">Organizar las clases en un jerarquía usando <code>rdfs:subClassOf</code></span>
+	</div>
+      </li>
+      <li>
+	<div id="config-property-hierarchy" class="config-param">
+	  <input id="input-property-hierarchy" type="checkbox" checked> <!-- Edit to change default value -->
+	  <span class="texte lang-en">Organize properties into a hierarchy using <code>rdfs:subPropertyOf</code> </span>
+	  <span class="texte lang-fr">Organiser les propriétés en une hiérarchie utilisant <code>rdfs:subPropertyOf</code></span>
+	  <span class="texte lang-es">Organizar las propriedades en un jerarquía usando <code>rdfs:subPropertyOf</code></span>
+	</div>
+      </li>
+    </ul>
+    
     <div class="config-heading">
       <span class="texte lang-en">Language and labels:</span>
       <span class="texte lang-fr">Langue et étiquettes :</span>
@@ -454,7 +478,7 @@
 	<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
 	<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
 	<span class="tooltip lang-es">Haga clic para insertar un concepto en el foco de la consulta</span>
-	<div id="list-properties" class="list-incrs">
+	<div id="list-properties" class="list-incrs css-treeview">
 	</div>
       </span>
       <div id="count-properties" class="count-incrs">

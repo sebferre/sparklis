@@ -1,25 +1,79 @@
 
 open Js
 
-class ['a,'b] index =
-object
-  val mutable l : ('a * 'b) list = []
-  method is_empty : bool = (l=[])
-  method length : int = List.length l
-  method add (elt_info : 'a * 'b) : unit = l <- elt_info::l
+class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
+object (self)
+  val mutable organized : bool = false
+  val mutable h : ('a, 'b * 'a list ref) Hashtbl.t = Hashtbl.create 101
+  val mutable roots : 'a list = []
+
+  method add (elt, info : 'a * 'b) : unit = Hashtbl.add h elt (info, ref [])
+    
+  method private organize : unit = (* must be called after all additions *)
+    match organized, parents with
+    | _, None -> ()
+    | true, _ -> ()
+    | false, Some parents ->
+      let add_child k_parent k_child : bool = (* returns true if parent exists *)
+	try
+	  let _v, ref_children = Hashtbl.find h k_parent in
+	  ref_children := k_child::!ref_children;
+	  true
+	with Not_found -> false (* absent parents are ignored *)
+      in
+      Hashtbl.iter
+	(fun k_child _ ->
+	  let has_parent =
+	    List.fold_left
+	      (fun res k_parent ->
+		let res1 = add_child k_parent k_child in
+		res || res1)
+	      false (parents k_child) in
+	  if not has_parent then roots <- k_child::roots)
+	h;
+      organized <- true
+
+  method is_empty : bool = (Hashtbl.length h = 0)
+  method length : int = Hashtbl.length h
   method fold : 'c. ('c -> 'a * 'b -> 'c) -> 'c -> 'c =
-    fun f init -> List.fold_left f init l
+    fun f init -> Hashtbl.fold (fun k (v,_) res -> f res (k,v)) h init
   method iter : ('a * 'b -> unit) -> unit =
-    fun f -> List.iter f l
-  method map : 'c. ('a * 'b -> 'c) -> 'c list =
-    fun f -> List.map f l
+    fun f -> Hashtbl.iter (fun k (v,_) -> f (k,v)) h
+  method map_list : 'c. ('a * 'b -> 'c) -> 'c list =
+    fun f -> Hashtbl.fold (fun k (v,_) res -> (f (k,v))::res) h []
+  method map_tree : 'c. ('a * 'b -> 'c) -> ([`Node of 'c * 'd list] as 'd) list =
+    fun f ->
+      self#organize;
+      if organized then
+	let rec aux (keys : 'a list) =
+	  let elts =
+	    List.map
+	      (fun k -> try k, Hashtbl.find h k with Not_found -> assert false)
+	      keys in
+	  List.map
+	    (fun (k,(v,ref_children)) ->
+	      `Node (f (k,v), aux !ref_children))
+	    elts
+	in
+	aux roots
+      else (* no tree organization *)
+	Hashtbl.fold
+	  (fun k (v,_) res -> `Node (f (k,v), []) :: res)
+	  h []
 end
   
-class ['a] int_index = ['a,int] index
+class ['a] int_index = ['a,int] index ()
 
 type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
-class incr_freq_index = [Lisql.increment, freq option] index
+class incr_freq_index = [Lisql.increment, freq option] index ()
+
+let increment_parents = function
+  | Lisql.IncrType uri -> List.map (fun u -> Lisql.IncrType u) (Ontology.config_class_hierarchy#value#info uri)
+  | Lisql.IncrRel (uri,xwd) -> List.map (fun u -> Lisql.IncrRel (u,xwd)) (Ontology.config_property_hierarchy#value#info uri)
+  | _ -> []
+class incr_freq_tree_index = [Lisql.increment, freq option] index ~parents:increment_parents ()
+
 
 (* configuration *)
 
@@ -419,16 +473,18 @@ object (self)
       let unit = `Entities in
       let int_index_class = index_of_results_column "class" results_class in
       let int_index_prop = index_of_results_column "prop" results_prop in
-      let incr_index = new incr_freq_index in
+      let incr_index = new incr_freq_tree_index in
       int_index_class#iter
 	(function
 	| (Rdf.URI uri, count) ->
+	  Ontology.config_class_hierarchy#value#enqueue uri;
 	  Lexicon.config_class_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_prop; unit })
 	| _ -> ());
       int_index_prop#iter
 	(function
 	| (Rdf.URI uri, count) ->
+	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq = { value=count; max_value; partial=partial_prop; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some freq);
@@ -451,9 +507,11 @@ object (self)
 	int_index_prop in
       let index = index_a @ index_has @ index_isof in
   *)
-      Lexicon.config_class_lexicon#value#sync (fun () ->
-	Lexicon.config_property_lexicon#value#sync (fun () ->
-	  k ~partial incr_index))
+      Ontology.config_class_hierarchy#value#sync (fun () ->
+	Ontology.config_property_hierarchy#value#sync (fun () ->
+	  Lexicon.config_class_lexicon#value#sync (fun () ->
+	    Lexicon.config_property_lexicon#value#sync (fun () ->
+	      k ~partial incr_index))))
     in
     let ajax_extent () =
       let sparql_class =
@@ -504,22 +562,25 @@ object (self)
       let int_index_a = index_of_results_column "class" results_a in
       let int_index_has = index_of_results_column "prop" results_has in
       let int_index_isof = index_of_results_column "prop" results_isof in
-      let incr_index = new incr_freq_index in
+      let incr_index = new incr_freq_tree_index in
       int_index_a#iter
 	(function
 	| (Rdf.URI uri, count) ->
+	  Ontology.config_class_hierarchy#value#enqueue uri;
 	  Lexicon.config_class_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_a; unit })
 	| _ -> ());
       int_index_has#iter
 	(function
 	| (Rdf.URI uri, count) ->
+	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some { value=count; max_value; partial=partial_has; unit })
 	| _ -> ());
       int_index_isof#iter
 	(function
 	| (Rdf.URI uri, count) ->
+	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some { value=count; max_value; partial=partial_has; unit })
 	| _ -> ());
@@ -547,9 +608,11 @@ object (self)
 	    let index = if index_isof = [] then index else (Lisql.IncrTriple Lisql.O, None) :: index in
       let index = if index_has = [] then index else (Lisql.IncrTriple Lisql.S, None) :: index in
       *)
-      Lexicon.config_class_lexicon#value#sync (fun () ->
-	Lexicon.config_property_lexicon#value#sync (fun () ->
-	  k ~partial incr_index))
+      Ontology.config_class_hierarchy#value#sync (fun () ->
+	Ontology.config_property_hierarchy#value#sync (fun () ->
+	  Lexicon.config_class_lexicon#value#sync (fun () ->
+	    Lexicon.config_property_lexicon#value#sync (fun () ->
+	      k ~partial incr_index))))
     in
     let ajax_intent () =
       let max_value = None in
@@ -580,7 +643,7 @@ object (self)
       let partial = false in (* relative to computed entities *)
       let unit = `Entities in
       let sparql_a =
-	let gp = Sparql.union (focus_term_index#map
+	let gp = Sparql.union (focus_term_index#map_list
 				 (fun (t,_) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:config_max_classes#value
@@ -594,7 +657,7 @@ object (self)
 	 :> string) in
       let sparql_has =
 	let gp =
-	  Sparql.union (focus_term_index#map
+	  Sparql.union (focus_term_index#map_list
 			  (fun (t,_) ->
 			    Sparql.subquery
 			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
@@ -607,7 +670,7 @@ object (self)
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in
       let sparql_isof =
-	let gp = Sparql.union (focus_term_index#map
+	let gp = Sparql.union (focus_term_index#map_list
 				 (fun (t,_) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value

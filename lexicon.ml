@@ -81,6 +81,7 @@ let sparql_lexicon
     (map : string -> 'a) : 'a lexicon =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_labels l_uri k =
+    Jsutils.firebug ("Retrieving labels for " ^ string_of_int (List.length l_uri) ^ " URIs");
     let l_uri =
       if endpoint = Sparql_endpoint.wikidata_endpoint
       then List.map wikidata_entity_of_predicate l_uri (* converting Wikidata predicates to entities *)

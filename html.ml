@@ -254,14 +254,13 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
       | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
       ) in
-  freq, rank, data, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  freq, rank, data, key, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lis.incr_freq_index) =
-  let enriched_index = index#map (freq_text_html_increment_frequency focus state) in
-  let sorted_index =
+  let sort_node_list nodes =
     List.sort
-      (fun (f1,r1,data1,_) (f2,r2,data2,_) ->
+      (fun (`Node ((f1,r1,data1,_,_),_)) (`Node ((f2,r2,data2,_,_),_)) ->
 	let c = Pervasives.compare (f2,r1) (f1,r2) in
 	if c <> 0
 	then c
@@ -274,16 +273,32 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
 	    if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
 	    else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
 	    else Pervasives.compare lw1 lw2)
-      enriched_index in
+      nodes in
+  let rec aux buf nodes =
+    let sorted_nodes = sort_node_list nodes in
+    Buffer.add_string buf "<ul>";
+    List.iter
+      (fun (`Node ((_freq,_rank,_data,key,html), children)) ->
+	let check_id = "collapse-" ^ key in
+	Buffer.add_string buf "<li>";
+	if children = [] then begin
+	  Buffer.add_string buf "<label style=\"visibility:hidden;\">► </label>";
+	  Buffer.add_string buf html
+	end
+	else begin
+	  Buffer.add_string buf ("<input type=\"checkbox\" id=\"" ^ check_id ^ "\">");
+	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼ </label>");
+	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">► </label>");
+	  Buffer.add_string buf html;
+	  aux buf children
+	end;
+	Buffer.add_string buf "</li>")
+      sorted_nodes;
+    Buffer.add_string buf "</ul>"
+  in
+  let enriched_index_tree = index#map_tree (freq_text_html_increment_frequency focus state) in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf "<ul>";
-  List.iter
-    (fun (_freq,_rank,_data,html) ->
-      Buffer.add_string buf "<li>";
-      Buffer.add_string buf html;
-      Buffer.add_string buf "</li>")
-    sorted_index;
-  Buffer.add_string buf "</ul>";
+  aux buf enriched_index_tree;
   Buffer.contents buf
 
 (* HTML of results *)
