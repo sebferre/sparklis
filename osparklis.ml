@@ -488,7 +488,8 @@ object (self)
       for i = options##length - 1 downto 0 do
 	Opt.iter options##item(i) (fun option ->
 	  let value = to_string option##value in
-	  if value = lis#endpoint || value = "" then option##selected <- bool true)
+	  if value = "osparklis.html" ^ to_string Dom_html.window##location##search || value = "" then
+	    option##selected <- bool true)
       done);
     jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
@@ -824,15 +825,12 @@ let _ =
     jquery_select "#sparql-endpoint-select"
       (onchange (fun select ev ->
 	jquery_input "#sparql-endpoint-input" (fun input ->
-	  let url = to_string select##value in
-	  if url = ""
+	  let permalink = to_string select##value in
+	  if permalink = ""
 	  then begin
 	    input##value <- string "http://";
 	    input##select() end
-	  else begin
-	    input##value <- string url;
-	    history#change_endpoint url
-	  end)));
+	  else Dom_html.window##location##assign(string permalink))));
     jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in

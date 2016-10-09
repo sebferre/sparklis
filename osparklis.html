@@ -87,15 +87,16 @@
 	<span class="tooltip lang-fr">Sélectionner un point d'accès SPARQL dans cette liste</span>
 	<span class="tooltip lang-es">Seleccionar un SPARQL endpoint de la lista</span>
 	<select id="sparql-endpoint-select">
-	  <option value="http://servolis.irisa.fr:3030/dbpedia/sparql">Core English DBpedia</option>
-	  <option value="http://dbpedia.org/sparql">DBpedia</option>
-	  <option value="http://live.dbpedia.org/sparql">Live DBpedia</option>
-	  <option value="http://servolis.irisa.fr:3232/mondial/sparql">Mondial</option>
-	  <option value="http://data.nobelprize.org/sparql">Nobel prizes</option>
-	  <option value="http://lod.euscreen.eu/sparql">European Television Heritage</option>
+	  <option value="osparklis.html">Core English DBpedia</option> <!-- default settings -->
+	  <option value="osparklis.html?endpoint=http%3A//dbpedia.org/sparql&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%29">DBpedia</option>
+	  <option value="osparklis.html?endpoint=http%3A//live.dbpedia.org/sparql">Live DBpedia</option>
+	  <option value="osparklis.html?endpoint=http%3A//servolis.irisa.fr%3A3232/mondial/sparql&class_hierarchy=false&property_hierarchy=false&entity_lexicon_property=http%3A//www.semwebtech.org/mondial/10/meta%23name&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en">Mondial</option>
+	  <option value="osparklis.html?endpoint=http%3A//data.nobelprize.org/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">Nobel prizes</option>
 <!--	<option value="http://bnb.data.bl.uk/sparql">British National Bibliography</option> -->
-	  <option value="http://rdf.insee.fr/sparql">INSEE</option>
-	  <option value="http://datos.bcn.cl/sparql">Chile government</option>
+	  <option value="osparklis.html?endpoint=http%3A//rdf.insee.fr/sparql">INSEE</option>
+	  <option value="osparklis.html?endpoint=http%3A//data.persee.fr/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">Persée</option>
+	  <option value="osparklis.html?endpoint=http%3A//datos.bcn.cl/sparql&lang=es">Chile government</option>
+	  <option value="osparklis.html?endpoint=http%3A//lod.euscreen.eu/sparql">European Television Heritage</option>
 <!--	<option value="http://data.ox.ac.uk/sparql/">University of Oxford</option> -->
 	  <option value="">...</option>
 	</select>
