@@ -448,6 +448,15 @@ and annot_elt_expr pos expr ctx =
       ~ids:(list_union_ids (List.map (fun a -> a#ids) la))
       ~defined:(List.for_all (fun a -> a#defined) la) () in
     a, Apply (a, func, l_a_arg)
+  | Choice (_,le) ->
+    let la, l_a_expr =
+      List.split (List.map
+		    (fun (expr,ll_rr) -> annot_elt_expr pos_down expr (ChoiceX (ll_rr, ctx)))
+		    (ctx_of_list le)) in
+    let a = annot
+      ~ids:(list_union_ids (List.map (fun a -> a#ids) la))
+      ~defined:(List.exists (fun a -> a#defined) la) () in
+    a, Choice (a, l_a_expr)
 and annot_elt_s pos s ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtS (s,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -471,12 +480,12 @@ and annot_elt_s pos s ctx =
     let a1, a_expr = annot_elt_expr pos_down expr (SExprX (name,id,modif,rel_opt,ctx)) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (SExprThatX (name,id,modif,expr,ctx)) in
     let ids = union_ids a1#ids ids_rel in
-    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} () in
+    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
     a, SExpr (a, name, id, modif, a_expr, a_rel_opt)
   | SFilter (_,id,expr) ->
     let a1, a_expr = annot_elt_expr pos_down expr (SFilterX (id,ctx)) in
     let ids = a1#ids in
-    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} () in
+    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
     a, SFilter (a, id, a_expr)
   | Seq (_,lr) ->
     let a_lr =
@@ -531,7 +540,7 @@ let rec annot_ctx_p1 ft_opt (a1,a_x) x = function
     let f = SExpr ((), name, id, modif, expr, Some x) in
     let a2, a_expr = annot_elt_expr (`Aside false) expr (SExprX (name,id,modif,Some x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
-    let ids = {ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} in
+    let ids = {ids with all = Ids.add id ids.all; defs = if a2#defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s ft (a, SExpr (a, name, id, modif, a_expr, Some a_x)) f ctx
   | AndX (ll_rr,ctx) ->
@@ -680,14 +689,14 @@ and annot_ctx_expr defined (a1,a_x) x = function
     let f = SExpr ((),name,id,modif,x,rel_opt) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (name,id,modif,x,ctx)) in
     let ids = union_ids a1#ids ids_rel in
-    let ids = {ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} in
+    let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s ft (a, SExpr (a, name, id, modif, a_x, a_rel_opt)) f ctx
   | SFilterX (id,ctx) ->
     let ft = `IdNoIncr id in
     let f = SFilter ((),id,x) in
     let ids = a1#ids in
-    let ids = {ids with all = Ids.add id ids.all; defs = Ids.add id ids.defs} in
+    let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s ft (a, SFilter (a, id, a_x)) f ctx
   | ApplyX (func,ll_rr,ctx) ->
@@ -701,6 +710,17 @@ and annot_ctx_expr defined (a1,a_x) x = function
     let ids = list_union_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (true, Some (1 + List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
     annot_ctx_expr defined (a, Apply (a, func, lar)) f ctx
+  | ChoiceX (ll_rr,ctx) ->
+    let f = Choice ((), list_of_ctx x ll_rr) in
+    let la, lar =
+      List.split
+	(list_of_ctx (a1,a_x)
+	   (map_ctx_list
+	      (fun (x2,ll_rr2) -> annot_elt_expr (`Aside true) x2 (ChoiceX (ll_rr2, ctx)))
+	      (ctx_of_ctx_list x ll_rr))) in
+    let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
+    let a = new annot ~focus_pos:(`Above (true, Some (List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
+    annot_ctx_expr defined (a, Choice (a, lar)) f ctx
 and annot_ctx_s ft (a1,a_x) x = function
   | Root -> ft, (a1,a_x)
   | SeqX (ll_rr,ctx) ->

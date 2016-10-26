@@ -27,6 +27,8 @@ object
   method virtual not_ : string
   method virtual optionally : string
   method virtual optional : string
+  method virtual choice : string
+  method virtual between : string
 
   method virtual of_ : string
   method virtual genetive_suffix : string option
@@ -157,6 +159,8 @@ object
   method everything = "everything"
   method nothing = "nothing"
   method for_ = "for"
+  method choice = "choice"
+  method between = "between"
 
   method n_th n =
     let suffix =
@@ -333,6 +337,8 @@ object
   method everything = "tout"
   method nothing = "rien"
   method for_ = "pour"
+  method choice = "choix"
+  method between = "entre"
 
   method n_th n =
     let suffix =
@@ -508,6 +514,8 @@ object
   method everything = "todo"
   method nothing = "nada"
   method for_ = "para"
+  method choice = "elección"
+  method between = "entre"
 
   method n_th n =
     let suffix =

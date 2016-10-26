@@ -422,19 +422,25 @@ and form_aggreg state : annot elt_aggreg -> Sparql.projection * Rdf.var * Sparql
     let sparql_g = sparql_aggreg g in
     let t_v2 = (Sparql.var v2 :> Sparql.term) in
     (`Aggreg (sparql_g, t_v2), v), v2, Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
-and form_expr state : annot elt_expr -> Sparql.expr = function
-  | Undef annot -> Sparql.sparql ""
-  | Const (annot,t) -> (Sparql.term t :> Sparql.expr)
-  | Var (annot,id) -> (Sparql.var (state#id_labelling#get_id_var id) :> Sparql.expr)
+and form_expr_list state : annot elt_expr -> Sparql.expr list = function (* non-deterministic semantics *)
+  | Undef annot -> []
+  | Const (annot,t) -> [(Sparql.term t :> Sparql.expr)]
+  | Var (annot,id) -> [(Sparql.var (state#id_labelling#get_id_var id) :> Sparql.expr)]
   | Apply (annot,func,args) ->
     if not annot#defined
-    then Sparql.sparql ""
+    then []
     else
       ( match annot#focus_pos with
-      | `Above (true, Some pos) -> form_expr state (List.nth args (pos-1))
+      | `Above (true, Some pos) -> form_expr_list state (List.nth args (pos-1))
       | _ ->
-	let sparql_args = List.map (fun arg -> form_expr state arg) args in
-	expr_apply func sparql_args )
+	let sparql_list_args = List.map (fun arg -> form_expr_list state arg) args in
+	Common.list_fold_prod
+	  (fun res sparql_args -> expr_apply func sparql_args :: res)
+	  [] sparql_list_args )
+  | Choice (annot,le) ->
+    ( match annot#focus_pos with
+    | `Above (true, Some pos) -> form_expr_list state (try List.nth le pos with _ -> assert false)
+    | _ -> List.concat (List.map (form_expr_list state) le) )
 and form_s state (s : annot elt_s) : seq_view * Sparql.view =
   let (_, view as seq_view), lr =
     match s with
@@ -466,23 +472,28 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
     | SExpr (annot,name,id,modif,expr,rel_opt) ->
       let x = state#id_labelling#get_id_var id in
       state#set_modif x modif;
-      let sparql_expr = form_expr state expr in
+      let sparql_expr_list = form_expr_list state expr in
       let form =
-	if sparql_expr = Sparql.sparql ""
+	if sparql_expr_list = []
 	then Sparql.True
 	else
 	  let d = form_p1_opt state rel_opt in
-	  Sparql.formula_and (Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))) (d (Sparql.var x :> Sparql.term)) in
+	  Sparql.formula_and
+	    (Sparql.formula_or_list
+	       (List.map
+		  (fun sparql_expr -> Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x)))
+		  sparql_expr_list))
+	    (d (Sparql.var x :> Sparql.term)) in
       form_view_list state lr (Sparql.join_views [view; Sparql.simple_view [x] form]) lv
     | SFilter (annot,id,expr) ->
       let x = state#id_labelling#get_id_var id in
-      let sparql_expr = form_expr state expr in
+      let sparql_expr_list = form_expr_list state expr in
       let lx, form =
 	match annot#focus_pos with
-	| `Above _ -> [x], Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))
-	| _ -> [], Sparql.Filter sparql_expr in
+	| `Above _ -> [x], Sparql.formula_or_list (List.map (fun sparql_expr -> Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))) sparql_expr_list)
+	| _ -> [], Sparql.Filter (Sparql.log_or sparql_expr_list) in
       let form =
-	if sparql_expr = Sparql.sparql ""
+	if sparql_expr_list = []
 	then Sparql.True
 	else form in
       form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv

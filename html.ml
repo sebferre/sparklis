@@ -231,6 +231,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrIs -> 7, None
       | IncrAnd -> 8, None
       | IncrOr -> 9, Some grammar#tooltip_or
+      | IncrChoice -> 9, Some grammar#tooltip_or
       | IncrMaybe -> 10, Some grammar#tooltip_optionally
       | IncrNot -> 11, Some grammar#tooltip_not
       | IncrOrder (Highest _) -> 12, Some grammar#tooltip_highest

@@ -110,6 +110,7 @@ and 'a nl_np =
   | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
   | `And of 'a np list
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
+  | `Choice of adj * 'a np list * 'a rel
   | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
   | `Not of 'a np ] (* (* the bool indicates whether negation is suspended *) *)
 and 'a ng = ('a, 'a nl_ng) annotated
@@ -248,6 +249,7 @@ let word_of_incr grammar = function
   | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
   | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
+  | IncrChoice -> `Op grammar#choice
   | IncrName name -> `Op "="
 
 (* verbalization of IDs *)
@@ -688,6 +690,9 @@ and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = 
       func
       (List.map (fun arg -> np_of_elt_expr grammar ~id_labelling top_adj top_rel arg) args)
       rel
+  | Choice (annot,le) ->
+    let lnp = List.map (fun expr -> np_of_elt_expr grammar ~id_labelling top_adj top_rel expr) le in
+    A (annot, `Choice (adj, lnp, rel))
 and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> annot nl_s = function
   | expr -> `Where (np_of_elt_expr grammar ~id_labelling top_adj top_rel expr)
 and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
@@ -756,6 +761,7 @@ and map_np transf np =
     | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
     | `And (lr) -> `And (List.map (map_np transf) lr)
     | `Or (lr) -> `Or (List.map (map_np transf) lr)
+    | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
     | `Maybe (np) -> `Maybe (map_np transf np)
     | `Not (np) -> `Not (map_np transf np)
     | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel) )
@@ -945,6 +951,10 @@ let xml_or grammar annot_opt lr =
   let susp_or = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let coord = [Word (`Op grammar#or_)] in
   [ Coord (xml_suspended susp_or coord, lr) ]
+let xml_choice grammar annot_opt xml_adj lr =
+  Kwd (grammar#a_an ~following:grammar#choice) :: xml_adj [Word (`Op grammar#choice)] @ Kwd grammar#between :: Enum (", ", lr) :: []
+(* xml_adj grammar adj xml *)
+(* xml_rel grammar ~id_labelling rel *)
 let xml_maybe grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#optionally)] @ xml
@@ -990,6 +1000,7 @@ and xml_np grammar ~id_labelling np =
     | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
     | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
     | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
+    | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
     | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
     | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
     | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel) )
@@ -1229,4 +1240,5 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
 	    (fun i -> if i=pos then dummy_np else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
+  | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word dummy_word; Kwd ", "; Word `Undefined]
   | IncrName name -> [Input `String; Word (`Op "="); Word dummy_word]

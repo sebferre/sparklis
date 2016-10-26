@@ -141,6 +141,7 @@ and print_expr = function
   | Const (_,t) -> print_un "Const" (print_term t)
   | Var (_,id) -> print_un "Var" (print_id id)
   | Apply (_,func,args) -> print_bin "Apply" (print_func func) (print_list print_expr "Args" args)
+  | Choice (_,le) -> print_list print_expr "Choice" le
 and print_p1 = function
   | Is (_,np) -> print_un "Is" (print_s1 np)
   | Type (_,c) -> print_un "Type" (print_uri c)
@@ -287,6 +288,7 @@ and parse_expr ~version = parser
     | [< t = parse_un ~version "Const" parse_term >] -> Const ((), t)
     | [< id = parse_un ~version "Var" parse_id >] -> Var ((), id)
     | [< func, args = parse_bin ~version "Apply" parse_func (fun ~version -> parse_list parse_expr ~version "Args") >] -> Apply ((), func, args)
+    | [< le = parse_list parse_expr ~version "Choice" >] -> Choice ((), le)
     | [<>] -> syntax_error "invalid expr"
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)

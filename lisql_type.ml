@@ -222,6 +222,15 @@ let is_predicate (func : func) : bool =
 
 type type_constraint = datatype list option (* list of possible types or anything *)
 
+let union_constraints constr_list =
+  List.fold_left (* unioning possible datatypes, allowing nothing more than already used *)
+    (fun res constr ->
+      match res, constr with
+      | None, _ -> constr
+      | _, None -> res
+      | Some ldt1, Some ldt2 -> Some (Common.list_to_set (ldt1@ldt2)))
+    None constr_list
+
 let check_input_constraint constr dt_input =
   match constr with
   | None -> true
@@ -266,7 +275,10 @@ let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_c
     if comp_sigs = []
     then raise TypeError
     else Some (Common.list_to_set (List.map snd comp_sigs))
-
+  | Choice (_,le) -> 
+    let input_constr_list = List.map (constr_of_elt_expr env) le in
+    union_constraints input_constr_list
+    
 let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_constraint (* raise TypeError *) = function
   | SExprX _ -> None
   | SFilterX _ -> None
@@ -284,6 +296,12 @@ let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_cons
 	   (List.map
 	      (fun (input_dt_list,_) -> List.nth input_dt_list (pos-1))
 	      comp_sigs))
+  | ChoiceX (ll_rr,ctx) ->
+    let le = list_of_ctx (Undef ()) ll_rr in
+    let input_constr_list = List.map (constr_of_elt_expr env) le in
+    union_constraints input_constr_list
+    
+    
 
 let of_focus env : focus -> focus_type_constraints = function
   | AtExpr (expr,ctx) -> { input_constr = constr_of_elt_expr env expr;

@@ -102,3 +102,12 @@ let uncamel (s : string) : string =
   Bytes.sub s2 0 !j
 
     
+let list_fold_prod (f : 'a -> 'b list -> 'a) (acc : 'a) (list_col_x : 'b list list) : 'a =
+  let rec aux acc rev_row_x = function
+    | [] -> f acc (List.rev rev_row_x)
+    | col_x::lcx ->
+      List.fold_left
+	(fun acc x -> aux acc (x::rev_row_x) lcx)
+	acc col_x
+  in
+  aux acc [] list_col_x
