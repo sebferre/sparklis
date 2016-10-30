@@ -240,7 +240,9 @@ let word_of_incr grammar = function
   | IncrTriplify -> `Relation
   | IncrIs -> `Op grammar#is
   | IncrAnd -> `Op grammar#and_
+  | IncrDuplicate -> `Op grammar#and_
   | IncrOr -> `Op grammar#or_
+  | IncrChoice -> `Op grammar#choice
   | IncrMaybe -> `Op grammar#optionally
   | IncrNot -> `Op grammar#not_
   | IncrUnselect -> `Op grammar#any
@@ -249,7 +251,6 @@ let word_of_incr grammar = function
   | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
   | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
-  | IncrChoice -> `Op grammar#choice
   | IncrName name -> `Op "="
 
 (* verbalization of IDs *)
@@ -1215,7 +1216,9 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
   | IncrIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis
+  | IncrDuplicate -> Kwd grammar#and_ :: Word dummy_word :: []
   | IncrOr -> Word (`Op grammar#or_) :: xml_ellipsis
+  | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word dummy_word; Kwd ", "; Word `Undefined]
   | IncrMaybe -> xml_maybe grammar None [Word dummy_word]
   | IncrNot -> xml_not grammar None [Word dummy_word]
   | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
@@ -1240,5 +1243,4 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
 	    (fun i -> if i=pos then dummy_np else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
-  | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word dummy_word; Kwd ", "; Word `Undefined]
   | IncrName name -> [Input `String; Word (`Op "="); Word dummy_word]

@@ -628,6 +628,55 @@ let rec focus_opt_moves (steps : (focus -> focus option) list) (foc_opt : focus 
   | None -> None
   | Some foc -> Some (focus_moves steps foc)
 
+(* copy *)
+
+let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
+  match f with
+  | Is (a,np) -> Is (a, copy_s1 np)
+  | Type (a,uri) -> Type (a,uri)
+  | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
+  | Triple (a,arg,np1,np2) -> Triple (a,arg, copy_s1 np1, copy_s1 np2)
+  | Search _ -> f
+  | Filter _ -> f
+  | And (a,lr) -> And (a, List.map copy_p1 lr)
+  | Or (a,lr) -> Or (a, List.map copy_p1 lr)
+  | Maybe (a,f1) -> Maybe (a, copy_p1 f1)
+  | Not (a,f1) -> Not (a, copy_p1 f1)
+  | IsThere _ -> f
+and copy_p1_opt = function
+  | None -> None
+  | Some f -> Some (copy_p1 f)
+and copy_s1 (np : unit elt_s1) : unit elt_s1 =
+  match np with
+  | Det (a,det,rel_opt) -> Det (a, copy_s2 det, copy_p1_opt rel_opt)
+  | AnAggreg (a,id,modif,g,rel_opt,np) -> AnAggreg (a, factory#new_id, modif,g, copy_p1_opt rel_opt, copy_s1 np)
+  | NAnd (a,lr) -> NAnd (a, List.map copy_s1 lr)
+  | NOr (a,lr) -> NOr (a, List.map copy_s1 lr)
+  | NMaybe (a,np1) -> NMaybe (a, copy_s1 np1)
+  | NNot (a,np1) -> NNot (a, copy_s1 np1)
+and copy_s2 (det : elt_s2) : elt_s2 =
+  match det with
+  | Term _ -> det
+  | An (id,modif,head) -> An (factory#new_id, modif, head)
+  | The _ -> det
+and copy_dim (dim : unit elt_dim) : unit elt_dim =
+  match dim with
+  | ForEachResult _ -> dim
+  | ForEach (a,id,modif,rel_opt,id2) -> ForEach (a, factory#new_id, modif, copy_p1_opt rel_opt, id2)
+  | ForTerm _ -> dim
+and copy_aggreg (aggreg : unit elt_aggreg) : unit elt_aggreg =
+  match aggreg with
+  | TheAggreg (a,id,modif,g,rel_opt,id2) -> TheAggreg (a, factory#new_id, modif, g, copy_p1_opt rel_opt, id2)
+and copy_expr (expr : unit elt_expr) : unit elt_expr =
+  expr
+and copy_s (s : unit elt_s) : unit elt_s =
+  match s with
+  | Return (a,np) -> Return (a, copy_s1 np)
+  | SAggreg (a,dims,aggregs) -> SAggreg (a, List.map copy_dim dims, List.map copy_aggreg aggregs)
+  | SExpr (a,name,id,modif,expr,rel_opt) -> SExpr (a,"", factory#new_id, modif, copy_expr expr, copy_p1_opt rel_opt)
+  | SFilter (a,id,expr) -> SFilter (a, factory#new_id, copy_expr expr)
+  | Seq (a, lr) -> Seq (a, List.map copy_s lr)
+    
 (* increments *)
 
 type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
@@ -643,7 +692,9 @@ type increment =
   | IncrRel of Rdf.uri * modif_p2
   | IncrTriplify
   | IncrAnd
+  | IncrDuplicate
   | IncrOr
+  | IncrChoice
   | IncrMaybe
   | IncrNot
   | IncrUnselect
@@ -653,7 +704,6 @@ type increment =
   | IncrForeach of id
   (*  | IncrAggregId of aggreg * id *)
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *)
-  | IncrChoice
   | IncrName of string
 
       
@@ -807,12 +857,40 @@ let insert_and = function
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
+let insert_duplicate = function
+  | AtP1 _ -> None (* P1 conjunction is implicit *)
+  | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
+  | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (copy_s1 f, NAndX ((f::ll,rr),ctx)))
+  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx (copy_s1 f) f)
+  | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) -> Some (AtS (copy_s f, SeqX ((f::ll,rr),ctx)))
+  | _ -> None
+
 let insert_or = function
   | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere (), OrX ((f::ll,rr),ctx2)))
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx (IsThere ()) f)
   | AtS1 (f, NOrX ((ll,rr),ctx2)) when not (is_top_s1 f) -> Some (AtS1 (factory#top_s1, NOrX ((f::ll,rr),ctx2)))
   | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
+
+let insert_choice = function
+  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
+  | AtExpr (f, ctx) when not (is_top_expr f) -> Some (append_choice ctx factory#top_expr f)
+  | _ -> None
+(*
+let insert_choice = function
+  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
+  | AtExpr (Choice (_,lr), ctx) -> Some (AtExpr (factory#top_expr, ChoiceX ((List.rev lr,[]),ctx)))
+  | AtExpr (f, (SExprX _ as ctx)) -> Some (AtExpr (factory#top_expr, ChoiceX (([f],[]), ctx)))
+  | AtExpr (f,ctx) ->
+    let id = factory#new_id in
+    let s, ctx2 = root_expr_of_ctx_expr (Var ((),id)) ctx in
+    let ll, rr, ctx3 = match ctx2 with Root -> [], [], Root | SeqX ((ll,rr),ctx3) -> ll, rr, ctx3 in
+    Some (AtExpr (factory#top_expr,
+		  ChoiceX (([f],[]),
+			   SExprX ("", id, factory#top_modif, None,
+				   SeqX ((ll,s::rr), ctx3)))))
+  | _ -> None
+*)
 
 let insert_maybe = function
   | AtP1 (Maybe (_,f), ctx) -> Some (AtP1 (f,ctx))
@@ -982,26 +1060,6 @@ let insert_func_arg is_pred func arity pos =
       let focus2 = append_seq_s Root s2 s in
       move_seq down_focus next_undef_focus focus2 )
 
-let insert_choice = function
-  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
-  | AtExpr (f, ctx) when not (is_top_expr f) -> Some (append_choice ctx factory#top_expr f)
-  | _ -> None
-(*
-let insert_choice = function
-  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
-  | AtExpr (Choice (_,lr), ctx) -> Some (AtExpr (factory#top_expr, ChoiceX ((List.rev lr,[]),ctx)))
-  | AtExpr (f, (SExprX _ as ctx)) -> Some (AtExpr (factory#top_expr, ChoiceX (([f],[]), ctx)))
-  | AtExpr (f,ctx) ->
-    let id = factory#new_id in
-    let s, ctx2 = root_expr_of_ctx_expr (Var ((),id)) ctx in
-    let ll, rr, ctx3 = match ctx2 with Root -> [], [], Root | SeqX ((ll,rr),ctx3) -> ll, rr, ctx3 in
-    Some (AtExpr (factory#top_expr,
-		  ChoiceX (([f],[]),
-			   SExprX ("", id, factory#top_modif, None,
-				   SeqX ((ll,s::rr), ctx3)))))
-  | _ -> None
-*)
-
 let insert_name new_name = function
   | AtS (SExpr (_,name,id,modif,expr,rel_opt), ctx) -> Some (AtS (SExpr ((), new_name, id, modif, expr, rel_opt), ctx))
   | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) -> Some (AtExpr (expr, SExprX (new_name, id, modif, rel_opt, ctx)))
@@ -1025,7 +1083,9 @@ let insert_increment incr focus =
     | IncrTriplify -> insert_triplify focus
     | IncrIs -> insert_is focus
     | IncrAnd -> insert_and focus
+    | IncrDuplicate -> insert_duplicate focus
     | IncrOr -> insert_or focus
+    | IncrChoice -> insert_choice focus
     | IncrMaybe -> insert_maybe focus
     | IncrNot -> insert_not focus
     | IncrUnselect ->
@@ -1046,7 +1106,6 @@ let insert_increment incr focus =
     | IncrForeach id -> insert_foreach id focus
     (*    | IncrAggregId (g,id) -> insert_aggreg_id g id focus *)
     | IncrFuncArg (is_pred,func,arity,pos) -> insert_func_arg is_pred func arity pos focus
-    | IncrChoice -> insert_choice focus
     | IncrName name -> insert_name name focus
 
       

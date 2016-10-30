@@ -230,6 +230,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property
       | IncrIs -> 7, None
       | IncrAnd -> 8, None
+      | IncrDuplicate -> 8, Some grammar#tooltip_duplicate_focus
       | IncrOr -> 9, Some grammar#tooltip_or
       | IncrChoice -> 9, Some grammar#tooltip_or
       | IncrMaybe -> 10, Some grammar#tooltip_optionally

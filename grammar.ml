@@ -89,6 +89,7 @@ object
   method virtual tooltip_delete_current_focus : string
   method virtual tooltip_remove_element_at_focus : string
   method virtual tooltip_focus_on_property : string
+  method virtual tooltip_duplicate_focus : string
   method virtual tooltip_or : string
   method virtual tooltip_optionally : string
   method virtual tooltip_not : string
@@ -275,6 +276,7 @@ object
   method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
   method tooltip_remove_element_at_focus = "Remove this query element at the query focus"
   method tooltip_focus_on_property = "Adds a focus on the property to refine it"
+  method tooltip_duplicate_focus = "Insert a copy of the current focus"
   method tooltip_or = "Insert an alternative to the current focus"
   method tooltip_optionally = "Make the current focus optional"
   method tooltip_not = "Apply negation to the current focus"
@@ -452,6 +454,7 @@ object
   method tooltip_remove_element_at_focus = "Supprimer cet élément de requête au focus actuel"
   method tooltip_focus_on_property = "Insérer un focus sur la propriété pour la raffiner"
   method tooltip_or = "Insérer une alternative au focus actuel"
+  method tooltip_duplicate_focus = "Insérer une copie du focus actuel"
   method tooltip_optionally = "Rendre le focus actuel optionnel"
   method tooltip_not = "Appliquer une négation au focus actuel"
   method tooltip_any = "Cacher la colonne du focus actuel dans la table des résultats"
@@ -628,6 +631,7 @@ object
   method tooltip_delete_current_focus = "Haga clic en la X roja para eliminar el foco actual"
   method tooltip_remove_element_at_focus = "Eliminar el elemento en el foco actual de consulta"
   method tooltip_focus_on_property = "Insertar un foco sobre la propiedad para refinarla"
+  method tooltip_duplicate_focus = "Insertar una copia de el foco actual"
   method tooltip_or = "Insertar una alternativa en el foco actual"
   method tooltip_optionally = "Hacer al foco actual opcional"
   method tooltip_not = "Aplicar una negación en el foco actual"

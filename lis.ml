@@ -707,7 +707,7 @@ object (self)
 	let incrs = [] in
 	let incrs =
 	  IncrIs :: IncrName "" :: IncrTriplify ::
-	    IncrAnd :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
+	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrUnselect ::
 	    incrs in
 	let incrs =
