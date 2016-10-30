@@ -204,11 +204,17 @@ let string_of_input_type grammar = function
   | `DateTime -> grammar#date_and_time
 (*  | `Time -> grammar#time *)
     
-let word_of_aggreg grammar g =
+let aggreg_syntax grammar g =
   let qu, noun, adj_opt = grammar#aggreg_syntax g in
-  match adj_opt with
-    | None -> `Func noun
-    | Some adj -> `Func adj
+  let noun_word = if g=Sample then `Op noun else `Func noun in
+  let adj_word_opt = match adj_opt with None -> None | Some adj -> Some (if g=Sample then `Op adj else `Func adj) in
+  qu, noun, adj_opt, noun_word, adj_word_opt
+
+let word_of_aggreg grammar g =
+  let _, _, _, noun_word, adj_word_opt = aggreg_syntax grammar g in
+  match adj_word_opt with
+  | Some adj_word -> adj_word
+  | _ -> noun_word
 
 let string_of_func grammar func =
   match grammar#func_syntax func with
@@ -250,6 +256,7 @@ let word_of_incr grammar = function
   | IncrAggreg g -> word_of_aggreg grammar g
   | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
+  | IncrAggregId (g,id) -> word_of_aggreg grammar g
   | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
   | IncrName name -> `Op "="
 
@@ -394,17 +401,12 @@ and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = f
     labelling @ (id, `Labels ls_g) :: lab_rel
 and labelling_aggreg_op grammar g ls =
   let v = var_of_aggreg g in
-  let qu, noun, adj_opt = grammar#aggreg_syntax g in
-  let w = `Func noun in
+  let qu, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
   let make_aggreg =
-    match adj_opt with
-    | None -> (fun l -> `AggregNoun (`Func noun, l))
-    | Some adj ->
-      (fun l ->
-	(*match l with
-	| `Expr _ -> `AggregNoun (`Func noun, l)
-	  | _ ->*) `AggregAdjective (`Func adj, l)) in
-  List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word w)]
+    match adj_word_opt with
+    | Some adj_word -> (fun l -> `AggregAdjective (adj_word, l))
+    | None -> (fun l -> `AggregNoun (noun_word, l)) in
+  List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word noun_word)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
     let _ls, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
@@ -551,11 +553,11 @@ let ng_of_id ~id_labelling id : annot ng =
 
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : annot rel) (ng : annot ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
-  let qu_aggreg, noun, adj_opt = grammar#aggreg_syntax g in
+  let qu_aggreg, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
   let ng_aggreg =
-    match ng, adj_opt with
-    | _, None -> `NounThatOf (`Func noun, rel)
-    | _, Some adj -> `AdjThat (`Func adj, rel) in
+    match adj_word_opt with
+    | Some adj_word -> `AdjThat (adj_word, rel)
+    | None -> `NounThatOf (noun_word, rel) in
   let qu = if qu = `The then (qu_aggreg :> qu) else qu in (* the sample of --> a sample of *)
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
@@ -650,10 +652,10 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let ng_aggreg =
-      let qu, noun, adj_opt = grammar#aggreg_syntax g in
-      match adj_opt with
-      | None -> `NounThatOf (`Func noun, rel)
-      | Some adj -> `AdjThat (`Func adj, rel) in
+      let qu, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
+      match adj_word_opt with
+      | Some adj_word -> `AdjThat (adj_word, rel)
+      | None -> `NounThatOf (noun_word, rel) in
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
     A (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
@@ -1233,7 +1235,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
       | _ -> [] in
     Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
   | IncrForeach id -> Kwd grammar#for_ :: Kwd grammar#each :: xml_ng_id grammar ~id_labelling id
-(*  | IncrAggregId (g,id) -> xml_np grammar ~id_labelling (np_of_aggreg grammar ~id_labelling None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id)) *)
+  | IncrAggregId (g,id) -> Kwd grammar#give_me :: xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
   | IncrFuncArg (is_pred,func,arity,pos) ->
     xml_np grammar ~id_labelling
       (np_of_apply grammar None

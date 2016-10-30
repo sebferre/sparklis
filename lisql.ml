@@ -666,7 +666,7 @@ and copy_dim (dim : unit elt_dim) : unit elt_dim =
   | ForTerm _ -> dim
 and copy_aggreg (aggreg : unit elt_aggreg) : unit elt_aggreg =
   match aggreg with
-  | TheAggreg (a,id,modif,g,rel_opt,id2) -> TheAggreg (a, factory#new_id, modif, g, copy_p1_opt rel_opt, id2)
+  | TheAggreg (a,id,modif,g,rel_opt,id2) -> TheAggreg (a, factory#new_id, factory#top_modif, Sample, None, id2)
 and copy_expr (expr : unit elt_expr) : unit elt_expr =
   expr
 and copy_s (s : unit elt_s) : unit elt_s =
@@ -702,7 +702,7 @@ type increment =
   | IncrAggreg of aggreg
   | IncrForeachResult
   | IncrForeach of id
-  (*  | IncrAggregId of aggreg * id *)
+  | IncrAggregId of aggreg * id
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *)
   | IncrName of string
 
@@ -862,6 +862,7 @@ let insert_duplicate = function
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (copy_s1 f, NAndX ((f::ll,rr),ctx)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx (copy_s1 f) f)
+  | AtAggreg (aggreg, SAggregX (dims,(ll,rr),ctx)) -> Some (AtAggreg (copy_aggreg aggreg, SAggregX (dims, (aggreg::ll,rr), ctx)))
   | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) -> Some (AtS (copy_s f, SeqX ((f::ll,rr),ctx)))
   | _ -> None
 
@@ -964,6 +965,8 @@ let insert_modif_transf f = function
     else Some (AtS (SExpr ((), name, id, modif2, expr, rel_opt), ctx))
   | _ -> None
 
+(* deprecated *)
+(*
 let insert_aggreg g = function
   | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
     Some (AtS1 (AnAggreg ((), id, factory#top_modif, g, None, np), ctx))
@@ -975,20 +978,25 @@ let insert_aggreg g = function
   | AtS1 (np, AnAggregX (_,_,g0,_,ctx)) when g0 = g ->
     Some (AtS1 (np,ctx))
   | _ -> None
-
-let insert_aggreg_bis g focus =
-  match id_of_focus focus with
-  | None -> None
-  | Some id2 ->
-    let s = elt_s_of_focus focus in
-    let dims =
-      match focus with
-      | AtS1 _ -> [ForEachResult ()]
-      | _ -> [] in
-    let focus2 = append_seq_s Root
-      (SAggreg ((), dims, [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)]))
-      s in
-    down_focus focus2
+*)
+    
+let insert_aggreg_bis g = function
+  | AtAggreg (TheAggreg (_,id,modif,g0,rel_opt,id2), ctx) when g=Sample || g0=Sample ->
+    if g=g0 then None
+    else Some (AtAggreg (TheAggreg ((),id,modif,g,None,id2), ctx))
+  | focus ->
+    ( match id_of_focus focus with
+    | None -> None
+    | Some id2 ->
+      let s = elt_s_of_focus focus in
+      let dims =
+	match focus with
+	| AtS1 _ -> [ForEachResult ()]
+	| _ -> [] in
+      let focus2 = append_seq_s Root
+	(SAggreg ((), dims, [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)]))
+	s in
+      down_focus focus2 )
 
 let insert_foreach_result = function (* restricted to removal of ForEachResult *)
   | AtS (SAggreg (_, [ForEachResult _], aggregs), ctx) -> Some (AtS (SAggreg ((), [], aggregs), ctx))
@@ -1104,7 +1112,7 @@ let insert_increment incr focus =
     | IncrAggreg g -> insert_aggreg_bis g focus
     | IncrForeachResult -> insert_foreach_result focus
     | IncrForeach id -> insert_foreach id focus
-    (*    | IncrAggregId (g,id) -> insert_aggreg_id g id focus *)
+    | IncrAggregId (g,id) -> insert_aggreg_id g id focus
     | IncrFuncArg (is_pred,func,arity,pos) -> insert_func_arg is_pred func arity pos focus
     | IncrName name -> insert_name name focus
 

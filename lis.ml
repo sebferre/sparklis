@@ -721,7 +721,7 @@ object (self)
 	  | Some ids ->
 	      IncrForeachResult ::
 	      List.fold_right
-	      (fun id incrs -> IncrForeach id :: incrs)
+	      (fun id incrs -> IncrForeach id :: IncrAggregId (Sample,id) :: incrs)
 	      ids incrs in
 	let incrs =
 	  List.fold_left

@@ -221,6 +221,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrId _ -> 1, None
       | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
       | IncrForeach _ -> 1, Some grammar#tooltip_foreach
+      | IncrAggregId _ -> 2, Some grammar#tooltip_aggreg_id
       | IncrInput _ -> 2, None
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
@@ -239,6 +240,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrOrder (Lowest _) -> 13, Some grammar#tooltip_lowest
       | IncrOrder _ -> 12, None
       | IncrUnselect -> 14, Some grammar#tooltip_any
+      | IncrAggreg Sample -> 14, Some grammar#tooltip_sample
       | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
       | IncrFuncArg _ -> 16, Some grammar#tooltip_func
   in

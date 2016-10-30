@@ -94,11 +94,13 @@ object
   method virtual tooltip_optionally : string
   method virtual tooltip_not : string
   method virtual tooltip_any : string
+  method virtual tooltip_sample : string
   method virtual tooltip_aggreg : string
   method virtual tooltip_func : string
   method virtual tooltip_input_name : string
   method virtual tooltip_foreach_result : string
   method virtual tooltip_foreach : string
+  method virtual tooltip_aggreg_id : string
   method virtual tooltip_highest : string
   method virtual tooltip_lowest : string
   method virtual tooltip_header_hide_focus : string
@@ -281,11 +283,13 @@ object
   method tooltip_optionally = "Make the current focus optional"
   method tooltip_not = "Apply negation to the current focus"
   method tooltip_any = "Hide the focus column in the table of results"
+  method tooltip_sample = "Replace the aggregation by a sample in order to select another aggregation operator"
   method tooltip_aggreg = "Aggregate the focus column in the table of results" (*, for each solution on other columns *)
   method tooltip_func = "Apply the function to the current focus"
   method tooltip_input_name = "Input a (new) name for the expression result"
   method tooltip_foreach_result = "Compute the aggregation for each result of the related query"
   method tooltip_foreach = "Compute the aggregation for each value of this entity"
+  method tooltip_aggreg_id = "Insert a new aggregation column for this entity"
   method tooltip_highest = "Sort the focus column in decreasing order"
   method tooltip_lowest = "Sort the focus column in increasing order"
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
@@ -458,11 +462,13 @@ object
   method tooltip_optionally = "Rendre le focus actuel optionnel"
   method tooltip_not = "Appliquer une négation au focus actuel"
   method tooltip_any = "Cacher la colonne du focus actuel dans la table des résultats"
+  method tooltip_sample = "Remplacer l'agrégation par un échantillon afin de pouvoir sélectionner un autre opérateur d'agrégation"
   method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Appliquer cette fonction au focus actuel"
   method tooltip_input_name = "Entrer un (nouveau) nom pour le résultat de l'expression"
   method tooltip_foreach_result = "Calculer l'agrégation pour chaque résultat de la requête associée"
   method tooltip_foreach = "Calculer l'agrégation pour chaque valeur de cette entité"
+  method tooltip_aggreg_id = "Insérer une nouvelle colonne d'agrégation pour cette entité"
   method tooltip_highest = "Trier la colonne du focus actuel en ordre décroissant"
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"
@@ -636,11 +642,13 @@ object
   method tooltip_optionally = "Hacer al foco actual opcional"
   method tooltip_not = "Aplicar una negación en el foco actual"
   method tooltip_any = "Ocultar la columna del foco actual en la tabla de resultados"
+  method tooltip_sample = "Vuelva a colocar la agregación de una muestra con el fin de seleccionar otro agregador"
   method tooltip_aggreg = "Totalizar la columna del foco actual en la tabla de resultados" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Aplicar esta función en el foco actual"
   method tooltip_input_name = "Introduzca un nombre (nuevo) para el resultado de la expresión"
   method tooltip_foreach_result = "Calcular la agregación para cada resultado de la consulta asociada"
   method tooltip_foreach = "Calcular la agregación para cada valor de esta entidad"
+  method tooltip_aggreg_id = "Insertar una nueva columna de agregación para esta entidad"
   method tooltip_highest = "Ordenar la columna del foco actual en forma descendente"
   method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
