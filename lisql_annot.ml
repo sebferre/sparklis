@@ -186,7 +186,7 @@ let seq_view_defs (_, v : seq_view) : id list =
   Ids.elements (view_ids v).defs
 
 let seq_view_available_dims (focus_sid, v : seq_view) : id list option =
-  let rec aux = function
+  let rec aux : view -> Ids.t option = function
     | Unit -> None
     | Atom _ -> None
     | InlineAggregs _ -> None
@@ -200,22 +200,24 @@ let seq_view_available_dims (focus_sid, v : seq_view) : id list option =
 	      | InlineAggregs (ids,_,_) -> Ids.diff (Ids.diff ids_defs ids.defs) ids.refs
 	      | _ -> ids_defs)
 	    ids.defs lv in
-	Some (Ids.elements ids_defs)
+	Some ids_defs
       else
 	List.fold_left
 	  (fun res v ->
 	    match res, aux v with
 	    | None, None -> None
-	    | None, Some lid -> Some lid
-	    | Some lid, None -> Some lid
-	    | Some lid1, Some lid2 -> Some (lid1 @ lid2))
+	    | None, Some ids -> Some ids
+	    | Some ids, None -> Some ids
+	    | Some ids1, Some ids2 -> Some (Ids.union ids1 ids2))
 	  None lv
     | Aggreg (ids,sid,v) ->
       if sid = focus_sid
-      then Some (Ids.elements (Ids.diff (view_ids v).defs ids.refs))
+      then Some (Ids.diff (view_ids v).defs ids.refs)
       else None
   in
-  aux v
+  match aux v with
+  | None -> None
+  | Some ids -> Some (Ids.elements ids)
 
 
 let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) : (annot * annot elt_s) list -> view list = function
@@ -255,7 +257,7 @@ let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) 
 	    else view::views)
 	  views [] in
       views_of_seq focus_id_opt views (sid+1) las
-    | SAggreg _ ->
+    | SAggreg (_,dims,_) ->
       let views =
 	try
 	  let aggregated_view =
@@ -276,20 +278,30 @@ let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) 
 		  lv (ids.refs,[]) in		
 	      join_views lv2
 	    | _ -> aggregated_view in
-	  let aggregation_view = Aggreg (ids, sid, aggregated_view) in
 	  let merged, views =
 	    List.fold_right
 	      (fun view (merged,views) ->
 		let v_ids = view_ids view in
 		if Ids.subset ids.dims v_ids.dims
 		then
+		  let ids = (* removing dimension definitions before joining, preferring the original to the copy *)
+		    { ids with
+		      defs = List.fold_left
+			(fun defs -> function
+			| ForEachResult _ -> defs
+			| ForEach (_,id,_,_,_) -> Ids.remove id defs
+			| ForTerm _ -> defs)
+			ids.defs dims } in
+		  let aggregation_view = Aggreg (ids, sid, aggregated_view) in
 		  let same_dims = Ids.subset v_ids.dims ids.dims in
 		  (merged || same_dims), join_views [view; aggregation_view]::views
 		else merged, view::views)
 	      views (false,[]) in
 	  if merged
 	  then views
-	  else aggregation_view :: views
+	  else
+	    let aggregation_view = Aggreg (ids, sid, aggregated_view) in
+	    aggregation_view :: views
 	with Not_found -> views in
       views_of_seq focus_id_opt views (sid+1) las
     | Seq _ -> assert false
