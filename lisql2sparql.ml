@@ -64,35 +64,35 @@ let sparql_order = function
 let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
   let label_prop, label_lang = label_property_lang in
-  let label_wrapper make_filter =
+  let label_wrapper (make_filter : Sparql.expr -> Sparql.formula) =
     if label_prop = ""
-    then make_filter t
+    then make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)])
     else
       let open Sparql in
       let term_l = (var "constr_label" :> term) in
       formula_or_list
-	[ make_filter t;
+	[ make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]);
 	  formula_and_list
 	    [ Pattern (triple t (uri label_prop) term_l);
 	      if label_lang = "" then True else Filter (expr_regex (expr_func "lang" [(term_l :> expr)]) label_lang);
-	      make_filter term_l ] ] in
+	      make_filter (term_l :> Sparql.expr) ] ] in
   match c with
     | True -> Sparql.True
     | MatchesAll [] -> Sparql.True
     | MatchesAll lpat ->
-      label_wrapper (fun t ->
+      label_wrapper (fun e ->
 	Sparql.Filter
 	  (Sparql.log_and
 	     (List.map
-		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [(t :> Sparql.expr)]) pat)
+		(fun pat -> Sparql.expr_regex e pat)
 		lpat)))
     | MatchesAny [] -> Sparql.True
     | MatchesAny lpat ->
-      label_wrapper (fun t ->
+      label_wrapper (fun e ->
 	Sparql.Filter
 	  (Sparql.log_or
 	     (List.map
-		(fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [(t :> Sparql.expr)]) pat)
+		(fun pat -> Sparql.expr_regex e pat)
 		lpat)))
     | After pat ->
       Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [(t :> Sparql.expr)]) (Sparql.string pat :> Sparql.expr))
