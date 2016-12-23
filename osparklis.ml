@@ -778,8 +778,11 @@ let _ =
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
+    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
+    firebug "Loaded document and google charts";
     (* initializing YASGUI *)
     Jsutils.yasgui#init;
+    (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
     (* defining navigation history *)
     let default_endpoint = ref "" in
     let default_focus = ref Lisql.factory#home_focus in
@@ -905,4 +908,4 @@ let _ =
     (* generating and displaying contents *)
     translate ();
     history#present#refresh;
-    bool true)
+    bool true))

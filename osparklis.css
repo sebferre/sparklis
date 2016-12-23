@@ -279,6 +279,11 @@ clear:both;
 clear:both;
 }
 
+#charts
+{
+    clear:both;
+}
+
 #list-results
 {
 margin:5px;

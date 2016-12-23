@@ -105,8 +105,26 @@ let lookupPrefix (elt : Dom.element t) (ns : js_string t) : js_string t opt =
   (* not working in Internet Explorer *)
   some (Unsafe.coerce (Unsafe.meth_call elt "lookupPrefix" [|Unsafe.inject ns|]))
 
+
+(* helping injection of OCaml values to JSON values *)
+
+module Inject =
+struct
+  let bool b = Unsafe.inject (bool b)
+  let int i = Unsafe.inject i
+  let float f = Unsafe.inject f
+  let string s = Unsafe.inject (string s)
+  let array ar = Unsafe.inject (array ar)
+  let obj ar = Unsafe.obj ar
+end
+    
 (* YASGUI bindings *)
 
+let opt_iter (opt : 'a option) (k : 'a -> unit) : unit =
+  match opt with
+  | Some x -> k x
+  | None -> ()
+    
 let yasgui =
 object (self)
   val mutable this_opt = None
@@ -163,3 +181,52 @@ object (self)
       yasqe##setValue(yasqe##getValue());
       yasr##draw()
 end
+
+(* Google charts bindings *)
+  
+let google =
+object
+  val mutable viz_opt = None
+
+  method init =
+    try
+      let google = Unsafe.global##google in
+      firebug "Found global 'google'";
+      let viz = google##visualization in
+      firebug "Found 'google.visualization'";
+      viz_opt <- Some viz;
+      ignore (Unsafe.eval_string "google.charts.load('upcoming', {packages: ['map']});");
+      firebug "Loaded package 'map'"
+    with exn -> alert ("Warning: 'Google charts' could not be initialized for some reason. Maps and charts will not be displayed.")
+
+  method set_on_load_callback : 'a. (unit -> 'a) -> 'a = fun k ->
+    Unsafe.global##google##charts##setOnLoadCallback(wrap_callback k)
+      
+  method draw_map : unit =
+    firebug "Drawing map";
+    let map = jsnew (Unsafe.global##google##visualization##_Map) (Dom_html.getElementById "map") in
+    firebug "Created the map";
+    let table =
+      let data =
+	let col t = Inject.(obj [| "type", string t |]) in
+	let row lat long name =
+	  let cell v = Inject.(obj [| "v", float v |]) in
+	  Inject.(obj [| "c", array [| cell lat; cell long; cell (string name) |] |]) in
+	Inject.(obj [| 
+	  "cols", array [| col "number"; col "number"; col "string" |];
+	  "rows", array [|
+	    row 48. (-2.) "A";
+	    row 45. 1. "B";
+	    row 50. 2. "C" |] |]) in
+      jsnew (Unsafe.global##google##visualization##_DataTable) (data) in
+    firebug "Created the data table";
+    let options = Inject.(obj [|
+      "showTooltip", bool true;
+      "showInfoWindow", bool true;
+      "useMapTypeControl", bool true |]) in
+    firebug "Created the map options";
+    map##draw(table, options);
+    firebug "Drawed the map"
+
+end
+
