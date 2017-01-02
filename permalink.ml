@@ -147,6 +147,7 @@ and print_p1 = function
   | Type (_,c) -> print_un "Type" (print_uri c)
   | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
   | Triple (_,arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
+  | LatLong (_,plat,plong,id1,id2) -> print_nary "LatLong" [print_uri plat; print_uri plong; print_id id1; print_id id2]
   | Search (_,c) -> print_un "Search" (print_constr c)
   | Filter (_,c) -> print_un "Filter" (print_constr c)
   | And (_,lr) -> print_lr print_p1 "And" lr
@@ -297,6 +298,7 @@ and parse_p1 ~version = parser
   | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
   | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
+  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((),plat,plong,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c)
   | [< c = parse_un ~version "Constr" parse_constr >] -> Filter ((),c) (* for backward compatibility *)

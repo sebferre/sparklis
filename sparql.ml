@@ -124,6 +124,7 @@ let rec term : Rdf.term -> term = function
   | Rdf.Bnode name -> bnode name
   | Rdf.Var v -> (var v :> term)
 
+    
 type aggreg =
 | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
 | SUM of converter | AVG of converter | MAX of converter | MIN of converter

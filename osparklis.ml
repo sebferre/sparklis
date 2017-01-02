@@ -371,7 +371,15 @@ object (self)
 	    let key = to_string (elt##id) in
 	    let _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
-	    Lisql.insert_term term id_focus )))
+	    Lisql.insert_term term id_focus )));
+	lis#results_geolocations (fun geolocations ->
+	  jquery "#map" (fun elt_map ->
+	    if geolocations = [] then begin
+	      elt_map##style##display <- string "none" end
+	    else begin
+	      elt_map##style##display <- string "block";
+	      google#draw_map geolocations elt_map
+	    end))
       end)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
@@ -865,9 +873,6 @@ let _ =
     jquery "#show-hide-results" (onclick (fun elt ev ->
       jquery_toggle "#results-body";
       ignore (jquery_toggle_innerHTML "#show-hide-results" "+" "-")));
-    (*jquery "#show-hide-sparql" (onclick (fun elt ev ->
-      jquery_toggle "#sparql-body";
-      jquery_toggle_innerHTML "#show-hide-sparql" "+" "-"));*)
 
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->

@@ -330,12 +330,15 @@ let view_of_list_focus ft a_x a_ll_rr =
     
 (* unzipping and annotation *)
 
+let ids_an_id ?(as_p1 = false) id =
+  let defs = if as_p1 then Ids.empty else Ids.singleton id in
+  { empty_ids with all = Ids.singleton id; defs = defs; dims = defs }
+    
 let ids_elt_s2 ~as_p1 = function
   | Term _ -> empty_ids
-  | An (id, _, _) -> let defs = if as_p1 then Ids.empty else Ids.singleton id in
-		     { empty_ids with all = Ids.singleton id; defs = defs; dims = defs }
+  | An (id, _, _) -> ids_an_id ~as_p1 id
   | The id -> { empty_ids with refs = Ids.singleton id }
-    
+
 let rec annot_elt_p1 pos f ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtP1 (f,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -348,6 +351,8 @@ let rec annot_elt_p1 pos f ctx =
   | Rel(_,p,m,np) -> let a1, a_np = annot_elt_s1 ~as_p1:false pos_down np (RelX (p,m,ctx)) in
 		     let a = annot ~ids:a1#ids () in
 		     a, Rel (a, p, m, a_np)
+  | LatLong (_,plat,plong,id1,id2) -> let a = annot ~ids:(union_ids (ids_an_id id1) (ids_an_id id2)) () in
+				      a, LatLong (a, plat, plong, id1, id2)
   | Triple (_,arg,np1,np2) -> let a1, a_np1 = annot_elt_s1 ~as_p1:false pos_down np1 (TripleX1 (arg,np2,ctx)) in
 			      let a2, a_np2 = annot_elt_s1 ~as_p1:false pos_down np2 (TripleX2 (arg,np1,ctx)) in
 			      let a = annot ~ids:(union_ids a1#ids a2#ids) () in

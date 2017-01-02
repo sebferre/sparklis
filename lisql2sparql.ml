@@ -30,6 +30,11 @@ object (self)
   method project (v : Rdf.var) = fst (self#modif v)
   method order (v : Rdf.var) = snd (self#modif v)
 
+  val mutable geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list = []
+  method add_geoloc (t : Sparql.term) (v_lat : Rdf.var) (v_long : Rdf.var) : unit =
+    geolocs <- (t,(v_lat,v_long))::geolocs
+  method geolocs = geolocs
+
 end
 
 let sparql_converter (conv_opt : num_conv option) : Sparql.converter =
@@ -253,6 +258,14 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     (fun x -> q_np (fun y ->
       let s, o = match m with Fwd -> x, y | Bwd -> y, x in
       Sparql.Pattern (Sparql.triple s (Sparql.uri p) o)))
+  | LatLong (annot,plat,plong,id1,id2) ->
+    let v1 = state#id_labelling#get_id_var id1 in
+    let v2 = state#id_labelling#get_id_var id2 in
+    (fun x ->
+      state#add_geoloc x v1 v2;
+      Sparql.formula_and
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plat) (Sparql.var v1 :> Sparql.term)))
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plong) (Sparql.var v2 :> Sparql.term))))
   | Triple (annot,arg,np1,np2) ->
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
@@ -602,12 +615,20 @@ let make_query state t_list (view : Sparql.view) : template =
       (Sparql.pattern_of_formula form_hook) in
     (query :> string))
 
-      
-let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s)
-    : Rdf.term list * template option * template option * template option * template option * seq_view =
+type s_sparql =
+  { focus_term_list : Rdf.term list;
+    query_opt : template option;
+    query_class_opt : template option;
+    query_prop_has_opt : template option;
+    query_prop_isof_opt : template option;
+    seq_view : seq_view;
+    geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list }
+    
+let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s) : s_sparql =
+  (*    : Rdf.term list * template option * template option * template option * template option * seq_view =*)
   let state = new state id_labelling in
-  let annot_view, view = form_s state s_annot in
-  let t_list =
+  let seq_view, view = form_s state s_annot in
+  let focus_term_list =
     match ft with
     | `TermIncr t | `TermNoIncr t -> [t]
     | `IdIncr id | `IdNoIncr id -> [Rdf.Var (id_labelling#get_id_var id)]
@@ -615,9 +636,9 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
   let query_opt =
     if Sparql.is_empty_view view
     then None
-    else Some (make_query state t_list view) in
+    else Some (make_query state focus_term_list view) in
   let query_incr_opt (x : Rdf.var) triple =
-    match ft, t_list with
+    match ft, focus_term_list with
     | `IdNoIncr _, _
     | `TermNoIncr _, _ -> None (* no increments for this focus term (expressions, aggregations) *)
     | _, [t] ->
@@ -636,4 +657,10 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
-  t_list, query_opt, query_class_opt, query_prop_has_opt, query_prop_isof_opt, annot_view
+  { focus_term_list;
+    query_opt;
+    query_class_opt;
+    query_prop_has_opt;
+    query_prop_isof_opt;
+    seq_view;
+    geolocs = state#geolocs }

@@ -202,9 +202,9 @@ object
   method set_on_load_callback : 'a. (unit -> 'a) -> 'a = fun k ->
     Unsafe.global##google##charts##setOnLoadCallback(wrap_callback k)
       
-  method draw_map : unit =
+  method draw_map (points : (float * float * string) list) (elt_map : Dom_html.element t) : unit =
     firebug "Drawing map";
-    let map = jsnew (Unsafe.global##google##visualization##_Map) (Dom_html.getElementById "map") in
+    let map = jsnew (Unsafe.global##google##visualization##_Map) (elt_map) in
     firebug "Created the map";
     let table =
       let data =
@@ -214,10 +214,7 @@ object
 	  Inject.(obj [| "c", array [| cell lat; cell long; cell (string name) |] |]) in
 	Inject.(obj [| 
 	  "cols", array [| col "number"; col "number"; col "string" |];
-	  "rows", array [|
-	    row 48. (-2.) "A";
-	    row 45. 1. "B";
-	    row 50. 2. "C" |] |]) in
+	  "rows", array (Array.of_list (List.map (fun (lat,long,name) -> row lat long name) points)) |]) in
       jsnew (Unsafe.global##google##visualization##_DataTable) (data) in
     firebug "Created the data table";
     let options = Inject.(obj [|

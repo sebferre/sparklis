@@ -56,6 +56,7 @@ type 'a elt_p1 =
   | Type of 'a * Rdf.uri
   | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
   | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
+  | LatLong of 'a * Rdf.uri * Rdf.uri * id * id (* specialization of two Rel to get latitude and longitude *)
   | Search of 'a * constr
   | Filter of 'a * constr
   | And of 'a * 'a elt_p1 list
@@ -286,6 +287,7 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Type (a,c) -> a
   | Rel (a,p,modif,np) -> a
   | Triple (a,arg,np1,np2) -> a
+  | LatLong (a,plat,plong,id1,id2) -> a
   | Search (a,constr) -> a
   | Filter (a,constr) -> a
   | And (a,lr) -> a
@@ -386,6 +388,7 @@ let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
   | Type _ -> None
   | Rel (_,p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
   | Triple (_,arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
+  | LatLong _ -> None
   | Search _ -> None
   | Filter _ -> None
   | And (_,[]) -> None
@@ -636,6 +639,7 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
   | Type (a,uri) -> Type (a,uri)
   | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
   | Triple (a,arg,np1,np2) -> Triple (a,arg, copy_s1 np1, copy_s1 np2)
+  | LatLong (a,plat,plong,id1,id2) -> LatLong (a, plat, plong, factory#new_id, factory#new_id)
   | Search _ -> f
   | Filter _ -> f
   | And (a,lr) -> And (a, List.map copy_p1 lr)
@@ -690,6 +694,7 @@ type increment =
   | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
+  | IncrLatLong of Rdf.uri * Rdf.uri
   | IncrTriplify
   | IncrAnd
   | IncrDuplicate
@@ -821,6 +826,9 @@ let insert_type c = function
 let insert_rel p m focus =
   let foc_opt = insert_elt_p1 (Rel ((), p, m, factory#top_s1)) focus in
   focus_opt_moves [down_focus] foc_opt
+
+let insert_latlong plat plong focus =
+  insert_elt_p1 (LatLong ((), plat, plong, factory#new_id, factory#new_id)) focus
 
 let insert_triple arg focus =
   let foc_opt = insert_elt_p1 (Triple ((), arg, factory#top_s1, factory#top_s1)) focus in
@@ -1087,6 +1095,7 @@ let insert_increment incr focus =
     | IncrId id -> insert_id id focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
+    | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrIs -> insert_is focus

@@ -195,6 +195,38 @@ let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql
       | _ -> ());
   incr_index
 *)
+
+let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * string) list -> unit) : unit =
+  let open Sparql_endpoint in
+  let l =
+    List.fold_left
+      (fun data ((t : Sparql.term), (v_lat,v_long)) ->
+	try
+	  let i_lat = List.assoc v_lat results.vars in
+	  let i_long = List.assoc v_long results.vars in
+	  let get_name =
+	    let s = (t :> string) in
+	    assert (s <> "");
+	    if s.[0] = '?' then
+	      let v = String.sub s 1 (String.length s - 1) in
+	      let i_name = List.assoc v results.vars in
+	      (fun binding ->
+		match binding.(i_name) with
+		| Some term -> Lisql2nl.string_of_term term
+		| _ -> "")
+	    else
+	      (fun binding -> s) in (* TODO *)
+	  List.fold_left
+	    (fun data binding ->
+	      match binding.(i_lat), binding.(i_long) with
+	      | Some (Rdf.Number (lat,_,_)), Some (Rdf.Number (long,_,_)) -> (lat,long, get_name binding)::data
+	      | _ -> data)
+	    data results.bindings
+	with Not_found ->
+	  Jsutils.firebug ("Missing geoloc vars in results: " ^ v_lat ^ ", " ^ v_long);
+	  data)
+      [] geolocs in
+  k l
       
 (* LIS navigation places *)
 
@@ -215,27 +247,22 @@ object (self)
   val mutable id_labelling = new Lisql2nl.id_labelling []
   method id_labelling = id_labelling
 
-  val mutable focus_term_list : Rdf.term list = []
-  method focus_term_list = focus_term_list
+  val mutable s_sparql : Lisql2sparql.s_sparql =
+    Lisql2sparql.({
+      focus_term_list = [];
+      query_opt = None;
+      query_class_opt = None;
+      query_prop_has_opt = None;
+      query_prop_isof_opt = None;
+      seq_view = 0, Lisql_annot.Unit;
+      geolocs = [] })
     
-  val mutable query_opt : Lisql2sparql.template option = None
-  val mutable query_class_opt : Lisql2sparql.template option = None
-  val mutable query_prop_has_opt : Lisql2sparql.template option = None
-  val mutable query_prop_isof_opt : Lisql2sparql.template option = None
-
-  val mutable seq_view : Lisql_annot.seq_view = 0, Lisql_annot.Unit
-
+  method focus_term_list = s_sparql.Lisql2sparql.focus_term_list
+    
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      let t_list, q_opt, qc_opt, qph_opt, qpi_opt, seq_v =
-	Lisql2sparql.s_annot id_labelling focus_term s_annot in
-      focus_term_list <- t_list;
-      query_opt <- q_opt;
-      query_class_opt <- qc_opt;
-      query_prop_has_opt <- qph_opt;
-      query_prop_isof_opt <- qpi_opt;
-      seq_view <- seq_v
+      s_sparql <- Lisql2sparql.s_annot id_labelling focus_term s_annot
     end
 
   initializer self#init
@@ -269,9 +296,9 @@ object (self)
     focus_term_index <- new int_index;
     some_focus_term_is_blank <- false;
     (* computing results and derived attributes *)
-    match query_opt with
+    match s_sparql.Lisql2sparql.query_opt with
       | None ->
-	( match focus_term_list with
+	( match s_sparql.Lisql2sparql.focus_term_list with
 	| [Rdf.Var _] -> ()
 	| [Rdf.Bnode _] ->  (* should not happen *)
 	  Firebug.console##log(string "no query and focus_term_list is a Bnode");
@@ -289,7 +316,7 @@ object (self)
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
 	      focus;
-	    ( match focus_term_list with
+	    ( match s_sparql.Lisql2sparql.focus_term_list with
 	    | [Rdf.Var v] ->
 	      let index = index_of_results_column v results in
 	      index#iter (* avoiding non recursive terminal fold_right *)
@@ -312,6 +339,7 @@ object (self)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
   method results_page offset limit k = page_of_results offset limit results k
+  method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.geolocs results k
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
@@ -385,7 +413,7 @@ object (self)
 	    incr_index#add (Lisql.IncrInput ("",dt), None))
 	[`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
     (* adding ids *)
-    ( match focus_term_list with
+    ( match s_sparql.Lisql2sparql.focus_term_list with
     | [term] ->
       if focus_incr then
 	begin
@@ -424,7 +452,7 @@ object (self)
 	      let ldt = self#id_typing id in
 	      if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt then
 		incr_index#add (Lisql.IncrId id, None))
-	    (Lisql_annot.seq_view_defs seq_view)
+	    (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
 	end
     | _ -> () );
     (* synchronizing lexicons and continuing *)
@@ -575,7 +603,12 @@ object (self)
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
-	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some { value=count; max_value; partial=partial_has; unit })
+	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), freq_opt);
+	  if uri = Rdf.wgs84_lat then
+	    incr_index#add (Lisql.IncrLatLong (Rdf.wgs84_lat,Rdf.wgs84_long), freq_opt);
+	  if uri = Rdf.mondial_lat then
+	    incr_index#add (Lisql.IncrLatLong (Rdf.mondial_lat,Rdf.mondial_long), freq_opt)	    
 	| _ -> ());
       int_index_isof#iter
 	(function
@@ -618,7 +651,11 @@ object (self)
       let max_value = None in
       let partial = self#partial_results in
       let unit = `Results in
-      match query_class_opt, query_prop_has_opt, query_prop_isof_opt with
+      match
+	s_sparql.Lisql2sparql.query_class_opt,
+	s_sparql.Lisql2sparql.query_prop_has_opt,
+	s_sparql.Lisql2sparql.query_prop_isof_opt
+      with
 	| None, None, None -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
 	| Some query_a, Some query_has, Some query_isof ->
 	  let sparql_a = query_a
@@ -716,7 +753,7 @@ object (self)
 	    incrs
 	    [ Highest None; Lowest None ] in
 	let incrs =
-	  match Lisql_annot.seq_view_available_dims seq_view with
+	  match Lisql_annot.seq_view_available_dims s_sparql.Lisql2sparql.seq_view with
 	  | None -> incrs
 	  | Some ids ->
 	      IncrForeachResult ::

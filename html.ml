@@ -226,6 +226,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
       | IncrTriple _ -> 3, None
+      | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
       | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property

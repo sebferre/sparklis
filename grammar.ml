@@ -16,6 +16,9 @@ object
   method virtual relation : string
   method virtual value_ : string
   method virtual result : string
+  method virtual geolocation : string
+  method virtual latitude : string
+  method virtual longitude : string
   method virtual is : string
   method virtual has : string
   method virtual has_as_a : string
@@ -105,6 +108,7 @@ object
   method virtual tooltip_lowest : string
   method virtual tooltip_header_hide_focus : string
   method virtual tooltip_header_set_focus : string
+  method virtual tooltip_geolocation : string
 
   method virtual msg_permalink : string
   method virtual result_results : string * string
@@ -123,6 +127,9 @@ object
   method relation = "relation"
   method value_ = "value"
   method result = "result"
+  method geolocation = "geolocation"
+  method latitude = "latitude"
+  method longitude = "longitude"
   method is = "is"
   method has = "has"
   method has_as_a = "has as a"
@@ -294,6 +301,7 @@ object
   method tooltip_lowest = "Sort the focus column in increasing order"
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
   method tooltip_header_set_focus = "Click on this column header to set the focus on it"
+  method tooltip_geolocation = "Retrieve geolocations to show entities on a map"
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
   method result_results = "result", "results"
@@ -312,6 +320,9 @@ object
   method relation = "relation"
   method value_ = "valeur"
   method result = "résultat"
+  method geolocation = "géolocalisation"
+  method latitude = "latitude"
+  method longitude = "longitude"
   method is = "est"
   method has = "a"
   method has_as_a = "a pour"
@@ -473,6 +484,7 @@ object
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"
   method tooltip_header_set_focus = "Cliquer sur cet entête de colonne pour mettre le focus dessus"
+  method tooltip_geolocation = "Récupérer les géolocalisations pour montrer les entités sur une carte"
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
   method result_results = "résultat", "résultats"
@@ -492,6 +504,9 @@ object
   method relation = "relación"
   method value_ = "valor"
   method result = "resultado"
+  method geolocation = "geolocalización"
+  method latitude = "latitud"
+  method longitude = "longitud"
   method is = "es"
   method has = "tiene"
   method has_as_a = "tiene como"
@@ -653,6 +668,7 @@ object
   method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
   method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
+  method tooltip_geolocation = "Recuperar geolocaciones para mostrar entidades en un mapa"
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"

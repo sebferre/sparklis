@@ -194,6 +194,14 @@ let rec word_of_term = function
   | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
+let string_of_term = function
+  | Rdf.URI uri -> Lexicon.config_entity_lexicon#value#info uri
+  | Rdf.Number (f,s,dt) -> s
+  | Rdf.TypedLiteral (s,dt) -> s
+  | Rdf.PlainLiteral (s,_) -> s
+  | Rdf.Bnode id -> id (* should not occur *)
+  | Rdf.Var v -> assert false
+
 let string_of_input_type grammar = function
   | `IRI -> grammar#uri
   | `String -> grammar#string
@@ -242,6 +250,7 @@ let word_of_incr grammar = function
   | IncrId id -> `Thing
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property p)
+  | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
   | IncrIs -> `Op grammar#is
@@ -306,6 +315,10 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
 	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
 	| _ -> [] in
     ls, lab
+  | LatLong (_,_plat,_plong,id1,id2) ->
+    let ls_lat = List.map (fun (v,l) -> (v ^ "_lat", `Gen (l, `Op  grammar#latitude))) labels in
+    let ls_long = List.map (fun (v,l) -> (v ^ "_long", `Gen (l, `Op grammar#longitude))) labels in 
+    [], [(id1, `Labels ls_lat); (id2, `Labels ls_long)]
   | Triple (_,arg,np1,np2) ->
     let v, w = "relation", `Relation in
     let ls_np1 =
@@ -602,6 +615,8 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
     | `InvNoun -> A (annot, `HasProp (word, np, []))
     | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
+  | LatLong (annot,_plat,_plong,_id1,_id2) ->
+    A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
     let np1 = np_of_elt_s1 grammar ~id_labelling np1 in
     let np2 = np_of_elt_s1 grammar ~id_labelling np2 in
@@ -1209,6 +1224,9 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
 	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `TransVerb -> xml_ellipsis @ Word word :: []
 	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: [])
+  | IncrLatLong (_plat,_plong) ->
+    xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])	 
   | IncrTriple (S | O as arg) ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ (if arg = S then Kwd grammar#rel_to :: xml_ellipsis else Kwd grammar#rel_from :: xml_ellipsis))
