@@ -609,10 +609,7 @@ object (self)
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), freq_opt);
-	  if uri = Rdf.wgs84_lat then
-	    incr_index#add (Lisql.IncrLatLong (Rdf.wgs84_lat,Rdf.wgs84_long), freq_opt);
-	  if uri = Rdf.mondial_lat then
-	    incr_index#add (Lisql.IncrLatLong (Rdf.mondial_lat,Rdf.mondial_long), freq_opt)	    
+	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
 	| _ -> ());
       int_index_isof#iter
 	(function

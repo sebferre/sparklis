@@ -21,12 +21,12 @@ let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
   
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
 
-let wgs84_lat = "http://www.w3.org/2003/01/geo/wgs84_pos#lat"
-let wgs84_long = "http://www.w3.org/2003/01/geo/wgs84_pos#long"
-
-let mondial_lat = "http://www.semwebtech.org/mondial/10/meta#latitude"
-let mondial_long = "http://www.semwebtech.org/mondial/10/meta#longitude"
-
+let lat_long_properties =
+  [ "http://www.w3.org/2003/01/geo/wgs84_pos#lat", "http://www.w3.org/2003/01/geo/wgs84_pos#long";
+    "http://www.semwebtech.org/mondial/10/meta#latitude", "http://www.semwebtech.org/mondial/10/meta#longitude";
+    "http://www.w3.org/2006/vcard/ns#latitude", "http://www.w3.org/2006/vcard/ns#longitude";
+    "http://schema.org/latitude", "http://schema.org/longitude" ]
+  
 (* ------------------------- *)
 
 type var = string
