@@ -101,7 +101,7 @@ let lexicon_enqueue_term = function
   | Rdf.TypedLiteral (_,dt) -> Lexicon.config_class_lexicon#value#enqueue dt
   | _ -> ()
 
-let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.results -> unit) : unit =
+let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : Sparql_endpoint.results -> unit) : unit =
   let open Sparql_endpoint in
   let rec aux offset limit acc = function
     | [] -> acc
@@ -116,10 +116,14 @@ let page_of_results (offset : int) (limit : int) results (k : Sparql_endpoint.re
 	aux offset (limit-1) (binding :: acc) l end
       else acc
   in
+  let partial_vars =
+    List.filter
+      (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
+      results.vars in
   let partial_bindings = List.rev (aux offset limit [] results.bindings) in
   Lexicon.config_class_lexicon#value#sync (fun () ->
     Lexicon.config_entity_lexicon#value#sync (fun () ->
-      k { results with bindings = partial_bindings }))
+      k { results with vars = partial_vars; bindings = partial_bindings }))
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   let open Sparql_endpoint in
@@ -338,7 +342,7 @@ object (self)
   method partial_results = (results.Sparql_endpoint.length = config_max_results#value)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
-  method results_page offset limit k = page_of_results offset limit results k
+  method results_page offset limit k = page_of_results offset limit s_sparql.Lisql2sparql.geolocs results k
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.geolocs results k
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
