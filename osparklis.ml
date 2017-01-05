@@ -516,17 +516,17 @@ object (self)
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      ( match lis#focus_term_list with
 	      | [] ->
-		self#refresh_term_increments_undefined;
+		self#refresh_modifier_increments ~init:true;
 		self#refresh_property_increments_undefined;
-		self#refresh_modifier_increments ~init:true
+		self#refresh_term_increments_undefined
 	      | [Rdf.Var v] ->
-		self#refresh_term_increments_init;
+		self#refresh_modifier_increments ~init:true;
 		self#refresh_property_increments_init;
-		self#refresh_modifier_increments ~init:true
+		self#refresh_term_increments_init
 	      | _ ->
-		self#refresh_term_increments;
+		self#refresh_modifier_increments ~init:false;
 		self#refresh_property_increments;
-		self#refresh_modifier_increments ~init:false)
+		self#refresh_term_increments)
 	    | Some sparql ->
 	      let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
 	      Jsutils.yasgui#set_query sparql_with_prefixes;
@@ -534,13 +534,13 @@ object (self)
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      ( match lis#focus_term_list with
 	      | [] ->
-		self#refresh_term_increments_undefined;
+		self#refresh_modifier_increments ~init:false;
 		self#refresh_property_increments_undefined;
-		self#refresh_modifier_increments ~init:false
+		self#refresh_term_increments_undefined
 	      | _ ->
-		self#refresh_term_increments;
+		self#refresh_modifier_increments ~init:false;
 		self#refresh_property_increments;
-		self#refresh_modifier_increments ~init:false ))))
+		self#refresh_term_increments ))))
 
   method private filter_increments elt_list constr =
     let matcher = compile_constr constr in
