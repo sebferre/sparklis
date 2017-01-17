@@ -39,18 +39,18 @@ end
 
 let sparql_converter (conv_opt : num_conv option) : Sparql.converter =
   match conv_opt with
-  | None -> (fun t -> (t :> Sparql.expr))
+  | None -> (fun e -> e)
   | Some (conv,b) ->
     let func_conv =
       match conv with
       | `Integer -> "xsd:integer"
       | `Decimal -> "xsd:decimal"
       | `Double -> "xsd:double" in
-    (fun t ->
+    (fun e ->
       Sparql.expr_func func_conv
 	[ if b
-	  then Sparql.expr_func "str" [(t :> Sparql.expr)]
-	  else (t :> Sparql.expr) ])
+	  then Sparql.expr_func "str" [e]
+	  else e ])
   
 let sparql_aggreg = function
   | NumberOf -> Sparql.DistinctCOUNT
@@ -448,9 +448,12 @@ and form_expr_list state : annot elt_expr -> Sparql.expr list = function (* non-
     then []
     else
       ( match annot#focus_pos with
-      | `Above (true, Some pos) -> form_expr_list state (List.nth args (pos-1))
+      | `Above (true, Some pos) -> form_expr_list state (snd (List.nth args (pos-1)))
       | _ ->
-	let sparql_list_args = List.map (fun arg -> form_expr_list state arg) args in
+	let sparql_list_args =
+	  List.map
+	    (fun (conv_opt,arg_expr) -> List.map (sparql_converter conv_opt) (form_expr_list state arg_expr))
+	    args in
 	Common.list_fold_prod
 	  (fun res sparql_args -> expr_apply func sparql_args :: res)
 	  [] sparql_list_args )

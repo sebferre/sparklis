@@ -140,8 +140,11 @@ and print_expr = function
   | Undef _ -> print_atom "Undef"
   | Const (_,t) -> print_un "Const" (print_term t)
   | Var (_,id) -> print_un "Var" (print_id id)
-  | Apply (_,func,args) -> print_bin "Apply" (print_func func) (print_list print_expr "Args" args)
+  | Apply (_,func,args) -> print_bin "Apply" (print_func func) (print_list print_apply_arg "Args" args)
   | Choice (_,le) -> print_list print_expr "Choice" le
+and print_apply_arg = function
+  | None, expr -> print_expr expr
+  | Some conv, expr -> print_bin "Conv" (print_num_conv conv) (print_expr expr)
 and print_p1 = function
   | Is (_,np) -> print_un "Is" (print_s1 np)
   | Type (_,c) -> print_un "Type" (print_uri c)
@@ -288,9 +291,12 @@ and parse_expr ~version = parser
     | [< () = parse_atom ~version "Undef" >] -> Undef ()
     | [< t = parse_un ~version "Const" parse_term >] -> Const ((), t)
     | [< id = parse_un ~version "Var" parse_id >] -> Var ((), id)
-    | [< func, args = parse_bin ~version "Apply" parse_func (fun ~version -> parse_list parse_expr ~version "Args") >] -> Apply ((), func, args)
+    | [< func, args = parse_bin ~version "Apply" parse_func (fun ~version -> parse_list parse_apply_arg ~version "Args") >] -> Apply ((), func, args)
     | [< le = parse_list parse_expr ~version "Choice" >] -> Choice ((), le)
     | [<>] -> syntax_error "invalid expr"
+and parse_apply_arg ~version = parser
+    | [< conv, expr = parse_bin ~version "Conv" parse_num_conv parse_expr >] -> (Some conv, expr)
+    | [< expr = parse_expr ~version >] -> (None, expr)
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)

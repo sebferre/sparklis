@@ -247,7 +247,7 @@ let word_of_order grammar = function
 let word_of_incr grammar = function
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
-  | IncrId id -> `Thing
+  | IncrId (id,_) -> `Thing
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property p)
   | IncrLatLong _ -> `Op grammar#geolocation
@@ -266,7 +266,7 @@ let word_of_incr grammar = function
   | IncrForeachResult -> `Op grammar#result
   | IncrForeach id -> `Thing
   | IncrAggregId (g,id) -> word_of_aggreg grammar g
-  | IncrFuncArg (is_pred,func,arity,pos) -> `Op (string_of_func grammar func)
+  | IncrFuncArg (is_pred,func,arity,pos,_,_) -> `Op (string_of_func grammar func)
   | IncrName name -> `Op "="
 
 (* verbalization of IDs *)
@@ -706,7 +706,7 @@ and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = 
     np_of_apply grammar (Some annot)
       adj
       func
-      (List.map (fun arg -> np_of_elt_expr grammar ~id_labelling top_adj top_rel arg) args)
+      (List.map (fun (_,arg_expr) -> np_of_elt_expr grammar ~id_labelling top_adj top_rel arg_expr) args)
       rel
   | Choice (annot,le) ->
     let lnp = List.map (fun expr -> np_of_elt_expr grammar ~id_labelling top_adj top_rel expr) le in
@@ -1183,7 +1183,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
-  | IncrId id ->
+  | IncrId (id,_) ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
       | AtS1 _ | AtExpr _ | AtDim _ -> xml
@@ -1254,7 +1254,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
   | IncrForeach id -> Kwd grammar#for_ :: Kwd grammar#each :: xml_ng_id grammar ~id_labelling id
   | IncrAggregId (g,id) -> Kwd grammar#give_me :: xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
-  | IncrFuncArg (is_pred,func,arity,pos) ->
+  | IncrFuncArg (is_pred,func,arity,pos,_,_) ->
     xml_np grammar ~id_labelling
       (np_of_apply grammar None
 	 top_adj

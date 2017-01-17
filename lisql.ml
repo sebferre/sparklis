@@ -88,7 +88,7 @@ and 'a elt_expr =
   | Undef of 'a
   | Const of 'a * Rdf.term
   | Var of 'a * id
-  | Apply of 'a * func * 'a elt_expr list
+  | Apply of 'a * func * (num_conv option * 'a elt_expr) list
   | Choice of 'a * 'a elt_expr list (* non-deterministic choice, enumeration *)
 (*and 'a elt_s1_expr =
   | NExpr of 'a * string * id * modif_s2 * 'a elt_expr * 'a elt_p1 option (* string : user label *) *)
@@ -154,7 +154,7 @@ and ctx_dim =
 and ctx_aggreg =
   | SAggregX of unit elt_dim list * unit elt_aggreg ctx_list * ctx_s
 and ctx_expr =
-  | ApplyX of func * unit elt_expr ctx_list * ctx_expr
+  | ApplyX of func * (num_conv option * unit elt_expr) ctx_list * num_conv option * ctx_expr
   | ChoiceX of unit elt_expr ctx_list * ctx_expr
   | SExprX of string * id * modif_s2 * unit elt_p1 option * ctx_s
   | SFilterX of id * ctx_s
@@ -330,7 +330,7 @@ and annot_s = function
 let rec root_expr_of_ctx_expr (f : unit elt_expr) : ctx_expr -> unit elt_s * ctx_s = function
   | SExprX (name,id,modif,rel_opt,ctx2) -> SExpr ((),name,id,modif,f,rel_opt), ctx2
   | SFilterX (id,ctx2) -> SFilter ((),id,f), ctx2
-  | ApplyX (func,ll_rr,ctx) -> root_expr_of_ctx_expr (Apply ((), func, list_of_ctx f ll_rr)) ctx
+  | ApplyX (func,ll_rr,conv_opt,ctx) -> root_expr_of_ctx_expr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
   | ChoiceX (ll_rr,ctx) -> root_expr_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
 
 (* extraction of LISQL s element from focus *)
@@ -363,7 +363,7 @@ and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
 and elt_s_of_ctx_expr (f : unit elt_expr) = function
   | SExprX (name,id,modif,rel_opt,ctx) -> elt_s_of_ctx_s (SExpr ((), name, id, modif, f, rel_opt)) ctx
   | SFilterX (id,ctx) -> elt_s_of_ctx_s (SFilter ((), id, f)) ctx
-  | ApplyX (func,ll_rr,ctx) -> elt_s_of_ctx_expr (Apply ((), func, list_of_ctx f ll_rr)) ctx
+  | ApplyX (func,ll_rr,conv_opt,ctx) -> elt_s_of_ctx_expr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
   | ChoiceX (ll_rr,ctx) -> elt_s_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
 and elt_s_of_ctx_s (f : unit elt_s) = function
   | Root -> f
@@ -423,7 +423,7 @@ let down_expr (ctx : ctx_expr) : unit elt_expr -> focus option = function
   | Const _ -> None
   | Var _ -> None
   | Apply (_,func,[]) -> None
-  | Apply (_,func,arg::args) -> Some (AtExpr (arg, ApplyX (func, ([],args), ctx)))
+  | Apply (_,func,(conv_opt,expr)::args) -> Some (AtExpr (expr, ApplyX (func, ([],args), conv_opt, ctx)))
   | Choice (_,[]) -> None (* should not happen *)
   | Choice (_,x::rr) -> Some (AtExpr (x, ChoiceX (([],rr),ctx)))
 let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
@@ -470,7 +470,7 @@ let up_aggreg f = function
 let up_expr f = function
   | SExprX (name,id,modif,rel_opt,ctx) -> Some (AtS (SExpr ((), name, id, modif, f, rel_opt), ctx))
   | SFilterX (id,ctx) -> Some (AtS (SFilter ((), id, f), ctx))
-  | ApplyX (func,ll_rr,ctx) -> Some (AtExpr (Apply ((), func, list_of_ctx f ll_rr), ctx))
+  | ApplyX (func,ll_rr,conv_opt,ctx) -> Some (AtExpr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr), ctx))
   | ChoiceX (ll_rr,ctx) -> Some (AtExpr (Choice ((), list_of_ctx f ll_rr), ctx))
 let up_s f = function
   | Root -> None
@@ -519,8 +519,8 @@ let right_expr (f : unit elt_expr) : ctx_expr -> focus option = function
   | SExprX (name,id,modif,None,ctx) -> None
   | SExprX (name,id,modif,Some rel,ctx) -> Some (AtP1 (rel, SExprThatX (name,id,modif,f,ctx)))
   | SFilterX (id,ctx) -> None
-  | ApplyX (func,(ll,[]),ctx) -> None
-  | ApplyX (func,(ll,x::rr),ctx) -> Some (AtExpr (x, ApplyX (func, (f::ll,rr), ctx)))
+  | ApplyX (func,(ll,[]),conv_opt,ctx) -> None
+  | ApplyX (func,(ll,(conv_opt_1,f_1)::rr),conv_opt,ctx) -> Some (AtExpr (f_1, ApplyX (func, ((conv_opt,f)::ll,rr), conv_opt_1, ctx)))
   | ChoiceX ((ll,[]),ctx) -> None
   | ChoiceX ((ll,x::rr),ctx) -> Some (AtExpr (x, ChoiceX ((f::ll,rr),ctx)))
 let right_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -573,8 +573,8 @@ let left_aggreg (f : unit elt_aggreg) : ctx_aggreg -> focus option = function
 let left_expr (f : unit elt_expr) : ctx_expr -> focus option = function
   | SExprX (name,id,modif,rel_opt,ctx) -> None
   | SFilterX (id,ctx) -> None
-  | ApplyX (func, ([],rr), ctx) -> None
-  | ApplyX (func, (x::ll,rr), ctx) -> Some (AtExpr (x, ApplyX (func, (ll,f::rr), ctx)))
+  | ApplyX (func, ([],rr), conv_opt, ctx) -> None
+  | ApplyX (func, ((conv_opt_1,f_1)::ll,rr), conv_opt, ctx) -> Some (AtExpr (f_1, ApplyX (func, (ll,(conv_opt,f)::rr), conv_opt_1, ctx)))
   | ChoiceX (([],rr), ctx) -> None
   | ChoiceX ((x::ll,rr), ctx) -> Some (AtExpr (x, ChoiceX ((ll,f::rr), ctx)))
 let left_s (f : unit elt_s) : ctx_s -> focus option = function
@@ -599,11 +599,11 @@ let rec next_undef_focus focus =
     | Var _ -> move_seq up_focus next_undef_focus focus
     | Apply (_,func,args) ->
       ( try
-	  let x, ll_rr =
+	  let (conv_opt, x), ll_rr =
 	    List.find (* if some argument is Undef *)
-	      (function (Undef _, ll_rr) -> true | _ -> false)
+	      (function ((_, Undef _), ll_rr) -> true | _ -> false)
 	      (ctx_of_list args) in
-	  Some (AtExpr (x, ApplyX (func,ll_rr,ctx))) (* set focus on it *)
+	  Some (AtExpr (x, ApplyX (func,ll_rr,conv_opt,ctx))) (* set focus on it *)
 	with _ -> move_seq up_focus next_undef_focus focus )
     | Choice (_,le) ->
       ( try
@@ -689,7 +689,7 @@ type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTi
 type increment =
   | IncrInput of string * input_type
   | IncrTerm of Rdf.term
-  | IncrId of id
+  | IncrId of id * num_conv option
   | IncrIs
   | IncrTriple of arg
   | IncrType of Rdf.uri
@@ -708,7 +708,7 @@ type increment =
   | IncrForeachResult
   | IncrForeach of id
   | IncrAggregId of aggreg * id
-  | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *)
+  | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *) * num_conv option (* function result *) * num_conv option (* argument *)
   | IncrName of string
 
       
@@ -731,6 +731,10 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
 
+let apply_conv_ctx_expr conv_opt = function
+  | ApplyX (func,ll_rr,_,ctx2) -> ApplyX (func,ll_rr,conv_opt,ctx2)
+  | ctx -> ctx
+    
 let append_and_p1 ctx (elt_p1 : unit elt_p1) = function
   | IsThere _ -> AtP1 (elt_p1, ctx)
   | And (_,lr) -> AtP1 (elt_p1, AndX ((List.rev lr, []), ctx))
@@ -802,11 +806,11 @@ let insert_term t focus =
     | Rdf.Bnode _ -> None (* blank nodes cannot be injected in queries *)
     | _ ->
       match focus with
-      | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((),t),ctx))
+      | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((),t), ctx))
       | AtDim (ForEach (_,id,modif,rel_opt,id2), ctx) -> Some (AtDim (ForTerm ((),t,id2), ctx))
       | _ -> insert_elt_s2 (Term t) focus
-let insert_id id = function
-  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id),ctx))
+let insert_id id conv_opt = function
+  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id), apply_conv_ctx_expr conv_opt ctx))
   | focus -> insert_elt_s2 (The id) focus
 
 let insert_type c = function
@@ -1040,10 +1044,10 @@ let insert_aggreg_id g id2 = function
     Some (AtAggreg (TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2), SAggregX (list_of_ctx dim ll_rr, (List.rev aggregs, []), ctx)))
   | _ -> None
 
-let insert_func_arg is_pred func arity pos =
+let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
   let ll_rr =
-    List.map (fun _ -> factory#top_expr) (Common.from_downto (pos-1) 1),
-    List.map (fun _ -> factory#top_expr) (Common.from_to (pos+1) arity) in
+    List.map (fun _ -> None, factory#top_expr) (Common.from_downto (pos-1) 1),
+    List.map (fun _ -> None, factory#top_expr) (Common.from_to (pos+1) arity) in
   function
   | AtExpr (expr,ctx) ->
     let ctx =
@@ -1056,18 +1060,18 @@ let insert_func_arg is_pred func arity pos =
 	if is_pred
 	then ctx
 	else SExprX ("", id, factory#top_modif, None, ctx2)
-      | _ -> ctx in
+      | _ -> apply_conv_ctx_expr res_conv_opt ctx in
     let args =
       if arity = 0
       then []
-      else list_of_ctx expr ll_rr in
+      else list_of_ctx (arg_conv_opt,expr) ll_rr in
     next_undef_focus (AtExpr (Apply ((), func, args), ctx))
   | focus ->
     ( match id_of_focus focus with
     | None -> None
     | Some id ->
       let s = elt_s_of_focus focus in
-      let args = if arity = 0 then [] else list_of_ctx (Var ((),id)) ll_rr in
+      let args = if arity = 0 then [] else list_of_ctx (arg_conv_opt, Var ((),id)) ll_rr in
       let s2 =
 	let expr = Apply ((), func, args) in
 	if is_pred
@@ -1092,7 +1096,7 @@ let insert_increment incr focus =
   match incr with
     | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
-    | IncrId id -> insert_id id focus
+    | IncrId (id,conv_opt) -> insert_id id conv_opt focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
     | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
@@ -1122,7 +1126,7 @@ let insert_increment incr focus =
     | IncrForeachResult -> insert_foreach_result focus
     | IncrForeach id -> insert_foreach id focus
     | IncrAggregId (g,id) -> insert_aggreg_id g id focus
-    | IncrFuncArg (is_pred,func,arity,pos) -> insert_func_arg is_pred func arity pos focus
+    | IncrFuncArg (is_pred,func,arity,pos,res_conv_opt,arg_conv_opt) -> insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt focus
     | IncrName name -> insert_name name focus
 
       
@@ -1188,10 +1192,10 @@ and delete_ctx_expr f_opt ctx =
   match ctx with
   | SExprX (name,id,modif,rel_opt,ctx2) -> delete_ctx_s None ctx2
   | SFilterX (id,ctx2) -> delete_ctx_s None ctx2
-  | ApplyX (func,ll_rr,ctx2) ->
+  | ApplyX (func,ll_rr,conv_opt,ctx2) ->
     ( match f_opt with
-    | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx factory#top_expr ll_rr))) ctx2
-    | Some _ -> Some (AtExpr (factory#top_expr, ctx)) )
+    | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx (None, factory#top_expr) ll_rr))) ctx2
+    | Some _ -> Some (AtExpr (factory#top_expr, apply_conv_ctx_expr None ctx)) ) (* forgetting conversion *)
   | ChoiceX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_expr None ctx2

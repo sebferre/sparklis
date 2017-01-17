@@ -459,7 +459,9 @@ and annot_elt_expr pos expr ctx =
   | Apply (_,func,args) ->
     let la, l_a_arg =
       List.split (List.map
-		    (fun (arg,ll_rr) -> annot_elt_expr pos_down arg (ApplyX (func, ll_rr, ctx)))
+		    (fun ((conv_opt,arg_expr),ll_rr) ->
+		      let a, a_arg_expr = annot_elt_expr pos_down arg_expr (ApplyX (func, ll_rr, conv_opt, ctx)) in
+		      a, (conv_opt,a_arg_expr))
 		    (ctx_of_list args)) in
     let a = annot
       ~ids:(list_union_ids (List.map (fun a -> a#ids) la))
@@ -716,14 +718,16 @@ and annot_ctx_expr defined (a1,a_x) x = function
     let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s ft (a, SFilter (a, id, a_x)) f ctx
-  | ApplyX (func,ll_rr,ctx) ->
-    let f = Apply ((), func, list_of_ctx x ll_rr) in
+  | ApplyX (func,ll_rr,conv_opt,ctx) ->
+    let f = Apply ((), func, list_of_ctx (conv_opt,x) ll_rr) in
     let la, lar =
       List.split
-	(list_of_ctx (a1,a_x)
+	(list_of_ctx (a1, (conv_opt,a_x))
 	   (map_ctx_list
-	      (fun (x2,ll_rr2) -> annot_elt_expr (`Aside true) x2 (ApplyX (func, ll_rr2, ctx)))
-	      (ctx_of_ctx_list x ll_rr))) in
+	      (fun ((conv_opt2,x2),ll_rr2) ->
+		let a2, a_x2 = annot_elt_expr (`Aside true) x2 (ApplyX (func, ll_rr2, conv_opt2, ctx)) in
+		a2, (conv_opt2,a_x2))
+	      (ctx_of_ctx_list (conv_opt,x) ll_rr))) in
     let ids = list_union_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (true, Some (1 + List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
     annot_ctx_expr defined (a, Apply (a, func, lar)) f ctx

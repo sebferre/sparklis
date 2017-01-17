@@ -444,7 +444,7 @@ object (self)
 		if term <> (Rdf.Var v) then
 		  (try
 		     let id = id_labelling#get_var_id v in
-		     incr_index#add (Lisql.IncrId id, Some { value=freqs.(i); max_value; partial; unit })
+		     incr_index#add (Lisql.IncrId (id, None), Some { value=freqs.(i); max_value; partial; unit })
 		   with _ -> ()))  (* ex: aggregation variables *)
 	    (Common.from_downto (dim-1) 0)
 	end;
@@ -452,10 +452,13 @@ object (self)
 	begin
 	  List.iter
 	    (fun id -> (* TODO: filter according to empirical type *)
-	    (*let id = id_labelling#get_var_id v in*)
 	      let ldt = self#id_typing id in
-	      if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt then
-		incr_index#add (Lisql.IncrId id, None))
+	      let comp_arg, comp_res =
+		Lisql_type.compatibles_insertion_list
+		  (List.map (fun dt -> (None,dt)) ldt)
+		  focus_type_constraints in
+	      if comp_res.Lisql_type.bool then
+		incr_index#add (Lisql.IncrId (id, comp_res.Lisql_type.conv_opt), None))
 	    (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
 	end
     | _ -> () );
@@ -778,10 +781,11 @@ object (self)
 	let incrs =
 	  List.fold_left
 	    (fun incrs (func,arity,pos) ->
-	      if Lisql_type.is_insertable_func_pos func pos focus_type_constraints
+	      let comp_arg, comp_res = Lisql_type.compatibles_insertion_func_pos func pos focus_type_constraints in
+	      if comp_arg.Lisql_type.bool && comp_res.Lisql_type.bool
 	      then
 		let is_pred = Lisql_type.is_predicate func in
-		IncrFuncArg (is_pred,func,arity,pos) :: incrs
+		IncrFuncArg (is_pred, func, arity, pos, comp_res.Lisql_type.conv_opt, comp_arg.Lisql_type.conv_opt) :: incrs
 	      else incrs)
 	    incrs
 	    [ `Str, 1, 1;

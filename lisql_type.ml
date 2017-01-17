@@ -43,16 +43,20 @@ let inheritance : (datatype * datatype list) list =
     [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String;
      `Float; `Decimal; `Integer; `Date; `Time; `DateTime; `Boolean]
 
-let rec compatible_with dt1 dt2 : bool * Lisql.num_conv option (* conv only relevant if true *) =
+type compatible = { bool : bool; conv_opt : Lisql.num_conv option }
+(* conv_opt field only well-defined when bool=true *)
+
+let compatible_true = { bool=true; conv_opt=None }
+let compatible_false = { bool=false; conv_opt=None }
+
+let rec compatible_with dt1 dt2 : compatible =
   match dt1 with
   | `Conversion (dt1_src,conv,dt1_dest) ->
-    let comp, _ = compatible_with dt1_src dt2 in
-    if comp
-    then comp, None
-    else
-      let comp2, _ = compatible_with dt1_dest dt2 in
-      comp2, Some conv
-  | _ -> List.mem dt2 (List.assoc dt1 inheritance), None
+    let comp = compatible_with dt1_src dt2 in
+    if comp.bool
+    then { comp with conv_opt=None }
+    else { compatible_with dt1_dest dt2 with conv_opt = Some conv }
+  | _ -> { bool=(List.mem dt2 (List.assoc dt1 inheritance)); conv_opt=None }
     
 let lcs_datatype dt1 dt2 =
   let inh1 = try List.assoc dt1 inheritance with _ -> assert false in
@@ -72,7 +76,20 @@ let lcs_num_conv_opt conv1_opt conv2_opt = match conv1_opt, conv2_opt with
     | (_,b1), (`Decimal,b2) -> Some (`Decimal, b1||b2)
     | (_,b1), (_,b2) -> Some (`Integer, b1||b2)
 
+let lcs_compatible (comp1 : compatible) (comp2 : compatible) : compatible =
+  match comp1.bool, comp2.bool with
+  | false, false -> comp1
+  | false, true -> comp2
+  | true, false -> comp1
+  | true, true -> { bool = true; conv_opt = lcs_num_conv_opt comp1.conv_opt comp2.conv_opt }
+
+
 (* typing functions *)
+
+let of_num_conv = function
+  | `Integer, _ -> `Integer
+  | `Decimal, _ -> `Decimal
+  | `Double, _ -> `Float
 
 let of_numeric_literal s src_dt apply_str =
   if String.contains s 'E' || String.contains s 'e' then `Conversion (src_dt, (`Double, apply_str), `Float)
@@ -146,7 +163,7 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `Datatype -> [ [`Literal], `IRI ]
   | `IRI -> [ [`IRI_Literal], `IRI ]
   | `STRDT -> [ [`Literal; `IRI], `Literal ]
-  | `STRLANG -> [ [`Literal; `String], `Literal ]
+  | `STRLANG -> [ [`Literal; `String], `StringLiteral ]
   | `Strlen -> [ [`StringLiteral], `Integer ]
   | `Substr2 -> [ [`StringLiteral; `Integer], `StringLiteral ]
   | `Substr3 -> [ [`StringLiteral; `Integer; `Integer], `StringLiteral ]
@@ -231,7 +248,8 @@ let union_constraints constr_list =
       | Some ldt1, Some ldt2 -> Some (Common.list_to_set (ldt1@ldt2)))
     None constr_list
 
-let check_input_constraint constr dt_input =
+(*
+let check_input_constraint constr dt_input : bool =
   match constr with
   | None -> true
   | Some ldt -> List.exists (fun dt -> fst (compatible_with dt dt_input)) ldt (* disjunctive compatibility *)
@@ -239,16 +257,31 @@ let check_output_constraint constr dt_output : bool = (* assuming dt_ouput is no
   match constr with
   | None -> true
   | Some ldt -> List.exists (fun dt -> fst (compatible_with dt_output dt)) ldt
+*)
 
-let check_input_constraint_conv_opt constr dt_input : bool * Lisql.num_conv option =
+let compatible_input_constraint constr dt_input : compatible =
   match constr with
-  | None -> true, None
+  | None -> compatible_true
   | Some ldt ->
     List.fold_left
-      (fun (comp1,conv_opt1) dt ->
-	let (comp2,conv_opt2) = compatible_with dt dt_input in
-	comp1 && comp2, lcs_num_conv_opt conv_opt1 conv_opt2) (* conjunctive compatibility *)
-      (true,None) ldt
+      (fun comp1 dt ->
+	let comp2 = compatible_with dt dt_input in
+	lcs_compatible comp1 comp2)
+      compatible_false ldt
+let check_input_constraint constr dt_input : bool =
+  (compatible_input_constraint constr dt_input).bool
+
+let compatible_output_constraint constr dt_output : compatible =
+  match constr with
+  | None -> compatible_true
+  | Some ldt ->
+    List.fold_left
+      (fun comp1 dt ->
+	let comp2 = compatible_with dt_output dt in
+	lcs_compatible comp1 comp2)
+      compatible_false ldt
+let check_output_constraint constr dt_output : bool =
+  (compatible_output_constraint constr dt_output).bool
 
 let compatible_func_signatures func input_constr_list output_constr =
   List.filter
@@ -261,7 +294,7 @@ type focus_type_constraints = { input_constr : type_constraint;
 				output_constr : type_constraint }
 
 let default_focus_type_constraints = { input_constr = None; output_constr = None }
-  
+
 exception TypeError
 
 let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_constraint (* raise TypeError *) = function
@@ -270,7 +303,13 @@ let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_c
   | Var (_,id) -> env id
   | Apply (_,func,args) ->
     let output_constr = None in
-    let input_constr_list = List.map (constr_of_elt_expr env) args in
+    let input_constr_list =
+      List.map
+	(fun (conv_opt,arg_expr) ->
+	  match conv_opt with
+	  | None -> constr_of_elt_expr env arg_expr
+	  | Some conv -> Some [of_num_conv conv])
+	args in
     let comp_sigs = compatible_func_signatures func input_constr_list output_constr in
     if comp_sigs = []
     then raise TypeError
@@ -282,11 +321,11 @@ let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_c
 let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_constraint (* raise TypeError *) = function
   | SExprX _ -> None
   | SFilterX _ -> None
-  | ApplyX (func,ll_rr,ctx) ->
+  | ApplyX (func,ll_rr,conv_opt,ctx) ->
     let pos = 1 + List.length (fst ll_rr) in
     let output_constr = constr_of_ctx_expr env ctx in
     let input_constr_list =
-      list_of_ctx None (map_ctx_list (constr_of_elt_expr env) ll_rr) in
+      list_of_ctx None (map_ctx_list (fun (conv_opt,arg_expr) -> constr_of_elt_expr env arg_expr) ll_rr) in
     let comp_sigs = compatible_func_signatures func input_constr_list output_constr in
     if comp_sigs = []
     then raise TypeError
@@ -313,43 +352,54 @@ let of_focus env : focus -> focus_type_constraints = function
 
 (* insertability of elements based on constraints *)
 
-let is_insertable (dt_arg_opt, dt_res) focus_constr =
-  let arg_ok =
+let compatibles_insertion (dt_arg_opt, dt_res) focus_constr : compatible * compatible =
+  let comp_arg =
     match dt_arg_opt with
-    | None -> true
-    | Some dt_arg -> check_input_constraint focus_constr.input_constr dt_arg in
-  let res_ok =
-    check_output_constraint focus_constr.output_constr dt_res in
-  arg_ok && res_ok
+    | None -> compatible_true
+    | Some dt_arg -> compatible_input_constraint focus_constr.input_constr dt_arg in
+  let comp_res =
+    compatible_output_constraint focus_constr.output_constr dt_res in
+  comp_arg, comp_res
+
+let is_insertable dt_arg_opt_res focus_constr =
+  let comp_arg, comp_res = compatibles_insertion dt_arg_opt_res focus_constr in
+  comp_arg.bool && comp_res.bool
 
 let is_insertable_input input_dt focus_type_constraints =
   is_insertable
     (None, input_dt)
     focus_type_constraints
 
-let is_insertable_func_pos func pos focus_type_constraints =
-  List.exists
-    (fun (ldt_params, dt_res) ->
-      try
-	let dt_arg_opt =
-	  if pos=0
-	  then None
-	  else Some (List.nth ldt_params (pos-1)) in
-	is_insertable (dt_arg_opt,dt_res) focus_type_constraints
-      with _ -> assert false)
-    (func_signatures func)
+let compatibles_insertion_list ldt_arg_opt_res focus_type_constraints : compatible * compatible =
+  List.fold_left
+    (fun (comp_arg, comp_res) dt_arg_opt_res ->
+      let comp_arg_1, comp_res_1 = compatibles_insertion dt_arg_opt_res focus_type_constraints in
+      if comp_arg_1.bool && comp_res_1.bool
+      then (lcs_compatible comp_arg comp_arg_1, lcs_compatible comp_res comp_res_1)
+      else (comp_arg, comp_res))
+    (compatible_false, compatible_false)
+    ldt_arg_opt_res
 
-(*
-let is_insertable_aggreg aggreg focus_type_constraints =
-  let param_dt, res_dt = aggreg_signature aggreg in
-  is_insertable (Some param_dt, res_dt) focus_type_constraints
-*)
+let compatibles_insertion_func_pos func pos focus_type_constraints : compatible * compatible =
+  compatibles_insertion_list
+    (List.map
+       (fun (ldt_params, dt_res) ->
+	 try
+	   let dt_arg_opt =
+	     if pos=0
+	     then None
+	     else Some (List.nth ldt_params (pos-1)) in
+	   (dt_arg_opt,dt_res)
+	 with _ -> assert false)
+       (func_signatures func))
+    focus_type_constraints
+
     
 let find_insertable_aggreg aggreg focus_type_constraints : Lisql.aggreg option =
   let aux_num f_aggreg =
-    let comp, conv_opt = check_input_constraint_conv_opt focus_type_constraints.input_constr `Float in
-    if comp
-    then Some (f_aggreg conv_opt)
+    let comp = compatible_input_constraint focus_type_constraints.input_constr `Float in
+    if comp.bool
+    then Some (f_aggreg comp.conv_opt)
     else None
   in
   match aggreg with
@@ -372,9 +422,9 @@ let find_insertable_aggreg aggreg focus_type_constraints : Lisql.aggreg option =
 
 let find_insertable_order order focus_type_constraints : Lisql.order =
   let aux_num f_order =
-    let comp, conv_opt = check_input_constraint_conv_opt focus_type_constraints.input_constr `Float in
-    if comp
-    then f_order conv_opt
+    let comp = compatible_input_constraint focus_type_constraints.input_constr `Float in
+    if comp.bool
+    then f_order comp.conv_opt
     else f_order None
   in
   match order with

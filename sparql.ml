@@ -31,7 +31,7 @@ type selector = [`Var|`Selector] sparql
 type ordering = [`Ordering] sparql
 type query = [`Query] sparql
 
-type converter = term -> expr
+type converter = expr -> expr
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
   try match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
@@ -134,10 +134,10 @@ let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are t
   match g with
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
   | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator='  /  ')"
-  | SUM conv -> make_aggreg "SUM(" (conv term) ")"
-  | AVG conv -> make_aggreg "AVG(" (conv term) ")"
-  | MAX conv -> make_aggreg "MAX(" (conv term) ")"
-  | MIN conv -> make_aggreg "MIN(" (conv term) ")"
+  | SUM conv -> make_aggreg "SUM(" (conv (term :> expr)) ")"
+  | AVG conv -> make_aggreg "AVG(" (conv (term :> expr)) ")"
+  | MAX conv -> make_aggreg "MAX(" (conv (term :> expr)) ")"
+  | MIN conv -> make_aggreg "MIN(" (conv (term :> expr)) ")"
   | SAMPLE -> make_aggreg "SAMPLE(" term ")"
   | ID -> make_aggreg "" term ""
 
@@ -209,8 +209,8 @@ type order = ASC of converter | DESC of converter
 
 let ordering (order : order) (term : term) : ordering =
   match order with
-  | ASC conv -> "ASC(" ^< conv term ^> ")"
-  | DESC conv -> "DESC(" ^< conv term ^> ")"
+  | ASC conv -> "ASC(" ^< conv (term :> expr) ^> ")"
+  | DESC conv -> "DESC(" ^< conv (term :> expr) ^> ")"
 
 
 type projection_def = [`Bare | `Expr of expr | `Aggreg of aggreg * term]
