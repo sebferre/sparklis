@@ -187,6 +187,10 @@ let rec expr_apply func args =
   | `GEQ -> Sparql.expr_infix " >= " args
   | `LT -> Sparql.expr_infix " < " args
   | `LEQ -> Sparql.expr_infix " <= " args
+  | `STRDT | `STRLANG | `Integer | `Decimal | `Double ->
+    ( match args with
+    | arg::other_args -> Sparql.expr_func (name_func func) (Sparql.expr_func "str" [arg] :: other_args)
+    | [] -> assert false )
   | func -> Sparql.expr_func (name_func func) args
 and name_func = function
   | `Str -> "str"

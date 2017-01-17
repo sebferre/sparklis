@@ -788,8 +788,8 @@ object (self)
 	      `Lang, 1, 1;
 	      `Datatype, 1, 1;
 	      `IRI, 1, 1;
-	      `STRDT, 1, 1;
-	      `STRLANG, 1, 1;
+	      `STRDT, 2, 1;
+	      `STRLANG, 2, 1;
 	      `Strlen, 1, 1;
 	      `Substr2, 2, 1;
 	      `Substr3, 3, 1;
