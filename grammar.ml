@@ -101,8 +101,9 @@ object
   method virtual tooltip_aggreg : string
   method virtual tooltip_func : string
   method virtual tooltip_input_name : string
-  method virtual tooltip_foreach_result : string
   method virtual tooltip_foreach : string
+  method virtual tooltip_foreach_result : string
+  method virtual tooltip_foreach_id : string
   method virtual tooltip_aggreg_id : string
   method virtual tooltip_highest : string
   method virtual tooltip_lowest : string
@@ -294,8 +295,9 @@ object
   method tooltip_aggreg = "Aggregate the focus column in the table of results" (*, for each solution on other columns *)
   method tooltip_func = "Apply the function to the current focus"
   method tooltip_input_name = "Input a (new) name for the expression result"
+  method tooltip_foreach = "Group results for each value of this entity"
   method tooltip_foreach_result = "Compute the aggregation for each result of the related query"
-  method tooltip_foreach = "Compute the aggregation for each value of this entity"
+  method tooltip_foreach_id = "Compute the aggregation for each value of this entity"
   method tooltip_aggreg_id = "Insert a new aggregation column for this entity"
   method tooltip_highest = "Sort the focus column in decreasing order"
   method tooltip_lowest = "Sort the focus column in increasing order"
@@ -477,8 +479,9 @@ object
   method tooltip_aggreg = "Agréger la colonne du focus actuel dans la table des résultats" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Appliquer cette fonction au focus actuel"
   method tooltip_input_name = "Entrer un (nouveau) nom pour le résultat de l'expression"
+  method tooltip_foreach = "Grouper les résultats pour chaque valeur de cette entité"
   method tooltip_foreach_result = "Calculer l'agrégation pour chaque résultat de la requête associée"
-  method tooltip_foreach = "Calculer l'agrégation pour chaque valeur de cette entité"
+  method tooltip_foreach_id = "Calculer l'agrégation pour chaque valeur de cette entité"
   method tooltip_aggreg_id = "Insérer une nouvelle colonne d'agrégation pour cette entité"
   method tooltip_highest = "Trier la colonne du focus actuel en ordre décroissant"
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"
@@ -661,8 +664,9 @@ object
   method tooltip_aggreg = "Totalizar la columna del foco actual en la tabla de resultados" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Aplicar esta función en el foco actual"
   method tooltip_input_name = "Introduzca un nombre (nuevo) para el resultado de la expresión"
+  method tooltip_foreach = "Compartir los resultados para cada valor de esta entidad"
   method tooltip_foreach_result = "Calcular la agregación para cada resultado de la consulta asociada"
-  method tooltip_foreach = "Calcular la agregación para cada valor de esta entidad"
+  method tooltip_foreach_id = "Calcular la agregación para cada valor de esta entidad"
   method tooltip_aggreg_id = "Insertar una nueva columna de agregación para esta entidad"
   method tooltip_highest = "Ordenar la columna del foco actual en forma descendente"
   method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"

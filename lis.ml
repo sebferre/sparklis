@@ -762,9 +762,10 @@ object (self)
 	  | Some ids ->
 	      IncrForeachResult ::
 	      List.fold_right
-	      (fun id incrs -> IncrForeach id :: IncrAggregId (Sample,id) :: incrs)
+	      (fun id incrs -> IncrForeachId id :: IncrAggregId (Sample,id) :: incrs)
 	      ids incrs in
 	let incrs =
+	  IncrForeach ::
 	  List.fold_left
 	    (fun incrs aggreg ->
 	      match Lisql_type.find_insertable_aggreg aggreg focus_type_constraints with

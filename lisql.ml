@@ -428,8 +428,9 @@ let down_expr (ctx : ctx_expr) : unit elt_expr -> focus option = function
   | Choice (_,x::rr) -> Some (AtExpr (x, ChoiceX (([],rr),ctx)))
 let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
   | Return (_,np) -> Some (AtS1 (np,ReturnX ctx))
-  | SAggreg (_,_,[]) -> None
   | SAggreg (_,dims,aggreg::aggregs) -> Some (AtAggreg (aggreg, SAggregX (dims, ([],aggregs), ctx)))
+  | SAggreg (_,dim::dims,[]) -> Some (AtDim (dim, SAggregForX (([],dims), [], ctx)))
+  | SAggreg (_,[],[]) -> None
   | SExpr (_,name,id,modif,expr,rel_opt) -> Some (AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)))
   | SFilter (_,id,expr) -> Some (AtExpr (expr, SFilterX (id,ctx)))
   | Seq (_,[]) -> None
@@ -704,9 +705,10 @@ type increment =
   | IncrNot
   | IncrUnselect
   | IncrOrder of order
+  | IncrForeach
   | IncrAggreg of aggreg
   | IncrForeachResult
-  | IncrForeach of id
+  | IncrForeachId of id
   | IncrAggregId of aggreg * id
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *) * num_conv option (* function result *) * num_conv option (* argument *)
   | IncrName of string
@@ -991,6 +993,19 @@ let insert_aggreg g = function
     Some (AtS1 (np,ctx))
   | _ -> None
 *)
+
+let insert_foreach = function
+  | focus ->
+    ( match id_of_focus focus with
+    | None -> None
+    | Some id2 ->
+      let s = elt_s_of_focus focus in
+      let dims = [ForEach ((), factory#new_id, factory#top_modif, None, id2)] in
+      let aggregs = [] in
+      let focus2 = append_seq_s Root
+	(SAggreg ((), dims, aggregs))
+	s in
+      down_focus focus2 )
     
 let insert_aggreg_bis g = function
   | AtAggreg (TheAggreg (_,id,modif,g0,rel_opt,id2), ctx) when g=Sample || g0=Sample ->
@@ -1019,7 +1034,7 @@ let insert_foreach_result = function (* restricted to removal of ForEachResult *
   | AtAggreg (aggreg, SAggregX (_dims, ll_rr, ctx)) -> Some (AtAggreg (aggreg, SAggregX ([ForEachResult ()], ll_rr, ctx)))
   | _ -> None
 
-let insert_foreach id2 = function
+let insert_foreach_id id2 = function
   | AtS (SAggreg (_,dims,aggregs), ctx) ->
     let ll_rr = if dims = [ForEachResult ()] then [], [] else List.rev dims, [] in
     Some (AtDim (factory#top_dim_foreach id2, SAggregForX (ll_rr, aggregs, ctx)))
@@ -1122,9 +1137,10 @@ let insert_increment incr focus =
 	  then proj, Unordered
 	  else proj, order)
 	focus
+    | IncrForeach -> insert_foreach focus
     | IncrAggreg g -> insert_aggreg_bis g focus
     | IncrForeachResult -> insert_foreach_result focus
-    | IncrForeach id -> insert_foreach id focus
+    | IncrForeachId id -> insert_foreach_id id focus
     | IncrAggregId (g,id) -> insert_aggreg_id g id focus
     | IncrFuncArg (is_pred,func,arity,pos,res_conv_opt,arg_conv_opt) -> insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt focus
     | IncrName name -> insert_name name focus
@@ -1185,7 +1201,10 @@ and delete_ctx_dim ctx =
   match ctx with
   | SAggregForX (ll_rr,aggregs,ctx) ->
     ( match delete_list ll_rr with
-    | `Empty -> Some (AtS (SAggreg ((), [],aggregs), ctx))
+    | `Empty ->
+      if aggregs=[]
+      then delete_ctx_s None ctx
+      else Some (AtS (SAggreg ((), [],aggregs), ctx))
     | `Single elt -> Some (AtDim (elt, SAggregForX (([],[]),aggregs,ctx)))
     | `List (elt,ll2,rr2) -> Some (AtDim (elt, SAggregForX ((ll2,rr2),aggregs,ctx))) )
 and delete_ctx_expr f_opt ctx =
@@ -1205,7 +1224,10 @@ and delete_ctx_aggreg ctx =
   match ctx with
   | SAggregX (dims,ll_rr,ctx) ->
     ( match delete_list ll_rr with
-    | `Empty -> delete_ctx_s None ctx (* the list of aggregations should not be empty *)
+    | `Empty ->
+      if dims=[]
+      then delete_ctx_s None ctx
+      else Some (AtS (SAggreg ((), dims, []), ctx))
     | `Single elt -> Some (AtAggreg (elt, SAggregX (dims,([],[]),ctx)))
     | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX (dims, (ll2,rr2), ctx))) )
 and delete_ctx_s f_opt ctx =

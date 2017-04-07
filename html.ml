@@ -220,30 +220,34 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
     match incr with
       | IncrId _ -> 1, None
       | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
-      | IncrForeach _ -> 1, Some grammar#tooltip_foreach
+      | IncrForeachId _ -> 1, Some grammar#tooltip_foreach_id
       | IncrAggregId _ -> 2, Some grammar#tooltip_aggreg_id
+	
       | IncrInput _ -> 2, None
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
+	
       | IncrTriple _ -> 3, None
       | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
-      | IncrTriplify -> 6, Some grammar#tooltip_focus_on_property
-      | IncrIs -> 7, None
-      | IncrAnd -> 8, None
-      | IncrDuplicate -> 8, Some grammar#tooltip_duplicate_focus
-      | IncrOr -> 9, Some grammar#tooltip_or
-      | IncrChoice -> 9, Some grammar#tooltip_or
-      | IncrMaybe -> 10, Some grammar#tooltip_optionally
-      | IncrNot -> 11, Some grammar#tooltip_not
+	
+      | IncrAnd -> 6, None
+      | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus
+      | IncrOr -> 7, Some grammar#tooltip_or
+      | IncrChoice -> 7, Some grammar#tooltip_or
+      | IncrMaybe -> 8, Some grammar#tooltip_optionally
+      | IncrNot -> 9, Some grammar#tooltip_not
+      | IncrTriplify -> 10, Some grammar#tooltip_focus_on_property
+      | IncrIs -> 11, None
       | IncrOrder (Highest _) -> 12, Some grammar#tooltip_highest
       | IncrOrder (Lowest _) -> 13, Some grammar#tooltip_lowest
       | IncrOrder _ -> 12, None
       | IncrUnselect -> 14, Some grammar#tooltip_any
-      | IncrAggreg Sample -> 14, Some grammar#tooltip_sample
-      | IncrAggreg _ -> 15, Some grammar#tooltip_aggreg
-      | IncrFuncArg _ -> 16, Some grammar#tooltip_func
+      | IncrForeach -> 14, Some grammar#tooltip_foreach
+      | IncrAggreg Sample -> 15, Some grammar#tooltip_sample
+      | IncrAggreg _ -> 16, Some grammar#tooltip_aggreg
+      | IncrFuncArg _ -> 17, Some grammar#tooltip_func
   in
   let freq, html_freq =
     match freq_opt with
