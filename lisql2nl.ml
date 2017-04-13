@@ -26,7 +26,7 @@ object (self)
     if v <> current_v then begin
       jquery_select select_selector (fun select -> select##value <- string v);
       current_v <- v;
-      has_changed <- true
+      self#changed
     end
 
   method get_permalink =
@@ -44,7 +44,7 @@ object (self)
       onchange
 	(fun select ev ->
 	  current_v <- to_string select##value;
-	  has_changed <- true)
+	  self#changed)
 	select)
   method reset = self#set_select init_v
 end

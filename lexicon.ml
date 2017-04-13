@@ -239,6 +239,7 @@ object (self)
   val mutable init_select = ""
   val mutable init_property = ""
   val mutable init_lang = ""
+  val mutable current_froms = []
   val mutable current_select = ""
   val mutable current_property = ""
   val mutable current_lang = ""
@@ -258,8 +259,8 @@ object (self)
       current_select <- s;
       current_property <- p;
       current_lang <- l;
-      has_changed <- true;
-      self#define_lexicon
+      self#define_lexicon;
+      self#changed
     end
 
   method private define_lexicon : unit =
@@ -272,13 +273,15 @@ object (self)
 	?language:(if current_lang = "" then None else Some current_lang) ()
 
   method private change_lexicon select input lang_input : unit =
+    let fr = config_graphs#froms in
     let s, p, l = self#get_select_property_lang select input lang_input in
-    if p <> current_property || l <> current_lang then begin
+    if fr <> current_froms || p <> current_property || l <> current_lang then begin
+      current_froms <- fr;
       current_select <- s;
       current_property <- p;
       current_lang <- l;
-      has_changed <- true;
-      self#define_lexicon
+      self#define_lexicon;
+      self#changed
     end
 
   method set_endpoint url =
@@ -315,11 +318,13 @@ object (self)
 	  init_property <- p;
 	  init_lang <- l;
 	  (* definition of current values *)
+	  current_froms <- config_graphs#froms;
 	  current_select <- init_select;
 	  current_property <- init_property;
 	  current_lang <- init_lang;
 	  self#define_lexicon;
 	  (* callbacks on changes/inputs *)
+	  config_graphs#on_change (fun () -> self#change_lexicon select input lang_input);
 	  onchange
 	    (fun _ ev ->
 	      if to_string select##value <> other

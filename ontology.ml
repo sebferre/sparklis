@@ -83,6 +83,7 @@ class ['hierarchy] config_hierarchy ~(key : string)
 object (self)
   inherit Config.input as super
   val mutable init_on = false
+  val mutable current_froms = []
   val mutable current_on = false
   val mutable current_hierarchy = default_hierarchy
 
@@ -92,8 +93,8 @@ object (self)
     if current_on <> on then begin
       jquery_input input_selector (fun input -> input##checked <- bool on);
       current_on <- on;
-      has_changed <- true;
-      self#define_hierarchy
+      self#define_hierarchy;
+      self#changed
     end
 
   method private define_hierarchy : unit =
@@ -108,11 +109,12 @@ object (self)
       end
 
   method private change_hierarchy input : unit =
+    let fr = config_graphs#froms in
     let on = self#get_on input in
-    if on <> current_on then begin
+    if fr <> current_froms || on <> current_on then begin
       current_on <- on;
-      has_changed <- true;
-      self#define_hierarchy
+      self#define_hierarchy;
+      self#changed
     end
     
   method set_endpoint url =
@@ -134,8 +136,10 @@ object (self)
     jquery_input input_selector (fun input ->
       let on = self#get_on input in
       init_on <- on;
+      current_froms <- config_graphs#froms;
       current_on <- init_on;
       self#define_hierarchy;
+      config_graphs#on_change (fun () -> self#change_hierarchy input);
       onchange
 	(fun _ ev -> self#change_hierarchy input)
 	input)

@@ -8,13 +8,16 @@ class virtual input =
 object
   val mutable endpoint : string = ""
   val mutable has_changed : bool = false
+  val mutable callbacks : (unit -> unit) list = []
   method set_endpoint (url : string) : unit = endpoint <- url
-  method virtual get_permalink : (string * string) list
-  method virtual set_permalink : (string * string) list -> unit
+  method on_change callback = callbacks <- callback::callbacks
+  method private changed = has_changed <- true; List.iter (fun callback -> callback ()) callbacks
   method has_changed : bool = has_changed
   method reset_changed : unit = has_changed <- false
   method virtual init : unit
   method virtual reset : unit
+  method virtual get_permalink : (string * string) list
+  method virtual set_permalink : (string * string) list -> unit
 end
 
 class boolean_input ~(key : string) ~(input_selector : string) ~default () =
@@ -27,7 +30,7 @@ object (self)
     if v <> current_v then begin
       jquery_input input_selector (fun input -> input##checked <- bool v);
       current_v <- v;
-      has_changed <- true
+      self#changed
     end
 
   method value : bool = current_v
@@ -49,7 +52,7 @@ object (self)
 	  let v = to_bool input##checked in
 	  if v <> current_v then begin
 	    current_v <- v;
-	    has_changed <- true
+	    self#changed
 	  end)
 	input)
   method reset = self#set_value init_v
@@ -65,7 +68,7 @@ object (self)
     if v <> current_v then begin
       jquery_input input_selector (fun input -> input##value <- string (string_of_int v));
       current_v <- v;
-      has_changed <- true
+      self#changed
     end
 
   method value : int = current_v
@@ -89,7 +92,7 @@ object (self)
 	      input##style##color <- string "black";
 	      if current_v <> v then begin
 		current_v <- v;
-		has_changed <- true
+		self#changed
 	      end
 	    | None ->
 	      input##style##color <- string "red")
@@ -113,7 +116,7 @@ object (self)
     if v <> current_v then begin
       jquery_input input_selector (fun input -> input##value <- string v);
       current_v <- v;
-      has_changed <- true
+      self#changed
     end
 
   method value : string = current_v
@@ -135,7 +138,7 @@ object (self)
 	  let v = to_string input##value in
 	  if current_v <> v then begin
 	    current_v <- v;
-	    has_changed <- true
+	    self#changed
 	  end)
 	input)
   method reset = self#set_input init_v
