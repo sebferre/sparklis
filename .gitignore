@@ -6,3 +6,5 @@
 *.cmxa
 *.byte
 osparklis.js
+log/
+old/
