@@ -583,10 +583,10 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
   | Join (_,lv1)::lv -> form_view_list state lr view (lv1@lv)
 
 
-type template = ?hook:(Sparql.term -> Sparql.formula) -> limit:int -> string
+type template = ?hook:(Sparql.term -> Sparql.formula) -> froms:(Rdf.uri list) -> limit:int -> string
 
 let make_query state t_list (view : Sparql.view) : template =
-  (fun ?hook ~limit ->
+  (fun ?hook ~froms ~limit ->
     let sq_view = view ~limit () in
     let sq_view = (* when sq_view makes no proper computation *)
       if sq_view.Sparql.having = Sparql.log_true &&
@@ -615,6 +615,7 @@ let make_query state t_list (view : Sparql.view) : template =
     let query = Sparql.select
       ~distinct:true
       ~projections:visible_projections
+      ~froms
       ~groupings:(List.map Sparql.var sq_view.Sparql.groupings)
       ~having:sq_view.Sparql.having
       ~limit
@@ -651,13 +652,13 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     | _, [t] ->
 	let term_t = Sparql.term t in
 	let tx = (Sparql.var x :> Sparql.term) in
-	Some (fun ?(hook=(fun tx -> Sparql.True)) ~limit ->
+	Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ~limit ->
 	  let form_x =
 	    match t with
 	    | Rdf.Var _
 	    | Rdf.Bnode _ -> Sparql.formula_and (Sparql.formula_of_view ~limit view) (triple term_t tx)
 	    | _ -> triple term_t tx in
-	  (Sparql.select ~projections:[(`Bare,x)] ~limit
+	  (Sparql.select ~projections:[(`Bare,x)] ~froms ~limit
 	    (Sparql.pattern_of_formula
 	       (Sparql.formula_and form_x (hook tx))) :> string))
       | _ -> None in

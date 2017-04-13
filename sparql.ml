@@ -233,6 +233,7 @@ let projection (def,v : projection) : selector =
 let select
     ?(distinct=false)
     ~(projections : projection list)
+    ?(froms : Rdf.uri list = [])
     ?(groupings : var list = [])
     ?(having : expr = log_true)
     ?(orderings : (order * var) list = [])
@@ -242,7 +243,12 @@ let select
   then ask pattern
   else
     let sel = concat " " (List.map projection projections) in
-    let s = "SELECT " ^< (if distinct then "DISTINCT " else "") ^< sel ^^ "\nWHERE { " ^< indent 8 pattern ^> " }" in
+    let s = "SELECT " ^< (if distinct then "DISTINCT " else "") ^< sel in
+    let s =
+      List.fold_left
+	(fun s from -> s ^^ "\nFROM " ^< uri from)
+	s froms in
+    let s = s ^^ "\nWHERE { " ^< indent 8 pattern ^> " }" in
     let s =
       if groupings = [] || not (List.exists (function (`Aggreg _,_) -> true | _ -> false) projections)
       then s

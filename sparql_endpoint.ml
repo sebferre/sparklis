@@ -287,7 +287,7 @@ object
     else None
   method clear = Hashtbl.clear ht
 end
-
+  
 let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
@@ -295,6 +295,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
     if config_proxy#value
     then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
     else endpoint, sparql in
+  (*firebug real_sparql;*)
   let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
   match cache#lookup real_endpoint prologue_sparql with
     | Some (response_text, results) ->
@@ -420,3 +421,21 @@ let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpo
 	      else k1 rs)
 	    (fun code -> k0 code))
 	(fun code -> k0 code)
+
+(* configuration for default graphs *)
+
+class config_graphs ~key ~input_selector ~(default_froms : unit -> Rdf.uri list) =
+object (self)
+  inherit Config.string_input ~key ~input_selector ~default:"" () as super
+
+  method froms : Rdf.uri list =
+    match super#value with
+    | "" -> default_froms ()
+    | uri -> [uri]
+  method sparql_froms : string =
+    String.concat "" (List.map (fun from -> "FROM <" ^ from ^ "> ") self#froms)
+end
+
+let config_default_graphs = new config_graphs ~key:"default_graph" ~input_selector:"#input-default-graph" ~default_froms:(fun () -> [])
+let config_schema_graphs = new config_graphs ~key:"schema_graph" ~input_selector:"#input-schema-graph" ~default_froms:(fun () -> config_default_graphs#froms)
+

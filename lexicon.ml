@@ -77,7 +77,7 @@ let wikidata_entity_of_predicate uri =
 (* from label property and optional language *)
 let sparql_lexicon
     ~(default_label : Rdf.uri -> 'a)
-    ~(endpoint : string) ~(property : string) ?(language : string option)
+    ~(endpoint : string) ~(froms: Rdf.uri list) ~(property : string) ?(language : string option)
     (map : string -> 'a) : 'a lexicon =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_labels l_uri k =
@@ -96,7 +96,7 @@ let sparql_lexicon
       let v_u, v_l = Sparql.var u, Sparql.var l in
       List.map
 	(fun l_uri ->
-	  select ~projections:[(`Bare,u); (`Bare,l)]
+	  select ~projections:[(`Bare,u); (`Bare,l)] ~froms
 	    (join
 	       [ union
 		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
@@ -213,12 +213,12 @@ let sparql_lexicon
 *)
   new tabled_lexicon default_label bind_labels
 
-let sparql_entity_lexicon ~endpoint ~property ?language () =
-  sparql_lexicon ~default_label:name_of_uri_entity ~endpoint ~property ?language (fun l -> l)
-let sparql_class_lexicon ~endpoint ~property ?language () =
-  sparql_lexicon ~default_label:name_of_uri_concept ~endpoint ~property ?language (fun l -> l)
-let sparql_property_lexicon ~endpoint ~property ?language () =
-  sparql_lexicon ~default_label:syntagm_name_of_uri_property ~endpoint ~property ?language syntagm_of_property_name
+let sparql_entity_lexicon ~endpoint ~froms ~property ?language () =
+  sparql_lexicon ~default_label:name_of_uri_entity ~endpoint ~froms ~property ?language (fun l -> l)
+let sparql_class_lexicon ~endpoint ~froms ~property ?language () =
+  sparql_lexicon ~default_label:name_of_uri_concept ~endpoint ~froms ~property ?language (fun l -> l)
+let sparql_property_lexicon ~endpoint ~froms ~property ?language () =
+  sparql_lexicon ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ~property ?language syntagm_of_property_name
 
 
 (* configuration *)
@@ -227,8 +227,9 @@ open Js
 open Jsutils
 
 class ['lexicon] config_input ~(key : string)
-  ~select_selector ~input_selector ~lang_input_selector
-  ~default_lexicon ~custom_lexicon () =
+  ~(select_selector : string) ~(input_selector : string) ~(lang_input_selector : string)
+  ~(config_graphs : Sparql_endpoint.config_graphs)
+  ~(default_lexicon : 'lexicon) ~(custom_lexicon : endpoint:string -> froms:(Rdf.uri list) -> property:Rdf.uri -> ?language:string -> unit -> 'lexicon) () =
   let other = "other" in
   let key_select = key ^ "_select" in
   let key_property = key ^ "_property" in
@@ -266,6 +267,7 @@ object (self)
       if current_property = ""
       then default_lexicon
       else custom_lexicon ~endpoint
+	~froms:config_graphs#froms
 	~property:current_property
 	?language:(if current_lang = "" then None else Some current_lang) ()
 
@@ -338,6 +340,7 @@ let config_entity_lexicon =
     ~select_selector:"#config-label-entity-select"
     ~input_selector:"#config-label-entity-input"
     ~lang_input_selector:"#config-label-entity-input-lang"
+    ~config_graphs:Sparql_endpoint.config_default_graphs
     ~default_lexicon:default_entity_lexicon
     ~custom_lexicon:sparql_entity_lexicon
     ()
@@ -347,6 +350,7 @@ let config_class_lexicon =
     ~select_selector:"#config-label-class-select"
     ~input_selector:"#config-label-class-input"
     ~lang_input_selector:"#config-label-class-input-lang"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_lexicon:default_class_lexicon
     ~custom_lexicon:sparql_class_lexicon
     ()
@@ -356,6 +360,7 @@ let config_property_lexicon =
     ~select_selector:"#config-label-property-select"
     ~input_selector:"#config-label-property-input"
     ~lang_input_selector:"#config-label-property-input-lang"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_lexicon:default_property_lexicon
     ~custom_lexicon:sparql_property_lexicon
     ()

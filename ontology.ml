@@ -12,7 +12,7 @@ let flat_hierarchy =
     (fun uri -> if uri=Rdf.owl_Thing then [] else [Rdf.owl_Thing])
 
 (* SPARQL-based hierarchy, retrieving hierarchy from endpoint *)    
-let sparql_hierarchy ~(endpoint : string) ~(property : string) : hierarchy =
+let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : string) : hierarchy =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_parents l_uri k =
     Jsutils.firebug ("Retrieving parent URIs for " ^ string_of_int (List.length l_uri) ^ " URIs");
@@ -26,7 +26,7 @@ let sparql_hierarchy ~(endpoint : string) ~(property : string) : hierarchy =
       let v_child, v_parent = Sparql.var child, Sparql.var parent in
       List.map
 	(fun l_uri ->
-	  select ~projections:[(`Bare,child); (`Bare,parent)]
+	  select ~projections:[(`Bare,child); (`Bare,parent)] ~froms
 	    (join
 	       [ union
 		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_child) l_uri);
@@ -68,8 +68,8 @@ let sparql_hierarchy ~(endpoint : string) ~(property : string) : hierarchy =
   in	 
   new tabled_hierarchy (fun uri -> []) bind_parents
 
-let sparql_class_hierarchy ~endpoint () = sparql_hierarchy ~endpoint ~property:Rdf.rdfs_subClassOf
-let sparql_property_hierarchy ~endpoint () = sparql_hierarchy ~endpoint ~property:Rdf.rdfs_subPropertyOf
+let sparql_class_hierarchy ~endpoint ~froms () = sparql_hierarchy ~endpoint ~froms ~property:Rdf.rdfs_subClassOf
+let sparql_property_hierarchy ~endpoint ~froms () = sparql_hierarchy ~endpoint ~froms ~property:Rdf.rdfs_subPropertyOf
     
 (* configuration *)
 
@@ -78,7 +78,8 @@ open Jsutils
 
 class ['hierarchy] config_hierarchy ~(key : string)
   ~(input_selector : string)
-  ~(default_hierarchy : 'hierarchy) ~(custom_hierarchy : endpoint:string -> unit -> 'hierarchy) () =
+  ~(config_graphs : Sparql_endpoint.config_graphs)
+  ~(default_hierarchy : 'hierarchy) ~(custom_hierarchy : endpoint:string -> froms:(Rdf.uri list) -> unit -> 'hierarchy) () =
 object (self)
   inherit Config.input as super
   val mutable init_on = false
@@ -103,7 +104,7 @@ object (self)
 	default_hierarchy end
       else begin
 	Jsutils.firebug "Using custom hierarchy";
-	custom_hierarchy ~endpoint ()
+	custom_hierarchy ~endpoint ~froms:config_graphs#froms ()
       end
 
   method private change_hierarchy input : unit =
@@ -145,6 +146,7 @@ let config_class_hierarchy =
   new config_hierarchy
     ~key:"class_hierarchy"
     ~input_selector:"#input-class-hierarchy"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_hierarchy:no_hierarchy
     ~custom_hierarchy:sparql_class_hierarchy
     ()
@@ -152,6 +154,7 @@ let config_property_hierarchy =
   new config_hierarchy
     ~key:"property_hierarchy"
     ~input_selector:"#input-property-hierarchy"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_hierarchy:no_hierarchy
     ~custom_hierarchy:sparql_property_hierarchy
     ()
