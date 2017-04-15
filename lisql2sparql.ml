@@ -344,10 +344,6 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
     else
       let d = form_s1_as_p1 (Oo.copy state) f in
       (fun x -> Sparql.formula_not (d x))
-  | NIn (annot,npg,f) ->
-    let q = form_s1 state npg in
-    let d = form_s1_as_p1 state f in
-    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
 and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
     (fun x -> Sparql.Filter (Sparql.expr_comp "=" (x :> Sparql.expr) (Sparql.term t :> Sparql.expr)))
@@ -399,10 +395,6 @@ and form_s1 state : annot elt_s1 -> sparql_s1 = function
     else
       let q = form_s1 (Oo.copy state) f in
       (fun d -> Sparql.formula_not (q d))
-  | NIn (annot,npg,f) ->
-    let q = form_s1 state npg in
-    let d = form_s1 state f in
-    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
 (*      
   | NRelax f ->
     state#set_relax true;

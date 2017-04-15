@@ -170,7 +170,6 @@ and print_s1 = function
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
   | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
   | NNot (_,f) -> print_un "NNot" (print_s1 f)
-  | NIn (_,npg,f) -> print_bin "NIn" (print_s1 npg) (print_s1 f)
 and print_s2 = function
   | Term t -> print_un "Term" (print_term t)
   | An (id,modif,head) -> print_ter "An" (print_id id) (print_modif modif) (print_head head)
@@ -330,7 +329,6 @@ and parse_s1 ~version = parser
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)
   | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot ((),f)
-  | [< npg, f = parse_bin ~version "NIn" parse_s1 parse_s1 >] -> NIn ((),npg,f)
   | [<>] -> syntax_error "invalid s1"
 and parse_s2 ~version = parser
   | [< t = parse_un ~version "Term" parse_term >] -> Term t

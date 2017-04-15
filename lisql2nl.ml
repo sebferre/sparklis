@@ -112,8 +112,7 @@ and 'a nl_np =
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
   | `Choice of adj * 'a np list * 'a rel
   | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
-  | `Not of 'a np (* (* the bool indicates whether negation is suspended *) *)
-  | `In of 'a np * 'a np ]
+  | `Not of 'a np ] (* (* the bool indicates whether negation is suspended *) *)
 and 'a ng = ('a, 'a nl_ng) annotated
 and 'a nl_ng =
   [ `That of word * 'a rel
@@ -413,10 +412,6 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
   | NNot (_, elt) ->
     let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
-  | NIn (_,npg,elt) ->
-    let _, lab1 = labelling_s1 ~as_p1:false grammar ~labels:[] npg in
-    let ls, lab2 = labelling_s1 ~as_p1 grammar ~labels elt in
-    ls, lab1 @ lab2
 and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
   | ForEachResult _ -> labelling
   | ForEach (_, id, modif, rel_opt, id2) ->
@@ -683,7 +678,6 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
   | NNot (annot,x) -> A (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
-  | NIn (annot,npg,x) -> A (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, np_of_elt_s1 grammar ~id_labelling x))
 and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | Det (annot, An (id,modif,head), rel_opt) ->
     A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
@@ -808,7 +802,6 @@ and map_np transf np =
     | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
     | `Maybe (np) -> `Maybe (map_np transf np)
     | `Not (np) -> `Not (map_np transf np)
-    | `In (npg,np) -> `In (map_np transf npg, map_np transf np)
     | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel) )
 and map_ng transf ng =
   map_annotated (transf#ng ng)
@@ -1053,7 +1046,6 @@ and xml_np grammar ~id_labelling np =
     | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
     | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
     | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
-    | `In (npg,np) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_np grammar ~id_labelling np)
     | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel) )
 and xml_expr grammar syntax lnp =
   match syntax with

@@ -449,10 +449,6 @@ and annot_elt_s1 ~(as_p1 : bool) pos np ctx =
   | NNot (_,x) -> let a1, a_x = annot_elt_s1 ~as_p1 pos_down x (NNotX ctx) in
 		  let a = annot ~ids:{a1#ids with defs = Ids.empty; dims = Ids.empty} () in
 		  a, NNot (a, a_x)
-  | NIn (_,npg,x) -> let a1, a_npg = annot_elt_s1 ~as_p1:false pos_down npg (NInGraphX (x,ctx)) in
-		     let a2, a_x = annot_elt_s1 ~as_p1 pos_down x (NInX (npg,ctx)) in
-		     let a = annot ~ids:(union_ids a1#ids a2#ids) () in
-		     a, NIn (a, a_npg, a_x)
 and annot_elt_dim pos dim ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtDim (dim,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -708,25 +704,12 @@ and annot_ctx_s1 ft_opt fg (a1,a_x) x = function
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtS1 (f,ctx)) ~ids () in (* suspended *)
     annot_ctx_s1 ft_opt fg (a, NNot (a, a_x)) f ctx
-  | NInX (npg,ctx) ->
-    let fg = define_focus_graph (focus_graph_s1 npg) fg in
-    let f = NIn ((),npg,x) in
-    let a2, a_npg = annot_elt_s1 ~as_p1:false (`Aside false) npg (NInGraphX (x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
-    let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 ft_opt fg (a, NIn (a,a_npg,a_x)) f ctx
   | InGraphX (x2,ctx) ->
     let f = In ((),x,x2) in
     let a2, a_x2 = annot_elt_p1 (`Aside false) x2 (InX (x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 ft_opt fg (a, In (a,a_x,a_x2)) f ctx
-  | NInGraphX (x2,ctx) ->
-    let f = NIn ((),x,x2) in
-    let a2, a_x2 = annot_elt_s1 ~as_p1:(is_s1_as_p1_ctx_s1 ctx) (`Aside false) x2 (NInX (x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
-    let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 ft_opt fg (a, NIn (a,a_x,a_x2)) f ctx
   | InWhichThereIsX ctx ->
     let f = InWhichThereIs ((),x) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids:a1#ids () in
