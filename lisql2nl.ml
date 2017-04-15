@@ -112,7 +112,8 @@ and 'a nl_np =
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
   | `Choice of adj * 'a np list * 'a rel
   | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
-  | `Not of 'a np ] (* (* the bool indicates whether negation is suspended *) *)
+  | `Not of 'a np (* (* the bool indicates whether negation is suspended *) *)
+  | `In of 'a np * 'a np ]
 and 'a ng = ('a, 'a nl_ng) annotated
 and 'a nl_ng =
   [ `That of word * 'a rel
@@ -136,10 +137,12 @@ and 'a nl_rel =
   (*  | `Of of 'a np *)
   | `PP of 'a pp list
   | `Ing of word * 'a np
+  | `InWhich of 'a s
   | `And of 'a rel list
   | `Or of 'a rel list
   | `Maybe of 'a rel
   | `Not of 'a rel
+  | `In of 'a np * 'a rel
   | `Ellipsis ]
 and 'a vp = ('a, 'a nl_vp) annotated
 and 'a nl_vp =
@@ -153,6 +156,7 @@ and 'a nl_vp =
   | `Or of 'a vp list (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of 'a vp (* the bool indicates whether negation is suspended *)
   | `Not of 'a vp (* the bool indicates whether negation is suspended *)
+  | `In of 'a np * 'a vp
   | `Ellipsis ]
 and 'a pp =
   [ `Prep of word * 'a np
@@ -260,6 +264,8 @@ let word_of_incr grammar = function
   | IncrChoice -> `Op grammar#choice
   | IncrMaybe -> `Op grammar#optionally
   | IncrNot -> `Op grammar#not_
+  | IncrIn -> `Op grammar#according_to
+  | IncrInWhichThereIs -> `Op grammar#according_to
   | IncrUnselect -> `Op grammar#any
   | IncrOrder o -> word_of_order grammar o
   | IncrForeach -> `Thing
@@ -351,6 +357,13 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
   | Not (_,elt) ->
     let _ls, lab = labelling_p1 grammar ~labels elt in
     [], lab
+  | In (_,npg,elt) ->
+    let _, lab1 = labelling_s1 ~as_p1:false grammar ~labels:[] npg in
+    let ls, lab2 = labelling_p1 grammar ~labels elt in
+    ls, lab1 @ lab2
+  | InWhichThereIs (_,np) ->
+    let _, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
+    [], lab
   | IsThere _ -> [], []
 and labelling_p1_opt grammar ~labels : 'a elt_p1 option -> id_label list * id_labelling_list = function
   | None -> [], []
@@ -400,6 +413,10 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
   | NNot (_, elt) ->
     let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
+  | NIn (_,npg,elt) ->
+    let _, lab1 = labelling_s1 ~as_p1:false grammar ~labels:[] npg in
+    let ls, lab2 = labelling_s1 ~as_p1 grammar ~labels elt in
+    ls, lab1 @ lab2
 and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
   | ForEachResult _ -> labelling
   | ForEach (_, id, modif, rel_opt, id2) ->
@@ -452,6 +469,7 @@ let rec size_ng_label = function
   | `Nth (k,l) -> 1 + size_ng_label l
 
 
+    
 class ['a ] counter =
 object
   val mutable key_cpt = []
@@ -634,6 +652,8 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
   | Or (annot,lr) -> A (annot, `Or (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
   | Maybe (annot,x) -> A (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
   | Not (annot,x) -> A (annot, `Not (vp_of_elt_p1 grammar ~id_labelling x))
+  | In (annot,npg,x) -> A (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, vp_of_elt_p1 grammar ~id_labelling x))
+  | InWhichThereIs (annot,np) -> assert false
 and vp_of_constr grammar annot = function
   | True -> A (annot, `Ellipsis)
   | MatchesAll lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), []))
@@ -648,6 +668,7 @@ and vp_of_constr grammar annot = function
   | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
 and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
+  | Some (InWhichThereIs (annot,np)) -> A (annot, `InWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
   | Some rel -> X (`That (vp_of_elt_p1 grammar ~id_labelling rel))
 and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | Det (annot, det, rel_opt) ->
@@ -662,6 +683,7 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
   | NNot (annot,x) -> A (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
+  | NIn (annot,npg,x) -> A (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, np_of_elt_s1 grammar ~id_labelling x))
 and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | Det (annot, An (id,modif,head), rel_opt) ->
     A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
@@ -786,6 +808,7 @@ and map_np transf np =
     | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
     | `Maybe (np) -> `Maybe (map_np transf np)
     | `Not (np) -> `Not (map_np transf np)
+    | `In (npg,np) -> `In (map_np transf npg, map_np transf np)
     | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel) )
 and map_ng transf ng =
   map_annotated (transf#ng ng)
@@ -813,10 +836,12 @@ and map_rel transf rel =
     (*    | `Of np -> `Of (map_np transf np) *)
     | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
     | `Ing (w,np) -> `Ing (w, map_np transf np)
+    | `InWhich (s) -> `InWhich (map_s transf s)
     | `And lr -> `And (List.map (map_rel transf) lr)
     | `Or lr -> `Or (List.map (map_rel transf) lr)
     | `Maybe rel -> `Maybe (map_rel transf rel)
     | `Not rel -> `Not (map_rel transf rel)
+    | `In (npg,rel) -> `In (map_np transf npg, map_rel transf rel)
     | `Ellipsis -> `Ellipsis )
 and map_vp transf vp =
   map_annotated (transf#vp vp)
@@ -831,6 +856,7 @@ and map_vp transf vp =
     | `Or lr -> `Or (List.map (map_vp transf) lr)
     | `Maybe vp -> `Maybe (map_vp transf vp)
     | `Not vp -> `Not (map_vp transf vp)
+    | `In (npg,vp) -> `In (map_np transf npg, map_vp transf vp)
     | `Ellipsis -> `Ellipsis )
 and map_pp transf pp =
   match transf#pp pp with
@@ -983,6 +1009,8 @@ let xml_maybe grammar annot_opt xml =
 let xml_not grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
+let xml_in grammar xml1 xml2 =
+  Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =
@@ -1025,6 +1053,7 @@ and xml_np grammar ~id_labelling np =
     | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
     | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
     | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
+    | `In (npg,np) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_np grammar ~id_labelling np)
     | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel) )
 and xml_expr grammar syntax lnp =
   match syntax with
@@ -1099,10 +1128,12 @@ and xml_rel grammar ~id_labelling = function
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
       | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
+      | `InWhich s -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Coord ([], [xml_s grammar ~id_labelling s]) :: []
       | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
       | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar ~id_labelling rel)
       | `Not rel -> xml_not grammar annot_opt (xml_rel grammar ~id_labelling rel)
+      | `In (npg,rel) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_rel grammar ~id_labelling rel)
       | `Ellipsis -> xml_ellipsis )
 and xml_vp grammar ~id_labelling = function
   | A (a1, `Maybe (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
@@ -1120,6 +1151,7 @@ and xml_vp grammar ~id_labelling = function
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
       | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar ~id_labelling vp)
       | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
+      | `In (npg,vp) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_vp grammar ~id_labelling vp)
       | `Ellipsis -> xml_ellipsis )
 and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_vp vp =
   let f_xml_mod = match op_mod with `Maybe -> xml_maybe | `Not -> xml_not in
@@ -1245,6 +1277,8 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word dummy_word; Kwd ", "; Word `Undefined]
   | IncrMaybe -> xml_maybe grammar None [Word dummy_word]
   | IncrNot -> xml_not grammar None [Word dummy_word]
+  | IncrIn -> [Suffix (Word (`Op grammar#according_to) :: xml_ellipsis, ","); Word dummy_word]
+  | IncrInWhichThereIs -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Kwd grammar#there_is :: xml_ellipsis
   | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
   | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Select,order))
   | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word dummy_word :: []

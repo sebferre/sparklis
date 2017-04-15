@@ -747,12 +747,13 @@ object (self)
     let open Lisql in
     let incrs =
       if init
-      then [IncrIs]
+      then [IncrIs; IncrIn]
       else
 	let incrs = [] in
 	let incrs =
 	  IncrIs :: IncrName "" :: IncrTriplify ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
+	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
 	    incrs in
 	let incrs =

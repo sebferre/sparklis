@@ -191,6 +191,7 @@ let optional (p : pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
   "OPTIONAL { " ^< indent 11 p ^> " }"
 let not_exists (p : pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
+let graph (g : term) (p : pattern) : pattern = "GRAPH " ^< g ^^ " { " ^< p ^> " }"
 
 let subquery (q : query) : pattern = "{ " ^< indent 2 q ^> " }"
 
@@ -269,7 +270,7 @@ let select_from_service url query : query =
 
 
 (* formulas *)
-      
+
 type formula =
   | Pattern of pattern (* binding *)
   | Subquery of subquery (* sub-queries *)
@@ -324,7 +325,7 @@ let rec formula_and (f1 : formula) (f2 : formula) : formula =
     | Pattern p1, Pattern p2 -> Pattern (join [p1;p2])
     | Pattern p1, Filter e2 -> Pattern (join [p1; filter e2])
     | Filter e1, Pattern p2 -> Pattern (join [p2; filter e1])
-    | Filter e1, Filter e2 -> Filter (log_and [e1;e2])
+    | Filter e1, Filter e2 -> Filter (log_and [e1; e2])
     | Pattern p1, Or (p2,e2) -> Pattern (union [join [p1;p2]; join [p1; filter e2]])
     | Filter e1, Or (p2,e2) -> Or (join [p2; filter e1], log_and [e1; e2])
     | Or (p1,e1), Pattern p2 -> Pattern (union [join [p1;p2]; join [p2; filter e1]])
@@ -385,6 +386,14 @@ let formula_bind (x : term) : formula -> formula = function
   | False -> False
   | Or (p,e) -> Pattern (union [p; join [something x; filter e]])
 
+let rec formula_graph (g : term) : formula -> formula = function
+  | Pattern p -> Pattern (graph g p)
+  | Subquery sq -> Subquery {sq with formula = formula_graph g sq.formula}
+  | Filter e -> Pattern (graph g (filter e))
+  | True -> Pattern (graph g empty)
+  | False -> False
+  | Or (p,e) -> Pattern (graph g (union [p; filter e])) (* TODO: avoid union? *)
+    
 let expr_of_formula : formula -> expr = function
   | Filter e -> e
   | _ -> log_true (* TODO: dummy default *)

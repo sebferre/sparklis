@@ -24,6 +24,8 @@ object
   method virtual has_as_a : string
   method virtual relative_that : string
   method virtual whose : string
+  method virtual according_to : string
+  method virtual which : string
 
   method virtual and_ : string
   method virtual or_ : string
@@ -136,6 +138,8 @@ object
   method has_as_a = "has as a"
   method relative_that = "that"
   method whose = "whose"
+  method according_to = "according to" (* "from" *)
+  method which = "which"
 
   method and_ = "and"
   method or_ = "or"
@@ -330,6 +334,8 @@ object
   method has_as_a = "a pour"
   method relative_that = "qui"
   method whose = "dont l'"
+  method according_to = "selon"
+  method which = "lequel"
 
   method and_ = "et"
   method or_ = "ou"
@@ -515,6 +521,8 @@ object
   method has_as_a = "tiene como"
   method relative_that = "que"
   method whose = "cuyo"
+  method according_to = "según"
+  method which = "el/la cual"
 
   method and_ = "y"
   method or_ = "o"

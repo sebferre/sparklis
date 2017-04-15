@@ -297,6 +297,13 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     else
       let d = form_p1 (Oo.copy state) f in
       (fun x -> Sparql.formula_not (d x))
+  | In (annot,npg,f) ->
+    let q = form_s1 state npg in
+    let d = form_p1 state f in
+    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
+  | InWhichThereIs (annot,np) ->
+    let q = form_s1 state np in
+    (fun g -> Sparql.formula_graph g (q (fun x -> Sparql.True)))
   | IsThere annot -> (fun x -> Sparql.True)
 and form_p1_opt state = function
   | None -> (fun x -> Sparql.True)
@@ -337,6 +344,10 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
     else
       let d = form_s1_as_p1 (Oo.copy state) f in
       (fun x -> Sparql.formula_not (d x))
+  | NIn (annot,npg,f) ->
+    let q = form_s1 state npg in
+    let d = form_s1_as_p1 state f in
+    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
 and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
     (fun x -> Sparql.Filter (Sparql.expr_comp "=" (x :> Sparql.expr) (Sparql.term t :> Sparql.expr)))
@@ -388,6 +399,10 @@ and form_s1 state : annot elt_s1 -> sparql_s1 = function
     else
       let q = form_s1 (Oo.copy state) f in
       (fun d -> Sparql.formula_not (q d))
+  | NIn (annot,npg,f) ->
+    let q = form_s1 state npg in
+    let d = form_s1 state f in
+    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
 (*      
   | NRelax f ->
     state#set_relax true;
@@ -661,7 +676,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
 	  (Sparql.select ~projections:[(`Bare,x)] ~froms ~limit
 	    (Sparql.pattern_of_formula
 	       (Sparql.formula_and form_x (hook tx))) :> string))
-      | _ -> None in
+    | _ -> None in
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in

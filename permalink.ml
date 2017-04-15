@@ -157,6 +157,8 @@ and print_p1 = function
   | Or (_,lr) -> print_lr print_p1 "Or" lr
   | Maybe (_,f) -> print_un "Maybe" (print_p1 f)
   | Not (_,f) -> print_un "Not" (print_p1 f)
+  | In (_,npg,f) -> print_bin "In" (print_s1 npg) (print_p1 f)
+  | InWhichThereIs (_,np) -> print_un "InWhichThereIs" (print_s1 np)
   | IsThere _ -> print_atom "IsThere"
 and print_modif_p2 = function
   | Fwd -> print_atom "Fwd"
@@ -168,6 +170,7 @@ and print_s1 = function
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
   | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
   | NNot (_,f) -> print_un "NNot" (print_s1 f)
+  | NIn (_,npg,f) -> print_bin "NIn" (print_s1 npg) (print_s1 f)
 and print_s2 = function
   | Term t -> print_un "Term" (print_term t)
   | An (id,modif,head) -> print_ter "An" (print_id id) (print_modif modif) (print_head head)
@@ -312,6 +315,8 @@ and parse_p1 ~version = parser
   | [< lr = parse_lr parse_p1 ~version "Or" >] -> Or ((),lr)
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe ((),f)
   | [< f = parse_un ~version "Not" parse_p1 >] -> Not ((),f)
+  | [< npg, f = parse_bin ~version "In" parse_s1 parse_p1 >] -> In ((),npg,f)
+  | [< np = parse_un ~version "InWhichThereIs" parse_s1 >] -> InWhichThereIs ((),np)
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
 and parse_modif_p2 ~version = parser
@@ -325,6 +330,7 @@ and parse_s1 ~version = parser
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)
   | [< f = parse_un ~version "NNot" parse_s1 >] -> NNot ((),f)
+  | [< npg, f = parse_bin ~version "NIn" parse_s1 parse_s1 >] -> NIn ((),npg,f)
   | [<>] -> syntax_error "invalid s1"
 and parse_s2 ~version = parser
   | [< t = parse_un ~version "Term" parse_term >] -> Term t

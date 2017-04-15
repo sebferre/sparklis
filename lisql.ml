@@ -63,6 +63,8 @@ type 'a elt_p1 =
   | Or of 'a * 'a elt_p1 list
   | Maybe of 'a * 'a elt_p1
   | Not of 'a * 'a elt_p1
+  | In of 'a * 'a elt_s1 * 'a elt_p1
+  | InWhichThereIs of 'a * 'a elt_s1
   | IsThere of 'a
 and 'a elt_s1 =
   | Det of 'a * elt_s2 * 'a elt_p1 option
@@ -71,6 +73,7 @@ and 'a elt_s1 =
   | NOr of 'a * 'a elt_s1 list
   | NMaybe of 'a * 'a elt_s1
   | NNot of 'a * 'a elt_s1
+  | NIn of 'a * 'a elt_s1 * 'a elt_s1
 and elt_s2 =
   | Term of Rdf.term
   | An of id * modif_s2 * elt_head (* existential quantifier *)
@@ -138,6 +141,7 @@ type ctx_p1 =
   | OrX of unit elt_p1 ctx_list * ctx_p1
   | MaybeX of ctx_p1
   | NotX of ctx_p1
+  | InX of unit elt_s1 * ctx_p1
 and ctx_s1 =
   | IsX of ctx_p1
   | RelX of Rdf.uri * modif_p2 * ctx_p1
@@ -149,6 +153,10 @@ and ctx_s1 =
   | NOrX of unit elt_s1 ctx_list * ctx_s1
   | NMaybeX of ctx_s1
   | NNotX of ctx_s1
+  | NInX of unit elt_s1 * ctx_s1
+  | InGraphX of unit elt_p1 * ctx_p1
+  | NInGraphX of unit elt_s1 * ctx_s1
+  | InWhichThereIsX of ctx_p1
 and ctx_dim =
   | SAggregForX of unit elt_dim ctx_list * unit elt_aggreg list * ctx_s
 and ctx_aggreg =
@@ -198,6 +206,7 @@ let is_home_focus = function AtS1 (f, ReturnX Root) -> is_top_s1 f | _ -> false
 
 let is_root_focus = function AtS (_, Root) -> true | _ -> false
 
+(*
 let rec is_aggregation_focus = function
   | AtS1 (AnAggreg _, _) -> true
   | AtS1 (_, ctx) -> is_aggregation_ctx_s1 ctx
@@ -227,6 +236,7 @@ and is_aggregation_ctx_s1 = function
   | NOrX (_,ctx) -> is_aggregation_ctx_s1 ctx
   | NMaybeX ctx -> is_aggregation_ctx_s1 ctx
   | NNotX ctx -> is_aggregation_ctx_s1 ctx
+*)
 
 let rec is_aggregated_focus = function
   | AtS1 (_, ctx) -> is_aggregated_ctx_s1 ctx
@@ -253,6 +263,10 @@ and is_s1_as_p1_ctx_s1 = function
   | NOrX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | NMaybeX ctx -> is_s1_as_p1_ctx_s1 ctx
   | NNotX ctx -> is_s1_as_p1_ctx_s1 ctx
+  | NInX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | InGraphX (_,ctx) -> false
+  | NInGraphX (_,ctx) -> false
+  | InWhichThereIsX ctx -> false
 
 let id_of_s2 = function
   | An (id, _, _) -> Some id
@@ -294,6 +308,8 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Or (a,lr) -> a
   | Maybe (a,f) -> a
   | Not (a,f) -> a
+  | In (a,npg,f) -> a
+  | InWhichThereIs (a,np) -> a
   | IsThere a -> a
 and annot_p1_opt : 'a elt_p1 option -> 'a option = function
   | None -> None
@@ -305,6 +321,7 @@ and annot_s1 = function
   | NOr (a,lr) -> a
   | NMaybe (a,f) -> a
   | NNot (a,f) -> a
+  | NIn (a,npg,f) -> a
 and annot_dim = function
   | ForEachResult a -> a
   | ForEach (a,id,modif,rel_opt,id2) -> a
@@ -345,6 +362,7 @@ let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
   | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or ((), list_of_ctx f ll_rr)) ctx
   | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe ((),f)) ctx
   | NotX ctx -> elt_s_of_ctx_p1 (Not ((),f)) ctx
+  | InX (npg,ctx) -> elt_s_of_ctx_p1 (In ((),npg,f)) ctx
 and elt_s_of_ctx_s1 (f : unit elt_s1) = function
   | IsX ctx -> elt_s_of_ctx_p1 (Is ((),f)) ctx
   | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel ((),p,modif,f)) ctx
@@ -356,6 +374,10 @@ and elt_s_of_ctx_s1 (f : unit elt_s1) = function
   | NOrX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NOr ((),list_of_ctx f ll_rr)) ctx
   | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe ((),f)) ctx
   | NNotX ctx -> elt_s_of_ctx_s1 (NNot ((),f)) ctx
+  | NInX (npg,ctx) -> elt_s_of_ctx_s1 (NIn ((),npg,f)) ctx
+  | InGraphX (f1,ctx) -> elt_s_of_ctx_p1 (In ((),f,f1)) ctx
+  | NInGraphX (np,ctx) -> elt_s_of_ctx_s1 (NIn ((),f,np)) ctx
+  | InWhichThereIsX ctx -> elt_s_of_ctx_p1 (InWhichThereIs ((),f)) ctx
 and elt_s_of_ctx_dim (f : unit elt_dim) = function
   | SAggregForX (ll_rr,aggregs,ctx) -> elt_s_of_ctx_s (SAggreg ((), list_of_ctx f ll_rr, aggregs)) ctx
 and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
@@ -397,6 +419,8 @@ let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
   | Or (_,x::rr) -> Some (AtP1 (x, OrX (([],rr),ctx)))
   | Maybe (_,elt) -> Some (AtP1 (elt, MaybeX ctx))
   | Not (_,elt) -> Some (AtP1 (elt, NotX ctx))
+  | In (_,npg,elt) -> Some (AtP1 (elt, InX (npg,ctx)))
+  | InWhichThereIs (_,np) -> Some (AtS1 (np, InWhichThereIsX ctx))
   | IsThere _ -> None
 let down_p1_opt (ctx : ctx_p1) : unit elt_p1 option -> focus option = function
   | Some (And (_,x::rr)) -> Some (AtP1 (x, AndX (([],rr), ctx)))
@@ -412,6 +436,7 @@ let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
   | NOr (_,x::rr) -> Some (AtS1 (x, NOrX (([],rr),ctx)))
   | NMaybe (_,elt) -> Some (AtS1 (elt, NMaybeX ctx))
   | NNot (_,elt) -> Some (AtS1 (elt, NNotX ctx))
+  | NIn (_,npg,elt) -> Some (AtS1 (elt, NInX (npg,ctx)))
 let down_dim (ctx : ctx_dim) : unit elt_dim -> focus option = function
   | ForEachResult _ -> None
   | ForEach (_,id,modif,rel_opt,id2) -> down_p1_opt (ForEachThatX (id,modif,id2,ctx)) rel_opt
@@ -453,6 +478,7 @@ let rec up_p1 f = function
   | OrX (ll_rr,ctx) -> Some (AtP1 (Or ((), list_of_ctx f ll_rr), ctx))
   | MaybeX ctx -> Some (AtP1 (Maybe ((), f), ctx))
   | NotX ctx -> Some (AtP1 (Not ((), f), ctx))
+  | InX (npg,ctx) -> Some (AtP1 (In ((), npg, f), ctx))
 let rec up_s1 f = function
   | IsX ctx -> Some (AtP1 (Is ((), f), ctx))
   | RelX (p,m,ctx) -> Some (AtP1 (Rel ((),p,m,f), ctx))
@@ -464,6 +490,10 @@ let rec up_s1 f = function
   | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr ((), list_of_ctx f ll_rr), ctx))
   | NMaybeX ctx -> Some (AtS1 (NMaybe ((),f), ctx))
   | NNotX ctx -> Some (AtS1 (NNot ((),f), ctx))
+  | NInX (npg,ctx) -> Some (AtS1 (NIn ((),npg,f), ctx))
+  | InGraphX (f1,ctx) -> Some (AtP1 (In ((),f,f1), ctx))
+  | NInGraphX (np,ctx) -> Some (AtS1 (NIn ((),f,np), ctx))
+  | InWhichThereIsX ctx -> Some (AtP1 (InWhichThereIs ((),f), ctx))
 let up_dim f = function
   | SAggregForX (ll_rr,aggregs,ctx) -> Some (AtS (SAggreg ((), list_of_ctx f ll_rr, aggregs), ctx))
 let up_aggreg f = function
@@ -496,6 +526,7 @@ let right_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | OrX ((ll,x::rr),ctx) -> Some (AtP1 (x, OrX ((f::ll,rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
+  | InX (npg,ctx) -> None
 let right_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
   | RelX _ -> None
@@ -509,6 +540,10 @@ let right_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | NOrX ((ll,x::rr),ctx) -> Some (AtS1 (x, NOrX ((f::ll,rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
+  | NInX (npg,ctx) -> None
+  | InGraphX (f1,ctx) -> Some (AtP1 (f1, InX (f, ctx)))
+  | NInGraphX (np,ctx) -> Some (AtS1 (np, NInX (f, ctx)))
+  | InWhichThereIsX ctx -> None
 let right_dim (f : unit elt_dim) : ctx_dim -> focus option = function
   | SAggregForX ((ll,[]),[],ctx) -> None
   | SAggregForX ((ll,[]),aggreg::aggregs,ctx) -> Some (AtAggreg (aggreg, SAggregX (List.rev ll, ([],aggregs), ctx)))
@@ -548,6 +583,7 @@ let left_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | OrX ((x::ll,rr),ctx) -> Some (AtP1 (x, OrX ((ll,f::rr),ctx)))
   | MaybeX ctx -> None
   | NotX ctx -> None
+  | InX (npg,ctx) -> Some (AtS1 (npg, InGraphX (f,ctx)))
 let left_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
   | RelX _ -> None
@@ -562,6 +598,10 @@ let left_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | NOrX ((x::ll,rr),ctx) -> Some (AtS1 (x, NOrX ((ll,f::rr),ctx)))
   | NMaybeX ctx -> None
   | NNotX ctx -> None
+  | NInX (npg,ctx) -> Some (AtS1 (npg, NInGraphX (f,ctx)))
+  | InGraphX (f1,ctx) -> None
+  | NInGraphX (np,ctx) -> None
+  | InWhichThereIsX ctx -> None
 let left_dim (f : unit elt_dim) : ctx_dim -> focus option = function
   | SAggregForX (([],rr),aggregs,ctx) -> None
   | SAggregForX ((x::ll,rr),aggregs,ctx) -> Some (AtDim (x, SAggregForX ((ll,f::rr),aggregs,ctx)))
@@ -647,6 +687,8 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
   | Or (a,lr) -> Or (a, List.map copy_p1 lr)
   | Maybe (a,f1) -> Maybe (a, copy_p1 f1)
   | Not (a,f1) -> Not (a, copy_p1 f1)
+  | In (a,npg,f1) -> In (a, copy_s1 npg, copy_p1 f1)
+  | InWhichThereIs (a,np) -> InWhichThereIs (a, copy_s1 np)
   | IsThere _ -> f
 and copy_p1_opt = function
   | None -> None
@@ -659,6 +701,7 @@ and copy_s1 (np : unit elt_s1) : unit elt_s1 =
   | NOr (a,lr) -> NOr (a, List.map copy_s1 lr)
   | NMaybe (a,np1) -> NMaybe (a, copy_s1 np1)
   | NNot (a,np1) -> NNot (a, copy_s1 np1)
+  | NIn (a,npg,np1) -> NIn (a, copy_s1 npg, copy_s1 np1)
 and copy_s2 (det : elt_s2) : elt_s2 =
   match det with
   | Term _ -> det
@@ -703,6 +746,8 @@ type increment =
   | IncrChoice
   | IncrMaybe
   | IncrNot
+  | IncrIn
+  | IncrInWhichThereIs
   | IncrUnselect
   | IncrOrder of order
   | IncrForeach
@@ -939,6 +984,16 @@ let insert_not = function
     if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot ((),f), ctx))
   | _ -> None
 
+let insert_in = function
+  | AtP1 (f,ctx) -> Some (AtS1 (factory#top_s1, InGraphX (f,ctx)))
+  | AtS1 (np,ctx) -> Some (AtS1 (factory#top_s1, NInGraphX (np,ctx)))
+  | _ -> None
+
+let insert_in_which_there_is focus =
+  let foc_opt = insert_elt_p1 (InWhichThereIs ((), factory#top_s1)) focus in
+  focus_opt_moves [down_focus] foc_opt
+
+    
 let insert_seq = function
   | AtS (f, SeqX ((ll,rr),ctx2)) -> Some (AtS (factory#top_s, SeqX ((f::ll,rr),ctx2)))
   | AtS (f, ctx) -> Some (append_seq_s ctx factory#top_s f)
@@ -1124,6 +1179,8 @@ let insert_increment incr focus =
     | IncrChoice -> insert_choice focus
     | IncrMaybe -> insert_maybe focus
     | IncrNot -> insert_not focus
+    | IncrIn -> insert_in focus
+    | IncrInWhichThereIs -> insert_in_which_there_is focus
     | IncrUnselect ->
       insert_modif_transf
 	(function
@@ -1171,6 +1228,7 @@ let rec delete_ctx_p1 = function
       | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx))) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
+  | InX (npg,ctx) -> delete_ctx_p1 ctx
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
@@ -1197,6 +1255,19 @@ and delete_ctx_s1 f_opt ctx =
 	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2))) )
     | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
     | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
+    | NInX (npg,ctx2) -> delete_ctx_s1 f_opt ctx2
+    | InGraphX (_,ctx2) ->
+      ( match f_opt with
+      | None -> delete_ctx_p1 ctx2
+      | Some _ -> Some (AtS1 (factory#top_s1, ctx)) )
+    | NInGraphX (_,ctx2) ->
+      ( match f_opt with
+      | None -> delete_ctx_s1 None ctx2
+      | Some _ -> Some (AtS1 (factory#top_s1, ctx)) )
+    | InWhichThereIsX ctx2 ->
+      ( match f_opt with
+      | None -> delete_ctx_p1 ctx2
+      | Some _ -> Some (AtS1 (factory#top_s1, ctx)) )
 and delete_ctx_dim ctx =
   match ctx with
   | SAggregForX (ll_rr,aggregs,ctx) ->
