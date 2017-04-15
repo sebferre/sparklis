@@ -234,7 +234,7 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 (* LIS navigation places *)
 
 class place (endpoint : string) (focus : Lisql.focus) =
-  let focus_term, s_annot = Lisql_annot.annot_focus focus in
+  let focus_term, focus_graph, s_annot = Lisql_annot.annot_focus focus in
   let focus_incr = match focus_term with `IdIncr _ | `TermIncr _ -> true | _ -> false in
 object (self)
   (* essential state *)
@@ -253,6 +253,7 @@ object (self)
   val mutable s_sparql : Lisql2sparql.s_sparql =
     Lisql2sparql.({
       focus_term_list = [];
+      focus_graph_opt = None;
       query_opt = None;
       query_class_opt = None;
       query_prop_has_opt = None;
@@ -261,11 +262,12 @@ object (self)
       geolocs = [] })
     
   method focus_term_list = s_sparql.Lisql2sparql.focus_term_list
+  method focus_graph_opt = s_sparql.Lisql2sparql.focus_graph_opt
     
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      s_sparql <- Lisql2sparql.s_annot id_labelling focus_term s_annot
+      s_sparql <- Lisql2sparql.s_annot id_labelling focus_term focus_graph s_annot
     end
 
   initializer self#init
@@ -549,15 +551,22 @@ object (self)
 	    Lexicon.config_property_lexicon#value#sync (fun () ->
 	      k ~partial incr_index))))
     in
+    let graph_opt (gp : string) : string =
+      match s_sparql.Lisql2sparql.focus_graph_opt with
+      | None -> gp
+      | Some tg -> "GRAPH " ^ (Sparql.term tg :> string) ^ " { " ^ gp ^ "} "
+    in
     let ajax_extent () =
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
       let sparql_class =
-	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { [] a ?class " ^
+	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
+	  graph_opt "[] a ?class " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
-	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { [] ?prop [] " ^
+	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
+	  graph_opt "[] ?prop [] " ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "prop" ^
 	  " } LIMIT " ^ string_of_int config_max_properties#value in
@@ -570,13 +579,15 @@ object (self)
     let ajax_intent () =
       let sparql_froms = Sparql_endpoint.config_schema_graphs#sparql_froms in
       let sparql_class =
-	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { { ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
+	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
+	  graph_opt "{ ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
-	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { { ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
+	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
+	  graph_opt "{ ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	  (* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "prop" ^
@@ -587,7 +598,7 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_extent ()) (* looking at facts *)
     in
-    if config_intentional_init_concepts#value
+    if config_intentional_init_concepts#value && s_sparql.Lisql2sparql.focus_graph_opt = None
     then ajax_intent ()
     else ajax_extent ()
 
@@ -683,6 +694,11 @@ object (self)
 	| _ -> assert false
     in
     let ajax_extent () =
+      let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
+	match s_sparql.Lisql2sparql.focus_graph_opt with
+	| None -> gp
+	| Some t -> Sparql.graph (Sparql.term t) gp
+      in
       let nb_focus_term = focus_term_index#length in
       let max_value = Some nb_focus_term in
       let partial = false in (* relative to computed entities *)
@@ -696,7 +712,7 @@ object (self)
 	(Sparql.select ~froms ~projections:[`Bare, "class"] ~limit:(config_max_classes#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
+		 [ Sparql.Pattern (graph_opt gp);
 		   (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr);
 		   formula_hidden_URIs "class" ]))
 	 :> string) in
@@ -710,7 +726,7 @@ object (self)
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
+		 [ Sparql.Pattern (graph_opt gp);
 		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in
@@ -723,7 +739,7 @@ object (self)
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
+		 [ Sparql.Pattern (graph_opt gp);
 		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in

@@ -191,7 +191,7 @@ let optional (p : pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
   "OPTIONAL { " ^< indent 11 p ^> " }"
 let not_exists (p : pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
-let graph (g : term) (p : pattern) : pattern = "GRAPH " ^< g ^^ " { " ^< p ^> " }"
+let graph (g : term) (p : pattern) : pattern = "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
 
 let subquery (q : query) : pattern = "{ " ^< indent 2 q ^> " }"
 

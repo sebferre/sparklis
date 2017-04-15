@@ -640,6 +640,7 @@ let make_query state t_list (view : Sparql.view) : template =
 
 type s_sparql =
   { focus_term_list : Rdf.term list;
+    focus_graph_opt : Rdf.term option;
     query_opt : template option;
     query_class_opt : template option;
     query_prop_has_opt : template option;
@@ -647,7 +648,7 @@ type s_sparql =
     seq_view : seq_view;
     geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list }
     
-let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : annot elt_s) : s_sparql =
+let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (fg : focus_graph) (s_annot : annot elt_s) : s_sparql =
   (*    : Rdf.term list * template option * template option * template option * template option * seq_view =*)
   let state = new state id_labelling in
   let seq_view, view = form_s state s_annot in
@@ -656,6 +657,11 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
     | `TermIncr t | `TermNoIncr t -> [t]
     | `IdIncr id | `IdNoIncr id -> [Rdf.Var (id_labelling#get_id_var id)]
     | `Undefined -> [] in
+  let focus_graph_opt : Rdf.term option =
+    match fg with
+    | `Default -> None
+    | `NamedTerm t -> Some t
+    | `NamedId id -> Some (Rdf.Var (id_labelling#get_id_var id)) in
   let query_opt =
     if Sparql.is_empty_view view
     then None
@@ -668,19 +674,22 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (ft : focus_term) (s_annot : 
 	let term_t = Sparql.term t in
 	let tx = (Sparql.var x :> Sparql.term) in
 	Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ~limit ->
+	  let form_x = triple term_t tx in
+	  let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph (Sparql.term tg) form_x in
 	  let form_x =
 	    match t with
 	    | Rdf.Var _
-	    | Rdf.Bnode _ -> Sparql.formula_and (Sparql.formula_of_view ~limit view) (triple term_t tx)
-	    | _ -> triple term_t tx in
+	    | Rdf.Bnode _ -> Sparql.formula_and (Sparql.formula_of_view ~limit view) form_x
+	    | _ -> form_x in
+	  let form_x = Sparql.formula_and form_x (hook tx) in
 	  (Sparql.select ~projections:[(`Bare,x)] ~froms ~limit
-	    (Sparql.pattern_of_formula
-	       (Sparql.formula_and form_x (hook tx))) :> string))
+	     (Sparql.pattern_of_formula form_x) :> string))
     | _ -> None in
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
   { focus_term_list;
+    focus_graph_opt;
     query_opt;
     query_class_opt;
     query_prop_has_opt;
