@@ -263,6 +263,57 @@ and is_s1_as_p1_ctx_s1 = function
   | InGraphX (_,ctx) -> false
   | InWhichThereIsX ctx -> false
 
+let rec is_unconstrained_elt_p1_opt = function
+  | None -> true
+  | Some rel -> is_unconstrained_elt_p1 rel
+and is_unconstrained_elt_p1 = function
+  | Is (_,np) -> is_unconstrained_elt_s1_as_p1 np
+  | Type _ -> false
+  | Rel _ -> false
+  | Triple _ -> false
+  | LatLong _ -> false
+  | Search _ -> false
+  | Filter _ -> false
+  | And (_,l) -> List.for_all is_unconstrained_elt_p1 l
+  | Or (_,l) -> List.for_all is_unconstrained_elt_p1 l
+  | Maybe (_,x) -> is_unconstrained_elt_p1 x
+  | Not (_,x) -> is_unconstrained_elt_p1 x
+  | In (_,npg,x) -> is_unconstrained_elt_p1 x
+  | InWhichThereIs _ -> false
+  | IsThere _ -> true
+and is_unconstrained_elt_s1_as_p1 = function
+  | Det (_,det,None) -> is_unconstrained_elt_s2 det
+  | Det (_,det,Some rel) -> is_unconstrained_elt_s2 det && is_unconstrained_elt_p1 rel
+  | AnAggreg _ -> false
+  | NAnd (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
+  | NOr (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
+  | NMaybe (_,x) -> is_unconstrained_elt_s1_as_p1 x
+  | NNot (_,x) -> is_unconstrained_elt_s1_as_p1 x
+and is_unconstrained_elt_s2 = function
+  | Term _ -> false
+  | An (id,modif,head) -> (match head with Thing -> true | Class _ -> false)
+  | The id -> false
+
+let rec is_unconstrained_ctx_s1 = function
+  | IsX _ -> false
+  | RelX _ -> false
+  | TripleX1 _ -> false
+  | TripleX2 _ -> false
+  | ReturnX _ -> true
+  | AnAggregX _ -> false
+  | NAndX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
+  | NOrX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
+  | NMaybeX ctx -> is_unconstrained_ctx_s1 ctx
+  | NNotX ctx -> is_unconstrained_ctx_s1 ctx
+  | InGraphX (f1,ctx) -> false
+  | InWhichThereIsX ctx -> true
+
+let is_unconstrained_det det rel_opt ctx =
+  is_unconstrained_elt_s2 det &&
+    is_unconstrained_elt_p1_opt rel_opt &&
+    is_unconstrained_ctx_s1 ctx
+    
+    
 let id_of_s2 = function
   | An (id, _, _) -> Some id
   | _ -> None

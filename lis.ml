@@ -430,7 +430,7 @@ object (self)
 	    (fun binding ->
 	      let t_focus_opt =
 		match term with
-		| Rdf.Var v -> binding.(List.assoc v vars)
+		| Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
 		| _ -> Some term in
 	      Array.iteri
 		(fun i t_opt ->

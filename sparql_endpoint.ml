@@ -295,7 +295,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
     if config_proxy#value
     then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
     else endpoint, sparql in
-  firebug real_sparql;
+  (*firebug real_sparql;*)
   let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
   match cache#lookup real_endpoint prologue_sparql with
     | Some (response_text, results) ->
