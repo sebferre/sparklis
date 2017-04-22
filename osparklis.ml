@@ -307,14 +307,14 @@ object (self)
 
   method private refresh_increments_focus =
     let html_focus =
-      match lis#focus_term_list with
-	| [Rdf.Var v] ->
+      match lis#focus_term_kind with
+	| `Term (Rdf.Var v) ->
 	  (try
 	    let id = lis#id_labelling#get_var_id v in
 	    Html.html_id html_state id
 	   with _ -> escapeHTML v (* should not happen *))
-	| [t] -> Html.html_term t
-	| _ -> Lisql2nl.config_lang#grammar#undefined in
+	| `Term t -> Html.html_term t
+	| `Undefined -> Lisql2nl.config_lang#grammar#undefined in
     jquery "#increments-focus" (fun elt ->
       elt##innerHTML <- string html_focus)
 
@@ -345,7 +345,7 @@ object (self)
 	  jquery_set_innerHTML "#list-results"
 	    (html_table_of_results html_state
 	       ~first_rank:(offset+1)
-	       ~focus_var:(match lis#focus_term_list with [Rdf.Var v] -> Some v | _ -> None)
+	       ~focus_var:(match lis#focus_term_kind with `Term (Rdf.Var v) -> Some v | _ -> None)
 	       results_page));
 	jquery_all ".count-results" (fun elt ->
 	  elt##innerHTML <- string
@@ -516,33 +516,33 @@ object (self)
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
-	      ( match lis#focus_term_list with
-	      | [] ->
-		self#refresh_modifier_increments ~init:true;
-		self#refresh_property_increments_undefined;
-		self#refresh_term_increments_undefined
-	      | [Rdf.Var v] ->
+	      ( match lis#focus_term_kind with
+	      | `Term (Rdf.Var _) ->
 		self#refresh_modifier_increments ~init:true;
 		self#refresh_property_increments_init;
 		self#refresh_term_increments_init
-	      | _ ->
+	      | `Term _ ->
 		self#refresh_modifier_increments ~init:false;
 		self#refresh_property_increments;
-		self#refresh_term_increments)
+		self#refresh_term_increments
+	      | `Undefined ->
+		self#refresh_modifier_increments ~init:true;
+		self#refresh_property_increments_undefined;
+		self#refresh_term_increments_undefined)
 	    | Some sparql ->
 	      let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
 	      Jsutils.yasgui#set_query sparql_with_prefixes;
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	      ( match lis#focus_term_list with
-	      | [] ->
-		self#refresh_modifier_increments ~init:false;
-		self#refresh_property_increments_undefined;
-		self#refresh_term_increments_undefined
-	      | _ ->
+	      ( match lis#focus_term_kind with
+	      | `Term _ ->
 		self#refresh_modifier_increments ~init:false;
 		self#refresh_property_increments;
-		self#refresh_term_increments ))))
+		self#refresh_term_increments
+	      | `Undefined ->
+		self#refresh_modifier_increments ~init:false;
+		self#refresh_property_increments_undefined;
+		self#refresh_term_increments_undefined ))))
 
   method private filter_increments elt_list constr =
     let matcher = compile_constr constr in

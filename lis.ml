@@ -252,7 +252,7 @@ object (self)
 
   val mutable s_sparql : Lisql2sparql.s_sparql =
     Lisql2sparql.({
-      focus_term_list = [];
+      focus_term_kind = `Undefined;
       focus_graph_opt = None;
       query_opt = None;
       query_class_opt = None;
@@ -261,7 +261,7 @@ object (self)
       seq_view = 0, Lisql_annot.Unit;
       geolocs = [] })
     
-  method focus_term_list = s_sparql.Lisql2sparql.focus_term_list
+  method focus_term_kind = s_sparql.Lisql2sparql.focus_term_kind
   method focus_graph_opt = s_sparql.Lisql2sparql.focus_graph_opt
     
   method private init =
@@ -303,13 +303,10 @@ object (self)
     (* computing results and derived attributes *)
     match s_sparql.Lisql2sparql.query_opt with
       | None ->
-	( match s_sparql.Lisql2sparql.focus_term_list with
-	| [Rdf.Var _] -> ()
-	| [Rdf.Bnode _] ->  (* should not happen *)
-	  Firebug.console##log(string "no query and focus_term_list is a Bnode");
-	  some_focus_term_is_blank <- true
-	| [term] -> focus_term_index#add (term,1)
-	| _ -> () );
+	( match s_sparql.Lisql2sparql.focus_term_kind with
+	| `Term (Rdf.Var _) -> ()
+	| `Term term -> focus_term_index#add (term,1)
+	| `Undefined -> () );
 	k None
       | Some query ->
 	let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -322,8 +319,8 @@ object (self)
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
 	      focus;
-	    ( match s_sparql.Lisql2sparql.focus_term_list with
-	    | [Rdf.Var v] ->
+	    ( match s_sparql.Lisql2sparql.focus_term_kind with
+	    | `Term (Rdf.Var v) ->
 	      let index = index_of_results_column v results in
 	      index#iter (* avoiding non recursive terminal fold_right *)
 		(fun (t,freq) ->
@@ -333,11 +330,8 @@ object (self)
 		  | Rdf.Bnode _ -> some_focus_term_is_blank <- true
 		      (* blank nodes are not allowed in SPARQL queries *)
 		  | _ -> focus_term_index#add (t,freq))
-	    | [Rdf.Bnode _] ->
-	      Firebug.console##log(string "focus_term_list is a Bnode");
-	      some_focus_term_is_blank <- true (* should not happen *)
-	    | [t] -> focus_term_index#add (t, 1)
-	    | _ -> () );
+	    | `Term t -> focus_term_index#add (t, 1)
+	    | `Undefined -> () );
 	    k (Some sparql))
 	  (fun code -> k (Some sparql))
 
@@ -419,8 +413,8 @@ object (self)
 	    incr_index#add (Lisql.IncrInput ("",dt), None))
 	[`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
     (* adding ids *)
-    ( match s_sparql.Lisql2sparql.focus_term_list with
-    | [term] ->
+    ( match s_sparql.Lisql2sparql.focus_term_kind with
+    | `Term term ->
       if focus_incr then
 	begin
 	  let dim = results.Sparql_endpoint.dim in
@@ -431,7 +425,7 @@ object (self)
 	      let t_focus_opt =
 		match term with
 		| Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
-		| _ -> Some term in
+		| t -> Some t in
 	      Array.iteri
 		(fun i t_opt ->
 		  match t_opt, t_focus_opt with
