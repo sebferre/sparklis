@@ -4,35 +4,21 @@
 open Rdf
 open Lisql
 
-(* focus terms *)
+(* focus description *)
 
-type focus_term = [ `TermIncr of Rdf.term | `TermNoIncr of Rdf.term | `IdIncr of id | `IdNoIncr of id | `Undefined ]
-
-let define_focus_term (ft : focus_term) : focus_term option -> focus_term = function
-  | None -> ft
-  | Some x -> x
-
+type focus_term = [ `Term of Rdf.term | `Id of id | `Undefined ]
+(* [Undefined] means 'does not exists' (e.g., sentence focus) or 'is ambiguous' (e.g., coordinated NP) *)
+  
 let focus_term_s2 : elt_s2 -> focus_term = function
-  | Term t -> `TermIncr t
-  | An (id,_,_) -> `IdIncr id
-  | The id -> `IdIncr id
+  | Term t -> `Term t
+  | An (id,_,_) -> `Id id
+  | The id -> `Id id
 
 let focus_term_id : focus_term -> id option = function
-  | `IdIncr id -> Some id
-  | `IdNoIncr id -> Some id
+  | `Id id -> Some id
   | _ -> None
 
-(* focus graph *)
-
 type focus_graph = [ `Default | `NamedTerm of Rdf.term | `NamedId of id ]
-type focus_graph_aux = [ focus_graph | `NamedFocus ]
-
-let define_focus_graph (fg : focus_graph) : focus_graph_aux -> focus_graph_aux = function
-  | `Default -> (fg :> focus_graph_aux)
-  | fg0 -> fg0
-let resolve_focus_graph (fg : focus_graph) : focus_graph_aux -> focus_graph_aux = function
-  | `NamedFocus -> (fg :> focus_graph_aux)
-  | fg0 -> fg0
 
 let focus_graph_s2 : elt_s2 -> focus_graph = function
   | Term t -> `NamedTerm t
@@ -41,6 +27,40 @@ let focus_graph_s2 : elt_s2 -> focus_graph = function
 let focus_graph_s1 : 'a elt_s1 -> focus_graph = function
   | Det (_,det, _) -> focus_graph_s2 det
   | _ -> assert false (* Lisql transformation must prevent this happening *)
+
+class focus_descr =
+  object
+    val mutable term_opt : [`None | focus_term] = `None
+    val mutable graph_aux : [focus_graph | `NamedFocus] = `Default
+    val mutable no_incr : bool = false (* whether class/property increments should not be computed *)
+    val mutable unconstrained : bool = false (* whether there is no relational constraint on focus *)
+
+    method term : focus_term = match term_opt with `None -> `Undefined | #focus_term as ft -> ft
+    method graph : focus_graph = match graph_aux with `NamedFocus -> `Default | #focus_graph as fg -> fg
+    method incr : bool = not no_incr
+    method unconstrained : bool = unconstrained
+      
+    method define_focus_term (ft : focus_term) : unit =
+      match term_opt with
+      | `None -> term_opt <- (ft :> [`None | focus_term])
+      | _ -> ()
+
+    method define_focus_graph (fg : focus_graph) : unit =
+      match graph_aux with
+      | `Default -> graph_aux <- (fg :> [focus_graph | `NamedFocus])
+      | _ -> ()
+    method wait_focus_graph : unit =
+      graph_aux <- `NamedFocus
+    method resolve_focus_graph (fg : focus_graph) : unit =
+      match graph_aux with
+      | `NamedFocus -> graph_aux <- (fg :> [focus_graph | `NamedFocus])
+      | _ -> ()
+
+    method set_no_incr : unit = no_incr <- true
+
+    method set_unconstrained : unit = unconstrained <- true
+  end
+
 
 (* focus positions *)
     
@@ -336,9 +356,9 @@ let view_of_list a_lr =
      | [] -> Unit
      | v::_ -> v)
 
-let view_of_list_focus ft a_x a_ll_rr =
+let view_of_list_focus focus_id_opt a_x a_ll_rr =
   (* computing views *)
-  let views = views_of_seq (focus_term_id ft) [] 0 (list_of_ctx a_x a_ll_rr) in
+  let views = views_of_seq focus_id_opt [] 0 (list_of_ctx a_x a_ll_rr) in
   let sid = List.length (fst a_ll_rr) in
   sid,
   (try List.find (top_sid_in_view sid) views
@@ -549,20 +569,21 @@ and annot_elt_s pos s ctx =
       let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) ~seq_view () in
       a, Seq (a, lar)
   
-let rec annot_ctx_p1 ft_opt fg (a1,a_x) x = function
+let rec annot_ctx_p1 fd (a1,a_x) x = function
   | DetThatX (det, ctx) ->
-    let ft = define_focus_term (focus_term_s2 det) ft_opt in
-    let fg = resolve_focus_graph (focus_graph_s2 det) fg in
+    fd#define_focus_term (focus_term_s2 det);
+    fd#resolve_focus_graph (focus_graph_s2 det);
     let f = Det ((),det,Some x) in
     let ids_det =
       let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det (Some x) ctx in
       ids_elt_s2 ~inactive det in
     let ids = union_ids ids_det a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 (Some ft) fg (a, Det (a, det, Some a_x)) f ctx
+    annot_ctx_s1 fd (a, Det (a, det, Some a_x)) f ctx
   | AnAggregThatX (id,modif,g,np,ctx) ->
-    let ft = define_focus_term (`IdNoIncr id) ft_opt in
-    let fg = resolve_focus_graph (`NamedId id) fg in
+    fd#define_focus_term (`Id id);
+    fd#set_no_incr;
+    fd#resolve_focus_graph (`NamedId id);
     let f = AnAggreg ((),id,modif,g,Some x,np) in
     let a2, a_np = annot_elt_s1 (`Aside false) np (AnAggregX (id,modif,g,Some x,ctx)) in
     let ids_aggreg = { empty_ids with all = Ids.singleton id; defs = Ids.singleton id } in
@@ -572,32 +593,34 @@ let rec annot_ctx_p1 ft_opt fg (a1,a_x) x = function
       | None -> assert false
       | Some id2 -> { ids with defs = Ids.remove id2 ids.defs; dims = Ids.remove id2 ids.dims; refs = Ids.add id2 ids.refs } in
     let a = new annot ~focus_pos:(`Above (false, None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 (Some ft) fg (a, AnAggreg (a, id, modif, g, Some a_x, a_np)) f ctx
+    annot_ctx_s1 fd (a, AnAggreg (a, id, modif, g, Some a_x, a_np)) f ctx
   | ForEachThatX (id,modif,id2,ctx) ->
-    let ft = define_focus_term (`IdIncr id) ft_opt in
-    let fg = resolve_focus_graph (`NamedId id) fg in
+    fd#define_focus_term (`Id id);
+    fd#resolve_focus_graph (`NamedId id);
     let f = ForEach ((),id,modif,Some x,id2) in
     let ids = a1#ids in
     let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = Ids.add id2 ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtDim (f,ctx)) ~ids () in
-    annot_ctx_dim ft fg (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
+    annot_ctx_dim fd (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
   | TheAggregThatX (id,modif,g,id2,ctx) ->
-    let ft = define_focus_term (`IdNoIncr id) ft_opt in
-    let fg = resolve_focus_graph (`NamedId id) fg in
+    fd#define_focus_term (`Id id);
+    fd#set_no_incr;
+    fd#resolve_focus_graph (`NamedId id);
     let f = TheAggreg ((),id,modif,g,Some x,id2) in
     let ids = a1#ids in
     let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtAggreg (f,ctx)) ~ids () in
-    annot_ctx_aggreg ft fg (a, TheAggreg (a, id, modif, g, Some a_x, id2)) f ctx
+    annot_ctx_aggreg fd (a, TheAggreg (a, id, modif, g, Some a_x, id2)) f ctx
   | SExprThatX (name,id,modif,expr,ctx) ->
-    let ft = define_focus_term (`IdNoIncr id) ft_opt in
-    let fg = resolve_focus_graph (`NamedId id) fg in
+    fd#define_focus_term (`Id id);
+    fd#set_no_incr;
+    fd#resolve_focus_graph (`NamedId id);
     let f = SExpr ((), name, id, modif, expr, Some x) in
     let a2, a_expr = annot_elt_expr (`Aside false) expr (SExprX (name,id,modif,Some x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let ids = {ids with all = Ids.add id ids.all; defs = if a2#defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft fg (a, SExpr (a, name, id, modif, a_expr, Some a_x)) f ctx
+    annot_ctx_s fd (a, SExpr (a, name, id, modif, a_expr, Some a_x)) f ctx
   | AndX (ll_rr,ctx) ->
     let f = And ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -608,7 +631,7 @@ let rec annot_ctx_p1 ft_opt fg (a1,a_x) x = function
 	      (ctx_of_ctx_list x ll_rr))) in
     let ids = list_union_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 ft_opt fg (a, And (a, lar)) f ctx
+    annot_ctx_p1 fd (a, And (a, lar)) f ctx
   | OrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
     let f = Or ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -620,62 +643,62 @@ let rec annot_ctx_p1 ft_opt fg (a1,a_x) x = function
     let ids = union_ids a1#ids { empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
     (* ids of alternatives are no more visible as defs/dims/refs *)
     let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 ft_opt fg (a, Or (a, lar)) f ctx
+    annot_ctx_p1 fd (a, Or (a, lar)) f ctx
   | MaybeX ctx ->
     let f = Maybe ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtP1 (f,ctx)) ~ids () in (* suspended *)
-    annot_ctx_p1 ft_opt fg (a, Maybe (a, a_x)) f ctx
+    annot_ctx_p1 fd (a, Maybe (a, a_x)) f ctx
   | NotX ctx ->
     let f = Not ((),x) in
     let ids = a1#ids in (* negation is suspended *)
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtP1 (f,ctx)) ~ids () in (* suspended *)
-    annot_ctx_p1 ft_opt fg (a, Not (a, a_x)) f ctx
+    annot_ctx_p1 fd (a, Not (a, a_x)) f ctx
   | InX (npg,ctx) ->
-    let fg = define_focus_graph (focus_graph_s1 npg) fg in
+    fd#define_focus_graph (focus_graph_s1 npg);
     let f = In ((),npg,x) in
     let a2, a_npg = annot_elt_s1 (`Aside false) npg (InGraphX (x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 ft_opt fg (a, In (a,a_npg,a_x)) f ctx
-and annot_ctx_s1 ft_opt fg (a1,a_x) x = function
+    annot_ctx_p1 fd (a, In (a,a_npg,a_x)) f ctx
+and annot_ctx_s1 fd (a1,a_x) x = function
   | IsX ctx ->
     let f = Is ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 ft_opt fg (a, Is (a, a_x)) f ctx
+    annot_ctx_p1 fd (a, Is (a, a_x)) f ctx
   | RelX (p,modif,ctx) ->
-    let ft = define_focus_term `Undefined ft_opt in
+    fd#define_focus_term `Undefined;
     let f = Rel ((),p,modif,x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 (Some ft) fg (a, Rel (a, p, modif, a_x)) f ctx
+    annot_ctx_p1 fd (a, Rel (a, p, modif, a_x)) f ctx
   | TripleX1 (arg,np2,ctx) ->
-    let ft = define_focus_term `Undefined ft_opt in
+    fd#define_focus_term `Undefined;
     let f = Triple ((),arg,x,np2) in
     let a2, a_np2 = annot_elt_s1 (`Aside false) np2 (TripleX2 (arg,x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 (Some ft) fg (a, Triple (a, arg, a_x, a_np2)) f ctx
+    annot_ctx_p1 fd (a, Triple (a, arg, a_x, a_np2)) f ctx
   | TripleX2 (arg,np1,ctx) ->
-    let ft = define_focus_term `Undefined ft_opt in
+    fd#define_focus_term `Undefined;
     let f = Triple ((),arg,np1,x) in
     let a2, a_np1 = annot_elt_s1 (`Aside false) np1 (TripleX1 (arg,x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 (Some ft) fg (a, Triple (a, arg, a_np1, a_x)) f ctx
+    annot_ctx_p1 fd (a, Triple (a, arg, a_np1, a_x)) f ctx
   | ReturnX ctx ->
-    let ft = define_focus_term `Undefined ft_opt in
+    fd#define_focus_term `Undefined;
     let f = Return ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft fg (a, Return (a, a_x)) f ctx
+    annot_ctx_s fd (a, Return (a, a_x)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in
     let _ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside true) rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
     let ids = a1#ids in (* suspended aggregation *)
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 ft_opt fg (a, AnAggreg (a, id, modif, g, a_rel_opt, a_x)) f ctx
+    annot_ctx_s1 fd (a, AnAggreg (a, id, modif, g, a_rel_opt, a_x)) f ctx
   | NAndX (ll_rr,ctx) ->
     let f = NAnd ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -686,7 +709,7 @@ and annot_ctx_s1 ft_opt fg (a1,a_x) x = function
 	      (ctx_of_ctx_list x ll_rr))) in
     let ids = list_union_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 ft_opt fg (a, NAnd (a, lar)) f ctx
+    annot_ctx_s1 fd (a, NAnd (a, lar)) f ctx
   | NOrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
     let f = NOr ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -697,28 +720,29 @@ and annot_ctx_s1 ft_opt fg (a1,a_x) x = function
 	      (ctx_of_ctx_list x ll_rr))) in
     let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
     let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtS1 (f,ctx)) ~ids () in
-    annot_ctx_s1 ft_opt fg (a, NOr (a, lar)) f ctx
+    annot_ctx_s1 fd (a, NOr (a, lar)) f ctx
   | NMaybeX ctx ->
     let f = NMaybe ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtS1 (f,ctx)) ~ids () in (* suspended *)
-    annot_ctx_s1 ft_opt fg (a, NMaybe (a, a_x)) f ctx
+    annot_ctx_s1 fd (a, NMaybe (a, a_x)) f ctx
   | NNotX ctx ->
     let f = NNot ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtS1 (f,ctx)) ~ids () in (* suspended *)
-    annot_ctx_s1 ft_opt fg (a, NNot (a, a_x)) f ctx
+    annot_ctx_s1 fd (a, NNot (a, a_x)) f ctx
   | InGraphX (x2,ctx) ->
     let f = In ((),x,x2) in
     let a2, a_x2 = annot_elt_p1 (`Aside false) x2 (InX (x,ctx)) in
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
-    annot_ctx_p1 ft_opt fg (a, In (a,a_x,a_x2)) f ctx
+    annot_ctx_p1 fd (a, In (a,a_x,a_x2)) f ctx
   | InWhichThereIsX ctx ->
+    fd#wait_focus_graph;
     let f = InWhichThereIs ((),x) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids:a1#ids () in
-    annot_ctx_p1 ft_opt `NamedFocus (a, InWhichThereIs (a,a_x)) f ctx
-and annot_ctx_dim ft fg (a1,a_x) x = function
+    annot_ctx_p1 fd (a, InWhichThereIs (a,a_x)) f ctx
+and annot_ctx_dim fd (a1,a_x) x = function
   | SAggregForX (ll_rr,aggregs,ctx) ->
     let dims = list_of_ctx x ll_rr in
     let f = SAggreg ((),dims,aggregs) in
@@ -735,8 +759,8 @@ and annot_ctx_dim ft fg (a1,a_x) x = function
 	   (ctx_of_list aggregs)) in
     let ids = list_union_ids (List.map (fun a -> a#ids) (la_dim @ la_aggreg)) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft fg (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
-and annot_ctx_aggreg ft fg (a1,a_x) x = function
+    annot_ctx_s fd (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
+and annot_ctx_aggreg fd (a1,a_x) x = function
   | SAggregX (dims,ll_rr,ctx) ->
     let aggregs = list_of_ctx x ll_rr in
     let f = SAggreg ((),dims,aggregs) in
@@ -753,24 +777,26 @@ and annot_ctx_aggreg ft fg (a1,a_x) x = function
 	      (ctx_of_ctx_list x ll_rr))) in
     let ids = list_union_ids (List.map (fun a -> a#ids) (la_dim @ la_aggreg)) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft fg (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
-and annot_ctx_expr defined (a1,a_x) x = function
+    annot_ctx_s fd (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
+and annot_ctx_expr defined fd (a1,a_x) x = function
 (* 'defined' is about the sub-expression at focus *)
   | SExprX (name,id,modif,rel_opt,ctx) ->
-    let ft = `IdNoIncr id in
+    fd#define_focus_term (`Id id);
+    fd#set_no_incr;
     let f = SExpr ((),name,id,modif,x,rel_opt) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (name,id,modif,x,ctx)) in
     let ids = union_ids a1#ids ids_rel in
     let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft `Default (a, SExpr (a, name, id, modif, a_x, a_rel_opt)) f ctx
+    annot_ctx_s fd (a, SExpr (a, name, id, modif, a_x, a_rel_opt)) f ctx
   | SFilterX (id,ctx) ->
-    let ft = `IdNoIncr id in
+    fd#define_focus_term (`Id id);
+    fd#set_no_incr;
     let f = SFilter ((),id,x) in
     let ids = a1#ids in
     let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s ft `Default (a, SFilter (a, id, a_x)) f ctx
+    annot_ctx_s fd (a, SFilter (a, id, a_x)) f ctx
   | ApplyX (func,ll_rr,conv_opt,ctx) ->
     let f = Apply ((), func, list_of_ctx (conv_opt,x) ll_rr) in
     let la, lar =
@@ -783,7 +809,7 @@ and annot_ctx_expr defined (a1,a_x) x = function
 	      (ctx_of_ctx_list (conv_opt,x) ll_rr))) in
     let ids = list_union_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (true, Some (1 + List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
-    annot_ctx_expr defined (a, Apply (a, func, lar)) f ctx
+    annot_ctx_expr defined fd (a, Apply (a, func, lar)) f ctx
   | ChoiceX (ll_rr,ctx) ->
     let f = Choice ((), list_of_ctx x ll_rr) in
     let la, lar =
@@ -794,9 +820,9 @@ and annot_ctx_expr defined (a1,a_x) x = function
 	      (ctx_of_ctx_list x ll_rr))) in
     let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
     let a = new annot ~focus_pos:(`Above (true, Some (List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
-    annot_ctx_expr defined (a, Choice (a, lar)) f ctx
-and annot_ctx_s ft fg (a1,a_x) x = function
-  | Root -> ft, fg, (a1,a_x)
+    annot_ctx_expr defined fd (a, Choice (a, lar)) f ctx
+and annot_ctx_s fd (a1,a_x) x = function
+  | Root -> fd, (a1,a_x)
   | SeqX (ll_rr,ctx) ->
     let f = Seq ((), list_of_ctx x ll_rr) in
     let a_ll_rr =
@@ -811,46 +837,58 @@ and annot_ctx_s ft fg (a1,a_x) x = function
 	| Some (x,ll_rr) -> focus_moves [down_focus] (AtS (x, SeqX (ll_rr,ctx))) in
       annot_focus_aux focus
     | `Unchanged ->
-      let seq_view = view_of_list_focus ft (a1,a_x) a_ll_rr in
+      let seq_view = view_of_list_focus (focus_term_id fd#term) (a1,a_x) a_ll_rr in
       let la, lar = List.split (list_of_ctx (a1,a_x) a_ll_rr) in
       let ids = list_union_ids (List.map (fun a -> a#ids) la) in
       let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids ~seq_view () in
-      annot_ctx_s ft fg (a, Seq (a, lar)) f ctx
+      annot_ctx_s fd (a, Seq (a, lar)) f ctx
 
 and annot_focus_aux =
   function
   | AtP1 (f,ctx) ->
+    let fd = new focus_descr in
     let f_annot = annot_elt_p1 `At f ctx in
-    annot_ctx_p1 None `Default f_annot f ctx
+    annot_ctx_p1 fd f_annot f ctx
   | AtS1 (np,ctx) ->
-    let ft_opt =
-      if is_s1_as_p1_ctx_s1 ctx
-      then None
-      else Some
-	( match np with
-	| Det (_,det,_) -> focus_term_s2 det
-	| AnAggreg (_,id,_,g,_,_) -> `IdNoIncr id
-	| _ -> `Undefined ) in
+    let fd = new focus_descr in
+    if is_s1_as_p1_ctx_s1 ctx
+    then ()
+    else begin
+      ( match np with
+      | Det (_,det,_) -> fd#define_focus_term (focus_term_s2 det)
+      | AnAggreg (_,id,_,g,_,_) -> fd#define_focus_term (`Id id); fd#set_no_incr
+      | _ -> fd#define_focus_term `Undefined );
+      ( match ctx with
+      | ReturnX _ | InWhichThereIsX _ -> fd#set_unconstrained
+      | _ -> () )
+    end;
     let np_annot = annot_elt_s1 `At np ctx in
-    annot_ctx_s1 ft_opt `Default np_annot np ctx
+    annot_ctx_s1 fd np_annot np ctx
   | AtDim (dim,ctx) ->
-    let ft = match dim with ForEachResult _ -> `Undefined | ForEach (_,id,_,_,_) -> `IdIncr id | ForTerm (_,t,_) -> `TermNoIncr t in
+    let fd = new focus_descr in
+    ( match dim with
+    | ForEachResult _ -> fd#define_focus_term `Undefined
+    | ForEach (_,id,_,_,_) -> fd#define_focus_term (`Id id)
+    | ForTerm (_,t,_) -> fd#define_focus_term (`Term t); fd#set_no_incr );
     let dim_annot = annot_elt_dim `At dim ctx in
-    annot_ctx_dim ft `Default dim_annot dim ctx
+    annot_ctx_dim fd dim_annot dim ctx
   | AtAggreg (aggreg,ctx) ->
-    let ft = match aggreg with TheAggreg (_,id,_,_,_,_) -> `IdNoIncr id in
+    let fd = new focus_descr in
+    ( match aggreg with
+    | TheAggreg (_,id,_,_,_,_) -> fd#define_focus_term (`Id id); fd#set_no_incr );
     let aggreg_annot = annot_elt_aggreg `At aggreg ctx in
-    annot_ctx_aggreg ft `Default aggreg_annot aggreg ctx
+    annot_ctx_aggreg fd aggreg_annot aggreg ctx
   | AtExpr (expr,ctx) ->
+    let fd = new focus_descr in
     let (a, a_expr as expr_annot) = annot_elt_expr `At expr ctx in
-    annot_ctx_expr a#defined expr_annot expr ctx
+    annot_ctx_expr a#defined fd expr_annot expr ctx
   | AtS (s,ctx) ->
-    let ft = `Undefined in
+    let fd = new focus_descr in
+    fd#define_focus_term `Undefined;
     let s_annot = annot_elt_s `At s ctx in
-    annot_ctx_s ft `Default s_annot s ctx
+    annot_ctx_s fd s_annot s ctx
 
-let annot_focus (focus : focus) : focus_term * focus_graph * annot elt_s =
-  let ft, fg, (a,a_s) = annot_focus_aux focus in
-  let fg = match fg with `NamedFocus -> `Default | #focus_graph as fg0 -> fg0 in
+let annot_focus (focus : focus) : focus_descr * annot elt_s =
+  let fd, (a,a_s) = annot_focus_aux focus in
   factory#set (try Ids.max_elt a#ids.all with Not_found -> 0); (* to account for ids imported from we don't know where (ex., permalinks) *)
-  ft, fg, a_s
+  fd, a_s

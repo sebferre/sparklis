@@ -234,8 +234,7 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 (* LIS navigation places *)
 
 class place (endpoint : string) (focus : Lisql.focus) =
-  let focus_term, focus_graph, s_annot = Lisql_annot.annot_focus focus in
-  let focus_incr = match focus_term with `IdIncr _ | `TermIncr _ -> true | _ -> false in
+  let focus_descr, s_annot = Lisql_annot.annot_focus focus in
 object (self)
   (* essential state *)
 
@@ -252,7 +251,7 @@ object (self)
 
   val mutable s_sparql : Lisql2sparql.s_sparql =
     Lisql2sparql.({
-      focus_term_kind = `Undefined;
+      focus_term_opt = None;
       focus_graph_opt = None;
       query_opt = None;
       query_class_opt = None;
@@ -261,13 +260,13 @@ object (self)
       seq_view = 0, Lisql_annot.Unit;
       geolocs = [] })
     
-  method focus_term_kind = s_sparql.Lisql2sparql.focus_term_kind
+  method focus_term_opt = s_sparql.Lisql2sparql.focus_term_opt
   method focus_graph_opt = s_sparql.Lisql2sparql.focus_graph_opt
     
   method private init =
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
-      s_sparql <- Lisql2sparql.s_annot id_labelling focus_term focus_graph s_annot
+      s_sparql <- Lisql2sparql.s_annot id_labelling focus_descr s_annot
     end
 
   initializer self#init
@@ -303,10 +302,10 @@ object (self)
     (* computing results and derived attributes *)
     match s_sparql.Lisql2sparql.query_opt with
       | None ->
-	( match s_sparql.Lisql2sparql.focus_term_kind with
-	| `Term (Rdf.Var _) -> ()
-	| `Term term -> focus_term_index#add (term,1)
-	| `Undefined -> () );
+	( match s_sparql.Lisql2sparql.focus_term_opt with
+	| Some (Rdf.Var _) -> ()
+	| Some term -> focus_term_index#add (term,1)
+	| None -> () );
 	k None
       | Some query ->
 	let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -319,8 +318,8 @@ object (self)
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
 	      focus;
-	    ( match s_sparql.Lisql2sparql.focus_term_kind with
-	    | `Term (Rdf.Var v) ->
+	    ( match s_sparql.Lisql2sparql.focus_term_opt with
+	    | Some (Rdf.Var v) ->
 	      let index = index_of_results_column v results in
 	      index#iter (* avoiding non recursive terminal fold_right *)
 		(fun (t,freq) ->
@@ -330,8 +329,8 @@ object (self)
 		  | Rdf.Bnode _ -> some_focus_term_is_blank <- true
 		      (* blank nodes are not allowed in SPARQL queries *)
 		  | _ -> focus_term_index#add (t,freq))
-	    | `Term t -> focus_term_index#add (t, 1)
-	    | `Undefined -> () );
+	    | Some t -> focus_term_index#add (t, 1)
+	    | None -> () );
 	    k (Some sparql))
 	  (fun code -> k (Some sparql))
 
@@ -413,9 +412,9 @@ object (self)
 	    incr_index#add (Lisql.IncrInput ("",dt), None))
 	[`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
     (* adding ids *)
-    ( match s_sparql.Lisql2sparql.focus_term_kind with
-    | `Term term ->
-      if focus_incr then
+    ( match s_sparql.Lisql2sparql.focus_term_opt with
+    | Some term ->
+      if focus_descr#incr then
 	begin
 	  let dim = results.Sparql_endpoint.dim in
 	  let vars = results.Sparql_endpoint.vars in
@@ -743,7 +742,7 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
-    if not focus_incr then k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
+    if not focus_descr#incr then k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
     else if focus_term_index#is_empty then
       if some_focus_term_is_blank
       then ajax_intent ()
