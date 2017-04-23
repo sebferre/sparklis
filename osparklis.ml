@@ -385,7 +385,7 @@ object (self)
       end)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
-  method private refresh_term_increments_gen ajax_index =
+  method private refresh_term_increments (* _gen ajax_index *) =
     let apply_incr elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       let incr_opt = (* retrieving input value for input increments *)
@@ -410,7 +410,7 @@ object (self)
       jquery_input "#pattern-terms" (fun input ->
 	jquery "#list-terms" (fun elt_list ->
 	  (*filtering_terms <- true;*)
-	  ajax_index (norm_constr term_constr) [elt_list]
+	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-terms"
@@ -427,23 +427,15 @@ object (self)
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
 	      self#set_term_constr new_constr))))
-  method private refresh_term_increments_init =
-    self#refresh_term_increments_gen lis#ajax_index_terms_init
-  method private refresh_term_increments =
-    self#refresh_term_increments_gen
-      (fun constr elts k -> lis#index_terms_inputs_ids k)
-  method private refresh_term_increments_undefined =
-    self#refresh_term_increments_gen
-      (fun constr elts k -> k ~partial:false (new Lis.incr_freq_index))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
-  method private refresh_property_increments_gen process_index =
+  method private refresh_property_increments (*_gen process_index*) =
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->
 	jquery "#list-properties" (fun elt_list ->
 	  (*filtering_properties <- true;*)
-	  process_index elt_list
+	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
 	      jquery_set_innerHTML "#count-properties"
@@ -455,15 +447,8 @@ object (self)
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
 	      self#set_property_constr new_constr))))
-  method private refresh_property_increments_init =
-    self#refresh_property_increments_gen (fun elt_list k -> lis#ajax_index_properties_init (norm_constr property_constr) elt_list k)
-  method private refresh_property_increments =
-    self#refresh_property_increments_gen (fun elt_list k -> lis#ajax_index_properties (norm_constr property_constr) elt_list k)
-  method private refresh_property_increments_undefined =
-    self#refresh_property_increments_gen (fun elt_list k -> k ~partial:true (new Lis.incr_freq_index))
 
-
-  method private refresh_modifier_increments ~(init : bool) =
+  method private refresh_modifier_increments =
     let apply_incr elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       let incr =
@@ -478,7 +463,7 @@ object (self)
       navigation#update_focus ~push_in_history:true (Lisql.insert_increment incr)
     in
     jquery "#list-modifiers" (fun elt_list ->
-      let index = lis#index_modifiers ~init in
+      let index = lis#index_modifiers in
       elt_list##innerHTML <- string (html_index lis#focus html_state index);
       jquery_set_innerHTML "#count-modifiers"
 	(html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
@@ -516,33 +501,17 @@ object (self)
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
-	      ( match lis#focus_term_opt with
-	      | Some (Rdf.Var _) ->
-		self#refresh_modifier_increments ~init:true;
-		self#refresh_property_increments_init;
-		self#refresh_term_increments_init
-	      | Some _ ->
-		self#refresh_modifier_increments ~init:false;
-		self#refresh_property_increments;
-		self#refresh_term_increments
-	      | None ->
-		self#refresh_modifier_increments ~init:true;
-		self#refresh_property_increments_undefined;
-		self#refresh_term_increments_undefined)
+	      self#refresh_modifier_increments;
+	      self#refresh_property_increments;
+	      self#refresh_term_increments
 	    | Some sparql ->
 	      let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
 	      Jsutils.yasgui#set_query sparql_with_prefixes;
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	      ( match lis#focus_term_opt with
-	      | Some _ ->
-		self#refresh_modifier_increments ~init:false;
-		self#refresh_property_increments;
-		self#refresh_term_increments
-	      | None ->
-		self#refresh_modifier_increments ~init:false;
-		self#refresh_property_increments_undefined;
-		self#refresh_term_increments_undefined ))))
+	      self#refresh_modifier_increments;
+	      self#refresh_property_increments;
+	      self#refresh_term_increments)))
 
   method private filter_increments elt_list constr =
     let matcher = compile_constr constr in
@@ -596,9 +565,9 @@ object (self)
     then begin
       refreshing_terms <- true;
       term_constr <- constr;
-      if self#is_home
-      then self#refresh_term_increments_init
-      else self#refresh
+      (*if self#is_home
+      then self#refresh_term_increments
+	else*) self#refresh
     end
 
   method set_property_constr constr =
@@ -610,9 +579,7 @@ object (self)
     then begin
       refreshing_properties <- true;
       property_constr <- constr;
-      if self#is_home
-      then self#refresh_property_increments_init
-      else self#refresh_property_increments
+      self#refresh_property_increments
     end
 
   method pattern_changed

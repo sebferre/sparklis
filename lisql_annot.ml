@@ -851,17 +851,14 @@ and annot_focus_aux =
     annot_ctx_p1 fd f_annot f ctx
   | AtS1 (np,ctx) ->
     let fd = new focus_descr in
-    if is_s1_as_p1_ctx_s1 ctx
-    then ()
-    else begin
+    if not (is_s1_as_p1_ctx_s1 ctx)
+    then
       ( match np with
-      | Det (_,det,_) -> fd#define_focus_term (focus_term_s2 det)
+      | Det (_,det,rel_opt) ->
+	fd#define_focus_term (focus_term_s2 det);
+	if is_unconstrained_det det rel_opt ctx then fd#set_unconstrained
       | AnAggreg (_,id,_,g,_,_) -> fd#define_focus_term (`Id id); fd#set_no_incr
       | _ -> fd#define_focus_term `Undefined );
-      ( match ctx with
-      | ReturnX _ | InWhichThereIsX _ -> fd#set_unconstrained
-      | _ -> () )
-    end;
     let np_annot = annot_elt_s1 `At np ctx in
     annot_ctx_s1 fd np_annot np ctx
   | AtDim (dim,ctx) ->

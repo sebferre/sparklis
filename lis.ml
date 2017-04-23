@@ -342,127 +342,7 @@ object (self)
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-(* moved to next method *)
-(*
-  method index_ids : incr_freq_index =
-    let index = new incr_freq_index in
-    ( match focus_term_list with
-    | [term] ->
-      if focus_incr then
-	begin
-	  let dim = results.Sparql_endpoint.dim in
-	  let vars = results.Sparql_endpoint.vars in
-	  let freqs = Array.make dim 0 in
-	  List.iter
-	    (fun binding ->
-	      let t_focus_opt =
-		match term with
-		| Rdf.Var v -> binding.(List.assoc v vars)
-		| _ -> Some term in
-	      Array.iteri
-		(fun i t_opt ->
-		  match t_opt, t_focus_opt with
-		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		  | _ -> ())
-		binding)
-	    results.Sparql_endpoint.bindings;
-	  let max_value = None (*Some results.Sparql_endpoint.length*) in
-	  let partial = self#partial_results in
-	  let unit = `Results in
-	  List.iter
-	    (fun i ->
-	      if freqs.(i) <> 0 then
-		let v = try Common.list_rev_assoc i vars with _ -> assert false in
-		if term <> (Rdf.Var v) then
-		  (try
-		     let id = id_labelling#get_var_id v in
-		     index#add (Lisql.IncrId id, Some { value=freqs.(i); max_value; partial; unit })
-		   with _ -> ()))  (* ex: aggregation variables *)
-	    (Common.from_downto (dim-1) 0)
-	end;
-      if Lisql.is_undef_expr_focus focus then
-	begin
-	  List.iter
-	    (fun id -> (* TODO: filter according to empirical type *)
-	    (*let id = id_labelling#get_var_id v in*)
-	      let ldt = self#id_typing id in
-	      if List.exists (fun dt -> Lisql_type.is_insertable (None, dt) focus_type_constraints) ldt then
-		index#add (Lisql.IncrId id, None))
-	    (Lisql_annot.seq_view_defs seq_view)
-	end
-    | _ -> () );
-    index
-*)
-
-  method index_terms_inputs_ids (k : partial:bool -> incr_freq_index -> unit) =
-    let max_value = None (*Some self#results_nb*) in
-    let partial = self#partial_results in
-    let unit = `Results in
-    let incr_index = new incr_freq_index in
-    (* adding term increments *)
-    focus_term_index#iter (*rev_map*)
-      (fun (t,freq) ->
-	lexicon_enqueue_term t;
-	incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
-    (* adding input increments *)
-    if Lisql.is_undef_expr_focus focus then
-      List.iter
-	(fun (dt : Lisql.input_type) ->
-	  if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints then
-	    incr_index#add (Lisql.IncrInput ("",dt), None))
-	[`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
-    (* adding ids *)
-    ( match s_sparql.Lisql2sparql.focus_term_opt with
-    | Some term ->
-      if focus_descr#incr then
-	begin
-	  let dim = results.Sparql_endpoint.dim in
-	  let vars = results.Sparql_endpoint.vars in
-	  let freqs = Array.make dim 0 in
-	  List.iter
-	    (fun binding ->
-	      let t_focus_opt =
-		match term with
-		| Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
-		| t -> Some t in
-	      Array.iteri
-		(fun i t_opt ->
-		  match t_opt, t_focus_opt with
-		  | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		  | _ -> ())
-		binding)
-	    results.Sparql_endpoint.bindings;
-	  List.iter
-	    (fun i ->
-	      if freqs.(i) <> 0 then
-		let v = try Common.list_rev_assoc i vars with _ -> assert false in
-		if term <> (Rdf.Var v) then
-		  (try
-		     let id = id_labelling#get_var_id v in
-		     incr_index#add (Lisql.IncrId (id, None), Some { value=freqs.(i); max_value; partial; unit })
-		   with _ -> ()))  (* ex: aggregation variables *)
-	    (Common.from_downto (dim-1) 0)
-	end;
-      if Lisql.is_undef_expr_focus focus then
-	begin
-	  List.iter
-	    (fun id -> (* TODO: filter according to empirical type *)
-	      let ldt = self#id_typing id in
-	      let comp_arg, comp_res =
-		Lisql_type.compatibles_insertion_list
-		  (List.map (fun dt -> (None,dt)) ldt)
-		  focus_type_constraints in
-	      if comp_res.Lisql_type.bool then
-		incr_index#add (Lisql.IncrId (id, comp_res.Lisql_type.conv_opt), None))
-	    (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
-	end
-    | _ -> () );
-    (* synchronizing lexicons and continuing *)
-    Lexicon.config_entity_lexicon#value#sync (fun () ->
-      Lexicon.config_class_lexicon#value#sync (fun () ->
-	k ~partial incr_index))
-
-  method ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
       let max_value = None in
@@ -495,7 +375,80 @@ object (self)
 	  (fun results_term -> process results_term)
 	  (fun code -> process Sparql_endpoint.empty_results))
 
-  method ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method ajax_index_terms_inputs_ids constr elt (k : partial:bool -> incr_freq_index -> unit) =
+    if focus_descr#term = `Undefined then
+      k ~partial:false (new incr_freq_index)
+    else if focus_descr#unconstrained then
+      self#ajax_index_terms_init constr elt k
+    else
+      let max_value = None (*Some self#results_nb*) in
+      let partial = self#partial_results in
+      let unit = `Results in
+      let incr_index = new incr_freq_index in
+    (* adding term increments *)
+      focus_term_index#iter (*rev_map*)
+	(fun (t,freq) ->
+	  lexicon_enqueue_term t;
+	  incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
+    (* adding input increments *)
+      if Lisql.is_undef_expr_focus focus then
+	List.iter
+	  (fun (dt : Lisql.input_type) ->
+	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints then
+	      incr_index#add (Lisql.IncrInput ("",dt), None))
+	  [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
+    (* adding ids *)
+      ( match s_sparql.Lisql2sparql.focus_term_opt with
+      | Some term ->
+	if focus_descr#incr then
+	  begin
+	    let dim = results.Sparql_endpoint.dim in
+	    let vars = results.Sparql_endpoint.vars in
+	    let freqs = Array.make dim 0 in
+	    List.iter
+	      (fun binding ->
+		let t_focus_opt =
+		  match term with
+		  | Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
+		  | t -> Some t in
+		Array.iteri
+		  (fun i t_opt ->
+		    match t_opt, t_focus_opt with
+		    | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		    | _ -> ())
+		  binding)
+	      results.Sparql_endpoint.bindings;
+	    List.iter
+	      (fun i ->
+		if freqs.(i) <> 0 then
+		  let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		  if term <> (Rdf.Var v) then
+		    (try
+		       let id = id_labelling#get_var_id v in
+		       incr_index#add (Lisql.IncrId (id, None), Some { value=freqs.(i); max_value; partial; unit })
+		     with _ -> ()))  (* ex: aggregation variables *)
+	      (Common.from_downto (dim-1) 0)
+	  end;
+	if Lisql.is_undef_expr_focus focus then
+	  begin
+	    List.iter
+	      (fun id -> (* TODO: filter according to empirical type *)
+		let ldt = self#id_typing id in
+		let comp_arg, comp_res =
+		  Lisql_type.compatibles_insertion_list
+		    (List.map (fun dt -> (None,dt)) ldt)
+		    focus_type_constraints in
+		if comp_res.Lisql_type.bool then
+		  incr_index#add (Lisql.IncrId (id, comp_res.Lisql_type.conv_opt), None))
+	      (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
+	  end
+      | _ -> () );
+    (* synchronizing lexicons and continuing *)
+      Lexicon.config_entity_lexicon#value#sync (fun () ->
+	Lexicon.config_class_lexicon#value#sync (fun () ->
+	  k ~partial incr_index))
+
+  method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_class results_prop =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -596,6 +549,11 @@ object (self)
     else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
+    if focus_descr#term = `Undefined || not focus_descr#incr then
+      k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
+    else if focus_descr#unconstrained then
+      self#ajax_index_properties_init constr elt k
+    else
     let process ~max_value ~partial ~unit results_a results_has results_isof =
       let partial_a = partial || results_a.Sparql_endpoint.length = config_max_classes#value in
       let partial_has = partial || results_has.Sparql_endpoint.length = config_max_properties#value in
@@ -742,8 +700,7 @@ object (self)
 	| _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
-    if not focus_descr#incr then k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
-    else if focus_term_index#is_empty then
+    if focus_term_index#is_empty then
       if some_focus_term_is_blank
       then ajax_intent ()
       else self#ajax_index_properties_init constr elt k
@@ -752,10 +709,10 @@ object (self)
       then ajax_intent ()
       else ajax_extent ()
 
-  method index_modifiers ~init : incr_freq_index =
+  method index_modifiers : incr_freq_index =
     let open Lisql in
     let incrs =
-      if init
+      if focus_descr#unconstrained
       then [IncrIs; IncrIn]
       else
 	let incrs = [] in
