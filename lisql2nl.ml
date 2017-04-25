@@ -147,6 +147,7 @@ and 'a vp = ('a, 'a nl_vp) annotated
 and 'a nl_vp =
   [ `IsNP of 'a np * 'a pp list
   | `IsPP of 'a pp
+  | `IsInWhich of 'a s
   | `HasProp of word * 'a np * 'a pp list
   | `Has of 'a np * 'a pp list
   | `VT of word * 'a np * 'a pp list
@@ -648,7 +649,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
   | Maybe (annot,x) -> A (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
   | Not (annot,x) -> A (annot, `Not (vp_of_elt_p1 grammar ~id_labelling x))
   | In (annot,npg,x) -> A (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, vp_of_elt_p1 grammar ~id_labelling x))
-  | InWhichThereIs (annot,np) -> assert false
+  | InWhichThereIs (annot,np) -> A (annot, `IsInWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
 and vp_of_constr grammar annot = function
   | True -> A (annot, `Ellipsis)
   | MatchesAll lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), []))
@@ -841,6 +842,7 @@ and map_vp transf vp =
     ( function
     | `IsNP (np,lpp) -> `IsNP (map_np transf np, List.map (map_pp transf) lpp)
     | `IsPP pp -> `IsPP (map_pp transf pp)
+    | `IsInWhich s -> `IsInWhich (map_s transf s)
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
     | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
     | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
@@ -900,6 +902,7 @@ object (self)
       -> A (a1, `That (X (`HasProp (p,np,lpp)))) (* idem *)
     | _ -> A (a1, `Whose (X (`That (p, X (`PP lpp))), X (`IsNP (np,[])))) )
   | A (a1, `That (X (`IsPP pp))) -> A (a1, `PP [pp])
+  | A (a1, `That (X (`IsInWhich s))) -> A (a1, `InWhich s)
   | nl -> nl
   method vp nl =
     map_annotated nl
@@ -1120,7 +1123,7 @@ and xml_rel grammar ~id_labelling = function
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
       | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
-      | `InWhich s -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Coord ([], [xml_s grammar ~id_labelling s]) :: []
+      | `InWhich s -> xml_in_which grammar ~id_labelling s
       | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
       | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar ~id_labelling rel)
@@ -1135,6 +1138,7 @@ and xml_vp grammar ~id_labelling = function
       (fun annot_opt -> function
       | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `IsPP pp -> Kwd grammar#is :: xml_pp grammar ~id_labelling pp
+      | `IsInWhich s -> Kwd grammar#is :: Kwd grammar#something :: xml_in_which grammar ~id_labelling s
       | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
@@ -1145,12 +1149,15 @@ and xml_vp grammar ~id_labelling = function
       | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
       | `In (npg,vp) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_vp grammar ~id_labelling vp)
       | `Ellipsis -> xml_ellipsis )
+and xml_in_which grammar ~id_labelling s =
+  Word (`Op grammar#according_to) :: Kwd grammar#which :: Coord ([], [xml_s grammar ~id_labelling s]) :: []
 and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_vp vp =
   let f_xml_mod = match op_mod with `Maybe -> xml_maybe | `Not -> xml_not in
   let xml_mod = xml_focus (annot_mod#down) (f_xml_mod grammar (Some annot_mod) []) in
   match op_mod, vp with
     | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | (`Not | `Maybe), `IsPP pp -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_pp grammar ~id_labelling pp)
+    | (`Not | `Maybe), `IsInWhich s -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ Kwd grammar#something :: xml_in_which grammar ~id_labelling s)
     | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling (X vp))
