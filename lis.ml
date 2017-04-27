@@ -63,6 +63,7 @@ object (self)
 end
   
 class ['a] int_index = ['a,int] index ()
+class ['a,'b] nested_int_index = ['a, int * 'b int_index] index ()
 
 type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
@@ -138,31 +139,95 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
 
-let index_of_results_column (var : Rdf.var) results : Rdf.term int_index =
+let fill_index_of_results_column index ?(filter : Rdf.term -> bool = fun _ -> true) (var : Rdf.var) results : unit =
   let open Sparql_endpoint in
-  let index = new int_index in
   try
     let i = List.assoc var results.vars in
     let ht = Hashtbl.create 1000 in
     List.iter
       (fun binding ->
 	match binding.(i) with
-	  | None -> ()
-	  | Some term ->
-	    try
-	      let cpt = Hashtbl.find ht term in
-	      incr cpt
+	| None -> ()
+	| Some term ->
+	  let cpt =
+	    try Hashtbl.find ht term
 	    with Not_found ->
-	      Hashtbl.add ht term (ref 1))
+	      let cpt = ref 0 in
+	      Hashtbl.add ht term cpt;
+	      cpt in
+	  incr cpt)
       results.bindings;
     Hashtbl.iter
-      (fun term cpt -> index#add (term,!cpt))
-      ht;
-    index
+      (fun term cpt ->
+	if filter term then index#add (term,!cpt))
+      ht
   with Not_found ->
-    Firebug.console##log(string ("index_of_results_column: missing variable " ^ var));
-    index
+    Firebug.console##log(string ("index_of_results_column: missing variable " ^ var))
+let index_of_results_column ?filter var results : Rdf.term int_index =
+  let index = new int_index in
+  fill_index_of_results_column index ?filter var results;
+  index
 
+      
+let fill_nested_index_of_results_columns index
+    ?(filter1 : Rdf.term -> bool = fun _ -> true)
+    ?(filter2 : Rdf.term -> bool = fun _ -> true)
+    (var1 : Rdf.var) (nested_spec : Rdf.term option) results =
+  let open Sparql_endpoint in
+  try
+    let i1 = List.assoc var1 results.vars in
+    let get2 =
+      match nested_spec with
+      | None -> (fun binding -> None)
+      | Some (Rdf.Var var2) ->
+	let i2 = List.assoc var2 results.vars in
+	(fun binding -> binding.(i2))
+      | Some term2 -> (fun binding -> Some term2)
+    in
+    let ht = Hashtbl.create 1000 in
+    List.iter
+      (fun binding ->
+	match binding.(i1) with
+	  | None -> ()
+	  | Some term1 ->
+	    let cpt1, nested_ht =
+	      try Hashtbl.find ht term1
+	      with Not_found ->
+		let data = ref 0, Hashtbl.create 3 in
+		Hashtbl.add ht term1 data;
+		data in
+	    incr cpt1;
+	    ( match get2 binding with
+	    | None -> ()
+	    | Some term2 ->
+	      let cpt2 =
+		try Hashtbl.find nested_ht term2
+		with Not_found ->
+		  let cpt2 = ref 0 in
+		  Hashtbl.add nested_ht term2 cpt2;
+		  cpt2 in
+	      incr cpt2 ))
+      results.bindings;
+    Hashtbl.iter
+      (fun term1 (cpt1,nested_ht) ->
+	if filter1 term1
+	then begin
+	  let nested_index = new int_index in
+	  Hashtbl.iter
+	    (fun term2 cpt2 ->
+	      if filter2 term2 then nested_index#add (term2, !cpt2))
+	    nested_ht;
+	  index#add (term1, (!cpt1, nested_index))
+	end)
+      ht
+  with Not_found ->
+    Firebug.console##log(string ("index_of_results_column_nested: missing variable " ^ var1 ^ " or nested variable"))
+let nested_index_of_results_columns ?filter1 ?filter2 var1 nested_spec results : (Rdf.term, Rdf.term) nested_int_index =
+  let index = new nested_int_index in
+  fill_nested_index_of_results_columns index ?filter1 ?filter2 var1 nested_spec results;
+  index
+
+      
 let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : Rdf.term int_index =
   let open Sparql_endpoint in
   let index = new int_index in
@@ -267,6 +332,11 @@ object (self)
     begin
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
       s_sparql <- Lisql2sparql.s_annot id_labelling focus_descr s_annot
+(*
+      Jsutils.firebug ("focus_term_opt = " ^ match s_sparql.Lisql2sparql.focus_term_opt with None -> "(none)" | Some t -> Rdf.string_of_term t);
+      Jsutils.firebug ("focus_graph_opt = " ^ match s_sparql.Lisql2sparql.focus_graph_opt with None -> "(none)" | Some t -> Rdf.string_of_term t);
+      Jsutils.firebug ("unconstrained focus = " ^ if focus_descr#unconstrained then "yes" else "no")
+*)
     end
 
   initializer self#init
@@ -281,7 +351,8 @@ object (self)
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
   val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
-  val mutable focus_term_index : Rdf.term int_index = new int_index
+  val mutable focus_term_index : (Rdf.term,Rdf.term) nested_int_index = new nested_int_index (* used when some focus term *)
+  val mutable focus_graph_index : Rdf.term int_index = new int_index (* used when no focus_term but some focus graph *)
   val mutable some_focus_term_is_blank : bool = false
 
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
@@ -295,16 +366,25 @@ object (self)
     
   method ajax_sparql_results term_constr elts (k : string option -> unit) =
     (* re-initializing *)
+    let filter_term =
+      function
+      | Rdf.URI uri when String.contains uri ' ' -> false
+      (* URIs with spaces inside are not allowed in SPARQL queries *)
+      | Rdf.Bnode _ -> some_focus_term_is_blank <- true ; false
+      (* blank nodes are not allowed in SPARQL queries *)
+      | _ -> true
+    in
     results <- Sparql_endpoint.empty_results;
     results_typing <- [||];
-    focus_term_index <- new int_index;
+    focus_term_index <- new nested_int_index;
+    focus_graph_index <- new int_index;
     some_focus_term_is_blank <- false;
     (* computing results and derived attributes *)
     match s_sparql.Lisql2sparql.query_opt with
       | None ->
 	( match s_sparql.Lisql2sparql.focus_term_opt with
 	| Some (Rdf.Var _) -> ()
-	| Some term -> focus_term_index#add (term,1)
+	| Some term -> focus_term_index#add (term, (1, new int_index))
 	| None -> () );
 	k None
       | Some query ->
@@ -318,19 +398,30 @@ object (self)
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
 	      focus;
-	    ( match s_sparql.Lisql2sparql.focus_term_opt with
-	    | Some (Rdf.Var v) ->
-	      let index = index_of_results_column v results in
-	      index#iter (* avoiding non recursive terminal fold_right *)
-		(fun (t,freq) ->
-		  match t with
-		  | Rdf.URI uri when String.contains uri ' ' -> ()
-	              (* URIs with spaces inside are not allowed in SPARQL queries *)
-		  | Rdf.Bnode _ -> some_focus_term_is_blank <- true
-		      (* blank nodes are not allowed in SPARQL queries *)
-		  | _ -> focus_term_index#add (t,freq))
-	    | Some t -> focus_term_index#add (t, 1)
-	    | None -> () );
+	    (* defining focus_term_index and focus_graph_index *)
+	    ( match
+		(if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
+	        s_sparql.Lisql2sparql.focus_graph_opt
+	      with
+	    | None, None -> ()
+	    | None, Some (Rdf.Var vg) ->
+	      fill_index_of_results_column focus_graph_index ~filter:filter_term vg results
+	    | None, Some tg ->
+	      focus_graph_index#add (tg,1)
+	    | Some (Rdf.Var v), tg_opt ->
+	      fill_nested_index_of_results_columns focus_term_index
+		~filter1:filter_term
+		~filter2:filter_term
+		v tg_opt
+		results
+	    | Some t, tg_opt ->
+	      let nested_index = new int_index in
+	      ( match tg_opt with
+	      | None -> ()
+	      | Some (Rdf.Var vg) -> fill_index_of_results_column nested_index ~filter:filter_term vg results
+	      | Some tg -> nested_index#add (tg,1) );
+	      focus_term_index#add (t, (1, nested_index)) );
+	    (* callback *)
 	    k (Some sparql))
 	  (fun code -> k (Some sparql))
 
@@ -387,7 +478,7 @@ object (self)
       let incr_index = new incr_freq_index in
     (* adding term increments *)
       focus_term_index#iter (*rev_map*)
-	(fun (t,freq) ->
+	(fun (t, (freq,_)) ->
 	  lexicon_enqueue_term t;
 	  incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
     (* adding input increments *)
@@ -497,22 +588,22 @@ object (self)
 	    Lexicon.config_property_lexicon#value#sync (fun () ->
 	      k ~partial incr_index))))
     in
-    let graph_opt (gp : string) : string =
-      match s_sparql.Lisql2sparql.focus_graph_opt with
-      | None -> gp
-      | Some tg -> "GRAPH " ^ (Sparql.term tg :> string) ^ " { " ^ gp ^ "} "
-    in
     let ajax_extent () =
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
+      let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
+	match s_sparql.Lisql2sparql.focus_graph_opt with
+	| None -> gp
+	| Some _ ->  Sparql.union (focus_graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
+      in
       let sparql_class =
 	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
-	  graph_opt "[] a ?class " ^
+	  (graph_opt (Sparql.sparql "[] a ?class " : Sparql.pattern) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
-	  graph_opt "[] ?prop [] " ^
+	  (graph_opt (Sparql.sparql "[] ?prop [] " : Sparql.pattern) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "prop" ^
 	  " } LIMIT " ^ string_of_int config_max_properties#value in
@@ -526,14 +617,14 @@ object (self)
       let sparql_froms = Sparql_endpoint.config_schema_graphs#sparql_froms in
       let sparql_class =
 	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
-	  graph_opt "{ ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
+	  "{ ?class a rdfs:Class } UNION { ?class a owl:Class } " ^
 	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
-	  graph_opt "{ ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
+	  "{ ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
 	  (* "FILTER EXISTS { [] ?prop [] } " ^ (* too costly *) *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "prop" ^
@@ -645,10 +736,10 @@ object (self)
 	| _ -> assert false
     in
     let ajax_extent () =
-      let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
+      let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
 	| None -> gp
-	| Some t -> Sparql.graph (Sparql.term t) gp
+	| Some _ ->  Sparql.union (graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
       in
       let nb_focus_term = focus_term_index#length in
       let max_value = Some nb_focus_term in
@@ -656,41 +747,41 @@ object (self)
       let unit = `Entities in
       let sparql_a =
 	let gp = Sparql.union (focus_term_index#map_list
-				 (fun (t,_) ->
+				 (fun (t,(_, graph_index)) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:config_max_classes#value
-					(Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term))))) in
+					(graph_opt graph_index (Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term)))))) in
 	(Sparql.select ~froms ~projections:[`Bare, "class"] ~limit:(config_max_classes#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern (graph_opt gp);
+		 [ Sparql.Pattern gp;
 		   (Lisql2sparql.filter_constr_class (Sparql.var "class" :> Sparql.term) constr);
 		   formula_hidden_URIs "class" ]))
 	 :> string) in
       let sparql_has =
 	let gp =
 	  Sparql.union (focus_term_index#map_list
-			  (fun (t,_) ->
+			  (fun (t, (_, graph_index)) ->
 			    Sparql.subquery
 			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-				 (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode ""))))) in
+				 (graph_opt graph_index (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode "")))))) in
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern (graph_opt gp);
+		 [ Sparql.Pattern gp;
 		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in
       let sparql_isof =
 	let gp = Sparql.union (focus_term_index#map_list
-				 (fun (t,_) ->
+				 (fun (t, (_, graph_index)) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-					(Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t))))) in
+					(graph_opt graph_index (Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t)))))) in
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
-		 [ Sparql.Pattern (graph_opt gp);
+		 [ Sparql.Pattern gp;
 		   Lisql2sparql.filter_constr_property (Sparql.var "prop" :> Sparql.term) constr;
 		   formula_hidden_URIs "prop" ]))
 	 :> string) in

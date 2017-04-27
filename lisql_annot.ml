@@ -847,6 +847,7 @@ and annot_focus_aux =
   function
   | AtP1 (f,ctx) ->
     let fd = new focus_descr in
+    if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained;
     let f_annot = annot_elt_p1 `At f ctx in
     annot_ctx_p1 fd f_annot f ctx
   | AtS1 (np,ctx) ->

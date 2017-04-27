@@ -15,11 +15,12 @@ let uri_of_id (id : string) : Rdf.uri option =
 
 (* SPARQL results JSon <--> OCaml *)
 
+type binding = Rdf.term option array
 type results =
     { dim : int;
       vars : (string * int) list; (* the int is the rank of the string in the list *)
       length : int;
-      bindings : Rdf.term option array list;
+      bindings : binding list;
     }
 
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }

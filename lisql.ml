@@ -307,11 +307,30 @@ let rec is_unconstrained_ctx_s1 = function
   | NNotX ctx -> is_unconstrained_ctx_s1 ctx
   | InGraphX (f1,ctx) -> false
   | InWhichThereIsX ctx -> true
+and is_unconstrained_ctx_p1 = function
+  | DetThatX (det,ctx) ->
+    is_unconstrained_elt_s2 det &&
+      is_unconstrained_ctx_s1 ctx
+  | AnAggregThatX _ -> false
+  | ForEachThatX _ -> false
+  | TheAggregThatX _ -> false
+  | SExprThatX _ -> false
+  | AndX ((ll,rr),ctx) ->
+    List.for_all is_unconstrained_elt_p1 ll &&
+      List.for_all is_unconstrained_elt_p1 rr &&
+      is_unconstrained_ctx_p1 ctx
+  | OrX ((ll,rr),ctx) -> is_unconstrained_ctx_p1 ctx
+  | MaybeX ctx -> is_unconstrained_ctx_p1 ctx
+  | NotX ctx -> is_unconstrained_ctx_p1 ctx
+  | InX (npg,ctx) -> is_unconstrained_ctx_p1 ctx
 
 let is_unconstrained_det det rel_opt ctx =
   is_unconstrained_elt_s2 det &&
     is_unconstrained_elt_p1_opt rel_opt &&
     is_unconstrained_ctx_s1 ctx
+let is_unconstrained_focus_p1 f ctx =
+  is_unconstrained_elt_p1 f &&
+    is_unconstrained_ctx_p1 ctx
     
     
 let id_of_s2 = function
