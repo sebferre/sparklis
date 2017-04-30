@@ -28,6 +28,7 @@ let string_is_float =
   (fun s -> Regexp.string_match re s 0 <> None)
 
 let make_constr op pat =
+  (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
   match op, lpat with
@@ -64,9 +65,9 @@ let make_constr op pat =
   | "hasDatatype", [] -> HasDatatype ""
   | "hasDatatype", pat::_ -> HasDatatype pat
   | _ -> assert false
-
+    
 let norm_constr = (* normalizing for empty patterns "" *)
-  (* must be called for any semantic use of constraints *)
+  (* MUST be called for any semantic use of constraints *)
   let open Lisql in
   function
   | MatchesAll [] -> True
@@ -558,6 +559,7 @@ object (self)
 
   method set_term_constr constr =
     let to_refresh =
+      let constr = norm_constr constr in
       if constr = term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
@@ -572,8 +574,9 @@ object (self)
 
   method set_property_constr constr =
     let to_refresh =
+      let constr = norm_constr constr in
       if constr = property_constr then false
-      else if subsumed_constr constr property_constr then not refreshing_terms
+      else if subsumed_constr constr property_constr then not refreshing_properties
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_properties && constr <> property_constr *)
     then begin
