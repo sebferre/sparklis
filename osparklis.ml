@@ -273,7 +273,7 @@ object (self)
 
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
 
-  method show_permalink : unit =
+  method show_permalink : unit Lwt.t =
     let args = config#get_permalink in
     let args =
       if self#is_home
@@ -283,14 +283,27 @@ object (self)
       let permalink_url =
 	match Url.Current.get () with
 	  | None -> raise Not_found
-	  | Some (Url.Http url) -> Url.Http { url with Url.hu_arguments = args }
-	  | Some (Url.Https url) -> Url.Http { url with Url.hu_arguments = args }
-	  | Some (Url.File url) -> Url.File { url with Url.fu_arguments = args } in
-      ignore
-	(prompt
-	   Lisql2nl.config_lang#grammar#msg_permalink
-	   (Url.string_of_url permalink_url))
-    with _ -> ()
+	  | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
+	  | Some (Url.Https url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
+	  | Some (Url.File url) -> "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?" ^ Url.encode_arguments args in
+      Lwt.bind
+	(XmlHttpRequest.perform_raw_url
+	   ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
+		      "format","txt";
+		      "longUrl", permalink_url]
+	   "https://api-ssl.bitly.com/v3/shorten")
+	(fun http_frame ->
+	  let permalink_url =
+	    let open XmlHttpRequest in
+	    if http_frame.code = 200
+	    then http_frame.content
+	    else permalink_url in
+	  ignore
+	    (prompt
+	       Lisql2nl.config_lang#grammar#msg_permalink
+	       permalink_url);
+	  Lwt.return ())
+    with _ -> Lwt.return ()
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
