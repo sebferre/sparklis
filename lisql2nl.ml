@@ -257,7 +257,8 @@ let word_of_incr grammar = function
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrIs -> `Op grammar#is
+  | IncrThatIs -> `Op grammar#is
+  | IncrSomethingThatIs -> `Op grammar#something
   | IncrAnd -> `Op grammar#and_
   | IncrDuplicate -> `Op grammar#and_
   | IncrOr -> `Op grammar#or_
@@ -1269,7 +1270,8 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
-  | IncrIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
+  | IncrThatIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
+  | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word dummy_word :: []
   | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis
   | IncrDuplicate -> Kwd grammar#and_ :: Word dummy_word :: []
   | IncrOr -> Word (`Op grammar#or_) :: xml_ellipsis

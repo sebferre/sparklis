@@ -788,7 +788,8 @@ type increment =
   | IncrInput of string * input_type
   | IncrTerm of Rdf.term
   | IncrId of id * num_conv option
-  | IncrIs
+  | IncrThatIs
+  | IncrSomethingThatIs
   | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
@@ -953,11 +954,19 @@ let insert_constr constr focus =
     | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search ((),constr)) focus
     | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
-let insert_is = function
-  | AtS1 (f, IsX ctx) when is_top_s1 f -> None
-  | focus ->
+let insert_that_is = function
+  (*  | AtS1 (f, IsX ctx) when is_top_s1 f -> None *)
+  | AtS1 (Det (_, An (id,modif,Class _), None), _) as focus ->
+    (*  | focus -> *)
     let foc_opt = insert_elt_p1 (Is ((),factory#top_s1)) focus in
     focus_opt_moves [down_focus] foc_opt
+  | _ -> None
+
+(* introduces a NP id when there is none *)
+let insert_something_that_is = function
+  | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) -> Some (AtS1 (np,ctx))
+  | AtS1 (np,ctx) when id_of_s1 np = None -> Some (AtS1 (Det ((), factory#top_s2, Some (Is ((), np))), ctx))
+  | _ -> None
 
 let insert_and = function
 (*
@@ -1233,7 +1242,8 @@ let insert_increment incr focus =
     | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
-    | IncrIs -> insert_is focus
+    | IncrThatIs -> insert_that_is focus
+    | IncrSomethingThatIs -> insert_something_that_is focus
     | IncrAnd -> insert_and focus
     | IncrDuplicate -> insert_duplicate focus
     | IncrOr -> insert_or focus

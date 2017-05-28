@@ -804,11 +804,11 @@ object (self)
     let open Lisql in
     let incrs =
       if focus_descr#unconstrained
-      then [IncrIs; IncrIn]
+      then [IncrIn]
       else
 	let incrs = [] in
 	let incrs =
-	  IncrIs :: IncrName "" :: IncrTriplify ::
+	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
