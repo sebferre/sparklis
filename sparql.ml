@@ -142,7 +142,7 @@ let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are t
   | ID -> make_aggreg "" term ""
 
 let expr_func (f : string) (l_expr : expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
-let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^< concat op l_expr ^> ")"
+let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
 let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
 

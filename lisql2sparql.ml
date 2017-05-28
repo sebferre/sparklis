@@ -179,14 +179,14 @@ let rec expr_apply func args =
     ( match args with
     | [] -> Sparql.expr_func "xsd:date" [Sparql.expr_func "NOW" []]
     | _ -> assert false )
-  | `And -> Sparql.expr_infix " && " args
-  | `Or -> Sparql.expr_infix " || " args
-  | `EQ -> Sparql.expr_infix " = " args
-  | `NEQ -> Sparql.expr_infix " != " args
-  | `GT -> Sparql.expr_infix " > " args
-  | `GEQ -> Sparql.expr_infix " >= " args
-  | `LT -> Sparql.expr_infix " < " args
-  | `LEQ -> Sparql.expr_infix " <= " args
+  | `And -> Sparql.expr_infix "&&" args
+  | `Or -> Sparql.expr_infix "||" args
+  | `EQ -> Sparql.expr_infix "=" args
+  | `NEQ -> Sparql.expr_infix "!=" args
+  | `GT -> Sparql.expr_infix ">" args
+  | `GEQ -> Sparql.expr_infix ">=" args
+  | `LT -> Sparql.expr_infix "<" args
+  | `LEQ -> Sparql.expr_infix "<=" args
   | `STRDT | `STRLANG | `Integer | `Decimal | `Double ->
     ( match args with
     | arg::other_args -> Sparql.expr_func (name_func func) (Sparql.expr_func "str" [arg] :: other_args)
