@@ -507,9 +507,16 @@ object (self)
     jquery "#increments" (fun elt_incrs ->
       jquery "#results" (fun elt_res ->
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
+	  ~k_sparql:
 	  (function
-	    | None ->
-	      Jsutils.yasgui#set_query "SELECT * WHERE { }";
+	  | None ->
+	    Jsutils.yasgui#set_query "SELECT * WHERE { }"
+	  | Some sparql ->
+	    let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
+	    Jsutils.yasgui#set_query sparql_with_prefixes)
+	  ~k_results:
+	  (function
+	  | None ->
 	      Jsutils.yasgui#set_response "";
 	      jquery "#results" (fun elt -> elt##style##display <- string "none");
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
@@ -518,9 +525,7 @@ object (self)
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
 	      self#refresh_term_increments
-	    | Some sparql ->
-	      let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
-	      Jsutils.yasgui#set_query sparql_with_prefixes;
+	  | Some sparql ->
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      self#refresh_modifier_increments;

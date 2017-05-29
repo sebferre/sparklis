@@ -364,7 +364,9 @@ object (self)
       Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
       []
     
-  method ajax_sparql_results term_constr elts (k : string option -> unit) =
+  method ajax_sparql_results term_constr elts
+    ~(k_sparql : string option -> unit)
+    ~(k_results : string option -> unit) =
     (* re-initializing *)
     let filter_term =
       function
@@ -381,16 +383,18 @@ object (self)
     some_focus_term_is_blank <- false;
     (* computing results and derived attributes *)
     match s_sparql.Lisql2sparql.query_opt with
-      | None ->
+    | None ->
+        k_sparql None;
 	( match s_sparql.Lisql2sparql.focus_term_opt with
 	| Some (Rdf.Var _) -> ()
 	| Some term -> focus_term_index#add (term, (1, new int_index))
 	| None -> () );
-	k None
-      | Some query ->
+	k_results None
+    | Some query ->
 	let froms = Sparql_endpoint.config_default_graphs#froms in
 	let limit = config_max_results#value in
 	let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity tx term_constr) ~froms ~limit in
+	k_sparql (Some sparql);
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
@@ -422,8 +426,8 @@ object (self)
 	      | Some tg -> nested_index#add (tg,1) );
 	      focus_term_index#add (t, (1, nested_index)) );
 	    (* callback *)
-	    k (Some sparql))
-	  (fun code -> k (Some sparql))
+	    k_results (Some sparql))
+	  (fun code -> k_results (Some sparql))
 
   method partial_results = (results.Sparql_endpoint.length = config_max_results#value)
   method results_dim = results.Sparql_endpoint.dim
