@@ -84,12 +84,13 @@ let word_text_content grammar : word -> string = function
 type ng_label =
   [ `Word of word
   | `Expr of annot elt_expr
+  | `Ref of Lisql.id
   | `Gen of ng_label * word
   | `Of of word * ng_label
   | `AggregNoun of word * ng_label
   | `AggregAdjective of word * ng_label
   | `Nth of int * ng_label ]
-
+    
 type ('a,'b) annotated = X of 'b | A of 'a * 'b
     
 type 'a s = ('a, 'a nl_s) annotated
@@ -379,28 +380,12 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels rel_opt in
     ls_rel, lab_rel
   | AnAggreg (_, id, modif, g, rel_opt, np) ->
-(*
-    let v = var_of_aggreg g in
-    let w, make_aggreg =
-      let s_g, pos_g = string_pos_of_aggreg grammar g in
-      let w = `Op s_g in
-      match pos_g with
-	| `Noun -> w, (fun l -> `AggregNoun (w, l))
-	| `Adjective -> w, (fun l -> `AggregAdjective (w, l)) in
-    let ls_np, lab_np = labelling_s1 grammar ~labels np in
-    let ls_g =
-      match id_of_s1 np with
-      | Some id ->
-	let l_np = try List.assoc id lab_np with _ -> [] in
-	List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) l_np @ [(v, `Word w)]
-      | None -> assert false in
-*)
     let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels np in
-    let l_np =
+    let id =
       match id_of_s1 np with
-      | Some id -> get_id_labelling id lab_np
+      | Some id -> id
       | None -> assert false in
-    let ls_g = labelling_aggreg_op grammar g l_np in
+    let ls_g = labelling_aggreg_op grammar g id in
     ls_np, (id, `Labels ls_g) :: lab_np
   | NAnd (_, lr) ->
     let lss, labs = List.split (List.map (labelling_s1 ~as_p1 grammar ~labels) lr) in
@@ -423,18 +408,17 @@ and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = functio
   | ForTerm (_, t, id2) -> labelling
 and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = function
   | TheAggreg (_, id, modif, g, rel_opt, id2) ->
-    let ls = get_id_labelling id2 labelling in
-    let ls_g = labelling_aggreg_op grammar g ls in
+    let ls_g = labelling_aggreg_op grammar g id2 in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls_g rel_opt in
     labelling @ (id, `Labels ls_g) :: lab_rel
-and labelling_aggreg_op grammar g ls =
-  let v = var_of_aggreg g in
-  let qu, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
-  let make_aggreg =
+and labelling_aggreg_op grammar g id =
+  let v_g = var_of_aggreg g in
+  let l_g =
+    let qu, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
     match adj_word_opt with
-    | Some adj_word -> (fun l -> `AggregAdjective (adj_word, l))
-    | None -> (fun l -> `AggregNoun (noun_word, l)) in
-  List.map (fun (u,l) -> (v ^ "_" ^ u, make_aggreg l)) ls @ [(v, `Word noun_word)]
+    | Some adj_word -> `AggregAdjective (adj_word, `Ref id)
+    | None -> `AggregNoun (noun_word, `Ref id) in
+  [(v_g, l_g)]
 and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = function
   | Return (_, np) ->
     let _ls, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
@@ -455,15 +439,16 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
       (fun labelling s -> labelling_s grammar ~labelling s)
       labelling lr
 
-let rec size_ng_label = function
+let rec size_ng_label ~(size_id_label : Lisql.id -> int) : ng_label -> int = function
   | `Word w -> 1
   | `Expr _ -> 1
-  | `Gen (l,w) -> size_ng_label l + 1
-  | `Of (w,l) -> 1 + size_ng_label l
-  | `AggregNoun (w,l) -> size_ng_label l
-  | `AggregAdjective (w,l) -> size_ng_label l
+  | `Ref id -> size_id_label id
+  | `Gen (l,w) -> size_ng_label ~size_id_label l + 1
+  | `Of (w,l) -> 1 + size_ng_label ~size_id_label l
+  | `AggregNoun (w,l) -> size_ng_label ~size_id_label l
+  | `AggregAdjective (w,l) -> size_ng_label ~size_id_label l
      (* not favoring 'the average' w.r.t. 'the average <prop>' *)
-  | `Nth (k,l) -> 1 + size_ng_label l
+  | `Nth (k,l) -> 1 + size_ng_label ~size_id_label l
 
 
     
@@ -486,62 +471,67 @@ end
 class id_labelling (lab : id_labelling_list) =
 object (self)
   val label_counter : ng_label counter = new counter
-  val mutable id_list : (id * [`Label of Rdf.var * (ng_label * int) | `Alias of id]) list = []
+  val mutable id_list : (id * ((Rdf.var * Lisql.id) * ng_label)) list = []
   initializer
-    let lab_rank =
-      List.rev_map (* reverse to process elements from left to right *)
-	(function
-	| (id, `Alias id2) -> (id, `Alias id2)
-	| (id, `Labels ls) ->
-	  let ls = Common.list_to_set ls in (* removing duplicates *)
-	  let ls = if ls = [] then [("thing", `Word `Thing)] else ls in (* default label *)
-	  let ls_rank =
-	    List.map
-	      (fun (var_prefix, ng) ->
-		let k = label_counter#rank ng in
-		var_prefix, (ng, k))
-	      ls in
-	  (id, `Labels ls_rank))
-	lab in
-    id_list <- List.rev_map
+    (* normalizing label lists, and attributing ranks with [label_counter] *)
+  let lab_rank =
+    List.map
       (function
       | (id, `Alias id2) -> (id, `Alias id2)
-      | (id, `Labels ls_rank) ->
-	let _, _, best_label =
-	  List.fold_left
-	    (fun (best_count,best_size,best_label) (_,(ng,_) as label) ->
-	      let count = label_counter#count ng in
-	      let size = size_ng_label ng in
-	      if count < best_count then (count,size,label)
-	      else if count = best_count && size < best_size then (count,size,label)
-	      else (best_count,best_size,best_label))
-	    (max_int,max_int, (try List.hd ls_rank with _ -> ("thing", (`Word `Undefined, 1)))) ls_rank in
-	(id, `Label best_label))
-      lab_rank
+      | (id, `Labels ls) ->
+	let ls = Common.list_to_set ls in (* removing duplicates *)
+	let ls = if ls = [] then [("thing", `Word `Thing)] else ls in (* default label *)
+	let ls_rank =
+	  List.map
+	    (fun (var_prefix, ng) ->
+	      let k = label_counter#rank ng in
+	      var_prefix, (ng, k))
+	    ls in
+	(id, `Labels ls_rank))
+      lab in
+  lab_rank |> List.iter
+    (function
+    | (id, `Alias id2) ->
+      let id2_data =
+	try List.assoc id2 id_list
+	with Not_found -> (("",id2), `Word `Undefined) in (* should not happen *)
+      id_list <- (id, id2_data)::id_list
+    | (id, `Labels ls_rank) ->
+      let _, _, best_label =
+	List.fold_left
+	  (fun (best_count,best_size,best_label) (_,(ng,_) as label) ->
+	    let count = label_counter#count ng in
+	    let size =
+	      let rec size_id_label id =
+		let ng_id =
+		  try snd (List.assoc id id_list)
+		  with Not_found -> `Word `Undefined (* should not happen *) in
+		size_ng_label ~size_id_label ng_id
+	      in
+	      size_ng_label ~size_id_label ng in
+	    if count < best_count then (count,size,label)
+	    else if count = best_count && size < best_size then (count,size,label)
+	    else (best_count,best_size,best_label))
+	  (max_int, max_int, (try List.hd ls_rank with _ -> assert false))
+	  ls_rank in
+      let best_prefix, (best_ng, best_k) = best_label in
+      let best_ng =
+	let n = label_counter#count best_ng in
+	if n = 1
+	then best_ng
+	else `Nth (best_k, best_ng) in
+      id_list <- (id, ((best_prefix,id), best_ng))::id_list)
 
-  method private get_id_var_label (id : id) : (Rdf.var * (ng_label * int)) * id =
-    try match List.assoc id id_list with
-    | `Label (v,ng_k) -> (v,ng_k), id
-    | `Alias id2 -> fst (self#get_id_var_label id2), id2
-    with Not_found -> assert false
-      
-  method get_id_label (id : id) : ng_label (* string *) =
-    try
-      let (_, (ng, k)), _ = self#get_id_var_label id in
-      let n = label_counter#count ng in
-      if n = 1
-      then ng
-      else `Nth (k, ng)
-    with _ -> `Word `Undefined (*failwith ("Lisql2nl.get_id_label: undefined label for id=" ^ string_of_int id)*)
+  method get_id_label (id : id) : ng_label =
+    try snd (List.assoc id id_list)
+    with Not_found -> `Word `Undefined (* should not happen *)
 
   method get_id_var (id : id) : string =
     let prefix, id =
-      try
-	let (prefix,_), id = self#get_id_var_label id in
-	prefix, id
-      with _ -> "thing", id in
+      try fst (List.assoc id id_list)
+      with Not_found -> "thing", id in
     prefix ^ "_" ^ string_of_int id
-
+    
   method get_var_id (v : string) : id =
     match Regexp.search (Regexp.regexp "[0-9]+$") v 0 with
       | Some (i,res) -> (try int_of_string (Regexp.matched_string res) with _ -> assert false)
@@ -1174,6 +1164,8 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     if isolated
     then xml
     else Kwd grammar#value_ :: Kwd grammar#of_ :: xml
+  | `Ref id ->
+    xml_ng_label ~isolated grammar ~id_labelling (id_labelling#get_id_label id)
   | `Nth (k, `Expr expr) -> xml_ng_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | `Gen (ng, w) ->
     ( match grammar#genetive_suffix with
