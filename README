@@ -1,0 +1,57 @@
+
+Sparklis online: <http://www.irisa.fr/LIS/ferre/sparklis/>
+
+Sparklis is a query builder in natural language that allows people to
+explore and query SPARQL endpoints with all the power of SPARQL and
+without any knowledge of SPARQL.
+
+Sparklis is a Web client running entirely in the browser. It directly
+connects to SPARQL endpoints to retrieve query results and suggested
+query elements. It covers a large subset of SPARQL 1.1 SELECT queries:
+basic graph patterns including cycles, UNION, OPTIONAL, NOT EXISTS,
+FILTER, BIND, complex expressions, aggregations, GROUP BY, ORDER
+BY. All those features can be combined in a flexible way, like in
+SPARQL. Results are presented as tables, and also on maps. A
+configuration panel offers a few configuration options to adapt to
+different endpoints (e.g., GET/POST, labelling properties and language
+tags). Sparklis also includes the YASGUI editor to let advanced users
+access and modify the SPARQL translation of the query.
+
+On the "Examples" page there are 100+ example queries over several
+datasets, and a number of them have a YouTube screencast to show how
+they are built.
+
+Sparklis reconciles expressivity and usability in semantic search by
+tightly combining a Query Builder, a Natural Language Interface, and a
+Faceted Search system. As a Query Builder it lets users build complex
+queries by composing elementary queries in an incremental fashion. An
+elementary query can be a class (e.g., "a film"), a property (e.g.,
+"that has a director"), a RDF node (e.g., "Tim Burton"), a reference
+to another node (e.g., "the film"), or an operator (e.g., "not", "or",
+"highest-to-lowest", "+", "average").
+
+As a Faceted Search system, at every step, the query under
+construction is well-formed, query results are computed and displayed,
+and the suggested query elements are derived from actual data - not
+only from schema - so as to prevent the construction of non-sensical
+or empty results. The display of results and data-relevant suggestions
+at every step provides constant and acurate feedback to users during
+the construction process. This supports exploratory search,
+serendipity, and confidence about final results.
+
+As a Natural Language Interface, everything presented to users -
+queries, suggested query elements, and results - are verbalized in
+natural language, completely hidding SPARQL behind the user
+interface. Compared to Query Answering (QA) systems, the hard problem
+of spontaneous NL understanding is avoided by controlling query
+formulation through guided query construction, and replaced by the
+simpler problem of NL generation. The user interface lends itself to
+multilinguality, and is so far available in English, French, and
+Spanish.
+
+
+Team: SemLIS at IRISA <http://www-semlis.irisa.fr/>
+Contact: Sébastien Ferré <http://people.irisa.fr/Sebastien.Ferre/>
+Copyright © 2013-2017 Sébastien Ferré, IRISA, Université de Rennes 1, France
+Licence: GPLv3
+
