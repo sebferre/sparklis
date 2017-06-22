@@ -58,7 +58,11 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
 	  let p_ref = ref [] in
 	  Hashtbl.add ht_parents uri_child p_ref;
 	  p_ref in
-      parents_ref := uri_parent :: !parents_ref
+      if uri_parent <> uri_child
+	 && not (List.mem uri_parent !parents_ref)
+	 && not (List.mem uri_child (try !(Hashtbl.find ht_parents uri_parent) with _ -> []))
+      then parents_ref := uri_parent :: !parents_ref
+      else ()
     in
     Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
       (fun l_results ->
