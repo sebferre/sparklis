@@ -24,6 +24,21 @@ open Lisql_annot
 (* translation from LISQL elts to SPARQL queries *)
 
 (* SPARQL variable generator *)
+class genvar =
+object
+  val h_varprefix_cpt : (string, int ref) Hashtbl.t = Hashtbl.create 7
+  method new_var (prefix : string) : string =
+    let cpt =
+      try Hashtbl.find h_varprefix_cpt prefix
+      with Not_found ->
+	let cpt = ref 0 in
+	Hashtbl.add h_varprefix_cpt prefix cpt;
+	cpt in
+    incr cpt;
+    prefix ^ string_of_int !cpt
+end
+       
+(* SPARQL generation state *)
 class state (id_labelling : Lisql2nl.id_labelling) =
 object (self)
   method id_labelling = id_labelling
@@ -53,8 +68,13 @@ object (self)
     geolocs <- (t,(v_lat,v_long))::geolocs
   method geolocs = geolocs
 
+  val gv = new genvar
+  method genvar = gv
 end
 
+(* assuming only few variables are created with same prefix in a given query *)
+(*let random_sparql_var prefix : Sparql.var = Sparql.var (prefix ^ string_of_int (Random.int 1000))*)
+  
 let sparql_converter (conv_opt : num_conv option) : Sparql.converter =
   match conv_opt with
   | None -> (fun e -> e)
@@ -84,7 +104,7 @@ let sparql_order = function
   | Lowest conv_opt -> Some (Sparql.ASC (sparql_converter conv_opt))
   | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
-let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
+let filter_constr_gen (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
   let label_prop, label_lang = label_property_lang in
   let label_wrapper (make_filter : Sparql.expr -> Sparql.formula) =
@@ -92,7 +112,7 @@ let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term)
     then make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)])
     else
       let open Sparql in
-      let term_l = (var "constr_label" :> term) in
+      let term_l = (var (gv#new_var "constr_label") :> term) in
       formula_or_list
 	[ make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]);
 	  formula_and_list
@@ -146,13 +166,13 @@ let filter_constr_gen ~(label_property_lang : string * string) (t : Sparql.term)
 	   [Sparql.expr_func "isLiteral" [(t :> Sparql.expr)];
 	    Sparql.expr_regex (Sparql.expr_func "str" [Sparql.expr_func "datatype" [(t :> Sparql.expr)]]) pat])
 
-let filter_constr_entity t c = filter_constr_gen ~label_property_lang:Lexicon.config_entity_lexicon#property_lang t c
-let filter_constr_class t c = filter_constr_gen ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
-let filter_constr_property t c = filter_constr_gen ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
+let filter_constr_entity gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_entity_lexicon#property_lang t c
+let filter_constr_class gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
+let filter_constr_property gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
 
 
-let search_constr (t : Sparql.term) (c : constr) : Sparql.formula =
-  let term_l = (Sparql.var "search_label" :> Sparql.term) in
+let search_constr (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula =
+  let term_l = (Sparql.var (gv#new_var "search_label") :> Sparql.term) in
   match c with
     | MatchesAll (w::lw) ->
       Sparql.formula_and_list
@@ -292,8 +312,8 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
-  | Search (annot,c) -> (fun x -> search_constr x c)
-  | Filter (annot,c) -> (fun x -> filter_constr_entity x c)
+  | Search (annot,c) -> (fun x -> search_constr state#genvar x c)
+  | Filter (annot,c) -> (fun x -> filter_constr_entity state#genvar x c)
   | And (annot,lr) ->
     let lr_d = List.map (fun elt -> form_p1 state elt) lr in
     (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
@@ -649,14 +669,14 @@ let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : t
     (query :> string))
 
 type s_sparql =
-  { focus_term_opt : Rdf.term option;
+  { state : state;
+    focus_term_opt : Rdf.term option;
     focus_graph_opt : Rdf.term option;
     query_opt : template option;
     query_class_opt : template option;
     query_prop_has_opt : template option;
     query_prop_isof_opt : template option;
-    seq_view : seq_view;
-    geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list }
+    seq_view : seq_view }
     
 let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot : annot elt_s) : s_sparql =
   let state = new state id_labelling in
@@ -694,11 +714,11 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
-  { focus_term_opt;
+  { state;
+    focus_term_opt;
     focus_graph_opt;
     query_opt;
     query_class_opt;
     query_prop_has_opt;
     query_prop_isof_opt;
-    seq_view;
-    geolocs = state#geolocs }
+    seq_view }
