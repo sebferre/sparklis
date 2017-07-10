@@ -32,6 +32,8 @@ type property_lexicon = (property_syntagm * string) lexicon
 
 (* default lexicon *)
 
+let re_white = Regexp.regexp "_"
+
 let name_of_uri uri =
   let uri = Js.to_string (Js.decodeURI (Js.string uri)) in
   match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
@@ -40,7 +42,6 @@ let name_of_uri uri =
     | None -> uri
 
 let name_of_uri_entity =
-  let re_white = Regexp.regexp "_" in
   fun uri ->
     let name = name_of_uri uri in
     try Regexp.global_replace re_white name " "
@@ -48,18 +49,34 @@ let name_of_uri_entity =
 
 let name_of_uri_concept =
   fun uri ->
-    let name = name_of_uri uri in
+  let name = name_of_uri uri in
+  let name =
     try Common.uncamel name
-    with _ -> Jsutils.firebug "Common.uncamel failed"; name
+    with _ -> Jsutils.firebug "Common.uncamel failed"; name in
+  try Regexp.global_replace re_white name " "
+  with _ -> name
 
 let prepositions = ["by"; "for"; "with"; "on"; "from"; "to"; "off"; "in"; "about"; "after"; "at"; "down"; "up"; "into"; "over"; "until"; "upon"; "within"; "without"]
 
 let syntagm_of_property_name (name : string) : property_syntagm * string =
   try
-    if Common.has_suffix name " of" then `InvNoun, String.sub name 0 (String.length name - 3)
-    else if Common.has_prefix name "has " then `Noun, String.sub name 4 (String.length name - 4)
-    else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then `TransVerb, name
-    else if List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then `TransAdj, name
+    if Common.has_suffix name " of" then
+      let name = String.sub name 0 (String.length name - 3) in
+      let name =
+	if Common.has_prefix name "is "
+	then String.sub name 3 (String.length name - 3)
+	else name in
+      `InvNoun, name
+    else if Common.has_prefix name "has " then
+      `Noun, String.sub name 4 (String.length name - 4)
+    else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then
+      `TransVerb, name
+    else if Common.has_prefix name "is " || List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then
+      let name =
+	if Common.has_prefix name "is "
+	then String.sub name 3 (String.length name - 3)
+	else name in
+      `TransAdj, name
     else `Noun, name
   with _ -> Jsutils.firebug ("Lexicon.syntagm_of_property_name: exception raised for:" ^ name); `Noun, name
 
