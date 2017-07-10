@@ -38,10 +38,13 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then Common.bin_list 50 l_uri (* creating bins of 50 uris max *)
       else [l_uri] in
-    let child, parent = "child", "parent" in (* SPARQL vars *)
+    let child, middle, parent = "child", "middle", "parent" in (* SPARQL vars *)
     let l_sparql =
       let open Sparql in
-      let v_child, v_parent = Sparql.var child, Sparql.var parent in
+      let v_child, v_middle, v_parent = var child, var middle, var parent in
+      let t_child, t_middle, t_parent = (v_child :> term), (v_middle :> term), (v_parent :> term) in
+      let e_child, e_middle, e_parent = (v_child :> expr), (v_middle :> expr), (v_parent :> expr) in
+      let uri_property = uri property in
       List.map
 	(fun l_uri ->
 	  select ~projections:[(`Bare,child); (`Bare,parent)] ~froms
@@ -49,7 +52,18 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
 	       [ union
 		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_child) l_uri);
 		 optional
-		   (triple (v_child :> term) (uri property) (v_parent :> term)) ]))
+		   (join
+		      [ triple t_child uri_property t_parent;
+			filter (expr_comp "!=" e_child e_parent);
+			filter (not_exists (triple t_parent uri_property t_child));
+			filter (not_exists (join
+					      [ triple t_child uri_property t_middle;
+						triple t_middle uri_property t_parent;
+						filter (log_and [ expr_comp "!=" e_middle e_child;
+								  expr_comp "!=" e_middle e_parent ])
+					      ]))
+		      ])
+	       ]))
 	l_l_uri in
     let add_child_parent ht_parents uri_child uri_parent =
       let parents_ref =
@@ -58,9 +72,10 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
 	  let p_ref = ref [] in
 	  Hashtbl.add ht_parents uri_child p_ref;
 	  p_ref in
-      if uri_parent <> uri_child
+      if not (List.mem uri_parent !parents_ref)
+	     (* uri_parent <> uri_child
 	 && not (List.mem uri_parent !parents_ref)
-	 && not (List.mem uri_child (try !(Hashtbl.find ht_parents uri_parent) with _ -> []))
+	 && not (List.mem uri_child (try !(Hashtbl.find ht_parents uri_parent) with _ -> [])) *)
       then parents_ref := uri_parent :: !parents_ref
       else ()
     in
