@@ -464,7 +464,7 @@ and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let v = state#id_labelling#get_id_var id in
   state#set_aggreg v (vg, g, (d (Sparql.var vg :> Sparql.term)));
   state#set_modif vg modifg
-and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
+and form_dim state : annot elt_aggreg -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
   | ForEachResult annot -> assert false
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
@@ -475,6 +475,7 @@ and form_dim state : annot elt_dim -> Sparql.projection option * Rdf.var option 
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
     None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2 :> Sparql.expr) (Sparql.term t :> Sparql.expr))
+  | _ -> assert false
 and form_aggreg state : annot elt_aggreg -> Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
@@ -484,6 +485,7 @@ and form_aggreg state : annot elt_aggreg -> Sparql.projection * Rdf.var * Sparql
     let sparql_g = sparql_aggreg g in
     let t_v2 = (Sparql.var v2 :> Sparql.term) in
     (`Aggreg (sparql_g, t_v2), v), v2, Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
+  | _ -> assert false
 and form_expr_list state : annot elt_expr -> Sparql.expr list = function (* non-deterministic semantics *)
   | Undef annot -> []
   | Const (annot,t) -> [(Sparql.term t :> Sparql.expr)]
@@ -565,7 +567,9 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
     | _ -> assert false )
   | InlineAggregs (ids,sid,_ids2)::lv ->
     ( match List.nth lr sid with
-    | SAggreg (annot, [ForEachResult _], aggregs) ->
+    | SAggreg (annot, aggregs) ->
+      assert (List.exists is_ForEachResult aggregs);
+      let aggregs = List.filter is_aggreg aggregs in 
       let l_aggregs = List.map (form_aggreg state) aggregs in
       let lx2 = List.map (fun (_,x2,_) -> x2) l_aggregs in
       let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
@@ -582,7 +586,9 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
   | Aggreg (ids,sid,v2)::lv ->
     let aggregated_view = form_view state lr v2 in
     ( match List.nth lr sid with
-    | SAggreg (annot,dims,aggregs) ->
+    | SAggreg (annot,dims_aggregs) ->
+      let dims = List.filter is_dim dims_aggregs in
+      let aggregs = List.filter is_aggreg dims_aggregs in
       let l_dims = List.map (form_dim state) dims in
       let l_aggregs = List.map (form_aggreg state) aggregs in
       let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in

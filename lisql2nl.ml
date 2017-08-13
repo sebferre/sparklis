@@ -417,14 +417,13 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
   | NNot (_, elt) ->
     let _ls, lab = labelling_s1 ~as_p1 grammar ~labels elt in
     [], lab
-and labelling_dim grammar ~labelling : 'a elt_dim -> id_labelling_list = function
+and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = function
   | ForEachResult _ -> labelling
   | ForEach (_, id, modif, rel_opt, id2) ->
     let ls = get_id_labelling id2 labelling in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls rel_opt in
     labelling @ (id, `Alias id2) :: lab_rel
   | ForTerm (_, t, id2) -> labelling
-and labelling_aggreg grammar ~labelling : 'a elt_aggreg -> id_labelling_list = function
   | TheAggreg (_, id, modif, g, rel_opt, id2) ->
     let ls_g = labelling_aggreg_op grammar g id2 in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:ls_g rel_opt in
@@ -441,11 +440,10 @@ and labelling_s grammar ?(labelling = []) : 'a elt_s -> id_labelling_list = func
   | Return (_, np) ->
     let _ls, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
     labelling @ lab
-  | SAggreg (_,dims,aggregs) ->
+  | SAggreg (_,aggregs) ->
     let lab1 = labelling in
-    let lab2 = List.fold_left (fun labelling dim -> labelling_dim grammar ~labelling dim) lab1 dims in
-    let lab3 = List.fold_left (fun labelling aggreg -> labelling_aggreg grammar ~labelling aggreg) lab2 aggregs in
-    lab3
+    let lab2 = List.fold_left (fun labelling aggreg -> labelling_aggreg grammar ~labelling aggreg) lab1 aggregs in
+    lab2
   | SExpr (_,name,id,modif,expr,rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:[] rel_opt in
     let expr_label = if name="" then `Expr expr else `Word (`Func name) in
@@ -709,7 +707,7 @@ and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> annot np = functio
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
-and np_of_elt_dim grammar ~id_labelling : annot elt_dim -> annot np = function
+and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = function
   | ForEachResult annot ->
     A (annot, `Qu (`Each, `Nil, X (`That (`Op grammar#result, X `Nil))))
   | ForEach (annot,id,modif,rel_opt,id2) ->
@@ -717,7 +715,6 @@ and np_of_elt_dim grammar ~id_labelling : annot elt_dim -> annot np = function
     A (annot, `Qu (qu, adj, X (`LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))))
   | ForTerm (annot,t,id2) ->
     A (annot, `Label (id_labelling#get_id_label id2, Some (word_of_term t)))
-and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     np_of_aggreg grammar (Some annot) `The modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
@@ -743,7 +740,8 @@ and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> annot nl_s = functio
 and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
   | Return (annot,np) ->
     A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
-  | SAggreg (annot,dims,aggregs) ->
+  | SAggreg (annot,dims_aggregs) ->
+    let dims, aggregs = List.partition is_dim dims_aggregs in
     let nl_s_aggregs =
       if aggregs = []
       then `Return (X (`PN (`Undefined, X `Nil)))
@@ -751,7 +749,7 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
     if dims = []
     then A (annot, nl_s_aggregs)
     else
-      let np_dims = nl_and (List.map (np_of_elt_dim grammar ~id_labelling) dims) in
+      let np_dims = nl_and (List.map (np_of_elt_aggreg grammar ~id_labelling) dims) in
       A (annot, `For (np_dims, X nl_s_aggregs))
   | SExpr (annot,name,id,modif,expr,rel_opt) ->
     let _qu, adj = qu_adj_of_modif grammar (Some annot) `The modif in
@@ -1225,14 +1223,16 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
       | AtS1 (Det (_, Term t0, _), _) when t0 = t -> xml_t @ [DeleteIncr]
-      | AtS1 _ | AtExpr _ | AtDim _ -> xml_t
+      | AtS1 _ | AtExpr _ -> xml_t
+      | AtAggreg (aggreg, _) when is_dim aggreg -> xml_t (* for ForTerm dimensions *)
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
   | IncrId (id,_) ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
-      | AtS1 _ | AtExpr _ | AtDim _ -> xml
+      | AtS1 _ | AtExpr _ -> xml
+      | AtAggreg (aggreg, _) when is_dim aggreg -> xml (* for ForTerm dimensions *)
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )
@@ -1295,13 +1295,17 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word dummy_word :: []
   | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
   | IncrForeachResult ->
-    let xml_delete_opt =
-      match focus with
-      | AtS (SAggreg (_, [ForEachResult _], _), _)
-      | AtDim (ForEachResult _, _)
-      | AtAggreg (_, SAggregX ([ForEachResult _], _, _)) -> [DeleteIncr]
-      | _ -> [] in
-    Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
+     let xml_delete_opt =
+       let has_foreach_result =
+	 match focus with
+	 | AtS (SAggreg (_, aggregs), _) -> List.exists is_ForEachResult aggregs
+	 | AtAggreg (ForEachResult _, _) -> true
+	 | AtAggreg (_, SAggregX ((ll,rr), _)) -> List.exists is_ForEachResult ll || List.exists is_ForEachResult rr
+	 | _ -> false in
+       if has_foreach_result
+       then [DeleteIncr]
+       else [] in
+     Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
   | IncrForeachId id -> Kwd grammar#for_ :: Kwd grammar#each :: xml_ng_id grammar ~id_labelling id
   | IncrAggregId (g,id) -> Kwd grammar#give_me :: xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
   | IncrFuncArg (is_pred,func,arity,pos,_,_) ->

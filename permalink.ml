@@ -143,16 +143,15 @@ let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
-  | SAggreg (_,dims,aggregs) -> print_bin "SAggreg" (print_list print_dim "Dims" dims) (print_list print_aggreg "Aggregs" aggregs)
+  | SAggreg (_,aggregs) -> print_un "SAggreg" (print_list print_aggreg "Aggregs" aggregs)
   | SExpr (_,"",id,modif,expr,rel_opt) -> print_nary "SExpr" [print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | SExpr (_,name,id,modif,expr,rel_opt) -> print_nary "SExprNamed" [print_string name; print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | SFilter (_,id,expr) -> print_bin "SFilter" (print_id id) (print_expr expr)
   | Seq (_,lr) -> print_lr print_s "Seq" lr
-and print_dim = function
+and print_aggreg = function
   | ForEachResult _ -> print_atom "ForeachResult"
   | ForEach (_,id,modif,rel_opt,id2) -> print_nary "Foreach" [print_id id; print_modif modif; print_opt print_p1 rel_opt; print_id id2]
   | ForTerm (_,t,id2) -> print_nary "Forterm" [print_term t; print_id id2]
-and print_aggreg = function
   | TheAggreg (_,id,modif,g,rel_opt,id2) -> print_nary "TheAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_id id2]
 and print_expr = function
   | Undef _ -> print_atom "Undef"
@@ -293,18 +292,17 @@ let rec parse = parser
   | [< s = parse_s ~version:VInit >] -> s
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
-    | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_dim ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((),dims,aggregs)
+    | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_aggreg ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((), dims @ aggregs) (* for backward compatibility *)
+    | [< aggregs = parse_un ~version "SAggreg1" (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((), aggregs)
     | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), "", id, modif, expr, rel_opt)
     | [< name, id, modif, expr, rel_opt = parse_quin ~version "SExprNamed" parse_string parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), name, id, modif, expr, rel_opt)
     | [< id, expr = parse_bin ~version "SFilter" parse_id parse_expr >] -> SFilter ((), id, expr)
     | [< lr = parse_lr parse_s ~version "Seq" >] -> Seq ((),lr)
     | [<>] -> syntax_error "invalid s"
-and parse_dim ~version = parser
+and parse_aggreg ~version = parser
     | [< () = parse_atom ~version "ForeachResult" >] -> ForEachResult ()
     | [< id, modif, rel_opt, id2 = parse_quad ~version "Foreach" parse_id parse_modif (parse_opt parse_p1) parse_id >] -> ForEach ((), id, modif, rel_opt, id2)
     | [< t, id2 = parse_bin ~version "Forterm" parse_term parse_id >] -> ForTerm ((), t, id2)
-    | [<>] -> syntax_error "invalid dim"
-and parse_aggreg ~version = parser
     | [< id, modif, g, rel_opt, id2 = parse_quin ~version "TheAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_id >] -> TheAggreg ((), id, modif, g, rel_opt, id2)
     | [<>] -> syntax_error "invalid aggreg"
 and parse_expr ~version = parser

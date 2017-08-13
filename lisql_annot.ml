@@ -296,12 +296,13 @@ let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) 
 	    else view::views)
 	  views [] in
       views_of_seq focus_id_opt views (sid+1) las
-    | SAggreg (_, [ForEachResult _], aggregs) ->
+    | SAggreg (_, aggregs) when List.exists is_ForEachResult aggregs ->
       let ids2 =
 	List.fold_left
 	  (fun ids2 ->
 	    function
-	    | TheAggreg (_,id,modif,g,rel_opt,id2) -> Ids.add id2 ids2)
+	    | TheAggreg (_,id,modif,g,rel_opt,id2) -> Ids.add id2 ids2
+	    | _ -> ids2)
 	  Ids.empty aggregs in	  
       let new_view = InlineAggregs (ids, sid, ids2) in
       let views =
@@ -316,7 +317,7 @@ let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) 
 	    else view::views)
 	  views [] in
       views_of_seq focus_id_opt views (sid+1) las
-    | SAggreg (_,dims,_) ->
+    | SAggreg (_, aggregs) ->
       let views =
 	try
 	  let aggregated_view =
@@ -347,10 +348,9 @@ let rec views_of_seq (focus_id_opt : id option) (views : view list) (sid : sid) 
 		    { ids with
 		      defs = List.fold_left
 			(fun defs -> function
-			| ForEachResult _ -> defs
 			| ForEach (_,id,_,_,_) -> Ids.remove id defs
-			| ForTerm _ -> defs)
-			ids.defs dims } in
+			| _ -> defs)
+			ids.defs aggregs } in
 		  let aggregation_view = Aggreg (ids, sid, aggregated_view) in
 		  let same_dims = Ids.subset v_ids.dims ids.dims in
 		  (merged || same_dims), join_views [view; aggregation_view]::views
@@ -490,30 +490,30 @@ and annot_elt_s1 pos np ctx =
   | NNot (_,x) -> let a1, a_x = annot_elt_s1 pos_down x (NNotX ctx) in
 		  let a = annot ~ids:{a1#ids with defs = Ids.empty; dims = Ids.empty} () in
 		  a, NNot (a, a_x)
-and annot_elt_dim pos dim ctx =
-  let annot = new annot ~focus_pos:pos ~focus:(AtDim (dim,ctx)) in
-  let pos_down = focus_pos_down pos in
-  match dim with
-  | ForEachResult _ -> let ids = empty_ids in
-		       let a = annot ~ids () in
-		       a, ForEachResult a
-  | ForEach (_,id,modif,rel_opt,id2) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForEachThatX (id,modif,id2,ctx)) in
-					let ids = {all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
-					let a = annot ~ids () in
-					a, ForEach (a, id, modif, a_rel_opt, id2)
-  | ForTerm (_,t,id2) -> let a = annot ~ids:{empty_ids with refs = Ids.singleton id2} () in
-			 a, ForTerm (a, t, id2)
 and annot_elt_aggreg pos aggreg ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtAggreg (aggreg,ctx)) in
   let pos_down = focus_pos_down pos in
   match aggreg with
-  | TheAggreg (_,id,modif,g,rel_opt,id2) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) in
-					    let ids = {all = Ids.add id ids_rel.all;
-						       defs = Ids.add id ids_rel.defs;
-						       dims = ids_rel.dims;
-						       refs = Ids.add id2 ids_rel.refs} in
-					    let a = annot ~ids () in
-					    a, TheAggreg (a, id, modif, g, a_rel_opt, id2)
+  | ForEachResult _ ->
+     let ids = empty_ids in
+     let a = annot ~ids () in
+     a, ForEachResult a
+  | ForEach (_,id,modif,rel_opt,id2) ->
+     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForEachThatX (id,modif,id2,ctx)) in
+     let ids = {all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
+     let a = annot ~ids () in
+     a, ForEach (a, id, modif, a_rel_opt, id2)
+  | ForTerm (_,t,id2) ->
+     let a = annot ~ids:{empty_ids with refs = Ids.singleton id2} () in
+     a, ForTerm (a, t, id2)
+  | TheAggreg (_,id,modif,g,rel_opt,id2) ->
+     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) in
+     let ids = {all = Ids.add id ids_rel.all;
+		defs = Ids.add id ids_rel.defs;
+		dims = ids_rel.dims;
+		refs = Ids.add id2 ids_rel.refs} in
+     let a = annot ~ids () in
+     a, TheAggreg (a, id, modif, g, a_rel_opt, id2)
 and annot_elt_expr pos expr ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtExpr (expr,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -552,17 +552,13 @@ and annot_elt_s pos s ctx =
     let a1, a_np = annot_elt_s1 pos_down np (ReturnX ctx) in
     let a = annot ~ids:a1#ids () in
     a, Return (a, a_np)
-  | SAggreg (_,dims,aggregs) ->
-    let la1, l_a_dim =
+  | SAggreg (_,aggregs) ->
+    let la, l_a_aggreg =
       List.split (List.map
-		    (fun (x,ll_rr) -> annot_elt_dim pos_down x (SAggregForX (ll_rr,aggregs,ctx)))
-		    (ctx_of_list dims)) in
-    let la2, l_a_aggreg =
-      List.split (List.map
-		    (fun (x,ll_rr) -> annot_elt_aggreg pos_down x (SAggregX (dims,ll_rr,ctx)))
+		    (fun (x,ll_rr) -> annot_elt_aggreg pos_down x (SAggregX (ll_rr,ctx)))
 		    (ctx_of_list aggregs)) in
-    let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) (la1@la2))) () in
-    a, SAggreg (a, l_a_dim, l_a_aggreg)
+    let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+    a, SAggreg (a, l_a_aggreg)
   | SExpr (_,name,id,modif,expr,rel_opt) ->
     let a1, a_expr = annot_elt_expr pos_down expr (SExprX (name,id,modif,rel_opt,ctx)) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (SExprThatX (name,id,modif,expr,ctx)) in
@@ -619,8 +615,8 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     let f = ForEach ((),id,modif,Some x,id2) in
     let ids = a1#ids in
     let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = Ids.add id2 ids.dims; refs = Ids.add id2 ids.refs} in
-    let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtDim (f,ctx)) ~ids () in
-    annot_ctx_dim fd (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
+    let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtAggreg (f,ctx)) ~ids () in
+    annot_ctx_aggreg fd (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
   | TheAggregThatX (id,modif,g,id2,ctx) ->
     fd#define_focus_term (`Id id);
     fd#set_no_incr;
@@ -761,7 +757,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     let f = InWhichThereIs ((),x) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids:a1#ids () in
     annot_ctx_p1 fd (a, InWhichThereIs (a,a_x)) f ctx
-and annot_ctx_dim fd (a1,a_x) x = function
+(*and annot_ctx_dim fd (a1,a_x) x = function
   | SAggregForX (ll_rr,aggregs,ctx) ->
     let dims = list_of_ctx x ll_rr in
     let f = SAggreg ((),dims,aggregs) in
@@ -778,25 +774,20 @@ and annot_ctx_dim fd (a1,a_x) x = function
 	   (ctx_of_list aggregs)) in
     let ids = list_union_ids (List.map (fun a -> a#ids) (la_dim @ la_aggreg)) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s fd (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
+    annot_ctx_s fd (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx*)
 and annot_ctx_aggreg fd (a1,a_x) x = function
-  | SAggregX (dims,ll_rr,ctx) ->
+  | SAggregX (ll_rr,ctx) ->
     let aggregs = list_of_ctx x ll_rr in
-    let f = SAggreg ((),dims,aggregs) in
-    let la_dim, lar_dim =
-      List.split
-	(List.map
-	   (fun (x2,ll_rr2) -> annot_elt_dim (`Aside false) x2 (SAggregForX (ll_rr2,aggregs,ctx)))
-	   (ctx_of_list dims)) in
+    let f = SAggreg ((),aggregs) in
     let la_aggreg, lar_aggreg =
       List.split
 	(list_of_ctx (a1,a_x)
 	   (map_ctx_list
-	      (fun (x2,ll_rr2) -> annot_elt_aggreg (`Aside false) x2 (SAggregX (dims,ll_rr2,ctx)))
+	      (fun (x2,ll_rr2) -> annot_elt_aggreg (`Aside false) x2 (SAggregX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) (la_dim @ la_aggreg)) in
+    let ids = list_union_ids (List.map (fun a -> a#ids) la_aggreg) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
-    annot_ctx_s fd (a, SAggreg (a, lar_dim, lar_aggreg)) f ctx
+    annot_ctx_s fd (a, SAggreg (a, lar_aggreg)) f ctx
 and annot_ctx_expr defined fd (a1,a_x) x = function
 (* 'defined' is about the sub-expression at focus *)
   | SExprX (name,id,modif,rel_opt,ctx) ->
@@ -881,7 +872,7 @@ and annot_focus_aux =
       | _ -> fd#define_focus_term `Undefined );
     let np_annot = annot_elt_s1 `At np ctx in
     annot_ctx_s1 fd np_annot np ctx
-  | AtDim (dim,ctx) ->
+(*  | AtDim (dim,ctx) ->
     let fd = new focus_descr in
     ( match dim with
     | ForEachResult _ -> fd#define_focus_term `Undefined
@@ -889,9 +880,13 @@ and annot_focus_aux =
     | ForTerm (_,t,_) -> fd#define_focus_term (`Term t); fd#set_no_incr );
     let dim_annot = annot_elt_dim `At dim ctx in
     annot_ctx_dim fd dim_annot dim ctx
+ *)
   | AtAggreg (aggreg,ctx) ->
     let fd = new focus_descr in
     ( match aggreg with
+    | ForEachResult _ -> fd#define_focus_term `Undefined
+    | ForEach (_,id,_,_,_) -> fd#define_focus_term (`Id id)
+    | ForTerm (_,t,_) -> fd#define_focus_term (`Term t); fd#set_no_incr
     | TheAggreg (_,id,_,_,_,_) -> fd#define_focus_term (`Id id); fd#set_no_incr );
     let aggreg_annot = annot_elt_aggreg `At aggreg ctx in
     annot_ctx_aggreg fd aggreg_annot aggreg ctx

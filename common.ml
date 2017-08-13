@@ -19,6 +19,8 @@
 
 (* common utilities *)
 
+let not1 (p : 'a -> bool) : 'a -> bool = fun x -> not (p x)
+
 let rec from_to a b =
   if a <= b
   then a :: from_to (a+1) b
