@@ -21,6 +21,7 @@ head, body, input, textarea, select {
     font-family: Tahoma, Geneva, sans-serif;
 }
 
+/*
 button {
     color:white;
     background-color:#646464;
@@ -33,6 +34,16 @@ button {
 button:hover {
     color:#646464;
     background-color:white;
+}
+*/
+
+.no-padding {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.navbar {
+    margin: 0;
 }
 
 .texte
@@ -137,17 +148,18 @@ text-align:right;
 #refresh, .previous-results, .next-results { padding-right: 10px; }
 #config-control, .next-results { padding-left: 10px; }
 
-
+/*
 #sparql-endpoint
 {
 text-align:right;
 }
+*/
 
-#sparql-endpoint-input
-{
-width:300px;
+#sparql-endpoint-input {
+    width:300px;
 }
 
+/*
 #permalink
 {
 margin-left:10px;
@@ -164,6 +176,7 @@ text-decoration:underline;
 margin:10px;
 /*font-weight:bold;*/
 }
+*/
 
 .focus
 {
@@ -194,13 +207,16 @@ margin:0px;
 /*font-weight:bold;*/
 }
 
+/*
 .incr-box
 {
 border:4px groove #a0f0a0;
 margin:5px;
 float:left;
 }
+*/
 
+/*
 .pattern-incrs
 {
 width:155px;
@@ -210,7 +226,18 @@ width:155px;
 {
 width:120px;
 }
+*/
 
+.panel-body-incrs {
+    padding: 0;
+}
+
+.list-incrs {
+    height:200px;
+    resize:vertical;
+    overflow:auto;
+}
+/*
 .list-incrs
 {
 width:300px;
@@ -219,11 +246,13 @@ resize:both;
 overflow:auto;
 resize:both;
 }
-
+*/
+/*
 #list-terms
 {
 width:335px;
 }
+*/
 
 .list-incrs ul
 {

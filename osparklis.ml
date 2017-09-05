@@ -368,18 +368,20 @@ object (self)
 
   method private refresh_extension =
     let open Sparql_endpoint in
-    jquery "#results" (fun elt_results ->
+    jquery "#list-results" (fun elt_results ->
       if lis#results_dim = 0 then begin
-	elt_results##style##display <- string "none" end
+	  jquery_set_innerHTML "#list-results" "";
+	  jquery_set_innerHTML "#map" "No geolocalized data"
+	(*elt_results##style##display <- string "none"*) end
       else begin
 	lis#results_page offset limit (fun results_page ->
-	  elt_results##style##display <- string "block";
+	(*elt_results##style##display <- string "block";*)
 	  jquery_set_innerHTML "#list-results"
 	    (html_table_of_results html_state
 	       ~first_rank:(offset+1)
 	       ~focus_var:(match lis#focus_term_opt with Some (Rdf.Var v) -> Some v | _ -> None)
 	       results_page));
-	jquery_all ".count-results" (fun elt ->
+	jquery "#count-results" (fun elt ->
 	  elt##innerHTML <- string
 	    (let nb = lis#results_nb in
 	     let grammar = Lisql2nl.config_lang#grammar in
@@ -409,9 +411,10 @@ object (self)
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
-	      elt_map##style##display <- string "none" end
+	      elt_map##innerHTML <- string "No geolocalized data"
+	      (*elt_map##style##display <- string "none"*) end
 	    else begin
-	      elt_map##style##display <- string "block";
+		(*elt_map##style##display <- string "block";*)
 	      google#draw_map geolocations elt_map
 	    end))
       end)
@@ -523,7 +526,7 @@ object (self)
     self#refresh_increments_focus;
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
-      jquery "#results" (fun elt_res ->
+      jquery "#list-results" (fun elt_res ->
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  ~k_sparql:
 	  (function
@@ -535,8 +538,9 @@ object (self)
 	  ~k_results:
 	  (function
 	  | None ->
-	      Jsutils.yasgui#set_response "";
-	      jquery "#results" (fun elt -> elt##style##display <- string "none");
+	      (*Jsutils.yasgui#set_response "";
+	      elt_res##style##display <- string "none";*)
+	      self#refresh_extension;
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
@@ -837,10 +841,10 @@ let _ =
     let history = new history !default_endpoint !default_focus in
 
     (* setting event callbacks *)
-    jquery "#home" (onclick (fun elt ev -> history#home));
-    jquery "#back" (onclick (fun elt ev -> history#back));
-    jquery "#forward" (onclick (fun elt ev -> history#forward));
-    jquery "#refresh" (onclick (fun elt ev -> history#update_focus ~push_in_history:false (fun focus -> Some focus)));
+    jquery "#button-home" (onclick (fun elt ev -> history#home));
+    jquery "#button-back" (onclick (fun elt ev -> history#back));
+    jquery "#button-forward" (onclick (fun elt ev -> history#forward));
+    jquery "#button-refresh" (onclick (fun elt ev -> history#update_focus ~push_in_history:false (fun focus -> Some focus)));
     jquery_select "#sparql-endpoint-select"
       (onchange (fun select ev ->
 	jquery_input "#sparql-endpoint-input" (fun input ->
@@ -856,7 +860,7 @@ let _ =
 	history#change_endpoint url)));
     jquery_input "#sparql-endpoint-input" (onenter (fun input ev ->
       jquery_click "#sparql-endpoint-button"));
-    jquery "#config-control" (onclick (fun elt ev ->
+    (*jquery "#config-control" (onclick (fun elt ev ->
       jquery "#config-panel" (fun panel ->
 	let dis =
 	  if to_string panel##style##display = "none"
@@ -866,7 +870,11 @@ let _ =
 	if dis = "none" then
 	  config#if_has_changed
 	    ~translate
-	    ~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus)))));
+	    ~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus)))));*)
+    jquery_all ".config-close" (onclick (fun elt ev ->
+      config#if_has_changed
+	~translate
+	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus))));
     jquery "#switch-view" (onclick (fun elt ev ->
       jquery_toggle "#sparklis-view";
       jquery_toggle "#yasgui-view";
@@ -875,13 +883,15 @@ let _ =
 
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
 
+(*
     jquery "#show-hide-increments" (onclick (fun elt ev ->
       jquery_toggle "#increments-body";
-      ignore (jquery_toggle_innerHTML "#show-hide-increments" "+" "-")));
+      ignore (jquery_toggle_innerHTML "#show-hide-increments" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
     jquery "#show-hide-results" (onclick (fun elt ev ->
-      jquery_toggle "#results-body";
-      ignore (jquery_toggle_innerHTML "#show-hide-results" "+" "-")));
-
+      jquery_toggle "#list-results";
+      ignore (jquery_toggle_innerHTML "#show-hide-results" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
+ *)
+    
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
@@ -911,10 +921,10 @@ let _ =
        ("#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
        ("#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
     
-    jquery_all ".previous-results" (onclick (fun elt ev -> history#present#page_up));
-    jquery_all ".next-results" (onclick (fun elt ev -> history#present#page_down));
-    jquery_select ".limit-results"
-      (onchange (fun select ev ->
+    jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
+    jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
+    jquery_select "#limit-results" (fun select -> firebug "found #limit-results"; select |> onchange (fun select ev ->
+        firebug "changed limit-results";
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit));
 

@@ -99,6 +99,7 @@ and elt_head =
   | Thing
   | Class of Rdf.uri
 and 'a elt_aggreg =
+  (*  | AggregWhere of 'a * id * 'a elt_expr *)
   | ForEachResult of 'a
   | ForEach of 'a * id * modif_s2 * 'a elt_p1 option * id
   | ForTerm of 'a * Rdf.term * id

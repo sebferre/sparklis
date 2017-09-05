@@ -97,6 +97,8 @@ let html_img ?id ?classe ~height ~alt ~title url =
     (match classe with None -> "" | Some c -> " class=\"" ^ c ^ "\"") ^
     " src=\"" ^ url ^ "\" height=\"" ^ string_of_int height ^ "\" alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
 
+let html_glyphicon name = "<span class=\"glyphicon glyphicon-" ^ name ^ "\"></span>"
+
 let html_open_new_window ~height uri =
   html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "icon-open-new-window.png")
 
@@ -317,7 +319,7 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
 	end
 	else begin
 	  Buffer.add_string buf ("<input type=\"checkbox\" id=\"" ^ check_id ^ "\">");
-	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼ </label>");
+	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼</label>");
 	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">► </label>");
 	  Buffer.add_string buf html;
 	  aux buf children
@@ -373,7 +375,7 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
   let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
   let id_i_list = List.map (fun (var,i) -> (state#id_labelling#get_var_id var, i)) results.vars in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf ("<table id=\"extension\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_hide_focus ^ "\"></th>");
+  Buffer.add_string buf ("<div class=\"table-responsive\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_hide_focus ^ "\"></th>");
   List.iter
     (fun (id,i) ->
       Buffer.add_string buf
@@ -407,5 +409,5 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
       Buffer.add_string buf "</tr>";
       incr rank)
     results.bindings;
-  Buffer.add_string buf "</table>";
+  Buffer.add_string buf "</table></div>";
   Buffer.contents buf
