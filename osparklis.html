@@ -28,7 +28,7 @@
 <!-- jQuery library -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
 <!-- Bootstrap -->
-<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
 <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 <!-- Select-picker -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/css/bootstrap-select.min.css">
@@ -42,7 +42,7 @@
   google.charts.load('upcoming', { 'packages': ['map'] });
 </script>
 <!-- Sparklis -->
-<link href="osparklis.css" rel="stylesheet" type="text/css">
+<link href="osparklis.css?v=2" rel="stylesheet" type="text/css"/>
 <script src="osparklis.js"></script>
 </head>
 
@@ -580,7 +580,7 @@
 </div>
 
 <div id="control-navig" class="navbar"> <!-- data-spy="affix" data-offset-top="100">-->
-  <div class="container-fluid nav navbar-nav navbar-left">
+  <div class="nav navbar-nav navbar-left">
     <span class="btn-group">
       <button id="button-home" class="btn btn-primary btn-md navbar-btn">
 	<span class="tooltiped">
@@ -615,14 +615,14 @@
 	</span>
       </button>
     </span>
-    &nbsp;
+
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to switch between SPARKLIS and YASGUI views</span>
       <span class="tooltip lang-fr">Cliquer pour commuter entre les vues SPARKLIS et YASGUI</span>
       <span class="tooltip lang-es">Haga clic para cambiar entre las vistas SPARKLIS y YASGUI</span>
       <button id="switch-view" class="btn btn-default btn-md navbar-btn">YASGUI view</button>
     </span>
-    &nbsp;
+
     <span class="tooltiped">
       <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
       <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
@@ -630,8 +630,9 @@
       <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
     </span>
   </div>
-</div>
+  </div>
 
+<div class="container-fluid">
   <div id="sparklis-view" class="panel-group">
     <div id="query" class="panel panel-default">
     <!--
@@ -677,7 +678,7 @@
 
 	<div class="row">
 	  
-	  <div class="incr-box col-md-4">
+	  <div class="incr-box col-sm-4">
 	    <div class="panel panel-success">
 	      <div class="panel-heading">
 		<div class="row">
@@ -710,7 +711,7 @@
 	    </div>
 	  </div>
 	
-	  <div class="incr-box col-md-4">
+	  <div class="incr-box col-sm-4">
 	    <div class="panel panel-success">
 	      <div class="panel-heading">
 		<div class="row">
@@ -755,7 +756,7 @@
 	    </div>
 	  </div>
 	
-	  <div class="incr-box col-md-4">
+	  <div class="incr-box col-sm-4">
 	    <div class="panel panel-success">
 	      <div class="panel-heading">
 		<div class="row">
@@ -819,43 +820,37 @@
 	  </ul>
 	  <div class="tab-content">
 	    <div id="results-table" class="tab-pane fade in active">
-	      <div id="control-results-top">
+	      <div id="control-results">
 		<span class="tooltiped">
 		  <span class="tooltip lang-en">Click to show the previous page of results</span>
 		  <span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
 		  <span class="tooltip lang-es">Haga clic para mostrar la página anterior de resultados</span>
 		  <button id="previous-results" class="btn btn-default btn-md"><span class="glyphicon glyphicon-step-backward"></span></button>
 		</span>
-		&nbsp;
 		<span id="count-results">
 		  <span class="texte lang-en">No result</span>
 		  <span class="texte lang-fr">Aucun résultat</span>
 		  <span class="texte lang-es">Ningún resultado</span>
 		</span>
-		&nbsp;
 		<span class="tooltiped">
 		  <span class="tooltip lang-en">Click to show the next page of results</span>
 		  <span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
 		  <span class="tooltip lang-es">Haga clic para mostrar la siguiente página de resultados</span>
 		  <button id="next-results" class="btn btn-default btn-md"><span class="glyphicon glyphicon-step-forward"></span></button>
 		</span>
-		&nbsp;
 		<span class="texte lang-en">Show</span>
 		<span class="texte lang-fr">Montrer</span>
 		<span class="texte lang-es">Mostrar</span>
-		&nbsp;
 		<select id="limit-results" class="selectpicker" data-width="fit"> <!-- NOT WORKING!!! -->
 		  <option value="10">10</option>
 		  <option value="20">20</option>
 		  <option value="50">50</option>
 		  <option value="100">100</option>
 		</select>
-		&nbsp;
 		<span class="texte lang-en">results</span>
 		<span class="texte lang-fr">résultats</span>
 		<span class="texte lang-es">resultados</span>
 	      </div>
-	      
 	      <span class="tooltiped">
 		<span class="tooltip lang-en">Click an entity to insert in the query at the column's focus</span>
 		<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
@@ -890,6 +885,8 @@
     <div id="sparql-query"></div>
     <div id="sparklis-yasgui"></div>
   </div>
+</div>
+
 </div>
 
   <footer>

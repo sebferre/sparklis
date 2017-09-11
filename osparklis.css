@@ -19,23 +19,8 @@
 
 head, body, input, textarea, select {
     font-family: Tahoma, Geneva, sans-serif;
+    font-size: 16px;
 }
-
-/*
-button {
-    color:white;
-    background-color:#646464;
-    border-radius:5px;
-    border: 1px solid #646464;
-    font-weight:bold;
-    padding: 5px 5px 0px 5px;
-    margin: 0px 3px;
-}
-button:hover {
-    color:#646464;
-    background-color:white;
-}
-*/
 
 .no-padding {
     padding-left: 0;
@@ -46,219 +31,81 @@ button:hover {
     margin: 0;
 }
 
-.texte
-{
-display:none;
+.texte {
+    display:none;
 }
 
-.tooltip
-{
-display:none;
+.tooltip {
+    display:none;
 }
 
-.option-label
-{
-display:none;
+.open-new-window {
+    vertical-align:top;
 }
 
-header
-{
-margin:5px 0px;
-padding:5px 10px;
-/*height:50px;*/
-color:white;
-background-image:url('sparkles_background.png');
-background-repeat:repeat-x;
+.classURI {
+    color:darkorange;
 }
 
-.heading
-{
-width:100%;
-padding: 3px 3px;
-margin: 5px 0px;
-color:white;
-background-color:#c8a0c8;
-font-style:italic;
-/*font-weight:bold;*/
+.propURI {
+    color:darkviolet;
 }
 
-.config-heading
-{
+.URI {
+    color:darkblue;
 }
 
-.open-new-window
-{
-vertical-align:top;
+.function {
+    color:green;
 }
 
-.classURI
-{
-color:darkorange;
+.Literal {
+    color:darkgreen;
 }
 
-.propURI
-{
-color:darkviolet;
+.nodeID {
+    color:darkgrey;
 }
 
-.URI
-{
-color:darkblue;
+.lisqlID {
+    color:darkred;
 }
 
-.function
-{
-color:green;
+.modifier {
+    color:darkred;
 }
-
-.Literal
-{
-color:darkgreen;
-}
-
-.nodeID
-{
-color:darkgrey;
-}
-
-.lisqlID
-{
-color:darkred;
-}
-
-.modifier
-{
-color:darkred;
-}
-
-#external-links
-{
-text-align:right;
-}
-
-#control-navig, #control-results-top, #control-results-bottom {
-    display: -webkit-flex; /* Safari */
-    -webkit-align-items: center; /* Safari 7.0+ */
-    display: flex;
-    align-items: center;
-}
-#home, #back, #forward, #refresh, .previous-results, .next-results {
-    padding: 2px;
-}
-#refresh, .previous-results, .next-results { padding-right: 10px; }
-#config-control, .next-results { padding-left: 10px; }
-
-/*
-#sparql-endpoint
-{
-text-align:right;
-}
-*/
 
 #sparql-endpoint-input {
     width:300px;
 }
 
-/*
-#permalink
-{
-margin-left:10px;
-/*
-font-style:normal;
-font-weight:normal;
-color:blue;
-text-decoration:underline;
-*/
+.focus {
 }
 
-#lisql
-{
-margin:10px;
-/*font-weight:bold;*/
-}
-*/
-
-.focus
-{
+.highlighted {
+    background-color:#a0f0a0;
 }
 
-.highlighted
-{
-background-color:#a0f0a0;
+.suspended {
+    opacity:0.3;
 }
 
-.suspended
-{
-opacity:0.3;
-}
-
-.coordination
-{
-list-style-type:none;
-margin:0px;
-}
-
-#increments
-{
-}
-
-#increments-focus
-{
-/*font-weight:bold;*/
-}
-
-/*
-.incr-box
-{
-border:4px groove #a0f0a0;
-margin:5px;
-float:left;
-}
-*/
-
-/*
-.pattern-incrs
-{
-width:155px;
-}
-
-#pattern-terms
-{
-width:120px;
-}
-*/
-
-.panel-body-incrs {
-    padding: 0;
+.coordination {
+    list-style-type:none;
+    margin:0px;
 }
 
 .list-incrs {
     height:200px;
     resize:vertical;
     overflow:auto;
+    padding-top:0;
 }
-/*
-.list-incrs
-{
-width:300px;
-height:200px;
-resize:both;
-overflow:auto;
-resize:both;
-}
-*/
-/*
-#list-terms
-{
-width:335px;
-}
-*/
 
-.list-incrs ul
-{
-list-style-type: none;
-padding: 10px;
-margin: 0px;
+.list-incrs ul {
+    list-style-type: none;
+    padding: 10px;
+    margin: 0px;
 }
 .list-incrs.css-treeview ul {
     list-style-type: none;
@@ -274,9 +121,8 @@ margin: 0px;
     left-margin: 0px;
 }
 
-.increment
-{
-cursor:pointer;
+.increment {
+    cursor:pointer;
 }
 
 .frequency-results, .frequency-entities {
@@ -289,10 +135,8 @@ cursor:pointer;
     font-size:12px;
 }
 			 
-
-.count-incrs
-{
-text-align:right;
+.count-incrs {
+    text-align:right;
 }
 
 .css-treeview input ~ ul {
@@ -301,8 +145,7 @@ text-align:right;
 .css-treeview input:checked ~ ul {
     display: block; /* showing sublists of checked increments */
 }
-.css-treeview input
-{
+.css-treeview input {
   position: absolute;
   opacity: 0;
 }
@@ -311,64 +154,34 @@ text-align:right;
 .css-treeview input:checked ~ .label-unchecked { display:none; }
 .css-treeview input:checked ~ .label-checked { display:inline; }
 
-
-#current-focus
-{
-clear:both;
+#control-results {
+    margin: 5px 0px;
 }
 
-#query
-{
-clear:both;
+#list-results {
 }
 
-#results
-{
-clear:both;
+table {
+    border-collapse:collapse;
 }
 
-#charts
-{
+table, th, td {
+    border:1px solid black;
+}
+
+th, td {
+    padding:4px;
+}
+
+footer {
     clear:both;
-}
-
-#list-results
-{
-margin:5px;
-}
-
-table
-{
-border-collapse:collapse;
-}
-
-table, th, td
-{
-border:1px solid black;
-}
-
-th, td
-{
-padding:4px;
-}
-
-#sparql
-{
-clear:both;
-}
-
-footer
-{
-clear:both;
 }
 
 /* examples */
 
-.sparklis-query
-{
-padding:5px;
+.sparklis-query {
+    padding:5px;
 }
 
-.sparklis-permalink
-{
+.sparklis-permalink {
 }
