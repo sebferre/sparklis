@@ -149,7 +149,10 @@ object (self)
 
   method init =
     try this_opt <- Some (jsnew (Unsafe.global##_YASGUI) (Dom_html.getElementById "sparklis-yasgui"))
-    with exn -> alert ("Warning: YASGUI could not be initialized for some reason. SPARQL queries will be displayed as mere text at the bottom of the page.")
+    with exn ->
+      firebug ("yasgui#init: " ^ Printexc.to_string exn);
+      alert ("Warning: YASGUI could not be initialized for some reason. SPARQL queries will be displayed only as text.");
+      this_opt <- None
 
   method set_corsProxy (url_opt : string option) : unit =
     match this_opt with

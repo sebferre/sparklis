@@ -296,7 +296,7 @@ object (self)
     let args =
       if self#is_home
       then ("endpoint", lis#endpoint) :: args
-      else ("endpoint", lis#endpoint) :: ("query", Permalink.of_query lis#query) :: args in
+      else ("endpoint", lis#endpoint) :: ("sparklis-query", Permalink.of_query lis#query) :: args in
     try
       let permalink_url =
 	match Url.Current.get () with
@@ -828,7 +828,9 @@ let _ =
 	   with _ -> url in
 	default_endpoint := url;
 	try
-	  let query = Permalink.to_query (List.assoc "query" args) in
+	  let query = Permalink.to_query
+			(try List.assoc "sparklis-query" args
+			 with _ -> List.assoc "query" args) in (* for backward compatibility of permalinks *)
 	  default_focus := Lisql.focus_of_query query
 	with
 	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
