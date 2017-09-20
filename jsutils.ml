@@ -51,6 +51,10 @@ let jquery_all_from (root : #Dom_html.nodeSelector Js.t) s k =
   done
 let jquery_all s k = jquery_all_from Dom_html.document s k
 
+let jquery_get_innerHTML sel =
+  let res = ref "" in
+  jquery sel (fun elt -> res := to_string elt##innerHTML);
+  !res
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
 let jquery_toggle_innerHTML sel (s1 : string) (s2 : string) : string =

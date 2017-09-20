@@ -292,11 +292,16 @@ object (self)
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
 
   method show_permalink : unit Lwt.t =
+    let endpoint = lis#endpoint in
+    let title = jquery_get_innerHTML "#sparql-endpoint-title" in
     let args = config#get_permalink in
     let args =
-      if self#is_home
-      then ("endpoint", lis#endpoint) :: args
-      else ("endpoint", lis#endpoint) :: ("sparklis-query", Permalink.of_query lis#query) :: args in
+      ("title",title)
+      :: ("endpoint",endpoint)
+      :: (if self#is_home
+	  then args
+	  else ("sparklis-query", Permalink.of_query lis#query)
+	       :: args) in
     try
       let permalink_url =
 	match Url.Current.get () with
@@ -513,15 +518,8 @@ object (self)
 
   method refresh =
     html_state <- new Html.state lis#id_labelling;
-    jquery_select "#sparql-endpoint-select" (fun select ->
-      let options = select##options in
-      for i = options##length - 1 downto 0 do
-	Opt.iter options##item(i) (fun option ->
-	  let value = to_string option##value in
-	  if value = "osparklis.html" ^ to_string Dom_html.window##location##search || value = "" then
-	    option##selected <- bool true)
-      done);
-    jquery_input "#sparql-endpoint-input" (fun input -> input##value <- string lis#endpoint);
+    jquery_input "#sparql-endpoint-input"
+		 (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
     self#refresh_increments_focus;
     self#refresh_constrs;
@@ -714,6 +712,7 @@ object (self)
     Sparql.prologue#reset;
     present#abort_all_ajax;
     config#set_endpoint url;
+    jquery_set_innerHTML "#sparql-endpoint-title" "";
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
@@ -819,24 +818,31 @@ let _ =
 	    (k, v)::l in
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
       (try
-	 let url = List.assoc "endpoint" args in
-	 let url = (* switching from lisfs2008 to servolis *)
-	   try List.assoc url
-		 ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr:3030/dbpedia/sparql";
-		  "http://lisfs2008.irisa.fr/defiEGC2016/sparql", "http://servolis.irisa.fr:3131/defiEGC2016/sparql";
-		  "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
-	   with _ -> url in
-	default_endpoint := url;
-	try
-	  let query = Permalink.to_query
-			(try List.assoc "sparklis-query" args
-			 with _ -> List.assoc "query" args) in (* for backward compatibility of permalinks *)
-	  default_focus := Lisql.focus_of_query query
-	with
-	  | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
-	  | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
-	  |  _ -> ()
-      with _ -> ());
+	  let url = List.assoc "endpoint" args in
+	  let url = (* switching from lisfs2008 to servolis *)
+	    try List.assoc
+		  url
+		  ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr:3030/dbpedia/sparql";
+		   "http://lisfs2008.irisa.fr/defiEGC2016/sparql", "http://servolis.irisa.fr:3131/defiEGC2016/sparql";
+		   "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
+	    with _ -> url in
+	  default_endpoint := url;
+	  (try
+	      let query =
+		Permalink.to_query
+		  (try List.assoc "sparklis-query" args
+		   with _ -> List.assoc "query" args) in (* for backward compatibility of permalinks *)
+	      default_focus := Lisql.focus_of_query query
+	    with
+	    | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
+	    | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
+	    |  _ -> ())
+       with _ -> ());
+      (* setting title if any *)
+      (try
+	  let title = List.assoc "title" args in
+	  jquery_set_innerHTML "#sparql-endpoint-title" title
+	with _ -> ());
       (* initializing configuration from HTML *)
       config#init !default_endpoint args in
     (* creating and initializing history *)
@@ -847,15 +853,6 @@ let _ =
     jquery "#button-back" (onclick (fun elt ev -> history#back));
     jquery "#button-forward" (onclick (fun elt ev -> history#forward));
     jquery "#button-refresh" (onclick (fun elt ev -> history#update_focus ~push_in_history:false (fun focus -> Some focus)));
-    jquery_select "#sparql-endpoint-select"
-      (onchange (fun select ev ->
-	jquery_input "#sparql-endpoint-input" (fun input ->
-	  let permalink = to_string select##value in
-	  if permalink = ""
-	  then begin
-	    input##value <- string "http://";
-	    input##select() end
-	  else Dom_html.window##location##assign(string permalink))));
     jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in

@@ -59,52 +59,113 @@
       </div>
 
       <div class="collapse navbar-collapse" id="myNavbar">
-	
-	<span class="navbar-form">
-	  <span class="tooltiped">
-	    <span class="tooltip lang-en">Select a SPARQL endpoint from a short list</span>
-	    <span class="tooltip lang-fr">Sélectionner un point d'accès SPARQL dans cette liste</span>
-	    <span class="tooltip lang-es">Seleccionar un SPARQL endpoint de la lista</span>
-	    <p class="navbar-text">
-	      <span class="texte lang-en">SPARQL endpoint</span>
-	      <span class="texte lang-fr">Point d'accès SPARQL</span>
-	      <span class="texte lang-es">SPARQL endpoint</span>
-	    </p>
-	    <select id="sparql-endpoint-select" class="selectpicker">
-	      <option value="osparklis.html">Core English DBpedia</option> <!-- default settings -->
-	      <option value="osparklis.html?endpoint=http%3A//dbpedia.org/sparql&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%29">DBpedia</option>
-	      <option value="osparklis.html?endpoint=http%3A//live.dbpedia.org/sparql">Live DBpedia</option>
-	      <option value="osparklis.html?endpoint=http%3A//servolis.irisa.fr%3A3232/mondial/sparql&class_hierarchy=false&property_hierarchy=false&entity_lexicon_property=http%3A//www.semwebtech.org/mondial/10/meta%23name&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en">Mondial</option>
-	      <option value="osparklis.html?endpoint=http%3A//data.nobelprize.org/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">Nobel prizes</option>
-	      <!--	<option value="http://bnb.data.bl.uk/sparql">British National Bibliography</option> -->
-	      <option value="osparklis.html?endpoint=http%3A//rdf.insee.fr/sparql">INSEE</option>
-	      <option value="osparklis.html?endpoint=http%3A//data.persee.fr/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">Persée</option>
-	      <option value="osparklis.html?endpoint=http%3A//datos.bcn.cl/sparql&lang=es">Chile government</option>
-	      <option value="osparklis.html?endpoint=http%3A//lod.euscreen.eu/sparql">European Television Heritage</option>
-	      <option value="osparklis.html?endpoint=http%3A//data.europa.eu/euodp/sparqlep&proxy=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&regexp_hidden_URIs=">Europe Union Open Data Portal</option>
-	      <option value="osparklis.html?endpoint=http%3A//servolis.irisa.fr%3A3333/BretagneTourism/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=fr&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=fr&lang=fr">Tourisme en Bretagne</option>
-	      <option value="osparklis.html?endpoint=http://servolis.irisa.fr:3434/panama-papers/sparql&entity_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&entity_lexicon_lang=en&class_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en">Panama papers (by Derivo)</option>
-	      <option value="osparklis.html?endpoint=http://nomisma.org/query&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2004/02/skos/core%23prefLabel&entity_lexicon_lang=en">Nomisma</option>
-	      <!--	<option value="http://data.ox.ac.uk/sparql/">University of Oxford</option> -->
-	      <option value="">...</option>
-	    </select>
-	  </span>
 
-	  <span class="tooltiped">
-	    <span class="tooltip lang-en">Enter here the URL of the desired SPARQL endpoint</span>
-	    <span class="tooltip lang-fr">Entrer ici l'URL du point d'accès SPARQL souhaité</span>
-	    <span class="tooltip lang-es">Ingrese aquí la URL del SPARQL endpoint requerido</span>
-	    <input id="sparql-endpoint-input" class="form-control no-padding" type="url"
-		   value="http://servolis.irisa.fr:3030/dbpedia/sparql">  <!-- Edit to change default endpoint -->
-	  </span>
-	  
-	  <span class="tooltiped">
-	    <span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
-	    <span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
-	    <span class="tooltip lang-es">Haga clic para conectarse a el SPARQL endpoint ingresado</span>
-	    <button id="sparql-endpoint-button" class="btn btn-primary navbar-btn">Go</button>
-	  </span>
-	</span>
+	<ul class="nav navbar-nav navbar-left">
+	  <li class="dropdown">
+	    <a class="dropdown-toggle" data-toggle="dropdown">
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Select a SPARQL endpoint from a short list</span>
+		<span class="tooltip lang-fr">Sélectionner un point d'accès SPARQL dans cette liste</span>
+		<span class="tooltip lang-es">Seleccionar un SPARQL endpoint de la lista</span>
+		<span class="texte lang-en">SPARQL endpoint</span>
+		<span class="texte lang-fr">Point d'accès SPARQL</span>
+		<span class="texte lang-es">SPARQL endpoint</span>
+	      </span>
+	      <span class="caret"></span>
+	    </a>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a href="osparklis.html?title=Core%20English%DBpedia&endpoint=http%3A//servolis.irisa.fr%3A3030/dbpedia/sparql">
+		  Core English DBpedia
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=DBpedia&endpoint=http%3A//dbpedia.org/sparql&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%29">
+		  DBpedia
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Live%20DBpedia&endpoint=http://live.dbpedia.org/sparql&class_hierarchy=false&property_hierarchy=false">
+		  Live DBpedia
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Mondial&endpoint=http%3A//servolis.irisa.fr%3A3232/mondial/sparql&class_hierarchy=false&property_hierarchy=false&entity_lexicon_property=http%3A//www.semwebtech.org/mondial/10/meta%23name&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en">
+		  Mondial
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Nobel%20prizes&endpoint=http%3A//data.nobelprize.org/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
+		  Nobel prizes
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=INSEE&endpoint=http%3A//rdf.insee.fr/sparql">
+		  INSEE
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Persée&endpoint=http%3A//data.persee.fr/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
+		  Persée
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Chile%20government&endpoint=http%3A//datos.bcn.cl/sparql&lang=es">
+		  Chile government
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=European%20Television%20Heritage&endpoint=http%3A//lod.euscreen.eu/sparql">
+		  European Television Heritage
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=EU%20Open%20Data%20Portal&endpoint=http%3A//data.europa.eu/euodp/sparqlep&proxy=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&regexp_hidden_URIs=">
+		  EU Open Data Portal
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Tourisme%20en%20Bretagne&endpoint=http%3A//servolis.irisa.fr%3A3333/BretagneTourism/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=fr&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=fr&lang=fr">
+		  Tourisme en Bretagne
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Panama%20papers%20%28by%20derivo%29&endpoint=http://servolis.irisa.fr:3434/panama-papers/sparql&entity_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&entity_lexicon_lang=en&class_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en">
+		  Panama papers (by derivo)
+		</a>
+	      </li>
+	      <li>
+		<a href="osparklis.html?title=Nomisma&endpoint=http://nomisma.org/query&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2004/02/skos/core%23prefLabel&entity_lexicon_lang=en">
+		  Nomisma
+		</a>
+	      </li>
+	    </ul>
+	  </li>
+
+	  <li>      
+	    <span class="navbar-form">
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URL of the desired SPARQL endpoint</span>
+		<span class="tooltip lang-fr">Entrer ici l'URL du point d'accès SPARQL souhaité</span>
+		<span class="tooltip lang-es">Ingrese aquí la URL del SPARQL endpoint requerido</span>
+		<input id="sparql-endpoint-input" class="form-control no-padding" type="url"
+		       value="http://servolis.irisa.fr:3030/dbpedia/sparql">  <!-- Edit to change default endpoint -->
+	      </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
+		<span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
+		<span class="tooltip lang-es">Haga clic para conectarse a el SPARQL endpoint ingresado</span>
+		<button id="sparql-endpoint-button" class="btn btn-primary navbar-btn">Go</button>
+	      </span>
+	    </span>
+	  </li>
+
+	  <li>
+	    <span id="sparql-endpoint-title" class="navbar-text">
+	      Core English DBpedia <!-- Edit to change default title -->
+	    </span>
+	  </li>
+	</ul>
 
 	<ul class="nav navbar-nav navbar-right">
 	  <li class="dropdown">
