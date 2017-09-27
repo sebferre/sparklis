@@ -378,6 +378,11 @@ let id_of_focus = function
   | _ -> None
 
 
+let term_hierarchy_spec_of_focus = function
+  | AtS1 (_, RelX (p,(ori,Transitive),ctx)) -> Some (p,ori)
+  | AtP1 (Rel (_,p,(ori,Transitive),_),ctx) -> Some (p,ori)
+  | _ -> None
+	   
 (* getting element annotation *)
 
 let rec annot_p1 : 'a elt_p1 -> 'a = function

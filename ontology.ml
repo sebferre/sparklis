@@ -30,10 +30,10 @@ let flat_hierarchy =
     (fun uri -> if uri=Rdf.owl_Thing then [] else [Rdf.owl_Thing])
 
 (* SPARQL-based hierarchy, retrieving hierarchy from endpoint *)    
-let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : string) : hierarchy =
+let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : string) ~(orientation : Lisql.orientation) : hierarchy =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_parents l_uri k =
-    Jsutils.firebug ("Retrieving parent URIs for " ^ string_of_int (List.length l_uri) ^ " URIs");
+    Jsutils.firebug ("Retrieving parent URIs with property " ^ property ^ ", for " ^ string_of_int (List.length l_uri) ^ " URIs");
     let l_l_uri =
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then Common.bin_list 50 l_uri (* creating bins of 50 uris max *)
@@ -44,7 +44,12 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
       let v_child, v_middle, v_parent = var child, var middle, var parent in
       let t_child, t_middle, t_parent = (v_child :> term), (v_middle :> term), (v_parent :> term) in
       let e_child, e_middle, e_parent = (v_child :> expr), (v_middle :> expr), (v_parent :> expr) in
-      let uri_property = (uri property :> pred) in
+      let has_parent s o =
+	let uri_property = (uri property :> pred) in
+	match orientation with
+	| Lisql.Fwd -> triple s uri_property o
+	| Lisql.Bwd -> triple o uri_property s
+      in
       List.map
 	(fun l_uri ->
 	  select ~projections:[(`Bare,child); (`Bare,parent)] ~froms
@@ -53,12 +58,12 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
 		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_child) l_uri);
 		 optional
 		   (join
-		      [ triple t_child uri_property t_parent;
+		      [ has_parent t_child t_parent;
 			filter (expr_comp "!=" e_child e_parent);
-			filter (not_exists (triple t_parent uri_property t_child));
+			filter (not_exists (has_parent t_parent t_child));
 			filter (not_exists (join
-					      [ triple t_child uri_property t_middle;
-						triple t_middle uri_property t_parent;
+					      [ has_parent t_child t_middle;
+						has_parent t_middle t_parent;
 						filter (log_and [ expr_comp "!=" e_middle e_child;
 								  expr_comp "!=" e_middle e_parent ])
 					      ]))
@@ -105,9 +110,36 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
   in	 
   new tabled_hierarchy (fun uri -> []) bind_parents
 
-let sparql_class_hierarchy ~endpoint ~froms () = sparql_hierarchy ~endpoint ~froms ~property:Rdf.rdfs_subClassOf
-let sparql_property_hierarchy ~endpoint ~froms () = sparql_hierarchy ~endpoint ~froms ~property:Rdf.rdfs_subPropertyOf
-    
+(* pool of hierarchies for an endpoint as a configuration *)
+
+let sparql_hierarchies =
+  object (self)
+    inherit Config.input as super
+
+    method get_permalink = []
+    method set_permalink _ = ()
+
+    val prop_hierarchy : (Rdf.uri * Lisql.orientation, hierarchy) Hashtbl.t = Hashtbl.create 7
+											     
+    method init = ()
+      
+    method set_endpoint url =
+      super#set_endpoint url;
+      Hashtbl.clear prop_hierarchy
+
+    method reset = ()
+
+    method get ~(froms : Rdf.uri list) (property : Rdf.uri) (orientation : Lisql.orientation) =
+      try Hashtbl.find prop_hierarchy (property,orientation)
+      with Not_found ->
+	let h = sparql_hierarchy ~endpoint ~froms ~property ~orientation in
+	Hashtbl.add prop_hierarchy (property,orientation) h;
+	h
+
+    method subclassof ~froms = self#get ~froms Rdf.rdfs_subClassOf Lisql.Fwd
+    method subpropertyof ~froms = self#get ~froms Rdf.rdfs_subPropertyOf Lisql.Fwd
+  end
+							     
 (* configuration *)
 
 open Js
@@ -116,7 +148,7 @@ open Jsutils
 class ['hierarchy] config_hierarchy ~(key : string)
   ~(input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_hierarchy : 'hierarchy) ~(custom_hierarchy : endpoint:string -> froms:(Rdf.uri list) -> unit -> 'hierarchy) () =
+  ~(default_hierarchy : 'hierarchy) ~(custom_hierarchy : froms:(Rdf.uri list) -> 'hierarchy) () =
 object (self)
   inherit Config.input as super
   val mutable init_on = false
@@ -142,7 +174,7 @@ object (self)
 	default_hierarchy end
       else begin
 	Jsutils.firebug "Using custom hierarchy";
-	custom_hierarchy ~endpoint ~froms:config_graphs#froms ()
+	custom_hierarchy ~froms:config_graphs#froms
       end
 
   method private change_hierarchy input : unit =
@@ -189,7 +221,7 @@ let config_class_hierarchy =
     ~input_selector:"#input-class-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_hierarchy:no_hierarchy
-    ~custom_hierarchy:sparql_class_hierarchy
+    ~custom_hierarchy:sparql_hierarchies#subclassof
     ()
 let config_property_hierarchy =
   new config_hierarchy
@@ -197,6 +229,6 @@ let config_property_hierarchy =
     ~input_selector:"#input-property-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_hierarchy:no_hierarchy
-    ~custom_hierarchy:sparql_property_hierarchy
+    ~custom_hierarchy:sparql_hierarchies#subpropertyof
     ()
  

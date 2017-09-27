@@ -87,11 +87,12 @@ type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
 class incr_freq_index = [Lisql.increment, freq option] index ()
 
-let increment_parents = function
+let increment_parents (term_hierarchy : Ontology.hierarchy) = function
+  | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
   | Lisql.IncrType uri -> List.map (fun u -> Lisql.IncrType u) (Ontology.config_class_hierarchy#value#info uri)
   | Lisql.IncrRel (uri,xwd) -> List.map (fun u -> Lisql.IncrRel (u,xwd)) (Ontology.config_property_hierarchy#value#info uri)
   | _ -> []
-class incr_freq_tree_index = [Lisql.increment, freq option] index ~parents:increment_parents ()
+class incr_freq_tree_index th = [Lisql.increment, freq option] index ~parents:(increment_parents th) ()
 
 
 (* configuration *)
@@ -329,6 +330,8 @@ object (self)
 
   (* derived state *)
 
+  val mutable term_hierarchy : Ontology.hierarchy = Ontology.no_hierarchy
+		   
   val mutable id_labelling = new Lisql2nl.id_labelling []
   method id_labelling = id_labelling
 
@@ -348,6 +351,13 @@ object (self)
     
   method private init =
     begin
+      term_hierarchy <-
+	( match Lisql.term_hierarchy_spec_of_focus focus with
+	  | None -> Ontology.no_hierarchy
+	  | Some (p,ori) ->
+	     Ontology.sparql_hierarchies#get
+	       ~froms:Sparql_endpoint.config_default_graphs#froms
+	       p ori );
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
       s_sparql <- Lisql2sparql.s_annot id_labelling focus_descr s_annot
 (*
@@ -462,7 +472,7 @@ object (self)
       let max_value = None in
       let partial = results_term.Sparql_endpoint.length = config_max_results#value in
       let unit = `Results in
-      let incr_index = new incr_freq_index in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
       List.iter
 	(fun t -> incr_index#add (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }))
 	list_term;
@@ -499,10 +509,11 @@ object (self)
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
       let unit = `Results in
-      let incr_index = new incr_freq_index in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
     (* adding term increments *)
       focus_term_index#iter (*rev_map*)
 	(fun (t, (freq,_)) ->
+	  (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
 	  lexicon_enqueue_term t;
 	  incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
     (* adding input increments *)
@@ -558,10 +569,11 @@ object (self)
 	      (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
 	  end
       | _ -> () );
-    (* synchronizing lexicons and continuing *)
-      Lexicon.config_entity_lexicon#value#sync (fun () ->
-	Lexicon.config_class_lexicon#value#sync (fun () ->
-	  k ~partial incr_index))
+      (* synchronizing hierarchies and lexicons and continuing *)
+      term_hierarchy#sync (fun () ->
+	Lexicon.config_entity_lexicon#value#sync (fun () ->
+	  Lexicon.config_class_lexicon#value#sync (fun () ->
+	    k ~partial incr_index)))
 
   method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_class results_prop =
@@ -572,7 +584,7 @@ object (self)
       let unit = `Entities in
       let int_index_class = index_of_results_column "class" results_class in
       let int_index_prop = index_of_results_column "prop" results_prop in
-      let incr_index = new incr_freq_tree_index in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
       int_index_class#iter
 	(function
 	| (Rdf.URI uri, count) ->
@@ -679,7 +691,7 @@ object (self)
       let int_index_a = index_of_results_column "class" results_a in
       let int_index_has = index_of_results_column "prop" results_has in
       let int_index_isof = index_of_results_column "prop" results_isof in
-      let incr_index = new incr_freq_tree_index in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
       int_index_a#iter
 	(function
 	| (Rdf.URI uri, count) ->

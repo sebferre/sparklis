@@ -218,6 +218,7 @@ let config =
       (Sparql_endpoint.config_caching :> Config.input);
       (Sparql_endpoint.config_default_graphs :> Config.input);
       (Sparql_endpoint.config_schema_graphs :> Config.input);
+      (Ontology.sparql_hierarchies :> Config.input);
       (Ontology.config_class_hierarchy :> Config.input);
       (Ontology.config_property_hierarchy :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
