@@ -44,7 +44,7 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
       let v_child, v_middle, v_parent = var child, var middle, var parent in
       let t_child, t_middle, t_parent = (v_child :> term), (v_middle :> term), (v_parent :> term) in
       let e_child, e_middle, e_parent = (v_child :> expr), (v_middle :> expr), (v_parent :> expr) in
-      let uri_property = uri property in
+      let uri_property = (uri property :> pred) in
       List.map
 	(fun l_uri ->
 	  select ~projections:[(`Bare,child); (`Bare,parent)] ~froms

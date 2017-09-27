@@ -116,7 +116,7 @@ let filter_constr_gen (gv : genvar) ~(label_property_lang : string * string) (t 
       formula_or_list
 	[ make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]);
 	  formula_and_list
-	    [ Pattern (triple t (uri label_prop) term_l);
+	    [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
 	      if label_lang = "" then True else Filter (expr_regex (expr_func "lang" [(term_l :> expr)]) label_lang);
 	      make_filter (term_l :> Sparql.expr) ] ] in
   match c with
@@ -194,9 +194,9 @@ let search_constr (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula 
 let triple_arg arg x y z =
   Sparql.Pattern
     ( match arg with
-      | S -> Sparql.triple x y z
-      | P -> Sparql.triple y x z
-      | O -> Sparql.triple y z x )
+      | S -> Sparql.triple x (y :> Sparql.pred) z
+      | P -> Sparql.triple y (x :> Sparql.pred) z
+      | O -> Sparql.triple y (z :> Sparql.pred) x )
 
 let rec expr_apply func args =
   match func with
@@ -295,19 +295,21 @@ type sparql_s = Sparql.formula
 let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
   | Type (annot,c) -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
-  | Rel (annot,p,m,np) ->
+  | Rel (annot,prop,(ori,path),np) ->
     let q_np = form_s1 state np in
     (fun x -> q_np (fun y ->
-      let s, o = match m with Fwd -> x, y | Bwd -> y, x in
-      Sparql.Pattern (Sparql.triple s (Sparql.uri p) o)))
+      let s, o = match ori with Fwd -> x, y | Bwd -> y, x in
+      let p = (Sparql.uri prop :> Sparql.pred) in
+      let p = match path with Direct -> p | Transitive -> Sparql.transitive p in
+      Sparql.Pattern (Sparql.triple s p o)))
   | LatLong (annot,plat,plong,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in
     let v2 = state#id_labelling#get_id_var id2 in
     (fun x ->
       state#add_geoloc x v1 v2;
       Sparql.formula_and
-	(Sparql.Pattern (Sparql.triple x (Sparql.uri plat) (Sparql.var v1 :> Sparql.term)))
-	(Sparql.Pattern (Sparql.triple x (Sparql.uri plong) (Sparql.var v2 :> Sparql.term))))
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plat :> Sparql.pred) (Sparql.var v1 :> Sparql.term)))
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plong :> Sparql.pred) (Sparql.var v2 :> Sparql.term))))
   | Triple (annot,arg,np1,np2) ->
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
@@ -718,8 +720,8 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
 	   (Sparql.pattern_of_formula form_x) :> string))
     | _ -> None in
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
-  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t tp (Sparql.bnode ""))) in
-  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") tp t)) in
+  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t (tp :> Sparql.pred) (Sparql.bnode ""))) in
+  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") (tp :> Sparql.pred) t)) in
   { state;
     focus_term_opt;
     focus_graph_opt;

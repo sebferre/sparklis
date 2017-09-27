@@ -44,6 +44,7 @@ object
   method virtual whose : string
   method virtual according_to : string
   method virtual which : string
+  method virtual hierarchy : string
 
   method virtual and_ : string
   method virtual or_ : string
@@ -130,6 +131,7 @@ object
   method virtual tooltip_header_hide_focus : string
   method virtual tooltip_header_set_focus : string
   method virtual tooltip_geolocation : string
+  method virtual tooltip_transitive : string
 
   method virtual msg_permalink : string
   method virtual result_results : string * string
@@ -158,6 +160,7 @@ object
   method whose = "whose"
   method according_to = "according to" (* "from" *)
   method which = "which"
+  method hierarchy = "hierarchy"
 
   method and_ = "and"
   method or_ = "or"
@@ -326,6 +329,7 @@ object
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
   method tooltip_header_set_focus = "Click on this column header to set the focus on it"
   method tooltip_geolocation = "Retrieve geolocations to show entities on a map"
+  method tooltip_transitive = "Show a hierarchy of entities according to the property at the left"
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
   method result_results = "result", "results"
@@ -354,6 +358,7 @@ object
   method whose = "dont l'"
   method according_to = "selon"
   method which = "lequel"
+  method hierarchy = "hiérarchie"
 
   method and_ = "et"
   method or_ = "ou"
@@ -512,6 +517,7 @@ object
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"
   method tooltip_header_set_focus = "Cliquer sur cet entête de colonne pour mettre le focus dessus"
   method tooltip_geolocation = "Récupérer les géolocalisations pour montrer les entités sur une carte"
+  method tooltip_transitive = "Montrer une hiérarchie d'entités selon la propriété à gauche"
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
   method result_results = "résultat", "résultats"
@@ -541,6 +547,7 @@ object
   method whose = "cuyo"
   method according_to = "según"
   method which = "el/la cual"
+  method hierarchy = "jerarquía"
 
   method and_ = "y"
   method or_ = "o"
@@ -699,6 +706,7 @@ object
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
   method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
   method tooltip_geolocation = "Recuperar geolocaciones para mostrar entidades en un mapa"
+  method tooltip_transitive = "Mostrar una jerarquía de entidades de acuerdo con la propiedad a la izquierda"
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"

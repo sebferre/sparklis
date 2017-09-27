@@ -178,8 +178,13 @@ and print_p1 = function
   | InWhichThereIs (_,np) -> print_un "InWhichThereIs" (print_s1 np)
   | IsThere _ -> print_atom "IsThere"
 and print_modif_p2 = function
+  | ori, path -> print_bin "ModifP2" (print_orientation ori) (print_path path)
+and print_orientation = function
   | Fwd -> print_atom "Fwd"
   | Bwd -> print_atom "Bwd"
+and print_path = function
+  | Direct -> print_atom "Direct"
+  | Transitive -> print_atom "Transitive"
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
@@ -319,8 +324,8 @@ and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
   | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
-  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
-  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,(Fwd,Direct),np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,(Bwd,Direct),np) (* for backward compatibility *)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
   | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((),plat,plong,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
@@ -335,9 +340,16 @@ and parse_p1 ~version = parser
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
 and parse_modif_p2 ~version = parser
+  | [< ori, path = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> (ori,path)
+  | [< ori = parse_orientation ~version >] -> (ori, Direct)  (* for backward compatibility *)
+  | [<>] -> syntax_error "invalid modif_p2"
+and parse_orientation ~version = parser
   | [< () = parse_atom ~version "Fwd" >] -> Fwd
   | [< () = parse_atom ~version "Bwd" >] -> Bwd
-  | [<>] -> syntax_error "invalid modif_p2"
+  | [<>] -> syntax_error "invalid orientation"
+and parse_path ~version = parser
+  | [< () = parse_atom ~version "Direct" >] -> Direct
+  | [< () = parse_atom ~version "Transitive" >] -> Transitive
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)

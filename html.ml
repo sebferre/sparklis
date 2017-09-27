@@ -251,6 +251,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
+      | IncrTransitive -> 5, Some grammar#tooltip_transitive
 	
       | IncrAnd -> 6, None
       | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus

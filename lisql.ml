@@ -45,7 +45,9 @@ type arg = S | P | O
 type project = Unselect | Select
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 type modif_s2 = project * order
-type modif_p2 = Fwd | Bwd
+type orientation = Fwd | Bwd
+type path = Direct | Transitive
+type modif_p2 = orientation * path
 type aggreg =
 | NumberOf | ListOf | Sample
 | Total of num_conv option | Average of num_conv option | Maximum of num_conv option | Minimum of num_conv option
@@ -788,6 +790,7 @@ type increment =
   | IncrRel of Rdf.uri * modif_p2
   | IncrLatLong of Rdf.uri * Rdf.uri
   | IncrTriplify
+  | IncrTransitive
   | IncrAnd
   | IncrDuplicate
   | IncrOr
@@ -935,12 +938,18 @@ let insert_triple arg focus =
   focus_opt_moves steps foc_opt
 
 let insert_triplify = function
-  | AtP1 (Rel (_, p, Fwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
-  | AtP1 (Rel (_, p, Bwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
-  | AtP1 (Triple (_, S, Det ((), Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel ((), p, Fwd, np), ctx))
-  | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, Bwd, np), ctx))
+  | AtP1 (Rel (_, p, (Fwd,_), np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
+  | AtP1 (Rel (_, p, (Bwd,_), np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
+  | AtP1 (Triple (_, S, Det ((), Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel ((), p, (Fwd,Direct), np), ctx))
+  | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, (Bwd,Direct), np), ctx))
   | _ -> None
 
+let toggle_transitive = function
+  | AtS1 (np, RelX (p,(ori,path),ctx)) ->
+     let path = match path with Direct -> Transitive | Transitive -> Direct in
+     Some (AtS1 (np, RelX (p,(ori,path),ctx)))
+  | _ -> None
+	   
 let insert_constr constr focus =
   match focus with
     | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search ((),constr)) focus
@@ -1245,6 +1254,7 @@ let insert_increment incr focus =
     | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
+    | IncrTransitive -> toggle_transitive focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
     | IncrAnd -> insert_and focus

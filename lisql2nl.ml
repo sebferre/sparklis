@@ -204,8 +204,12 @@ let nl_and = function
 
 let word_of_entity uri = `Entity (uri, Lexicon.config_entity_lexicon#value#info uri)
 let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri)
-let word_syntagm_of_property uri =
+let word_syntagm_of_property grammar uri path =
   let synt, name = Lexicon.config_property_lexicon#value#info uri in
+  let name =
+    match path with
+    | Direct -> name
+    | Transitive -> name ^ " (" ^ grammar#hierarchy ^ ")" in (* TODO: get label of transitive closure, if defined (e.g., ancestor for parent) *)
   `Prop (uri, name), synt
 
 let rec word_of_term = function
@@ -272,10 +276,11 @@ let word_of_incr grammar = function
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
   | IncrType c -> word_of_class c
-  | IncrRel (p,_) -> fst (word_syntagm_of_property p)
+  | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p Direct)
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
+  | IncrTransitive -> `Op grammar#hierarchy
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
   | IncrAnd -> `Op grammar#and_
@@ -327,17 +332,17 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
   | Type (_,c) ->
     let v, w = var_of_uri c, word_of_class c in
     [(v, `Word w)], []
-  | Rel (_, p, m, np) ->
+  | Rel (_, p, (ori,path), np) ->
     let v = var_of_uri p in
-    let w, synt = word_syntagm_of_property p in
+    let w, synt = word_syntagm_of_property grammar p path in
     let ls_np =
-      match synt, m with
+      match synt, ori with
 	| `Noun, Fwd
 	| `InvNoun, Bwd -> List.map (fun (_,l) -> (v, `Gen (l,w))) labels @ [(v, `Word w)]
 	| _ -> [] in
     let ls_np, lab = labelling_s1 ~as_p1:false grammar ~labels:ls_np np in
     let ls =
-      match synt, m with
+      match synt, ori with
 	| `Noun, Bwd
 	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
 	| _ -> [] in
@@ -621,16 +626,16 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
   | IsThere annot -> A (annot, `Ellipsis)
   | Is (annot,np) -> A (annot, `IsNP (np_of_elt_s1 grammar ~id_labelling np, []))
   | Type (annot,c) -> A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (word_of_class c, top_rel)))), []))
-  | Rel (annot,p,Fwd,np) ->
-    let word, synt = word_syntagm_of_property p in
+  | Rel (annot,p,(Fwd,path),np) ->
+    let word, synt = word_syntagm_of_property grammar p path in
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
     | `Noun -> A (annot, `HasProp (word, np, []))
     | `InvNoun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
     | `TransVerb -> A (annot, `VT (word, np, []))
     | `TransAdj -> A (annot, `IsPP (`Prep (word, np))) )
-  | Rel (annot,p,Bwd,np) ->
-    let word, synt = word_syntagm_of_property p in
+  | Rel (annot,p,(Bwd,path),np) ->
+    let word, synt = word_syntagm_of_property grammar p path in
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
     | `Noun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
@@ -1252,19 +1257,19 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar xml_c) )
-  | IncrRel (p,Lisql.Fwd) ->
+  | IncrRel (p,(Lisql.Fwd,path)) ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that ::
-       let word, synt = word_syntagm_of_property p in
+       let word, synt = word_syntagm_of_property grammar p path in
        match synt with
 	 | `Noun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
 	 | `TransVerb -> Word word :: xml_ellipsis
 	 | `TransAdj -> Kwd grammar#is :: Word word :: xml_ellipsis)
-  | IncrRel (p,Lisql.Bwd) ->
+  | IncrRel (p,(Lisql.Bwd,path)) ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that ::
-       let word, synt = word_syntagm_of_property p in
+       let word, synt = word_syntagm_of_property grammar p path in
        match synt with
 	 | `Noun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
 	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
@@ -1280,6 +1285,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
+  | IncrTransitive -> Word (`Prop ("", "... (" ^ grammar#hierarchy ^ ")")) :: Word dummy_word :: []
   | IncrThatIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word dummy_word :: []
   | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis

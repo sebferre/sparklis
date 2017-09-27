@@ -137,7 +137,7 @@ let sparql_lexicon
 		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
 		 optional
 		   (join
-		      ( triple (v_u :> term) (uri property) (v_l :> term)
+		      ( triple (v_u :> term) (uri property :> pred) (v_l :> term)
 			:: ( match language with
 			| None -> []
 			| Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]))

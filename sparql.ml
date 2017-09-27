@@ -44,6 +44,7 @@ include S
 type var = [`Var] sparql
 type term = [`Var|`Term] sparql
 type expr = [`Var|`Term|`Expr] sparql
+type pred = [`Var|`Term|`Path] sparql
 type pattern = [`Pattern] sparql
 type selector = [`Var|`Selector] sparql
 type ordering = [`Ordering] sparql
@@ -189,10 +190,12 @@ let log_or (le : expr list) : expr =
       | [e] -> e
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
+let transitive (p : pred) : pred = p ^> "*"
+								   
 let empty : pattern = sparql ""
 let something (s : term) : pattern = s ^> " a [] ."
 let rdf_type (s : term) (c : term) : pattern = s ^^ " a " ^< c ^> " ."
-let triple (s : term) (p : term) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
+let triple (s : term) (p : pred) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
 let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
 let filter (e : expr) : pattern =
   if e = log_true then empty

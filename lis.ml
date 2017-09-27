@@ -586,8 +586,8 @@ object (self)
 	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq = { value=count; max_value; partial=partial_prop; unit } in
-	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some freq);
-	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some freq)
+	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), Some freq);
+	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), Some freq)
 	| _ -> ());
   (*
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_class ~unit
@@ -693,7 +693,7 @@ object (self)
 	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
-	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), freq_opt);
+	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), freq_opt);
 	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
 	| _ -> ());
       int_index_isof#iter
@@ -701,7 +701,7 @@ object (self)
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
-	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some { value=count; max_value; partial=partial_has; unit })
+	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), Some { value=count; max_value; partial=partial_has; unit })
 	| _ -> ());
 (*	
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_a ~unit
@@ -792,7 +792,7 @@ object (self)
 			  (fun (t, (_, graph_index)) ->
 			    Sparql.subquery
 			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-				 (graph_opt graph_index (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.term) (Sparql.bnode "")))))) in
+				 (graph_opt graph_index (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")))))) in
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
@@ -805,7 +805,7 @@ object (self)
 				 (fun (t, (_, graph_index)) ->
 				   Sparql.subquery
 				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-					(graph_opt graph_index (Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.term) (Sparql.term t)))))) in
+					(graph_opt graph_index (Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) (Sparql.term t)))))) in
 	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
@@ -836,7 +836,7 @@ object (self)
       else
 	let incrs = [] in
 	let incrs =
-	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
+	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify :: IncrTransitive ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
