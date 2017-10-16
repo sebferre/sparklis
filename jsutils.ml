@@ -200,24 +200,12 @@ let google =
 object
   val mutable viz_opt = None
 
-  method init =
-    try
-      let google = Unsafe.global##google in
-      firebug "Found global 'google'";
-      let viz = google##visualization in
-      firebug "Found 'google.visualization'";
-      viz_opt <- Some viz;
-      ignore (Unsafe.eval_string "google.charts.load('upcoming', {packages: ['map']});");
-      firebug "Loaded package 'map'"
-    with exn -> alert ("Warning: 'Google charts' could not be initialized for some reason. Maps and charts will not be displayed.")
-
   method set_on_load_callback : 'a. (unit -> 'a) -> 'a = fun k ->
     Unsafe.global##google##charts##setOnLoadCallback(wrap_callback k)
       
   method draw_map (points : (float * float * string) list) (elt_map : Dom_html.element t) : unit =
     firebug "Drawing map";
     let map = jsnew (Unsafe.global##google##visualization##_Map) (elt_map) in
-    firebug "Created the map";
     let table =
       let data =
 	let col t = Inject.(obj [| "type", string t |]) in
@@ -228,12 +216,17 @@ object
 	  "cols", array [| col "number"; col "number"; col "string" |];
 	  "rows", array (Array.of_list (List.map (fun (lat,long,name) -> row lat long name) points)) |]) in
       jsnew (Unsafe.global##google##visualization##_DataTable) (data) in
-    firebug "Created the data table";
     let options = Inject.(obj [|
       "showTooltip", bool true;
       "showInfoWindow", bool true;
-      "useMapTypeControl", bool true |]) in
-    firebug "Created the map options";
+      "useMapTypeControl", bool true;
+      "icons",
+      obj [| "default",
+	     obj [| "normal",
+		    string "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+
+		    "selected",
+		    string "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" |] |] |]) in
     map##draw(table, options);
     firebug "Drawed the map"
 

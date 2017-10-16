@@ -404,11 +404,24 @@ object (self)
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
-	      elt_map##innerHTML <- string "No geolocalized data"
-	      (*elt_map##style##display <- string "none"*) end
+		elt_map##innerHTML <- string "No geolocalized data"
+	      end
 	    else begin
-		(*elt_map##style##display <- string "block";*)
-	      google#draw_map geolocations elt_map
+		jquery "#nav-tab-map"
+		       (fun elt ->
+			let _id = Dom_html.addEventListener
+				    elt
+				    (Dom_html.Event.make "click" (*"shown.bs.tab"*))
+				    (Dom_html.handler
+				       (fun ev ->
+					google#draw_map geolocations elt_map;
+					bool true))
+				    (bool false) in
+			jquery "li.active a#nav-tab-map"
+			       (fun elt ->
+				firebug "Clicked map tab";
+				Unsafe.(meth_call elt "click" [||]));
+			());
 	    end))
       end)
 
@@ -785,7 +798,7 @@ let _ =
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
-    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
+   Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
     firebug "Loaded document and google charts";
     (* initializing YASGUI *)
     Jsutils.yasgui#init;
@@ -914,7 +927,21 @@ let _ =
         firebug "changed limit-results";
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit));
-
+    (* to force redraw of Google Map when changing BS tab *)
+(*
+    jquery "#nav-tab-map"
+	       (onclick (fun elt ev ->
+			 Dom_html.stopPropagation ev;
+			 Unsafe.(meth_call elt "tab" [|inject (string "show")|])));
+    
+    jquery "#nav-tab-map" (fun elt ->
+			   ignore (Dom_html.addEventListener
+				     elt
+				     (Dom_html.Event.make "shown.bs.tab")
+				     (Dom_html.handler (fun ev -> firebug "shown.bs.tab FIRED"; bool true))
+				     (bool false)));
+ *)
+    
     (* generating and displaying contents *)
     translate ();
     history#present#refresh;

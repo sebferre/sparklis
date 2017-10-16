@@ -23,7 +23,7 @@
 <!-- Google Charts -->
 <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 <script type="text/javascript">
-  google.charts.load('current', { 'packages': ['map'] });
+  google.charts.load('current', { 'packages': ['map'], mapsApiKey: 'AIzaSyC1lxqo51Ivm0BrOc0ogkOBUFjHcoczqNo' });
 </script>
 <!-- YASGUI -->
 <link href="http://cdn.jsdelivr.net/yasgui/2.6.1/yasgui.min.css" rel="stylesheet" type="text/css"/>
@@ -860,7 +860,7 @@
 		<span class="texte lang-fr">Tableau</span>
 		<span class="texte lang-es">Tabla</span>
 	    </a></li>
-	    <li><a data-toggle="tab" data-target="#results-map">
+	    <li><a id="nav-tab-map" data-toggle="tab" data-target="#results-map" title="Click on this tab again if the map is not displayed correctly">
 		<span class="texte lang-en">Map</span>
 		<span class="texte lang-fr">Carte</span>
 		<span class="texte lang-es">Mapa</span>

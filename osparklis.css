@@ -160,6 +160,11 @@ th, td {
     padding:4px;
 }
 
+#map {
+    width: 100%;
+    height: 500px;
+}
+
 footer {
     clear:both;
 }
