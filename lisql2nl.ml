@@ -1210,7 +1210,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
   | IncrInput (s,typ) ->
     let xml_input = [Input typ] in
     let kwd_type = string_of_input_type grammar typ in
-    Kwd grammar#the :: Kwd kwd_type :: xml_input
+    Word (`Literal grammar#the) :: Word (`Literal kwd_type) :: xml_input
   | IncrTerm t ->
     let xml_t = [Word (word_of_term t)] in
     ( match focus with

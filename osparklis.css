@@ -82,6 +82,9 @@ head, body, input, textarea, select {
     margin:0px;
 }
 
+.term-input {
+}
+
 .list-incrs {
     height:200px;
     resize:vertical;
@@ -102,7 +105,7 @@ head, body, input, textarea, select {
     padding-top: 10px;
 }
 .list-incrs.css-treeview ul ul {
-    padding-left: 20px;
+    padding-left: 0px;
 }
 .list-incrs.css-treeview li {
     left-margin: 0px;
@@ -126,20 +129,20 @@ head, body, input, textarea, select {
     text-align:right;
 }
 
-.css-treeview input ~ ul {
+.css-treeview input.input-treeview ~ ul {
     display: none; /* hiding sublists of unckecked increments */
 }
-.css-treeview input:checked ~ ul {
+.css-treeview input.input-treeview:checked ~ ul {
     display: block; /* showing sublists of checked increments */
 }
-.css-treeview input {
+.css-treeview input.input-treeview {
   position: absolute;
   opacity: 0;
 }
 /* showing/hiding arrow labels depending on check status */
-.css-treeview input ~ .label-checked { display:none; }
-.css-treeview input:checked ~ .label-unchecked { display:none; }
-.css-treeview input:checked ~ .label-checked { display:inline; }
+.css-treeview input.input-treeview ~ .label-checked { display:none; }
+.css-treeview input.input-treeview:checked ~ .label-unchecked { display:none; }
+.css-treeview input.input-treeview:checked ~ .label-checked { display:inline; }
 
 #control-results {
     margin: 5px 0px;

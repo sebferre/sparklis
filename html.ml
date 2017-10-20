@@ -300,13 +300,13 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
     List.iter
       (fun (`Node ((_freq,_rank,_data,key,html), children)) ->
 	let check_id = "collapse-" ^ key in
-	Buffer.add_string buf "<li>";
+	Buffer.add_string buf "<li class=\"col-xs-11\">";
 	if children = [] then begin
-	  Buffer.add_string buf "<label style=\"visibility:hidden;\">► </label>";
-	  Buffer.add_string buf html
+	    Buffer.add_string buf "<label style=\"visibility:hidden;\">► </label>";
+	    Buffer.add_string buf html
 	end
 	else begin
-	  Buffer.add_string buf ("<input type=\"checkbox\" id=\"" ^ check_id ^ "\">");
+	  Buffer.add_string buf ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
 	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼</label>");
 	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">► </label>");
 	  Buffer.add_string buf html;
