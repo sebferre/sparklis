@@ -33,7 +33,7 @@ type project = Unselect | Select
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 type modif_s2 = project * order
 type orientation = Fwd | Bwd
-type path = Direct | Transitive
+type path = Direct | Transitive of bool (* bool to inverse display direction of hierarchy *)
 type modif_p2 = orientation * path
 type aggreg =
 | NumberOf | ListOf | Sample
@@ -364,10 +364,30 @@ let id_of_focus = function
   | AtS (s,_) -> id_of_s s
   | _ -> None
 
+let inverse_orientation = function
+  | Fwd -> Bwd
+  | Bwd -> Fwd
 
-let term_hierarchy_spec_of_focus = function
-  | AtS1 (_, RelX (p,(ori,Transitive),ctx)) -> Some (p,ori)
-  | AtP1 (Rel (_,p,(ori,Transitive),_),ctx) -> Some (p,ori)
+let rec term_hierarchy_spec_of_focus = function
+  | AtS1 (np,ctx) -> term_hierarchy_spec_of_ctx_s1 ctx
+  | AtP1 (f,ctx) -> term_hierarchy_spec_of_ctx_p1 ctx
+  | _ -> None
+and term_hierarchy_spec_of_ctx_s1 = function
+  | RelX (p,(ori,path),ctx) ->
+     ( match path with
+       | Direct -> None
+       | Transitive inv -> Some (p, if inv then inverse_orientation ori else ori) )
+  | NAndX (_,ctx)
+  | NOrX (_,ctx)
+  | NMaybeX ctx
+  | NNotX ctx -> term_hierarchy_spec_of_ctx_s1 ctx
+  | _ -> None
+and term_hierarchy_spec_of_ctx_p1 = function
+  | DetThatX (_,ctx) -> term_hierarchy_spec_of_ctx_s1 ctx
+  | AndX (_,ctx)
+  | OrX (_,ctx)
+  | MaybeX ctx
+  | NotX ctx -> term_hierarchy_spec_of_ctx_p1 ctx
   | _ -> None
 	   
 (* getting element annotation *)
@@ -782,7 +802,7 @@ type increment =
   | IncrRel of Rdf.uri * modif_p2
   | IncrLatLong of Rdf.uri * Rdf.uri
   | IncrTriplify
-  | IncrTransitive
+  | IncrTransitive of bool
   | IncrAnd
   | IncrDuplicate
   | IncrOr
@@ -936,9 +956,12 @@ let insert_triplify = function
   | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, (Bwd,Direct), np), ctx))
   | _ -> None
 
-let toggle_transitive = function
+let toggle_transitive inv = function
   | AtS1 (np, RelX (p,(ori,path),ctx)) ->
-     let path = match path with Direct -> Transitive | Transitive -> Direct in
+     let path =
+       match path with
+       | Direct -> Transitive inv
+       | Transitive inv0 -> if inv=inv0 then Direct else Transitive inv in
      Some (AtS1 (np, RelX (p,(ori,path),ctx)))
   | _ -> None
 	   
@@ -1246,7 +1269,7 @@ let insert_increment incr focus =
     | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
-    | IncrTransitive -> toggle_transitive focus
+    | IncrTransitive inv -> toggle_transitive inv focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
     | IncrAnd -> insert_and focus

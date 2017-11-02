@@ -196,7 +196,7 @@ let word_syntagm_of_property grammar uri path =
   let name =
     match path with
     | Direct -> name
-    | Transitive -> name ^ " (" ^ grammar#hierarchy ^ ")" in (* TODO: get label of transitive closure, if defined (e.g., ancestor for parent) *)
+    | Transitive inv -> name ^ " (" ^ grammar#hierarchy inv ^ ")" in (* TODO: get label of transitive closure, if defined (e.g., ancestor for parent) *)
   `Prop (uri, name), synt
 
 let rec word_of_term = function
@@ -267,7 +267,7 @@ let word_of_incr grammar = function
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrTransitive -> `Op grammar#hierarchy
+  | IncrTransitive inv -> `Op (grammar#hierarchy inv)
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
   | IncrAnd -> `Op grammar#and_
@@ -1272,7 +1272,7 @@ let xml_incr grammar ~id_labelling (focus : focus) = function
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
-  | IncrTransitive -> Word (`Prop ("", "... (" ^ grammar#hierarchy ^ ")")) :: Word dummy_word :: []
+  | IncrTransitive inv -> Word (`Prop ("", "... (" ^ grammar#hierarchy inv ^ ")")) :: Word dummy_word :: []
   | IncrThatIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word dummy_word :: []
   | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis

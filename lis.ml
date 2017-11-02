@@ -835,7 +835,8 @@ object (self)
       else
 	let incrs = [] in
 	let incrs =
-	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify :: IncrTransitive ::
+	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
+	    IncrTransitive false :: IncrTransitive true ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::

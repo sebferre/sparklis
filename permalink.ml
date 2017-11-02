@@ -109,6 +109,7 @@ let print_version = function
   | VInit -> "VInit"
   | VId -> "VId"
 
+let print_bool b = if b then "true" else "false"
 let print_int i = Printf.sprintf "%d" i
 let print_float f = Printf.sprintf "%F" f
 let print_string s = Printf.sprintf "%S" s
@@ -171,7 +172,7 @@ and print_orientation = function
   | Bwd -> print_atom "Bwd"
 and print_path = function
   | Direct -> print_atom "Direct"
-  | Transitive -> print_atom "Transitive"
+  | Transitive inv -> print_un "Transitive" (print_bool inv)
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
@@ -249,6 +250,7 @@ let parse_version = parser
   | [< 'Ident "VId" >] -> VId
   | [<>] -> syntax_error "invalid version"
 
+let parse_bool ~version = parser [< 'Ident "true" >] -> true | [< 'Ident "false" >] -> false
 let parse_int ~version = parser [< 'Int i >] -> i
 let parse_float ~version = parser [< 'Float f >] -> f
 let parse_string ~version = parser [< 'String s >] -> s
@@ -336,7 +338,7 @@ and parse_orientation ~version = parser
   | [<>] -> syntax_error "invalid orientation"
 and parse_path ~version = parser
   | [< () = parse_atom ~version "Direct" >] -> Direct
-  | [< () = parse_atom ~version "Transitive" >] -> Transitive
+  | [< inv = parse_un ~version "Transitive" parse_bool >] -> Transitive inv
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)

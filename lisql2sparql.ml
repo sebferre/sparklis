@@ -287,7 +287,7 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     (fun x -> q_np (fun y ->
       let s, o = match ori with Fwd -> x, y | Bwd -> y, x in
       let p = (Sparql.uri prop :> Sparql.pred) in
-      let p = match path with Direct -> p | Transitive -> Sparql.transitive p in
+      let p = match path with Direct -> p | Transitive _ -> Sparql.transitive p in
       Sparql.Pattern (Sparql.triple s p o)))
   | LatLong (annot,plat,plong,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in

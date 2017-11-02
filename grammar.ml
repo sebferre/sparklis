@@ -31,7 +31,7 @@ object
   method virtual whose : string
   method virtual according_to : string
   method virtual which : string
-  method virtual hierarchy : string
+  method virtual hierarchy : bool -> string (* [bool] for 'inverse' *)
 
   method virtual and_ : string
   method virtual or_ : string
@@ -147,7 +147,7 @@ object
   method whose = "whose"
   method according_to = "according to" (* "from" *)
   method which = "which"
-  method hierarchy = "hierarchy"
+  method hierarchy inv = if inv then "inverse hierarchy" else "hierarchy"
 
   method and_ = "and"
   method or_ = "or"
@@ -345,7 +345,7 @@ object
   method whose = "dont l'"
   method according_to = "selon"
   method which = "lequel"
-  method hierarchy = "hiérarchie"
+  method hierarchy inv = if inv then "hiérarchie inversée" else "hiérarchie"
 
   method and_ = "et"
   method or_ = "ou"
@@ -534,7 +534,7 @@ object
   method whose = "cuyo"
   method according_to = "según"
   method which = "el/la cual"
-  method hierarchy = "jerarquía"
+  method hierarchy inv = if inv then "jerarquía inversa" else "jerarquía"
 
   method and_ = "y"
   method or_ = "o"
