@@ -920,6 +920,22 @@ let _ =
       [("#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
        ("#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
        ("#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
+
+    List.iter
+      (fun (sel_btn,sel_list_incrs,checked) ->
+       jquery sel_btn
+	      (onclick
+		 (fun elt ev ->
+		  jquery_all
+		    (sel_list_incrs ^ " .input-treeview")
+		    (fun elt ->
+		     Opt.iter
+		       (Dom_html.CoerceTo.input elt)
+		       (fun input -> input##checked <- bool checked)))))
+      ["#button-expand-properties", "#list-properties", true;
+       "#button-collapse-properties", "#list-properties", false;
+       "#button-expand-terms", "#list-terms", true;
+       "#button-collapse-terms", "#list-terms", false];
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
