@@ -14,21 +14,30 @@ open Lisql_annot
 class ['a] dico (prefix : string) =
 object
   val mutable cpt = 0
-  val ht : (string,'a) Hashtbl.t = Hashtbl.create 100
+  val ht : (string,'a) Hashtbl.t = Hashtbl.create 101
+  val rev_ht : ('a,string) Hashtbl.t = Hashtbl.create 101
 
   method add (x : 'a) : string =
-    let k = cpt <- cpt + 1; prefix ^ string_of_int cpt in
-    Hashtbl.add ht k x;
-    k
+    try Hashtbl.find rev_ht x
+    with Not_found ->
+      let k = cpt <- cpt + 1; prefix ^ string_of_int cpt in
+      Hashtbl.add ht k x;
+      Hashtbl.add rev_ht x k;
+      k
 
   method add_key (key : string) (x : 'a) : unit =
-    Hashtbl.add ht key x
+    Hashtbl.add ht key x;
+    Hashtbl.add rev_ht x key
 
   method get (key : string) : 'a =
     try Hashtbl.find ht key
     with _ ->
       Firebug.console##log(string ("Missing element in dico: " ^ key));
       failwith "Osparqlis.dico#get"
+
+  method get_key (x : 'a) : string option =
+    try Some (Hashtbl.find rev_ht x)
+    with Not_found -> None
 end
 
 (* HTML state with dictionaries for foci and increments in user interface *)
@@ -36,6 +45,11 @@ end
 let focus_key_of_root = "root"
 let focus_key_of_id (id : Lisql.id) : string = "id" ^ string_of_int id
 
+let collapse_of_key key = "collapse-" ^ key
+let key_of_collapse =
+  let l = String.length "collapse-" in
+  fun s -> String.sub s l (String.length s - l)
+								    
 class state (id_labelling : Lisql2nl.id_labelling) =
 object
   method id_labelling = id_labelling
@@ -299,7 +313,7 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
     Buffer.add_string buf "<ul>";
     List.iter
       (fun (`Node ((_freq,_rank,_data,key,html), children)) ->
-	let check_id = "collapse-" ^ key in
+	let check_id = collapse_of_key key in
 	Buffer.add_string buf "<li class=\"col-xs-11\">";
 	if children = [] then begin
 	    Buffer.add_string buf "<label style=\"visibility:hidden;\">► </label>";

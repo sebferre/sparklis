@@ -274,10 +274,19 @@ object (self)
   val mutable term_constr = Lisql.True
   val mutable property_constr = Lisql.True
 
+  (* UI state *)
+  val mutable document_scroll = 0
+  val mutable property_scroll = 0
+  val mutable term_scroll = 0
+  val mutable modifier_scroll = 0
+  val mutable expanded_terms : Lisql.increment list = []
+  val mutable expanded_properties : Lisql.increment list = []
+							     
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
+  initializer html_state <- new Html.state lis#id_labelling
 
   method show_permalink : unit Lwt.t =
     let endpoint = lis#endpoint in
@@ -454,6 +463,8 @@ object (self)
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
+	      jquery "#list-terms" (fun elt -> elt##scrollTop <- term_scroll);
+	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
 		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      stop_propagation_from elt_list "a, .term-input";
@@ -479,6 +490,8 @@ object (self)
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	    (fun ~partial index ->
 	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
+	      jquery "#list-properties" (fun elt -> elt##scrollTop <- property_scroll);
+	      self#restore_expanded_properties;
 	      jquery_set_innerHTML "#count-properties"
 		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
@@ -506,6 +519,7 @@ object (self)
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
       elt_list##innerHTML <- string (html_index lis#focus html_state index);
+      jquery "#list-modifiers" (fun elt -> elt##scrollTop <- modifier_scroll);    
       jquery_set_innerHTML "#count-modifiers"
 	(html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
       stop_propagation_from elt_list ".term-input";
@@ -518,7 +532,8 @@ object (self)
 	    apply_incr incr_elt)))))
 
   method refresh =
-    html_state <- new Html.state lis#id_labelling;
+    Dom_html.document##body##scrollTop <- document_scroll;
+    Dom_html.document##documentElement##scrollTop <- document_scroll;
     jquery_input "#sparql-endpoint-input"
 		 (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
@@ -606,6 +621,7 @@ object (self)
     then begin
       refreshing_terms <- true;
       term_constr <- constr;
+      self#save_ui_state;
       (*if self#is_home
       then self#refresh_term_increments
 	else*) self#refresh
@@ -621,6 +637,7 @@ object (self)
     then begin
       refreshing_properties <- true;
       property_constr <- constr;
+      self#save_ui_state;
       self#refresh_property_increments
     end
 
@@ -677,12 +694,68 @@ object (self)
     lis#abort_all_ajax;
     refreshing_terms <- false;
     refreshing_properties <- false
+
+
+  method save_ui_state =
+    document_scroll <-
+      max
+	Dom_html.document##body##scrollTop
+	Dom_html.document##documentElement##scrollTop;
+    jquery "#list-properties" (fun elt -> property_scroll <- elt##scrollTop);
+    jquery "#list-terms" (fun elt -> term_scroll <- elt##scrollTop);
+    jquery "#list-modifiers" (fun elt -> modifier_scroll <- elt##scrollTop);
+    self#save_expanded_terms;
+    self#save_expanded_properties
+  method save_expanded_terms =
+    expanded_terms <- [];
+    jquery_all "#list-terms .input-treeview:checked"
+	       (fun elt ->
+		try
+		  let incr = self#increment_of_elt elt in
+		  expanded_terms <- incr :: expanded_terms
+		with _ -> ())
+  method save_expanded_properties =
+    expanded_properties <- [];
+    jquery_all "#list-properties .input-treeview:checked"
+	       (fun elt ->
+		try
+		  let incr = self#increment_of_elt elt in
+		  expanded_properties <- incr :: expanded_properties
+		with _ -> ())
+  method private increment_of_elt elt =
+    let id = to_string elt##id in
+    let key = Html.key_of_collapse id in
+    html_state#dico_incrs#get key
+	       
+  method restore_expanded_terms =
+    self#restore_expanded_gen expanded_terms
+  method restore_expanded_properties =
+    self#restore_expanded_gen expanded_properties
+  method private restore_expanded_gen expanded =
+    List.iter
+      (fun incr ->
+       match  html_state#dico_incrs#get_key incr with
+       | Some key ->
+	  let id = Html.collapse_of_key key in
+	  jquery_input ("#" ^ id)
+		       (fun input ->
+			input##checked <- bool true)
+       | None -> ())
+      expanded
+
       
   method new_place endpoint focus =
-    {< lis = new Lis.place endpoint focus;
+    let lis = new Lis.place endpoint focus in 
+    {< lis = lis;
+       html_state = new Html.state lis#id_labelling;
        offset = 0;
        term_constr = Lisql.True;
-       property_constr = Lisql.True; >}
+       property_constr = Lisql.True;
+       (* keeping same document scroll *)
+       property_scroll = 0;
+       term_scroll = 0;
+       modifier_scroll = 0;
+       (* keeping expanded increments *) >}
 
 end
 
@@ -708,10 +781,11 @@ object (self)
     past <- present::past;
     present <- p;
     future <- []
-
+		
   method change_endpoint url =
     Sparql.prologue#reset;
     present#abort_all_ajax;
+    present#save_ui_state;
     config#set_endpoint url;
     jquery_set_innerHTML "#sparql-endpoint-title" "";
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
@@ -724,11 +798,12 @@ object (self)
     match f present#lis#focus with
       | None -> ()
       | Some foc ->
-	present#abort_all_ajax;
-	let p = present#new_place present#lis#endpoint foc in
-	p#set_navigation (self :> navigation);
-	if push_in_history then self#push p else present <- p;
-	p#refresh
+	 present#abort_all_ajax;
+	 present#save_ui_state;
+	 let p = present#new_place present#lis#endpoint foc in
+	 p#set_navigation (self :> navigation);
+	 if push_in_history then self#push p else present <- p;
+	 p#refresh
 
   method home =
     self#update_focus ~push_in_history:true
@@ -738,21 +813,23 @@ object (self)
     match past with
       | [] -> ()
       | p::lp ->
-	present#abort_all_ajax;
-	future <- present::future;
-	present <- p;
-	past <- lp;
-	p#refresh
-
+	 present#abort_all_ajax;
+	 present#save_ui_state;
+	 future <- present::future;
+	 present <- p;
+	 past <- lp;
+	 p#refresh
+	   
   method forward : unit =
     match future with
       | [] -> ()
       | p::lp ->
-	present#abort_all_ajax;
-	past <- present::past;
-	present <- p;
-	future <- lp;
-	p#refresh
+	 present#abort_all_ajax;
+	 present#save_ui_state;
+	 past <- present::past;
+	 present <- p;
+	 future <- lp;
+	 p#refresh
 
 end
 
