@@ -92,11 +92,6 @@ head, body, input, textarea, select {
     padding-top:0;
 }
 
-.list-incrs ul {
-    list-style-type: none;
-    padding: 10px;
-    margin: 0px;
-}
 .list-incrs.css-treeview ul {
     list-style-type: none;
     padding: 0px;
