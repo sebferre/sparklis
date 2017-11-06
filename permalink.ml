@@ -131,7 +131,7 @@ let rec print s =
   "[" ^ print_version current_version ^ "]" ^ print_s s
 and print_s = function
   | Return (_,np) -> print_un "Return" (print_s1 np)
-  | SAggreg (_,aggregs) -> print_un "SAggreg" (print_list print_aggreg "Aggregs" aggregs)
+  | SAggreg (_,aggregs) -> print_list print_aggreg "SAggregList" aggregs
   | SExpr (_,"",id,modif,expr,rel_opt) -> print_nary "SExpr" [print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | SExpr (_,name,id,modif,expr,rel_opt) -> print_nary "SExprNamed" [print_string name; print_id id; print_modif modif; print_expr expr; print_opt print_p1 rel_opt]
   | SFilter (_,id,expr) -> print_bin "SFilter" (print_id id) (print_expr expr)
@@ -287,7 +287,7 @@ let rec parse = parser
 and parse_s ~version = parser
     | [< np = parse_un ~version "Return" parse_s1 >] -> Return ((),np)
     | [< dims, aggregs = parse_bin ~version "SAggreg" (fun ~version -> parse_list parse_aggreg ~version "Dims") (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((), dims @ aggregs) (* for backward compatibility *)
-    | [< aggregs = parse_un ~version "SAggreg1" (fun ~version -> parse_list parse_aggreg ~version "Aggregs") >] -> SAggreg ((), aggregs)
+    | [< aggregs = parse_list parse_aggreg ~version "SAggregList" >] -> SAggreg ((), aggregs)
     | [< id, modif, expr, rel_opt = parse_quad ~version "SExpr" parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), "", id, modif, expr, rel_opt)
     | [< name, id, modif, expr, rel_opt = parse_quin ~version "SExprNamed" parse_string parse_id parse_modif parse_expr (parse_opt parse_p1) >] -> SExpr ((), name, id, modif, expr, rel_opt)
     | [< id, expr = parse_bin ~version "SFilter" parse_id parse_expr >] -> SFilter ((), id, expr)
