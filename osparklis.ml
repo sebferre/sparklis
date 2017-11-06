@@ -305,7 +305,11 @@ object (self)
 	  | None -> raise Not_found
 	  | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
 	  | Some (Url.Https url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	  | Some (Url.File url) -> "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html?" ^ Url.encode_arguments args in
+	  | Some (Url.File url) ->
+	     ( match Url.url_of_string
+		       "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html" with
+	       | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
+	       | _ -> assert false ) in
       Lwt.bind
 	(XmlHttpRequest.perform_raw_url
 	   ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
