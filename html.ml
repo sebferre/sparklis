@@ -55,11 +55,13 @@ object
   method id_labelling = id_labelling
   val dico_foci : Lisql.focus dico = new dico "focus"
   method add_focus (focus : Lisql.focus) : string =
-    if Lisql.is_root_focus focus then dico_foci#add_key focus_key_of_root focus;
+    let key = dico_foci#add focus in
+    if Lisql.is_root_focus focus then
+      dico_foci#add_key focus_key_of_root focus;
     ( match Lisql.id_of_focus focus with
       | Some id -> dico_foci#add_key (focus_key_of_id id) focus
       | None -> () );
-    dico_foci#add focus
+    key
   method get_focus (key : string) : Lisql.focus = dico_foci#get key
 
   val dico_incrs : Lisql.increment dico = new dico "incr"
