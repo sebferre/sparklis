@@ -95,19 +95,27 @@ head, body, input, textarea, select {
 .list-incrs.css-treeview ul {
     list-style-type: none;
     padding: 0px;
+    line-height:90%; // avoids wasted space between items
 }
 .list-incrs.css-treeview > ul {
-    padding-top: 10px;
+    padding-top: 0px;
 }
 .list-incrs.css-treeview ul ul {
     padding-left: 0px;
 }
 .list-incrs.css-treeview li {
-    left-margin: 0px;
+    margin-left: 0px;
+    margin-top:8px;
+    margin-bottom: 0px;
+    white-space: nowrap;
 }
 
 .increment {
     cursor:pointer;
+    display:inline-block;
+    vertical-align:top;
+    line-height:100%;
+    white-space:normal;
 }
 
 .frequency-results, .frequency-entities {

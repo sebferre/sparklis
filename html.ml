@@ -318,13 +318,13 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
 	let check_id = collapse_of_key key in
 	Buffer.add_string buf "<li class=\"col-xs-11\">";
 	if children = [] then begin
-	    Buffer.add_string buf "<label style=\"visibility:hidden;\">► </label>";
+	    Buffer.add_string buf "<label style=\"visibility:hidden;\">►&nbsp;</label>";
 	    Buffer.add_string buf html
 	end
 	else begin
 	  Buffer.add_string buf ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
-	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼</label>");
-	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">► </label>");
+	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
+	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
 	  Buffer.add_string buf html;
 	  aux buf children
 	end;
