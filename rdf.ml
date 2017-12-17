@@ -23,7 +23,10 @@ let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
 let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
 let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
-  
+let rdfs_domain = "http://www.w3.org/2000/01/rdf-schema#domain"
+let rdfs_range = "http://www.w3.org/2000/01/rdf-schema#range"
+let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough"
+
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
 
 let lat_long_properties =

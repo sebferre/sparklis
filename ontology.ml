@@ -4,20 +4,124 @@
   This file is part of Sparklis.
 *)
 
-(* ontological hierarchies *)
-class virtual hierarchy = [Rdf.uri,Rdf.uri list] Cache.cache
-class pure_hierarchy get_parents = [Rdf.uri,Rdf.uri list] Cache.pure_cache ~get:get_parents
-class tabled_hierarchy default_parents bind_parents = [Rdf.uri,Rdf.uri list] Cache.tabled_cache ~default:default_parents ~bind:bind_parents
+(* ontological relations *)
+class virtual relation = [Rdf.uri,Rdf.uri list] Cache.cache
+class pure_relation get_images = [Rdf.uri,Rdf.uri list] Cache.pure_cache ~get:get_images
+class tabled_relation default_images bind_images = [Rdf.uri,Rdf.uri list] Cache.tabled_cache ~default:default_images ~bind:bind_images
 
 (* default void hierarchy *)
-let no_hierarchy = new pure_hierarchy (fun uri -> [])
+let no_relation = new pure_relation (fun uri -> [])
 
-let flat_hierarchy =
-  new pure_hierarchy
-    (fun uri -> if uri=Rdf.owl_Thing then [] else [Rdf.owl_Thing])
 
-(* SPARQL-based hierarchy, retrieving hierarchy from endpoint *)    
-let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : string) ~(orientation : Lisql.orientation) : hierarchy =
+(* SPARQL-based relation, retrieving relation from endpoint *)
+let sparql_relation
+      ~(name : string)
+      ~(endpoint : string)
+      ~(froms : Rdf.uri list)
+      ~(make_pattern : Sparql.var -> Sparql.var -> Sparql.pattern)
+    : relation =
+  let ajax_pool = new Sparql_endpoint.ajax_pool in
+  let bind_images l_uri k =
+    Jsutils.firebug ("Retrieving image URIs in " ^ name ^ ", for " ^ string_of_int (List.length l_uri) ^ " URIs");
+    let l_l_uri =
+      if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
+      then Common.bin_list 50 l_uri (* creating bins of 50 uris max *)
+      else [l_uri] in
+    let source, image = "uri", "image" in (* SPARQL vars *)
+    let l_sparql =
+      let open Sparql in
+      let v_source, v_image = var source, var image in
+      List.map
+	(fun l_uri ->
+	  select ~projections:[(`Bare,source); (`Bare,image)] ~froms
+	    (join
+	       [ union
+		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_source) l_uri);
+		 optional
+		   (make_pattern v_source v_image) ]))
+	l_l_uri in
+    let add_source_image ht_images uri_source uri_image =
+      let images_ref =
+	try Hashtbl.find ht_images uri_source
+	with Not_found ->
+	  let imgs_ref = ref [] in
+	  Hashtbl.add ht_images uri_source imgs_ref;
+	  imgs_ref in
+      if not (List.mem uri_image !images_ref)
+      then images_ref := uri_image :: !images_ref
+      else ()
+    in
+    Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
+      (fun l_results ->
+	let ht_images : (Rdf.uri, Rdf.uri list ref) Hashtbl.t = Hashtbl.create 101 in
+	List.iter
+	  (fun results ->
+	    let i = List.assoc source results.Sparql_endpoint.vars in
+	    let j = List.assoc image results.Sparql_endpoint.vars in
+	    List.iter
+	      (fun binding ->
+		match binding.(i), binding.(j) with
+		| Some (Rdf.URI uri_source), Some (Rdf.URI uri_image) -> add_source_image ht_images uri_source uri_image
+		| Some (Rdf.URI uri_source), None -> Hashtbl.add ht_images uri_source (ref []) (* recording absence of parents *)
+		| _ -> ())
+	      results.Sparql_endpoint.bindings)
+	  l_results;
+	let l_uri_info_opt =
+	  Hashtbl.fold
+	    (fun uri_source images_ref res -> (uri_source, Some !images_ref)::res)
+	    ht_images [] in
+	k l_uri_info_opt)
+      (fun code ->
+	ajax_pool#alert ("The image URIs could not be retrieved in " ^ name ^ ".");
+	k [])
+  in
+  new tabled_relation (fun uri -> []) bind_images
+
+(* SPARQL-based relation, retrieving data from endpoint *)
+let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(orientation : Lisql.orientation) : relation =
+  let make_pattern v_source v_image : Sparql.pattern =
+    let open Sparql in
+    let uri_property = (uri property :> pred) in
+    match orientation with
+    | Lisql.Fwd -> triple (v_source :> term) uri_property (v_image :> term)
+    | Lisql.Bwd -> triple (v_image :> term) uri_property (v_source :> term)
+  in
+  sparql_relation
+    ~name:("property <" ^ property ^ ">")
+    ~endpoint
+    ~froms
+    ~make_pattern
+
+(* SPARQL-based hierarchy, retrieving hierarchical relation from endpoint *)    
+let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(orientation : Lisql.orientation) : relation =
+  let make_pattern v_child v_parent : Sparql.pattern =
+    let open Sparql in
+    let has_parent s o =
+      let uri_property = (uri property :> pred) in
+      match orientation with
+      | Lisql.Fwd -> triple s uri_property o
+      | Lisql.Bwd -> triple o uri_property s
+    in
+    let v_middle = var "middle" in
+    join
+      [ has_parent (v_child :> term) (v_parent :> term);
+	filter (expr_comp "!=" (v_child :> expr) (v_parent :> expr));
+	filter (not_exists (has_parent (v_parent :> term) (v_child :> term)));
+	filter (not_exists (join
+			      [ has_parent (v_child :> term) (v_middle :> term);
+				has_parent (v_middle :> term) (v_parent :> term);
+				filter (log_and [ expr_comp "!=" (v_middle :> expr) (v_child :> expr);
+						  expr_comp "!=" (v_middle :> expr) (v_parent :> expr) ])
+			      ]))
+      ]
+  in
+  sparql_relation
+    ~name:("property <" ^ property ^ ">")
+    ~endpoint
+    ~froms
+    ~make_pattern
+
+(*  
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_parents l_uri k =
     Jsutils.firebug ("Retrieving parent URIs with property " ^ property ^ ", for " ^ string_of_int (List.length l_uri) ^ " URIs");
@@ -96,35 +200,47 @@ let sparql_hierarchy ~(endpoint : string) ~(froms : Rdf.uri list) ~(property : s
 	k [])
   in	 
   new tabled_hierarchy (fun uri -> []) bind_parents
-
+ *)
+    
 (* pool of hierarchies for an endpoint as a configuration *)
 
-let sparql_hierarchies =
+type relation_spec =
+  | Property of Rdf.uri * Lisql.orientation
+  | Hierarchy of Rdf.uri * Lisql.orientation
+    
+let sparql_relations =
   object (self)
     inherit Config.input as super
 
     method get_permalink = []
     method set_permalink _ = ()
 
-    val prop_hierarchy : (Rdf.uri * Lisql.orientation, hierarchy) Hashtbl.t = Hashtbl.create 7
+    val spec_relation : (relation_spec, relation) Hashtbl.t = Hashtbl.create 7
 											     
     method init = ()
       
     method set_endpoint url =
       super#set_endpoint url;
-      Hashtbl.clear prop_hierarchy
+      Hashtbl.clear spec_relation
 
     method reset = ()
 
-    method get ~(froms : Rdf.uri list) (property : Rdf.uri) (orientation : Lisql.orientation) =
-      try Hashtbl.find prop_hierarchy (property,orientation)
+    method get ~(froms : Rdf.uri list) (rel_spec : relation_spec) : relation =
+      try Hashtbl.find spec_relation rel_spec
       with Not_found ->
-	let h = sparql_hierarchy ~endpoint ~froms ~property ~orientation in
-	Hashtbl.add prop_hierarchy (property,orientation) h;
-	h
+	let rel =
+	  match rel_spec with
+	  | Property (property,orientation) -> sparql_relation_property ~endpoint ~froms ~property ~orientation
+	  | Hierarchy (property,orientation) -> sparql_relation_hierarchy ~endpoint ~froms ~property ~orientation in
+	Hashtbl.add spec_relation rel_spec rel;
+	rel
 
-    method subclassof ~froms = self#get ~froms Rdf.rdfs_subClassOf Lisql.Fwd
-    method subpropertyof ~froms = self#get ~froms Rdf.rdfs_subPropertyOf Lisql.Fwd
+    method subclassof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subClassOf, Lisql.Fwd))
+    method subpropertyof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subPropertyOf, Lisql.Fwd))
+    method domain ~froms = self#get ~froms (Property (Rdf.rdfs_domain, Lisql.Fwd))
+    method range ~froms = self#get ~froms (Property (Rdf.rdfs_range, Lisql.Fwd))
+    method inheritsthrough ~froms = self#get ~froms (Property (Rdf.rdfs_inheritsThrough, Lisql.Fwd))
+													 
   end
 							     
 (* configuration *)
@@ -132,16 +248,16 @@ let sparql_hierarchies =
 open Js
 open Jsutils
 
-class ['hierarchy] config_hierarchy ~(key : string)
+class ['relation] config_relation ~(key : string)
   ~(input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_hierarchy : 'hierarchy) ~(custom_hierarchy : froms:(Rdf.uri list) -> 'hierarchy) () =
+  ~(default_relation : 'relation) ~(custom_relation : froms:(Rdf.uri list) -> 'relation) () =
 object (self)
   inherit Config.input as super
   val mutable init_on = false
   val mutable current_froms = []
   val mutable current_on = false
-  val mutable current_hierarchy = default_hierarchy
+  val mutable current_relation = default_relation
 
   method private get_on input =
     to_bool input##checked
@@ -149,33 +265,33 @@ object (self)
     if current_on <> on then begin
       jquery_input input_selector (fun input -> input##checked <- bool on);
       current_on <- on;
-      self#define_hierarchy;
+      self#define_relation;
       self#changed
     end
 
-  method private define_hierarchy : unit =
-    current_hierarchy <-
+  method private define_relation : unit =
+    current_relation <-
       if not current_on
       then begin
-	Jsutils.firebug "Using default hierarchy";
-	default_hierarchy end
+	Jsutils.firebug "Using default relation";
+	default_relation end
       else begin
-	Jsutils.firebug "Using custom hierarchy";
-	custom_hierarchy ~froms:config_graphs#froms
+	Jsutils.firebug "Using custom relation";
+	custom_relation ~froms:config_graphs#froms
       end
 
-  method private change_hierarchy input : unit =
+  method private change_relation input : unit =
     let fr = config_graphs#froms in
     let on = self#get_on input in
     if fr <> current_froms || on <> current_on then begin
       current_on <- on;
-      self#define_hierarchy;
+      self#define_relation;
       self#changed
     end
     
   method set_endpoint url =
     super#set_endpoint url;
-    self#define_hierarchy
+    self#define_relation
 
   method get_permalink =
     if current_on <> init_on
@@ -186,7 +302,7 @@ object (self)
     self#set_on on
 
   method on : bool = current_on
-  method value : 'hierarchy = current_hierarchy
+  method value : 'relation = current_relation
 
   method init =
     jquery_input input_selector (fun input ->
@@ -194,28 +310,35 @@ object (self)
       init_on <- on;
       current_froms <- config_graphs#froms;
       current_on <- init_on;
-      self#define_hierarchy;
-      config_graphs#on_change (fun () -> self#change_hierarchy input);
+      self#define_relation;
+      config_graphs#on_change (fun () -> self#change_relation input);
       onchange
-	(fun _ ev -> self#change_hierarchy input)
+	(fun _ ev -> self#change_relation input)
 	input)
   method reset = self#set_on init_on
 end
 
 let config_class_hierarchy =
-  new config_hierarchy
+  new config_relation
     ~key:"class_hierarchy"
     ~input_selector:"#input-class-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_hierarchy:no_hierarchy
-    ~custom_hierarchy:sparql_hierarchies#subclassof
+    ~default_relation:no_relation
+    ~custom_relation:sparql_relations#subclassof
     ()
 let config_property_hierarchy =
-  new config_hierarchy
+  new config_relation
     ~key:"property_hierarchy"
     ~input_selector:"#input-property-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_hierarchy:no_hierarchy
-    ~custom_hierarchy:sparql_hierarchies#subpropertyof
+    ~default_relation:no_relation
+    ~custom_relation:sparql_relations#subpropertyof
     ()
- 
+let config_hierarchy_inheritance =
+  new config_relation
+      ~key:"hierarchy_inheritance"
+      ~input_selector:"#input-hierarchy-inheritance"
+      ~config_graphs:Sparql_endpoint.config_schema_graphs
+      ~default_relation:no_relation
+      ~custom_relation:sparql_relations#inheritsthrough
+      ()

@@ -74,7 +74,7 @@ type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
 class incr_freq_index = [Lisql.increment, freq option] index ()
 
-let increment_parents (term_hierarchy : Ontology.hierarchy) = function
+let increment_parents (term_hierarchy : Ontology.relation) = function
   | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
   | Lisql.IncrType uri -> List.map (fun u -> Lisql.IncrType u) (Ontology.config_class_hierarchy#value#info uri)
   | Lisql.IncrRel (uri,xwd) -> List.map (fun u -> Lisql.IncrRel (u,xwd)) (Ontology.config_property_hierarchy#value#info uri)
@@ -317,7 +317,7 @@ object (self)
 
   (* derived state *)
 
-  val mutable term_hierarchy : Ontology.hierarchy = Ontology.no_hierarchy
+  val mutable term_hierarchy : Ontology.relation = Ontology.no_relation
 		   
   val mutable id_labelling = new Lisql2nl.id_labelling []
   method id_labelling = id_labelling
@@ -340,11 +340,11 @@ object (self)
     begin
       term_hierarchy <-
 	( match Lisql.term_hierarchy_spec_of_focus focus with
-	  | None -> Ontology.no_hierarchy
+	  | None -> Ontology.no_relation
 	  | Some (p,ori) ->
-	     Ontology.sparql_hierarchies#get
+	     Ontology.sparql_relations#get
 	       ~froms:Sparql_endpoint.config_default_graphs#froms
-	       p ori );
+	       (Ontology.Hierarchy (p,ori)) );
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
       s_sparql <- Lisql2sparql.s_annot id_labelling focus_descr s_annot
 (*
