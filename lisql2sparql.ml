@@ -283,11 +283,19 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
   | Type (annot,c) -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
   | Rel (annot,prop,(ori,path),np) ->
+     let p = (Sparql.uri prop :> Sparql.pred) in
+     let p =
+       match ori, path with
+       | Fwd, Direct -> (* only for hierarchy display, according to declared rdfs:inheritsThrough *)
+	  let lhp = Ontology.config_hierarchy_inheritance#value#info prop in
+	  ( match lhp with
+	    | [] -> p
+	    | hp::_ -> Sparql.path_seq p (Sparql.path_transitive (Sparql.uri hp :> Sparql.pred))) (* path: p/hp*  for inheritance through hp *)
+       | Bwd, Direct -> p
+       | _, Transitive _ -> Sparql.path_transitive p in
     let q_np = form_s1 state np in
     (fun x -> q_np (fun y ->
       let s, o = match ori with Fwd -> x, y | Bwd -> y, x in
-      let p = (Sparql.uri prop :> Sparql.pred) in
-      let p = match path with Direct -> p | Transitive _ -> Sparql.transitive p in
       Sparql.Pattern (Sparql.triple s p o)))
   | LatLong (annot,plat,plong,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in

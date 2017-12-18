@@ -368,26 +368,26 @@ let inverse_orientation = function
   | Fwd -> Bwd
   | Bwd -> Fwd
 
-let rec term_hierarchy_spec_of_focus = function
-  | AtS1 (np,ctx) -> term_hierarchy_spec_of_ctx_s1 ctx
-  | AtP1 (f,ctx) -> term_hierarchy_spec_of_ctx_p1 ctx
+let rec property_range_of_focus = function
+  | AtS1 (np,ctx) -> property_range_of_ctx_s1 ctx
+  | AtP1 (f,ctx) -> property_range_of_ctx_p1 ctx
   | _ -> None
-and term_hierarchy_spec_of_ctx_s1 = function
-  | RelX (p,(ori,path),ctx) ->
-     ( match path with
+and property_range_of_ctx_s1 = function
+  | RelX (p,(ori,path),ctx) -> Some (p,ori,path)
+     (* match path with
        | Direct -> None
-       | Transitive inv -> Some (p, if inv then inverse_orientation ori else ori) )
+       | Transitive inv -> Some (p, if inv then inverse_orientation ori else ori) *)
   | NAndX (_,ctx)
   | NOrX (_,ctx)
   | NMaybeX ctx
-  | NNotX ctx -> term_hierarchy_spec_of_ctx_s1 ctx
+  | NNotX ctx -> property_range_of_ctx_s1 ctx
   | _ -> None
-and term_hierarchy_spec_of_ctx_p1 = function
-  | DetThatX (_,ctx) -> term_hierarchy_spec_of_ctx_s1 ctx
+and property_range_of_ctx_p1 = function
+  | DetThatX (_,ctx) -> property_range_of_ctx_s1 ctx
   | AndX (_,ctx)
   | OrX (_,ctx)
   | MaybeX ctx
-  | NotX ctx -> term_hierarchy_spec_of_ctx_p1 ctx
+  | NotX ctx -> property_range_of_ctx_p1 ctx
   | _ -> None
 	   
 (* getting element annotation *)

@@ -177,7 +177,9 @@ let log_or (le : expr list) : expr =
       | [e] -> e
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
-let transitive (p : pred) : pred = p ^> "*"
+let path_seq (p1 : pred) (p2 : pred) : pred = p1 ^^ "/" ^< p2
+let path_alt (p1 : pred) (p2 : pred) : pred = "(" ^< p1 ^^ "|" ^< p2 ^> ")"
+let path_transitive (p : pred) : pred = "(" ^< p ^> ")*"
 								   
 let empty : pattern = sparql ""
 let something (s : term) : pattern = s ^> " a [] ."

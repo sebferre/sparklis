@@ -74,6 +74,26 @@ type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
 class incr_freq_index = [Lisql.increment, freq option] index ()
 
+let term_hierarchy_of_focus focus =
+  match Lisql.property_range_of_focus focus with
+  | None -> Ontology.no_relation
+  | Some (p,ori,path) ->
+     ( match path with
+       | Lisql.Direct ->
+	  let lp = Ontology.config_hierarchy_inheritance#value#info p in
+	  if lp = []
+	  then Ontology.no_relation
+	  else (* TODO: use all list lp instead of first only *)
+	    let hierarchy_spec = Ontology.Hierarchy (List.hd lp, Lisql.Fwd) in
+	    Ontology.sparql_relations#get
+	      ~froms:Sparql_endpoint.config_default_graphs#froms
+	      hierarchy_spec
+       | Lisql.Transitive inv ->
+	  let hierarchy_spec = Ontology.Hierarchy (p, if inv then Lisql.inverse_orientation ori else ori) in
+	  Ontology.sparql_relations#get
+	    ~froms:Sparql_endpoint.config_default_graphs#froms
+	    hierarchy_spec )
+						       
 let increment_parents (term_hierarchy : Ontology.relation) = function
   | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
   | Lisql.IncrType uri -> List.map (fun u -> Lisql.IncrType u) (Ontology.config_class_hierarchy#value#info uri)
@@ -338,13 +358,7 @@ object (self)
     
   method private init =
     begin
-      term_hierarchy <-
-	( match Lisql.term_hierarchy_spec_of_focus focus with
-	  | None -> Ontology.no_relation
-	  | Some (p,ori) ->
-	     Ontology.sparql_relations#get
-	       ~froms:Sparql_endpoint.config_default_graphs#froms
-	       (Ontology.Hierarchy (p,ori)) );
+      term_hierarchy <- term_hierarchy_of_focus focus;
       id_labelling <- Lisql2nl.id_labelling_of_s_annot Lisql2nl.config_lang#grammar s_annot;
       s_sparql <- Lisql2sparql.s_annot id_labelling focus_descr s_annot
 (*
@@ -583,6 +597,7 @@ object (self)
 	(function
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_property_hierarchy#value#enqueue uri;
+	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq = { value=count; max_value; partial=partial_prop; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), Some freq);
@@ -607,9 +622,10 @@ object (self)
   *)
       Ontology.config_class_hierarchy#value#sync (fun () ->
 	Ontology.config_property_hierarchy#value#sync (fun () ->
-	  Lexicon.config_class_lexicon#value#sync (fun () ->
-	    Lexicon.config_property_lexicon#value#sync (fun () ->
-	      k ~partial incr_index))))
+	  Ontology.config_hierarchy_inheritance#value#sync (fun () ->
+	    Lexicon.config_class_lexicon#value#sync (fun () ->
+	      Lexicon.config_property_lexicon#value#sync (fun () ->
+	        k ~partial incr_index)))))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -690,6 +706,7 @@ object (self)
 	(function
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_property_hierarchy#value#enqueue uri;
+	  Ontology.config_hierarchy_inheritance#value#enqueue uri; 
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), freq_opt);
@@ -699,6 +716,7 @@ object (self)
 	(function
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_property_hierarchy#value#enqueue uri;
+	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), Some { value=count; max_value; partial=partial_has; unit })
 	| _ -> ());
@@ -728,9 +746,10 @@ object (self)
       *)
       Ontology.config_class_hierarchy#value#sync (fun () ->
 	Ontology.config_property_hierarchy#value#sync (fun () ->
-	  Lexicon.config_class_lexicon#value#sync (fun () ->
-	    Lexicon.config_property_lexicon#value#sync (fun () ->
-	      k ~partial incr_index))))
+	  Ontology.config_hierarchy_inheritance#value#sync (fun () ->
+	    Lexicon.config_class_lexicon#value#sync (fun () ->
+	      Lexicon.config_property_lexicon#value#sync (fun () ->
+	        k ~partial incr_index)))))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
