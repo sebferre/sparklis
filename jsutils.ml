@@ -58,7 +58,7 @@ let jquery_toggle sel = jquery sel (fun elt ->
   then elt##style##display <- string "block"
   else elt##style##display <- string "none")    
 
-let jquery_click sel = jquery_input sel (fun input -> input##click())
+let jquery_click sel = jquery sel (fun elt -> Unsafe.(meth_call elt "click" [||]))
 
 let onclick k elt =
   elt##onclick <- Dom.handler (fun ev -> k elt ev; bool true)
