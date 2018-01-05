@@ -428,7 +428,10 @@ object (self)
 				    (Dom_html.Event.make "click" (*"shown.bs.tab"*))
 				    (Dom_html.handler
 				       (fun ev ->
-					google#draw_map geolocations elt_map;
+					Lwt.on_termination
+					  (Lwt_js.sleep 0.2)
+					  (fun () ->
+					   google#draw_map geolocations elt_map);
 					bool true))
 				    (bool false) in
 			jquery "li.active a#nav-tab-map"
@@ -500,8 +503,14 @@ object (self)
 	      jquery_set_innerHTML "#count-properties"
 		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		navigation#update_focus ~push_in_history:true
-		  (Lisql.insert_increment (html_state#dico_incrs#get (to_string (elt##id))))));
+		 navigation#update_focus
+		   ~push_in_history:true
+		   (let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+		    let _ =
+		      match incr with
+		      | Lisql.IncrLatLong _ -> jquery_click "#nav-tab-map"
+		      | _ -> () in
+		    Lisql.insert_increment incr)));
 	      refreshing_properties <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
