@@ -357,20 +357,22 @@ let html_cell_audio url mime =
   </audio>" ^ 
     html_open_new_window ~height:16 url
 
+let html_cell_contents (t : Rdf.term) =
+  match t with
+  | Rdf.URI uri ->
+     if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
+       html_cell_img uri
+     else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
+       html_cell_video uri "video/mp4"
+     else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
+       html_cell_video uri "video/ogg"
+     else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
+       html_cell_audio uri "audio/mpeg"
+     else html_word (Lisql2nl.word_of_term t)
+  | _ -> html_word (Lisql2nl.word_of_term t)  
+			 
 let html_cell state ~(line : int) ~(column : Lisql.id) t =
-  let contents =
-    match t with
-      | Rdf.URI uri ->
-	if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
-	  html_cell_img uri
-	else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
-	  html_cell_video uri "video/mp4"
-	else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
-	  html_cell_video uri "video/ogg"
-	else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
-	  html_cell_audio uri "audio/mpeg"
-	else html_word (Lisql2nl.word_of_term t)
-      | _ -> html_word (Lisql2nl.word_of_term t) in
+  let contents = html_cell_contents t in
   let key = state#dico_results#add (line,column,t) in
   html_span ~id:key ~classe:"cell" contents
 

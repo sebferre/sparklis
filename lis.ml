@@ -290,7 +290,7 @@ let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql
   incr_index
 *)
 
-let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * string) list -> unit) : unit =
+let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * Rdf.term) list -> unit) : unit =
   let open Sparql_endpoint in
   let l =
     List.fold_left
@@ -298,22 +298,20 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 	try
 	  let i_lat = List.assoc v_lat results.vars in
 	  let i_long = List.assoc v_long results.vars in
-	  let get_name =
+	  let get_term_opt =
 	    let s = (t :> string) in
 	    assert (s <> "");
 	    if s.[0] = '?' then
 	      let v = String.sub s 1 (String.length s - 1) in
 	      let i_name = List.assoc v results.vars in
-	      (fun binding ->
-		match binding.(i_name) with
-		| Some term -> Lisql2nl.string_of_term term
-		| _ -> "")
+	      (fun binding -> binding.(i_name))
 	    else
-	      (fun binding -> s) in (* TODO *)
+	      (fun binding -> None) in (* TODO *)
 	  List.fold_left
 	    (fun data binding ->
-	      match binding.(i_lat), binding.(i_long) with
-	      | Some (Rdf.Number (lat,_,_)), Some (Rdf.Number (long,_,_)) -> (lat,long, get_name binding)::data
+	      match binding.(i_lat), binding.(i_long), get_term_opt binding with
+	      | Some (Rdf.Number (lat,_,_)), Some (Rdf.Number (long,_,_)), Some term ->
+		 (lat,long,term)::data
 	      | _ -> data)
 	    data results.bindings
 	with Not_found ->
@@ -321,7 +319,7 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 	  data)
       [] geolocs in
   k l
-      
+
 (* LIS navigation places *)
 
 class place (endpoint : string) (focus : Lisql.focus) =

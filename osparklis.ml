@@ -428,6 +428,12 @@ object (self)
 				    (Dom_html.Event.make "click" (*"shown.bs.tab"*))
 				    (Dom_html.handler
 				       (fun ev ->
+					let geolocations =
+					  List.map
+					    (fun (lat,long,term) ->
+					     let html = Html.html_cell_contents term in
+					     (lat,long,html))
+					    geolocations in
 					Lwt.on_termination
 					  (Lwt_js.sleep 0.2)
 					  (fun () ->
