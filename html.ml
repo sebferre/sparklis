@@ -417,3 +417,18 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
     results.bindings;
   Buffer.add_string buf "</table></div>";
   Buffer.contents buf
+
+
+let html_slides slides =
+  let buf = Buffer.create 1000 in
+  let i = ref 0 in
+  List.iter
+    (fun uri ->
+     Buffer.add_string buf "<div class=\"item";
+     if !i=0 then Buffer.add_string buf " active";
+     Buffer.add_string buf "\"><img src=\"";
+     Buffer.add_string buf uri;
+     Buffer.add_string buf "\"></div>";
+     incr i)
+    slides;
+  Buffer.contents buf

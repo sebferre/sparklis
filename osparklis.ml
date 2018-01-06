@@ -415,6 +415,11 @@ object (self)
 	    let _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus )));
+	lis#results_slides
+	  (fun slides ->
+	   jquery_set_innerHTML
+	     "#carousel-slides"
+	     (Html.html_slides slides));
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin

@@ -290,6 +290,23 @@ let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql
   incr_index
 *)
 
+let slides_of_results results (k : Rdf.uri list -> unit) : unit =
+  let open Sparql_endpoint in
+  let rev_l =
+    List.fold_left
+      (fun rev_l binding ->
+       Array.fold_left
+	 (fun rev_l term_opt ->
+	  match term_opt with
+	  | Some (Rdf.URI uri)
+	       when Rdf.uri_is_image uri (*|| Rdf.uri_is_video uri*) ->
+	     uri::rev_l
+	  | _ -> rev_l)
+	 rev_l binding)
+      [] results.bindings
+  in
+  k (List.rev rev_l)
+      
 let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * Rdf.term) list -> unit) : unit =
   let open Sparql_endpoint in
   let l =
@@ -462,6 +479,7 @@ object (self)
   method results_nb = results.Sparql_endpoint.length
   method results_page offset limit k = page_of_results offset limit s_sparql.Lisql2sparql.state#geolocs results k
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.state#geolocs results k
+  method results_slides k = slides_of_results results k
 
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
