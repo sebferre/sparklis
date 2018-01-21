@@ -377,13 +377,20 @@ object (self)
     let open Sparql_endpoint in
     jquery "#list-results" (fun elt_results ->
       if lis#results_dim = 0 then begin
+	  jquery_disable_all "#nav-results-table";
 	  jquery_set_innerHTML "#list-results" "";
+	  jquery_set_innerHTML "#count-results"
+			       (let grammar = Lisql2nl.config_lang#grammar in
+				grammar#no ^ " " ^ fst grammar#result_results);
+	  jquery_disable_all "#nav-results-map";
 	  jquery_set_innerHTML "#map" "No geolocalized data";
+	  jquery_disable_all "#nav-results-slideshow";
 	  jquery_set_innerHTML "#carousel-slides" "No media"
 	(*elt_results##style##display <- string "none"*) end
       else begin
 	lis#results_page offset limit (fun results_page ->
 	(*elt_results##style##display <- string "block";*)
+	  jquery_enable_all "#nav-results-table";
 	  jquery_set_innerHTML "#list-results"
 	    (html_table_of_results html_state
 	       ~first_rank:(offset+1)
@@ -407,8 +414,10 @@ object (self)
 	lis#results_slides
 	  (function
 	    | [] ->
+	       jquery_disable_all "#nav-results-slideshow";
 	       jquery_set_innerHTML "#carousel-slides" "No media"
 	    | slides ->
+	       jquery_enable_all "#nav-results-slideshow";
 	       jquery_set_innerHTML
 		 "#carousel-slides"
 		 (Html.html_slides html_state slides));
@@ -427,9 +436,11 @@ object (self)
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
+		jquery_disable_all "#nav-results-map";
 		elt_map##innerHTML <- string "No geolocalized data"
 	      end
 	    else begin
+		jquery_enable_all "#nav-results-map";
 		jquery "#nav-tab-map"
 		       (fun elt ->
 			let _id = Dom_html.addEventListener

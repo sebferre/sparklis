@@ -58,6 +58,21 @@ let jquery_toggle sel = jquery sel (fun elt ->
   then elt##style##display <- string "block"
   else elt##style##display <- string "none")    
 
+let jquery_disable_all sel =
+  jquery_all
+    sel
+    (fun elt ->
+     let classes = elt##classList in
+     classes##add (string "disabled");
+     classes##add (string "disabledClick"))
+let jquery_enable_all sel =
+  jquery_all
+    sel
+    (fun elt ->
+     let classes = elt##classList in
+     classes##remove (string "disabled");
+     classes##remove (string "disabledClick"))
+			       
 let jquery_click sel = jquery sel (fun elt -> Unsafe.(meth_call elt "click" [||]))
 
 let onclick k elt =

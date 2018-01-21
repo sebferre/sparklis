@@ -14,6 +14,10 @@ head, body, input, textarea, select {
     padding-right: 0;
 }
 
+.disabledClick {
+    pointer-events: none;
+}
+
 .navbar {
     margin: 0;
 }
