@@ -299,7 +299,7 @@ let slides_of_results results (k : Rdf.uri list -> unit) : unit =
 	 (fun rev_l term_opt ->
 	  match term_opt with
 	  | Some (Rdf.URI uri)
-	       when Rdf.uri_is_image uri (*|| Rdf.uri_is_video uri*) ->
+	       when Rdf.uri_is_image uri || Rdf.uri_is_video uri ->
 	     uri::rev_l
 	  | _ -> rev_l)
 	 rev_l binding)

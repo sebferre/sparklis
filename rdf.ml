@@ -12,6 +12,7 @@ let uri_has_ext uri exts =
     exts
 let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"]
 let uri_is_video uri = uri_has_ext uri ["mp4"; "MP4"; "mov"; "MOV"]
+let uri_is_audio uri = uri_has_ext uri ["mp3"; "MP3"]
 
 let xsd_string = "http://www.w3.org/2001/XMLSchema#string"
 let xsd_integer = "http://www.w3.org/2001/XMLSchema#integer"

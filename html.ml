@@ -94,11 +94,33 @@ let html_div ?classe ?title text =
 let html_a url html =
   "<a target=\"_blank\" href=\"" ^ url ^ "\">" ^ html ^ "</a>"
 
-let html_img ?id ?classe ~height ~alt ~title url =
+let html_img ?id ?classe ?height ~alt ~title url =
   "<img" ^
     (match id with None -> "" | Some i -> " id=\"" ^ i ^ "\"") ^
     (match classe with None -> "" | Some c -> " class=\"" ^ c ^ "\"") ^
-    " src=\"" ^ url ^ "\" height=\"" ^ string_of_int height ^ "\" alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
+    " src=\"" ^ url ^ "\"" ^
+    (match height with None -> "" | Some h -> " height=\"" ^ string_of_int h ^ "\"") ^
+    " alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
+
+let html_video url =
+  let mime =
+    if Rdf.uri_has_ext url ["mp4"; "MP4"] then "video/mp4"
+    else if Rdf.uri_has_ext url ["mov"; "MOV"] then "video/quicktime"
+    else if Rdf.uri_has_ext url ["ogg"; "OGG"] then "video/ogg"
+    else "video" in
+  "<video width=\"320\" height=\"240\" controls>\
+   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
+   Your browser does not support the video tag.\
+   </video>"
+
+let html_audio url =
+  let mime =
+    if Rdf.uri_has_ext url ["mp3"; "MP3"] then "audio/mpeg"
+    else "audio" in
+  "<audio controls>\
+   <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
+   Your browser does not support this audio format.\
+   </audio>"
 
 let html_glyphicon name = "<span class=\"glyphicon glyphicon-" ^ name ^ "\"></span>"
 
@@ -339,37 +361,24 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) =
 
 (* HTML of results *)
 
-let html_cell_img ?(height = 120) url =
+let html_cell_img ?height url =
   let label = Lexicon.name_of_uri url in
-  html_img ~height ~alt:label ~title:label url ^ html_open_new_window ~height:16 url
+  html_img ?height ~alt:label ~title:label url ^ html_open_new_window ~height:16 url
 
-let html_cell_video url mime =
-  "<video width=\"320\" height=\"240\" controls>\
-  <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
-  Your browser does not support the video tag.\
-  </video>" ^
-    html_open_new_window ~height:16 url
+let html_cell_video url =
+  html_video url ^ html_open_new_window ~height:16 url
 
-let html_cell_audio url mime =
-  "<audio controls>\
-  <source src=\"" ^ url ^ "\" type=\"" ^ mime ^ "\">\
-  Your browser does not support this audio format.\
-  </audio>" ^ 
-    html_open_new_window ~height:16 url
+let html_cell_audio url =
+  html_audio url ^ html_open_new_window ~height:16 url
 
 let html_cell_contents (t : Rdf.term) =
   match t with
   | Rdf.URI uri ->
-     if Rdf.uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"] then
-       html_cell_img uri
-     else if Rdf.uri_has_ext uri ["mp4"; "MP4"] then
-       html_cell_video uri "video/mp4"
-     else if Rdf.uri_has_ext uri ["ogg"; "OGG"] then
-       html_cell_video uri "video/ogg"
-     else if Rdf.uri_has_ext uri ["mp3"; "MP3"] then
-       html_cell_audio uri "audio/mpeg"
+     if Rdf.uri_is_image uri then html_cell_img ~height:120 uri
+     else if Rdf.uri_is_video uri then html_cell_video uri
+     else if Rdf.uri_is_audio uri then html_cell_audio uri
      else html_word (Lisql2nl.word_of_term t)
-  | _ -> html_word (Lisql2nl.word_of_term t)  
+  | _ -> html_word (Lisql2nl.word_of_term t)
 			 
 let html_cell state ~(line : int) ~(column : Lisql.id) t =
   let contents = html_cell_contents t in
@@ -426,9 +435,16 @@ let html_slides slides =
     (fun uri ->
      Buffer.add_string buf "<div class=\"item";
      if !i=0 then Buffer.add_string buf " active";
-     Buffer.add_string buf "\"><img src=\"";
-     Buffer.add_string buf uri;
-     Buffer.add_string buf "\"></div>";
+     Buffer.add_string buf "\">";
+     let slide_content =
+       if Rdf.uri_is_image uri then
+	 let label = Lexicon.name_of_uri uri in
+	 html_img ~alt:label ~title:label uri
+       else if Rdf.uri_is_video uri then
+	 html_video uri
+       else "Unsupported media" in
+     Buffer.add_string buf slide_content;
+     Buffer.add_string buf "</div>";
      incr i)
     slides;
   Buffer.contents buf
