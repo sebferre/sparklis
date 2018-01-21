@@ -290,7 +290,10 @@ let index_incr_of_index_term_uri ~max_value ~partial ~unit (f : Rdf.uri -> Lisql
   incr_index
 *)
 
-let slides_of_results results (k : Rdf.uri list -> unit) : unit =
+type slide_data = { media_uri : Rdf.uri;
+		    binding_fields : (string (* var name *) * Rdf.term option) list }
+      
+let slides_of_results results (k : slide_data list -> unit) : unit =
   let open Sparql_endpoint in
   let rev_l =
     List.fold_left
@@ -300,7 +303,13 @@ let slides_of_results results (k : Rdf.uri list -> unit) : unit =
 	  match term_opt with
 	  | Some (Rdf.URI uri)
 	       when Rdf.uri_is_image uri || Rdf.uri_is_video uri ->
-	     uri::rev_l
+	     let data = { media_uri = uri;
+			  binding_fields =
+			    List.map
+			      (fun (v,i) -> (v, binding.(i)))
+			      results.vars;
+			} in
+	     data::rev_l
 	  | _ -> rev_l)
 	 rev_l binding)
       [] results.bindings

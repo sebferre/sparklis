@@ -49,7 +49,9 @@ let collapse_of_key key = "collapse-" ^ key
 let key_of_collapse =
   let l = String.length "collapse-" in
   fun s -> String.sub s l (String.length s - l)
-								    
+
+type results_view = Table | Slideshow
+		      
 class state (id_labelling : Lisql2nl.id_labelling) =
 object
   method id_labelling = id_labelling
@@ -67,7 +69,7 @@ object
   val dico_incrs : Lisql.increment dico = new dico "incr"
   method dico_incrs = dico_incrs
 
-  val dico_results : (int * Lisql.id * Rdf.term) dico = new dico "cell"
+  val dico_results : (results_view * int * Lisql.id * Rdf.term) dico = new dico "cell"
   method dico_results = dico_results
 end
 
@@ -380,9 +382,9 @@ let html_cell_contents (t : Rdf.term) =
      else html_word (Lisql2nl.word_of_term t)
   | _ -> html_word (Lisql2nl.word_of_term t)
 			 
-let html_cell state ~(line : int) ~(column : Lisql.id) t =
+let html_cell state ~(view : results_view) ~(rank : int) ~(column : Lisql.id) t =
   let contents = html_cell_contents t in
-  let key = state#dico_results#add (line,column,t) in
+  let key = state#dico_results#add (view,rank,column,t) in
   html_span ~id:key ~classe:"cell" contents
 
 let html_table_of_results (state : state) ~first_rank ~focus_var results =
@@ -418,7 +420,7 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	  Buffer.add_string buf "<td>";
 	  ( match binding.(i) with
 	    | None -> ()
-	    | Some t -> Buffer.add_string buf (html_cell state ~line:(!rank) ~column:id t) );
+	    | Some t -> Buffer.add_string buf (html_cell state ~view:Table ~rank:(!rank) ~column:id t) );
 	  Buffer.add_string buf "</td>")
 	id_i_list;
       Buffer.add_string buf "</tr>";
@@ -428,23 +430,48 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
   Buffer.contents buf
 
 
-let html_slides slides =
+let html_slides state slides =
+  let id_labelling = state#id_labelling in
   let buf = Buffer.create 1000 in
-  let i = ref 0 in
+  let rank = ref 0 in
   List.iter
-    (fun uri ->
+    (fun slide_data ->
+     incr rank;
+     let uri, fields = Lis.(slide_data.media_uri, slide_data.binding_fields) in
      Buffer.add_string buf "<div class=\"item";
-     if !i=0 then Buffer.add_string buf " active";
+     if !rank = 1 then Buffer.add_string buf " active";
      Buffer.add_string buf "\">";
-     let slide_content =
+     let slide_media =
        if Rdf.uri_is_image uri then
 	 let label = Lexicon.name_of_uri uri in
 	 html_img ~alt:label ~title:label uri
        else if Rdf.uri_is_video uri then
 	 html_video uri
        else "Unsupported media" in
-     Buffer.add_string buf slide_content;
-     Buffer.add_string buf "</div>";
-     incr i)
+     Buffer.add_string buf slide_media;
+     Buffer.add_string buf ("<div class=\"table-responsive\"><table class=\"table table-bordered table-condensed table-hover\">");
+     List.iter
+       (fun (var, term_opt) ->
+	let id = id_labelling#get_var_id var in
+	Buffer.add_string buf "<tr>";
+	Buffer.add_string buf "<td>";
+	Buffer.add_string
+	  buf
+	  (html_of_nl_xml
+	     state
+	     (Lisql2nl.xml_ng_id ~isolated:true
+				 Lisql2nl.config_lang#grammar
+				 ~id_labelling
+				 id));
+	Buffer.add_string buf "</td>";
+	Buffer.add_string buf "<td>";
+	( match term_opt with
+	  | None -> ()
+	  | Some t -> Buffer.add_string buf (html_cell state ~view:Slideshow ~rank:!rank ~column:id t) );
+	Buffer.add_string buf "</td>";
+	Buffer.add_string buf "</tr>")
+       fields;
+     Buffer.add_string buf "</table></div>";
+     Buffer.add_string buf "</div>")
     slides;
   Buffer.contents buf

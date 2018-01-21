@@ -378,7 +378,8 @@ object (self)
     jquery "#list-results" (fun elt_results ->
       if lis#results_dim = 0 then begin
 	  jquery_set_innerHTML "#list-results" "";
-	  jquery_set_innerHTML "#map" "No geolocalized data"
+	  jquery_set_innerHTML "#map" "No geolocalized data";
+	  jquery_set_innerHTML "#carousel-slides" "No media"
 	(*elt_results##style##display <- string "none"*) end
       else begin
 	lis#results_page offset limit (fun results_page ->
@@ -403,23 +404,26 @@ object (self)
 		 s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
 		   " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
 	stop_links_propagation_from elt_results;
+	lis#results_slides
+	  (function
+	    | [] ->
+	       jquery_set_innerHTML "#carousel-slides" "No media"
+	    | slides ->
+	       jquery_set_innerHTML
+		 "#carousel-slides"
+		 (Html.html_slides html_state slides));
 	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
 	    try
 	      let key = to_string (elt_foc##id) in
 	      Some (html_state#get_focus key)
 	    with _ -> None)));
-	jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
+	jquery_all ".cell" (onclick (fun elt ev ->
 	  navigation#update_focus ~push_in_history:true (fun current_focus ->
 	    let key = to_string (elt##id) in
-	    let _rank, id, term = html_state#dico_results#get key in
+	    let _view, _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus )));
-	lis#results_slides
-	  (fun slides ->
-	   jquery_set_innerHTML
-	     "#carousel-slides"
-	     (Html.html_slides slides));
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
