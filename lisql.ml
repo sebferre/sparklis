@@ -927,8 +927,8 @@ let insert_id id conv_opt = function
 let insert_anything focus =
   let focus2_opt =
     match focus with
-    | AtS1 (Det (_, det2, rel_opt), ctx) ->
-      Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
+    | AtS1 (Det (_, det, rel_opt), ctx) ->
+      Some (AtS1 (Det ((), (if is_top_s2 det then det else factory#top_s2), rel_opt), ctx))
     | AtS1 _ -> None (* no insertion of terms on complex NPs *)
     | _ -> None in
   match focus2_opt with
@@ -960,7 +960,10 @@ let insert_latlong plat plong focus =
   insert_elt_p1 (LatLong ((), plat, plong, factory#new_id, factory#new_id)) focus
 
 let insert_triple arg focus =
-  let foc_opt = insert_elt_p1 (Triple ((), arg, factory#top_s1, factory#top_s1)) focus in
+  let foc_opt =
+    let np1 = factory#top_s1 in
+    let np2 = factory#top_s1 in
+    insert_elt_p1 (Triple ((), arg, np1, np2)) focus in
   let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
   focus_opt_moves steps foc_opt
 

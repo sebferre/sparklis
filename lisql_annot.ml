@@ -686,7 +686,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     fd#define_focus_term `Undefined;
     let f = Triple ((),arg,np1,x) in
     let a2, a_np1 = annot_elt_s1 (`Aside false) np1 (TripleX1 (arg,x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
+    let ids = union_ids a2#ids a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, Triple (a, arg, a_np1, a_x)) f ctx
   | ReturnX ctx ->
