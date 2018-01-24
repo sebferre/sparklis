@@ -1010,6 +1010,7 @@ object (self)
 	      `Contains, 2, 1;
 	      `LangMatches, 2, 1;
 	      `REGEX, 2, 1;
+	      `REGEX_i, 2, 1;
 	    ] in
 	incrs in
     let valid_incrs =

@@ -269,7 +269,8 @@ object
   | `StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
   | `StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
   | `Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
-  | `REGEX -> `Pattern [`Arg 1; `Func "matches as regexp"; `Arg 2]
+  | `REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
+  | `REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
   | `LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
  
   method order_highest = "highest-to-lowest"
@@ -458,6 +459,7 @@ object
   | `StrEnds -> `Pattern [`Arg 1; `Func "finit par"; `Arg 2]
   | `Contains -> `Pattern [`Arg 1; `Func "contient"; `Arg 2]
   | `REGEX -> `Pattern [`Arg 1; `Func "matche la regexp"; `Arg 2]
+  | `REGEX_i -> `Pattern [`Arg 1; `Func "matche la regexp (insensible à la casse)"; `Arg 2]
   | `LangMatches -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "langue"; `Kwd "qui"; `Func "matche"; `Arg 2]
  
   method order_highest = "en ordre décroissant"
@@ -647,6 +649,7 @@ object
   | `StrEnds -> `Pattern [`Arg 1; `Func "termina en"; `Arg 2]
   | `Contains -> `Pattern [`Arg 1; `Func "contiene"; `Arg 2]
   | `REGEX -> `Pattern [`Arg 1; `Func "coincide con la expresión regular"; `Arg 2]
+  | `REGEX_i -> `Pattern [`Arg 1; `Func "coincide con la expresión regular (case insensible)"; `Arg 2]
   | `LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincida con"; `Arg 2]
  
   method order_highest = "en orden descendente"

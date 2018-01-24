@@ -216,6 +216,7 @@ let rec expr_apply func args =
     ( match args with
     | arg::other_args -> Sparql.expr_func (name_func func) (Sparql.expr_func "str" [arg] :: other_args)
     | [] -> assert false )
+  | `REGEX_i -> Sparql.expr_func (name_func func) (args @ [(Sparql.string "i" :> Sparql.expr)])
   | func -> Sparql.expr_func (name_func func) args
 and name_func = function
   | `Str -> "str"
@@ -267,7 +268,7 @@ and name_func = function
   | `StrStarts -> "strstarts"
   | `StrEnds -> "strends"
   | `Contains -> "contains"
-  | `REGEX -> "REGEX"
+  | `REGEX | `REGEX_i -> "REGEX"
   | `LangMatches -> "langMatches"
 
     

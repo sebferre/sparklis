@@ -77,7 +77,8 @@ let list_func_atom =
     `StrEnds, "StrEnds";
     `Contains, "Contains";
     `LangMatches, "LangMatches";
-    `REGEX, "REGEX"    
+    `REGEX, "REGEX";
+    `REGEX_i, "REGEX_i";
   ]
 let list_num_conv_atom =
   [ (`Integer, false), "Integer";

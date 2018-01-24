@@ -54,7 +54,7 @@ type func =
 | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ
 | `BOUND | `IF
 | `IsIRI | `IsBlank | `IsLiteral | `IsNumeric
-| `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX ]
+| `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX | `REGEX_i (* case insensitive *) ]
 (* missing: timezone, hash functions, BNODE *)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)

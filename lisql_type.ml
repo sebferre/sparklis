@@ -232,7 +232,8 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `StrEnds
   | `Contains
   | `LangMatches
-  | `REGEX -> [ [`StringLiteral; `StringLiteral], `Boolean ]
+  | `REGEX
+  | `REGEX_i -> [ [`StringLiteral; `StringLiteral], `Boolean ]
 
 
 let is_predicate (func : func) : bool =
