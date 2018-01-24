@@ -306,6 +306,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
   let rank, title_opt =
     match incr with
+      | IncrAnything -> 0, None
       | IncrId _ -> 1, None
       | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
       | IncrForeachId _ -> 1, Some grammar#tooltip_foreach_id

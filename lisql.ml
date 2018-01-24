@@ -795,6 +795,7 @@ type increment =
   | IncrInput of string * input_type
   | IncrTerm of Rdf.term
   | IncrId of id * num_conv option
+  | IncrAnything
   | IncrThatIs
   | IncrSomethingThatIs
   | IncrTriple of arg
@@ -923,6 +924,20 @@ let insert_id id conv_opt = function
   | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id), apply_conv_ctx_expr conv_opt ctx))
   | focus -> insert_elt_s2 (The id) focus
 
+let insert_anything focus =
+  let focus2_opt =
+    match focus with
+    | AtS1 (Det (_, det2, rel_opt), ctx) ->
+      Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
+    | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+    | _ -> None in
+  match focus2_opt with
+  | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+  | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
+  | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
+  | Some (AtS1 (f, InGraphX (f1,ctx))) -> Some (AtP1 (f1, InX (f,ctx)))
+  | other -> other
+			   
 let insert_type c = function
   | AtS1 (Det (_,det,rel_opt), ctx) ->
     ( match det with
@@ -1270,6 +1285,7 @@ let insert_increment incr focus =
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrTransitive inv -> toggle_transitive inv focus
+    | IncrAnything -> insert_anything focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
     | IncrAnd -> insert_and focus
