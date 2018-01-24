@@ -242,6 +242,33 @@ let html_id (state : state) (id : int) : string =
 
 (* HTML of increment lists *)
 
+type compare_incr_data = int option * int * [`Words of string list | `Number of float] (* freq_opt, rank, data *)
+
+let compare_incr (f1_opt,r1,d1 : compare_incr_data) (f2_opt,r2,d2 : compare_incr_data) : int =
+  let compare3 () =
+    match d1, d2 with
+    | `Number f1, `Number f2 -> Pervasives.compare f1 f2
+    | `Number _, `Words _ -> 1 (* words before numbers *)
+    | `Words _, `Number _ -> -1
+    | `Words lw1, `Words lw2 ->
+       if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
+       else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
+       else Pervasives.compare lw1 lw2 in
+  let compare2 () =
+    if r1 < r2 then -1
+    else if r1 > r2 then 1
+    else compare3 () in
+  let compare1 () =
+    match f1_opt, f2_opt with
+    | None, None -> compare2 ()
+    | None, Some _ -> -1
+    | Some _, None -> 1
+    | Some f1, Some f2 ->
+       if f1 < f2 then 1
+       else if f1 > f2 then -1
+       else compare2 () in
+  compare1 ()
+	  
 let html_count_unit freq (unit,units) =
   let count = freq.Lis.value in
   let s_count = string_of_int count in
@@ -250,20 +277,34 @@ let html_count_unit freq (unit,units) =
   else if count = 1 then s_count ^ " " ^ unit
   else s_count ^ " " ^ units
 
-let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
+let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : compare_incr_data * string * string =
   let key = state#dico_incrs#add incr in
-  let xml = Lisql2nl.xml_incr Lisql2nl.config_lang#grammar state#id_labelling focus incr in
-  let text =
-    Lisql2nl.word_text_content Lisql2nl.config_lang#grammar
-      (Lisql2nl.word_of_incr Lisql2nl.config_lang#grammar
-	 incr) in
-  let text = String.lowercase text in
-  let data =
+  let grammar = Lisql2nl.config_lang#grammar in
+  let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
+  let html = html_of_nl_xml state xml in
+  let f_opt, html_freq =
+    match freq_opt with
+    | None -> None, ""
+    | Some {Lis.value=1} -> Some 1, ""
+    | Some {Lis.value; max_value; partial; unit} ->
+      let s = string_of_int value in
+      let s = if partial then s ^ "+" else s in
+      (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
+      Some value,
+      ( match unit with
+      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+      ) in
+  let data = 
+    let text =
+      String.lowercase
+	(Lisql2nl.word_text_content
+	   grammar
+	   (Lisql2nl.word_of_incr grammar incr)) in
     try `Number (float_of_string text)
     with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
-  let html = html_of_nl_xml state xml in
   let rank, title_opt =
-    let grammar = Lisql2nl.config_lang#grammar in
     match incr with
       | IncrId _ -> 1, None
       | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
@@ -274,11 +315,11 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
 	
+      | IncrTransitive _ -> 2, Some grammar#tooltip_transitive
       | IncrTriple _ -> 3, None
       | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
-      | IncrTransitive _ -> 5, Some grammar#tooltip_transitive
 	
       | IncrAnd -> 6, None
       | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus
@@ -300,45 +341,20 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) =
       | IncrAggreg _ -> 16, Some grammar#tooltip_aggreg
       | IncrFuncArg _ -> 17, Some grammar#tooltip_func
   in
-  let freq, html_freq =
-    match freq_opt with
-    | None -> 1, ""
-    | Some {Lis.value=1} -> 1, ""
-    | Some {Lis.value; max_value; partial; unit} ->
-      let s = string_of_int value in
-      let s = if partial then s ^ "+" else s in
-      (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
-      value,
-      ( match unit with
-      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
-      ) in
-  freq, rank, data, key, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  let sort_data = (f_opt, rank, data) in
+  sort_data, key, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lis.incr_freq_index) =
   let sort_node_list nodes =
     List.sort
-      (fun (`Node ((f1,r1,data1,_,_),_)) (`Node ((f2,r2,data2,_,_),_)) ->
-	let c = Pervasives.compare (f2,r1) (f1,r2) in
-	if c <> 0
-	then c
-	else
-	  match data1, data2 with
-	  | `Number f1, `Number f2 -> Pervasives.compare f1 f2
-	  | `Number _, `Words _ -> 1 (* words before numbers *)
-	  | `Words _, `Number _ -> -1
-	  | `Words lw1, `Words lw2 ->
-	    if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
-	    else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
-	    else Pervasives.compare lw1 lw2)
+      (fun (`Node ((data1,_,_),_)) (`Node ((data2,_,_),_)) -> compare_incr data1 data2)
       nodes in
   let rec aux buf nodes =
     let sorted_nodes = sort_node_list nodes in
     Buffer.add_string buf "<ul>";
     List.iter
-      (fun (`Node ((_freq,_rank,_data,key,html), children)) ->
+      (fun (`Node ((_,key,html), children)) ->
 	let check_id = collapse_of_key key in
 	Buffer.add_string buf "<li class=\"col-xs-11\">";
 	if children = [] then begin

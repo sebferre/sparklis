@@ -711,6 +711,10 @@ object (self)
     else if focus_descr#unconstrained then
       self#ajax_index_properties_init constr elt k
     else
+    let focus_prop_ori_opt =
+      match focus with
+      | Lisql.AtS1 (np, Lisql.RelX (p,(ori,path),ctx)) -> Some (p,ori)
+      | _ -> None in
     let process ~max_value ~partial ~unit results_a results_has results_isof =
       let partial_a = partial || results_a.Sparql_endpoint.length = config_max_classes#value in
       let partial_has = partial || results_has.Sparql_endpoint.length = config_max_properties#value in
@@ -735,6 +739,11 @@ object (self)
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), freq_opt);
+	  if focus_prop_ori_opt = Some (uri,Lisql.Fwd) then
+	    begin
+	      incr_index#add (Lisql.IncrTransitive false, None);
+	      incr_index#add (Lisql.IncrTransitive true, None)
+	    end;
 	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
 	| _ -> ());
       int_index_isof#iter
@@ -743,7 +752,13 @@ object (self)
 	  Ontology.config_property_hierarchy#value#enqueue uri;
 	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
-	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), Some { value=count; max_value; partial=partial_has; unit })
+	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
+	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), freq_opt);
+	  if focus_prop_ori_opt = Some (uri,Lisql.Bwd) then
+	    begin
+	      incr_index#add (Lisql.IncrTransitive false, None);
+	      incr_index#add (Lisql.IncrTransitive true, None)
+	    end
 	| _ -> ());
 (*	
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_a ~unit
@@ -880,7 +895,6 @@ object (self)
 	let incrs = [] in
 	let incrs =
 	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
-	    IncrTransitive false :: IncrTransitive true ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
