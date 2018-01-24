@@ -54,7 +54,7 @@ let syntagm_of_property_name (name : string) : property_syntagm * string =
 	then String.sub name 3 (String.length name - 3)
 	else name in
       `InvNoun, name
-    else if Common.has_prefix name "has " then
+    else if Common.has_prefix name "has " || Common.has_prefix name "with " then
       `Noun, String.sub name 4 (String.length name - 4)
     else if Common.has_suffix name "ed" || List.exists (fun prep -> Common.has_suffix name ("s " ^ prep)) prepositions then
       `TransVerb, name
