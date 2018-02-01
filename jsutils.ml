@@ -105,6 +105,10 @@ let stop_propagation_from elt sel =
     (onclick (fun elt ev -> Dom_html.stopPropagation ev))
 let stop_links_propagation_from elt = stop_propagation_from elt "a"
 
+let toggle_class (elt : Dom_html.element t) (cl : string) : bool =
+  let clList = elt##classList in
+  to_bool (clList##toggle(string cl))
+							    
 (* prepare a string for safe insertion in HTML code *)
 let escapeHTML (str : string) : string =
   let div = Dom_html.createDiv Dom_html.document in

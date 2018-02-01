@@ -264,6 +264,29 @@ object
   method update_focus ~(push_in_history : bool) (f : Lisql.focus -> Lisql.focus option) : unit = ()
 end
 
+class increment_selection (sel_list_items : string) =
+object (self)
+  val mutable l_incr : Lisql.increment list = []
+  method get = List.rev l_incr
+  method private refresh =
+    let n_incr = List.length l_incr in
+    let display = if n_incr=0 then "none" else "block" in
+    jquery_all sel_list_items (fun elt_li ->
+      jquery_from elt_li ".selection-increment" (fun elt ->
+	elt_li##style##display <- string display;
+        jquery_from elt ".selection-count" (fun elt_count ->
+          elt_count##innerHTML <- string (string_of_int n_incr))))
+  method toggle (incr : Lisql.increment) : unit =
+    let _ =
+      if List.mem incr l_incr
+      then l_incr <- List.filter ((<>) incr) l_incr
+      else l_incr <- incr :: l_incr in
+    self#refresh
+  method reset =
+    l_incr <- [];
+    self#refresh
+end
+  
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val lis = new Lis.place endpoint foc
@@ -275,6 +298,8 @@ object (self)
   val mutable term_constr = Lisql.True
   val mutable property_constr = Lisql.True
 
+  val term_selection = new increment_selection "#list-terms li"
+				  
   (* UI state *)
   val mutable document_scroll = 0
   val mutable property_scroll = 0
@@ -470,24 +495,38 @@ object (self)
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
   method private refresh_term_increments (* _gen ajax_index *) =
-    let apply_incr elt =
+    let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
-      let incr_opt = (* retrieving input value for input increments *)
-	match incr with
-	| Lisql.IncrInput (s,dt) ->
-	  let ref_s = ref s in
-	  jquery_input_from elt ".term-input" (fun input ->
-	    ref_s := to_string input##value);
-	  let s = !ref_s in
-	  if check_input s dt
-	  then Some (Lisql.IncrInput (s,dt))
-	  else begin alert "Invalid input"; None end
-	| _ -> Some incr in
-      match incr_opt with
+      (* retrieving input value for input increments *)
+      match incr with
+      | Lisql.IncrSelection (selop,_) ->
+	 let l_incr = term_selection#get in
+	 if l_incr = []
+	 then begin alert "Empty selection"; None end
+	 else Some (Lisql.IncrSelection (selop, l_incr))
+      | Lisql.IncrInput (s,dt) ->
+	 let ref_s = ref s in
+	 jquery_input_from
+	   elt
+	   ".term-input"
+	   (fun input -> ref_s := to_string input##value);
+	 let s = !ref_s in
+	 if check_input s dt
+	 then Some (Lisql.IncrInput (s,dt))
+	 else begin alert "Invalid input"; None end
+      | _ -> Some incr in
+    let apply_incr elt =
+      match get_incr_opt elt with
       | None -> ()
       | Some incr ->
-	navigation#update_focus ~push_in_history:true
-	  (Lisql.insert_increment incr)
+	 navigation#update_focus ~push_in_history:true
+				 (Lisql.insert_increment incr) in
+    let toggle_incr elt =
+      match get_incr_opt elt with
+      | Some (Lisql.IncrTerm _ | Lisql.IncrId _ as incr) ->
+	 let _present = toggle_class elt "selected-incr" in
+	 term_selection#toggle incr
+      | _ -> ()
     in
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
@@ -501,9 +540,12 @@ object (self)
 	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
 		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+	      term_selection#reset;			   
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		apply_incr elt));
+		if to_bool ev##ctrlKey
+		then toggle_incr elt
+		else apply_incr elt));
 	      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
 		Opt.iter (elt##parentNode) (fun node ->
 		  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
@@ -612,7 +654,7 @@ object (self)
     let matcher = compile_constr constr in
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
-      jquery_from elt_li ".increment" (fun elt_incr ->
+      jquery_from elt_li ".filterable-increment" (fun elt_incr ->
 	let str =
 	  match constr with
 	  | Lisql.HasLang _ | Lisql.HasDatatype _ -> to_string elt_incr##innerHTML (* TODO: extract proper lang/datatype part *)

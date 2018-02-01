@@ -108,7 +108,14 @@ let uncamel (s : string) : string =
   done;
   Bytes.sub s2 0 !j
 
-    
+let mapfilter (f : 'a -> 'b option) (l : 'a list) : 'b list =
+  List.fold_right
+    (fun x res ->
+     match f x with
+     | None -> res
+     | Some y -> y::res)
+    l []
+	    
 let list_fold_prod (f : 'a -> 'b list -> 'a) (acc : 'a) (list_col_x : 'b list list) : 'a =
   let rec aux acc rev_row_x = function
     | [] -> f acc (List.rev rev_row_x)

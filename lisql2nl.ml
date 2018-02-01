@@ -258,7 +258,12 @@ let word_of_order grammar = function
   | Highest _ -> `Op grammar#order_highest
   | Lowest _ -> `Op grammar#order_lowest
 
+let word_of_selection_op grammar  = function
+  | `NAnd -> `Op grammar#and_
+  | `NOr -> `Op grammar#or_
+		 
 let word_of_incr grammar = function
+  | IncrSelection (selop,_) -> word_of_selection_op grammar selop
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
@@ -923,6 +928,7 @@ and node =
   | Kwd of string
   | Word of word
   | Input of input_type
+  | Selection of xml (* [xml] represents the selection operator *)
   | Suffix of xml * string (* suffix: eg. !, 's *)
   | Enum of string * xml list (* separator: eg. commas *)
   | Quote of string * xml * string (* quoted xml *)
@@ -939,6 +945,7 @@ and xml_node_text_content grammar = function
   | Kwd s -> s
   | Word w -> word_text_content grammar w
   | Input typ -> ""
+  | Selection xml_selop -> ""
   | Suffix (x,suf) -> xml_text_content grammar x ^ suf
   | Enum (sep, xs) -> String.concat sep (List.map (xml_text_content grammar) xs)
   | Quote (left, x, right) -> left ^ xml_text_content grammar x ^ right
@@ -955,7 +962,8 @@ and xml_node_label_prune ~quoted node =
   match node with
   | Kwd _
   | Word _
-  | Input _ -> [node]
+  | Input _
+  | Selection _ -> [node]
   | Suffix (x,suf) -> [Suffix (xml_label_prune ~quoted x, suf)]
   | Enum (sep, xs) -> [Enum (sep, List.map (xml_label_prune ~quoted) xs)]
   | Quote (left, x, right) ->
@@ -1007,6 +1015,9 @@ let xml_not grammar annot_opt xml =
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
+let xml_selection_op grammar : Lisql.selection_op -> xml = function
+  | `NAnd -> [Word (`Op grammar#and_)]
+  | `NOr -> [Word (`Op grammar#or_)]
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =
@@ -1207,8 +1218,10 @@ let xml_incr_coordinate grammar focus xml =
     | AtP1 (IsThere _, _) -> xml
     | _ -> Kwd grammar#and_ :: xml
 
-let xml_incr grammar ~id_labelling (focus : focus) = function
-  | IncrInput (s,typ) ->
+let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
+  | IncrSelection (selop,_) ->
+     [Selection (xml_selection_op grammar selop)]
+  | IncrInput (_,typ) ->
     let xml_input = [Input typ] in
     let kwd_type = string_of_input_type grammar typ in
     Word (`Literal grammar#the) :: Word (`Literal kwd_type) :: xml_input

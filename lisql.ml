@@ -722,6 +722,12 @@ let rec next_undef_focus focus =
   | AtS (SFilter _,_) -> down_focus focus
   | _ -> Some focus
 
+let focus_up_at_root_s1 = function
+  | AtS1 (f, RelX (p, m, ctx)) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+  | AtS1 (f, TripleX1 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
+  | AtS1 (f, TripleX2 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
+  | AtS1 (f, InGraphX (f1,ctx)) -> Some (AtP1 (f1, InX (f,ctx)))
+  | _ -> None
 
 let rec focus_moves (steps : (focus -> focus option) list) (foc : focus) : focus = (* makes as many steps as possible *)
   match steps with
@@ -791,7 +797,10 @@ and copy_s (s : unit elt_s) : unit elt_s =
 type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
 (* a sub-type of Sparql.datatype *)
 
+type selection_op = [`NAnd | `NOr]
+		     
 type increment =
+  | IncrSelection of selection_op * increment list
   | IncrInput of string * input_type
   | IncrTerm of Rdf.term
   | IncrId of id * num_conv option
@@ -842,6 +851,16 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
 
+let elt_s2_of_increment : increment -> elt_s2 option = function
+  | IncrTerm t -> Some (Term t)
+  | IncrId (id,_) -> Some (The id)
+  | _ -> None
+
+let elt_s1_of_increment (incr : increment) : unit elt_s1 option =
+  match elt_s2_of_increment incr with
+  | Some det -> Some (Det ((), det, None))
+  | None -> None
+	   
 let apply_conv_ctx_expr conv_opt = function
   | ApplyX (func,ll_rr,_,ctx2) -> ApplyX (func,ll_rr,conv_opt,ctx2)
   | ctx -> ctx
@@ -856,10 +875,16 @@ let append_or_p1 ctx (elt_p1 : unit elt_p1) = function
 
 let append_and_s1 ctx (elt_s1 : unit elt_s1) = function
   | NAnd (_,lr) -> AtS1 (elt_s1, NAndX ((List.rev lr, []), ctx))
-  | s1 -> AtS1 (elt_s1, NAndX (([s1], []), ctx))
+  | s1 ->
+     if is_top_s1 s1
+     then AtS1 (elt_s1, ctx)
+     else AtS1 (elt_s1, NAndX (([s1], []), ctx))
 let append_or_s1 ctx (elt_s1 : unit elt_s1) = function
   | NOr (_,lr) -> AtS1 (elt_s1, NOrX ((List.rev lr, []), ctx))
-  | s1 -> AtS1 (elt_s1, NOrX (([s1], []), ctx))
+  | s1 ->
+     if is_top_s1 s1
+     then AtS1 (elt_s1, ctx)
+     else AtS1 (elt_s1, NOrX (([s1], []), ctx))
 
 let append_choice ctx (elt_expr : unit elt_expr) = function
   | Choice (_,lr) -> AtExpr (elt_expr, ChoiceX ((List.rev lr, []), ctx))
@@ -900,12 +925,7 @@ let insert_elt_s2 det focus =
       Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), Det ((), det, None))), np), ctx))
     | AtS1 _ -> None (* no insertion of terms on complex NPs *)
     | _ -> None in
-  match focus2_opt with
-  | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
-  | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
-  | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
-  | Some (AtS1 (f, InGraphX (f1,ctx))) -> Some (AtP1 (f1, InX (f,ctx)))
-  | other -> other
+  focus_opt_moves [focus_up_at_root_s1] focus2_opt
 
 let insert_input s typ focus =
   match focus with
@@ -931,12 +951,7 @@ let insert_anything focus =
       Some (AtS1 (Det ((), (if is_top_s2 det then det else factory#top_s2), rel_opt), ctx))
     | AtS1 _ -> None (* no insertion of terms on complex NPs *)
     | _ -> None in
-  match focus2_opt with
-  | Some (AtS1 (f, RelX (p, m, ctx))) -> Some (AtP1 (Rel ((),p,m,f), ctx))
-  | Some (AtS1 (f, TripleX1 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
-  | Some (AtS1 (f, TripleX2 (arg,np,ctx))) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
-  | Some (AtS1 (f, InGraphX (f1,ctx))) -> Some (AtP1 (f1, InX (f,ctx)))
-  | other -> other
+  focus_opt_moves [focus_up_at_root_s1] focus2_opt
 			   
 let insert_type c = function
   | AtS1 (Det (_,det,rel_opt), ctx) ->
@@ -1276,9 +1291,41 @@ let insert_name new_name = function
     Some (AtS (SExpr ((), new_name, id, factory#top_modif, f, None),
 	       SeqX ((ll,s::rr), ctx3)))
   | _ -> None
-      
+
+
+let insert_selection_nand (l_incr : increment list) (focus : focus) : focus option =
+  let focus2_opt =
+    match focus with
+    | AtS1 (np,ctx) ->
+       let l_np_incr = Common.mapfilter elt_s1_of_increment l_incr in
+       ( match l_np_incr with
+	 | [] -> None
+	 | [np_incr] -> Some (append_and_s1 ctx np_incr np)
+	 | _ -> Some (append_and_s1 ctx (NAnd ((), l_np_incr)) np) )
+    | _ -> None in
+  focus_opt_moves [focus_up_at_root_s1] focus2_opt
+
+let insert_selection_nor (l_incr : increment list) (focus : focus) : focus option =
+  let l_np_incr = Common.mapfilter elt_s1_of_increment l_incr in
+  let np_incr_opt =
+    match l_np_incr with
+    | [] -> None
+    | [np_incr] -> Some np_incr
+    | _ -> Some (NOr ((), l_np_incr)) in
+  let focus2_opt =
+    match np_incr_opt, focus with
+    | None, _ -> None
+    | Some np_incr, AtS1 (np,ctx) -> Some (append_or_s1 ctx np_incr np)
+    | Some np_incr, _ -> insert_elt_p1 (Is ((), np_incr)) focus in
+  focus_opt_moves [focus_up_at_root_s1] focus2_opt  
+
+				     
 let insert_increment incr focus =
   match incr with
+    | IncrSelection (selop, l_incr) ->
+       ( match selop with
+	 | `NAnd -> insert_selection_nand l_incr focus
+	 | `NOr -> insert_selection_nor l_incr focus )
     | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus
@@ -1319,8 +1366,8 @@ let insert_increment incr focus =
     | IncrAggregId (g,id) -> insert_aggreg_id g id focus
     | IncrFuncArg (is_pred,func,arity,pos,res_conv_opt,arg_conv_opt) -> insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt focus
     | IncrName name -> insert_name name focus
-
-      
+	
+       
 let delete_list = function
   | [], [] -> `Empty
   | [x], [] -> `Single x

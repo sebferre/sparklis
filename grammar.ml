@@ -96,6 +96,8 @@ object
   method virtual where : string
   method virtual undefined : string
 
+  method virtual selected_item_s : string
+
   method virtual tooltip_open_resource : string
   method virtual tooltip_delete_current_focus : string
   method virtual tooltip_remove_element_at_focus : string
@@ -295,6 +297,8 @@ object
   method where = "where"
   method undefined = "undefined"
 
+  method selected_item_s = "selected items"
+
   method tooltip_open_resource = "Open resource in new window"
   method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
   method tooltip_remove_element_at_focus = "Remove this query element at the query focus"
@@ -483,6 +487,8 @@ object
   method it_is_true_that = "il est vrai que"
   method where = "où"
   method undefined = "indéfini"
+
+  method selected_item_s = "éléments sélectionnés"
 
   method tooltip_open_resource = "Ouvrir la ressource dans une nouvelle fenêtre"
   method tooltip_delete_current_focus = "Cliquer sur la croix rouge pour supprimer le focus actuel"
@@ -673,6 +679,8 @@ object
   method it_is_true_that = "es verdad que"
   method where = "donde"
   method undefined = "indefinido"
+
+  method selected_item_s = "artículos seleccionados"
 
   method tooltip_open_resource = "Abrir el recurso en una nueva ventana"
   method tooltip_delete_current_focus = "Haga clic en la X roja para eliminar el foco actual"

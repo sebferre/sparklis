@@ -536,6 +536,9 @@ object (self)
       let partial = self#partial_results in
       let unit = `Results in
       let incr_index = new incr_freq_tree_index term_hierarchy in
+    (* adding selection increments *)
+      incr_index#add (Lisql.IncrSelection (`NAnd, []), None);
+      incr_index#add (Lisql.IncrSelection (`NOr, []), None);
     (* adding increment 'anything' *)
       if Lisql.insert_increment Lisql.IncrAnything focus <> None then
 	incr_index#add (Lisql.IncrAnything, None);

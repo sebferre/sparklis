@@ -196,6 +196,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
     | Kwd s -> s
     | Word w -> html_word w
     | Input dt -> html_input dt
+    | Selection xml_selop -> html_of_nl_xml ~highlight state xml_selop ^ " <span class=\"selection-count\"></span> " ^ Lisql2nl.config_lang#grammar#selected_item_s
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Quote (left, xml, right) -> left ^ html_of_nl_xml ~highlight state xml ^ right
@@ -311,7 +312,8 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
       | IncrForeachId _ -> 1, Some grammar#tooltip_foreach_id
       | IncrAggregId _ -> 2, Some grammar#tooltip_aggreg_id
-	
+
+      | IncrSelection _ -> 1, None
       | IncrInput _ -> 2, None
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
@@ -340,10 +342,27 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrForeach -> 14, Some grammar#tooltip_foreach
       | IncrAggreg Sample -> 15, Some grammar#tooltip_sample
       | IncrAggreg _ -> 16, Some grammar#tooltip_aggreg
-      | IncrFuncArg _ -> 17, Some grammar#tooltip_func
+      | IncrFuncArg _ -> 17, Some grammar#tooltip_func in
+  let filterable =
+    match incr with
+    | IncrAnything
+    | IncrSelection _
+    | IncrTransitive _
+    | IncrRel _
+    | IncrTriple _
+    | IncrTriplify -> false
+    | _ -> true in
+  let selection_incr =
+    match incr with
+    | IncrSelection _ -> true
+    | _ -> false
   in
   let sort_data = (f_opt, rank, data) in
-  sort_data, key, html_span ~id:key ~classe:"increment" ?title:title_opt (html ^ html_freq)
+  let classe =
+    if filterable then "increment filterable-increment"
+    else if selection_incr then "increment selection-increment"
+    else "increment" in
+  sort_data, key, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq)
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index focus (state : state) (index : Lis.incr_freq_index) =

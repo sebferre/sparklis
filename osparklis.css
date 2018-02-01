@@ -89,6 +89,10 @@ head, body, input, textarea, select {
 .term-input {
 }
 
+.selected-incr {
+    background-color:#a0f0a0;
+}
+
 .list-incrs {
     height:200px;
     resize:vertical;
@@ -105,12 +109,18 @@ head, body, input, textarea, select {
     padding-top: 0px;
 }
 .list-incrs.css-treeview ul ul {
+    width: 100%;
     padding-left: 0px;
+    padding-right: 0px;
+    margin-right: 0px;
 }
 .list-incrs.css-treeview li {
+    width: 100%;
     margin-left: 0px;
+    margin-right: 0px;
     margin-top:8px;
     margin-bottom: 0px;
+    padding-right: 0px;
     white-space: nowrap;
 }
 
@@ -120,6 +130,10 @@ head, body, input, textarea, select {
     vertical-align:top;
     line-height:100%;
     white-space:normal;
+}
+
+.selection-increment {
+    background-color:#f0f0a0;
 }
 
 .frequency-results, .frequency-entities {
