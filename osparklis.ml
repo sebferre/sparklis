@@ -299,6 +299,7 @@ object (self)
   val mutable property_constr = Lisql.True
 
   val term_selection = new increment_selection "#list-terms li"
+  val property_selection = new increment_selection "#list-properties li"
 				  
   (* UI state *)
   val mutable document_scroll = 0
@@ -558,6 +559,34 @@ object (self)
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
+    let get_incr_opt elt =
+      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      (* retrieving selected increments for selection *)
+      match incr with
+      | Lisql.IncrSelection (selop,_) ->
+	 let l_incr = property_selection#get in
+	 if l_incr = []
+	 then begin alert "Empty selection"; None end
+	 else Some (Lisql.IncrSelection (selop, l_incr))
+      | _ -> Some incr in
+    let apply_incr elt =
+      match get_incr_opt elt with
+      | None -> ()
+      | Some incr ->
+	 navigation#update_focus
+	   ~push_in_history:true
+	   (let _ =
+	      match incr with
+	      | Lisql.IncrLatLong _ -> jquery_click "#nav-tab-map"
+	      | _ -> () in
+	    Lisql.insert_increment incr) in
+    let toggle_incr elt =
+      match get_incr_opt elt with
+      | Some (Lisql.IncrType _ | Lisql.IncrRel _ as incr) ->
+	 let _present = toggle_class elt "selected-incr" in
+	 property_selection#toggle incr
+      | _ -> ()
+    in
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->
@@ -569,16 +598,12 @@ object (self)
 	      jquery "#list-properties" (fun elt -> elt##scrollTop <- property_scroll);
 	      self#restore_expanded_properties;
 	      jquery_set_innerHTML "#count-properties"
-		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+	      property_selection#reset;
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		 navigation#update_focus
-		   ~push_in_history:true
-		   (let incr = html_state#dico_incrs#get (to_string (elt##id)) in
-		    let _ =
-		      match incr with
-		      | Lisql.IncrLatLong _ -> jquery_click "#nav-tab-map"
-		      | _ -> () in
-		    Lisql.insert_increment incr)));
+		 if to_bool ev##ctrlKey
+		 then toggle_incr elt
+		 else apply_incr elt));
 	      refreshing_properties <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;

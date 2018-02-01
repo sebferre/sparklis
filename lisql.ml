@@ -115,6 +115,8 @@ type 'a ctx_list = 'a list * 'a list
 
 let list_of_ctx (x : 'a) (ll,rr : 'a ctx_list) : 'a list = List.rev ll @ x :: rr
 
+let list_of_list_ctx (lx : 'a list) (ll, rr : 'a ctx_list) : 'a list = List.rev ll @ lx @ rr
+								
 let ctx_of_list (lr : 'a list) : ('a * 'a ctx_list) list =
   let rec aux ll = function
     | [] -> []
@@ -210,38 +212,6 @@ let is_dim = function ForEachResult _ | ForEach _ | ForTerm _ -> true | _ -> fal
 let is_aggreg = function TheAggreg _ -> true | _ -> false
 									    
 let is_root_focus = function AtS (_, Root) -> true | _ -> false
-
-(*
-let rec is_aggregation_focus = function
-  | AtS1 (AnAggreg _, _) -> true
-  | AtS1 (_, ctx) -> is_aggregation_ctx_s1 ctx
-  | AtP1 (_, ctx) -> is_aggregation_ctx_p1 ctx
-  | AtDim _ -> false
-  | AtAggreg _ -> true
-  | AtExpr _ -> false
-  | AtS _ -> false
-and is_aggregation_ctx_p1 = function
-  | DetThatX (_,ctx) -> is_aggregation_ctx_s1 ctx
-  | AnAggregThatX _ -> true
-  | ForEachThatX _ -> false
-  | TheAggregThatX _ -> true
-  | SExprThatX _ -> false
-  | AndX (_,ctx) -> is_aggregation_ctx_p1 ctx
-  | OrX (_,ctx) -> is_aggregation_ctx_p1 ctx
-  | MaybeX ctx -> is_aggregation_ctx_p1 ctx
-  | NotX ctx -> is_aggregation_ctx_p1 ctx
-and is_aggregation_ctx_s1 = function
-  | IsX ctx -> is_aggregation_ctx_p1 ctx
-  | RelX _ -> false
-  | TripleX1 _ -> false
-  | TripleX2 _ -> false
-  | ReturnX _ -> false
-  | AnAggregX _ -> false
-  | NAndX (_,ctx) -> is_aggregation_ctx_s1 ctx
-  | NOrX (_,ctx) -> is_aggregation_ctx_s1 ctx
-  | NMaybeX ctx -> is_aggregation_ctx_s1 ctx
-  | NNotX ctx -> is_aggregation_ctx_s1 ctx
-*)
 
 let rec is_aggregated_focus = function
   | AtS1 (_, ctx) -> is_aggregated_ctx_s1 ctx
@@ -389,7 +359,24 @@ and property_range_of_ctx_p1 = function
   | MaybeX ctx
   | NotX ctx -> property_range_of_ctx_p1 ctx
   | _ -> None
-	   
+
+let at_s1 np ctx =
+  match np, ctx with
+  | NAnd (_,l), NAndX (ll_rr,ctx2) ->
+     AtS1 (NAnd ((), list_of_list_ctx l ll_rr), ctx2)
+  | NOr (_,l), NOrX (ll_rr,ctx2) ->
+     AtS1 (NOr ((), list_of_list_ctx l ll_rr), ctx2)
+  | _ -> AtS1 (np, ctx)
+	       
+let at_p1 f ctx =
+  match f, ctx with
+  | And (_,l), AndX (ll_rr,ctx2) ->
+     AtP1 (And ((), list_of_list_ctx l ll_rr), ctx2)
+  | Or (_,l), OrX (ll_rr,ctx2) ->
+     AtP1 (Or ((), list_of_list_ctx l ll_rr), ctx2)
+  | _ -> AtP1 (f, ctx)
+
+	      
 (* getting element annotation *)
 
 let rec annot_p1 : 'a elt_p1 -> 'a = function
@@ -797,7 +784,7 @@ and copy_s (s : unit elt_s) : unit elt_s =
 type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
 (* a sub-type of Sparql.datatype *)
 
-type selection_op = [`NAnd | `NOr]
+type selection_op = [`And | `Or | `NAnd | `NOr]
 		     
 type increment =
   | IncrSelection of selection_op * increment list
@@ -851,6 +838,12 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
 
+let elt_p1_of_increment : increment -> unit elt_p1 option = function
+  | IncrType c -> Some (Type ((), c))
+  | IncrRel (p,m) -> Some (Rel ((), p, m, factory#top_s1))
+  | IncrLatLong (plat,plong) -> Some (LatLong ((), plat, plong, factory#new_id, factory#new_id))
+  | _ -> None
+	   
 let elt_s2_of_increment : increment -> elt_s2 option = function
   | IncrTerm t -> Some (Term t)
   | IncrId (id,_) -> Some (The id)
@@ -866,26 +859,48 @@ let apply_conv_ctx_expr conv_opt = function
   | ctx -> ctx
     
 let append_and_p1 ctx (elt_p1 : unit elt_p1) = function
-  | IsThere _ -> AtP1 (elt_p1, ctx)
-  | And (_,lr) -> AtP1 (elt_p1, AndX ((List.rev lr, []), ctx))
-  | p1 -> AtP1 (elt_p1, AndX (([p1], []), ctx))
+  | IsThere _ -> at_p1 elt_p1 ctx
+  | And (_,lr) -> at_p1 elt_p1 (AndX ((List.rev lr, []), ctx))
+  | f ->
+     let f_ctx =
+       match ctx with
+       | AndX ((ll,rr), ctx2) -> AndX ((f::ll,rr), ctx2)
+       | _ -> AndX (([f], []), ctx) in
+     at_p1 elt_p1 f_ctx
 let append_or_p1 ctx (elt_p1 : unit elt_p1) = function
-  | Or (_,lr) -> AtP1 (elt_p1, OrX ((List.rev lr, []), ctx))
-  | p1 -> AtP1 (elt_p1, OrX (([p1], []), ctx))
+  | IsThere _ -> at_p1 elt_p1 ctx
+  | Or (_,lr) -> at_p1 elt_p1 (OrX ((List.rev lr, []), ctx))
+  | f ->
+     let f_ctx =
+       match ctx with
+       | OrX ((ll,rr), ctx2) -> OrX ((f::ll,rr), ctx2)
+       | _ -> OrX (([f], []), ctx) in
+     at_p1 elt_p1 f_ctx
 
 let append_and_s1 ctx (elt_s1 : unit elt_s1) = function
-  | NAnd (_,lr) -> AtS1 (elt_s1, NAndX ((List.rev lr, []), ctx))
-  | s1 ->
-     if is_top_s1 s1
-     then AtS1 (elt_s1, ctx)
-     else AtS1 (elt_s1, NAndX (([s1], []), ctx))
+  | NAnd (_,lr) -> at_s1 elt_s1 (NAndX ((List.rev lr, []), ctx))
+  | np ->
+     if is_top_s1 np
+     then at_s1 elt_s1 ctx
+     else
+       let np_ctx =
+	 match ctx with
+	 | NAndX ((ll,rr), ctx2) -> NAndX ((np::ll,rr), ctx2)
+	 | _ -> NAndX (([np], []), ctx) in
+       at_s1 elt_s1 np_ctx
 let append_or_s1 ctx (elt_s1 : unit elt_s1) = function
-  | NOr (_,lr) -> AtS1 (elt_s1, NOrX ((List.rev lr, []), ctx))
-  | s1 ->
-     if is_top_s1 s1
-     then AtS1 (elt_s1, ctx)
-     else AtS1 (elt_s1, NOrX (([s1], []), ctx))
+  | NOr (_,lr) -> at_s1 elt_s1 (NOrX ((List.rev lr, []), ctx))
+  | np ->
+     if is_top_s1 np
+     then at_s1 elt_s1 ctx
+     else
+       let np_ctx =
+	 match ctx with
+	 | NOrX ((ll,rr), ctx2) -> NOrX ((np::ll,rr), ctx2)
+	 | _ -> NOrX (([np], []), ctx) in
+       at_s1 elt_s1 np_ctx
 
+	     
 let append_choice ctx (elt_expr : unit elt_expr) = function
   | Choice (_,lr) -> AtExpr (elt_expr, ChoiceX ((List.rev lr, []), ctx))
   | e -> AtExpr (elt_expr, ChoiceX (([e], []), ctx))
@@ -899,7 +914,6 @@ let insert_elt_p1_in_rel_opt ctx elt = function
   | Some rel -> Some (append_and_p1 ctx elt rel)
     
 let insert_elt_p1 (elt : unit elt_p1) = function
-  | AtP1 (f, AndX ((ll,rr),ctx)) -> Some (AtP1 (elt, AndX ((f::ll,rr),ctx)))
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
@@ -912,20 +926,30 @@ let insert_elt_p1 (elt : unit elt_p1) = function
   | AtExpr _ -> None (* no insertion inside expressions *)
   | AtS _ -> None
 
-let insert_elt_s2 det focus =
+let insert_elt_s1 elt focus =
   let focus2_opt =
     match focus with
-    | AtP1 _
-    | AtAggreg _ -> insert_elt_p1 (Is ((), Det ((), det, None))) focus
-    | AtS1 (Det (_, det2, rel_opt), ctx) ->
-      if det2 = det
-      then Some (AtS1 (Det ((), factory#top_s2, rel_opt), ctx))
-      else Some (AtS1 (Det ((), det, rel_opt), ctx))
+    | AtS1 ((Det _ as np), ctx) ->
+       if is_top_s1 np
+       then Some (at_s1 elt ctx)
+       else insert_elt_p1 (Is ((), elt)) focus
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
-      Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), Det ((), det, None))), np), ctx))
-    | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+       Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx))
+    | AtS1 _ -> None (* no insertion of NPs on complex NPs *)
+    | AtP1 _
+    | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
     | _ -> None in
   focus_opt_moves [focus_up_at_root_s1] focus2_opt
+
+let insert_elt_s2 det : focus -> focus option = function
+  | AtS1 (Det (_, det0, rel_opt), ctx) ->
+     let focus2 =
+       if det0 = det (* erasing existing det *)
+       then AtS1 (Det ((), factory#top_s2, rel_opt), ctx)
+       else AtS1 (Det ((), det, rel_opt), ctx) in
+     Some (focus_moves [focus_up_at_root_s1] focus2)
+  | focus -> insert_elt_s1 (Det ((), det, None)) focus
+		  
 
 let insert_input s typ focus =
   match focus with
@@ -1018,14 +1042,8 @@ let insert_something_that_is = function
   | _ -> None
 
 let insert_and = function
-(*
-  | AtP1 (And ar, ctx) -> Some (append_and_p1 ctx IsThere (And ar))
-  | AtP1 (f, AndX (i,ar,ctx)) when not (is_top_p1 f) -> ar.(i) <- f; Some (append_and_p1 ctx IsThere (And ar))
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_and_p1 ctx IsThere f)
-*)
   | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtS1 (f, ReturnX ctx) -> Some (AtS1 (factory#top_s1, ReturnX (SeqX (([Return ((),f)],[]), ctx))))
-  | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (factory#top_s1, NAndX ((f::ll,rr),ctx)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
@@ -1033,17 +1051,14 @@ let insert_duplicate = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (_, InGraphX _) -> None (* to avoid duplication of focus, and complex focus graphs *)
-  | AtS1 (f, NAndX ((ll,rr),ctx)) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (copy_s1 f, NAndX ((f::ll,rr),ctx)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx (copy_s1 f) f)
   | AtAggreg ((TheAggreg _ as aggreg), SAggregX ((ll,rr),ctx)) -> Some (AtAggreg (copy_aggreg aggreg, SAggregX ((aggreg::ll,rr), ctx)))
   | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) -> Some (AtS (copy_s f, SeqX ((f::ll,rr),ctx)))
   | _ -> None
 
 let insert_or = function
-  | AtP1 (f, OrX ((ll,rr),ctx2)) when not (is_top_p1 f) -> Some (AtP1 (IsThere (), OrX ((f::ll,rr),ctx2)))
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx (IsThere ()) f)
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (f, NOrX ((ll,rr),ctx2)) when not (is_top_s1 f) -> Some (AtS1 (factory#top_s1, NOrX ((f::ll,rr),ctx2)))
   | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
 
@@ -1293,6 +1308,63 @@ let insert_name new_name = function
   | _ -> None
 
 
+let insert_selection_gen
+      ~(elt_of_increment : increment -> 'elt option)
+      ~(coord : 'elt list -> 'elt)
+      ~(insert_elt : 'elt -> focus -> focus option)
+      (l_incr : increment list) (focus : focus) : focus option =
+  let l_f_incr = Common.mapfilter elt_of_increment l_incr in
+  let f_incr_opt =
+    match l_f_incr with
+    | [] -> None
+    | [f_incr] -> Some f_incr
+    | _ -> Some (coord l_f_incr) in
+  match f_incr_opt with
+  | None -> None
+  | Some f_incr -> insert_elt f_incr focus
+
+let insert_selection_p1 =
+  insert_selection_gen
+    ~elt_of_increment:elt_p1_of_increment
+    ~insert_elt:insert_elt_p1
+let insert_selection_and =
+  insert_selection_p1 ~coord:(fun l -> And ((), l))
+let insert_selection_or =
+  insert_selection_p1 ~coord:(fun l -> Or ((), l))
+			     
+let insert_selection_s1 =
+  insert_selection_gen
+    ~elt_of_increment:elt_s1_of_increment
+    ~insert_elt:insert_elt_s1
+let insert_selection_nand =
+  insert_selection_s1 ~coord:(fun l -> NAnd ((), l))
+let insert_selection_nor =
+  insert_selection_s1 ~coord:(fun l -> NOr ((), l))
+
+(*		      
+let insert_selection_and (l_incr : increment list) (focus : focus) : focus option =
+  let l_f_incr = Common.mapfilter elt_p1_of_increment l_incr in
+  let f_incr_opt =
+    match l_f_incr with
+    | [] -> None
+    | [f_incr] -> Some f_incr
+    | _ -> Some (And ((), l_f_incr)) in
+  match f_incr_opt with
+  | None -> None
+  | Some f_incr -> insert_elt_p1 f_incr focus
+	   
+let insert_selection_or (l_incr : increment list) (focus : focus) : focus option =
+  let l_f_incr = Common.mapfilter elt_p1_of_increment l_incr in
+  let f_incr_opt =
+    match l_f_incr with
+    | [] -> None
+    | [f_incr] -> Some f_incr
+    | _ -> Some (Or ((), l_f_incr)) in
+  match f_incr_opt with
+  | None -> None
+  | Some f_incr -> insert_elt_p1 f_incr focus
+
+				 
 let insert_selection_nand (l_incr : increment list) (focus : focus) : focus option =
   let focus2_opt =
     match focus with
@@ -1318,12 +1390,14 @@ let insert_selection_nor (l_incr : increment list) (focus : focus) : focus optio
     | Some np_incr, AtS1 (np,ctx) -> Some (append_or_s1 ctx np_incr np)
     | Some np_incr, _ -> insert_elt_p1 (Is ((), np_incr)) focus in
   focus_opt_moves [focus_up_at_root_s1] focus2_opt  
-
+ *)
 				     
 let insert_increment incr focus =
   match incr with
     | IncrSelection (selop, l_incr) ->
        ( match selop with
+	 | `And -> insert_selection_and l_incr focus
+	 | `Or -> insert_selection_or l_incr focus
 	 | `NAnd -> insert_selection_nand l_incr focus
 	 | `NOr -> insert_selection_nor l_incr focus )
     | IncrInput (s,dt) -> insert_input s dt focus

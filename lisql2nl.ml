@@ -259,8 +259,8 @@ let word_of_order grammar = function
   | Lowest _ -> `Op grammar#order_lowest
 
 let word_of_selection_op grammar  = function
-  | `NAnd -> `Op grammar#and_
-  | `NOr -> `Op grammar#or_
+  | `And | `NAnd -> `Op grammar#and_
+  | `Or | `NOr -> `Op grammar#or_
 		 
 let word_of_incr grammar = function
   | IncrSelection (selop,_) -> word_of_selection_op grammar selop
@@ -1016,8 +1016,8 @@ let xml_not grammar annot_opt xml =
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_selection_op grammar : Lisql.selection_op -> xml = function
-  | `NAnd -> [Word (`Op grammar#and_)]
-  | `NOr -> [Word (`Op grammar#or_)]
+  | `And | `NAnd -> [Word (`Op grammar#and_)]
+  | `Or | `NOr -> [Word (`Op grammar#or_)]
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =

@@ -730,6 +730,10 @@ object (self)
       let int_index_has = index_of_results_column "prop" results_has in
       let int_index_isof = index_of_results_column "prop" results_isof in
       let incr_index = new incr_freq_tree_index term_hierarchy in
+      (* adding selection increments *)
+      incr_index#add (Lisql.IncrSelection (`And, []), None);
+      incr_index#add (Lisql.IncrSelection (`Or, []), None);
+      (* adding class increments *)
       int_index_a#iter
 	(function
 	| (Rdf.URI uri, count) ->
@@ -737,6 +741,7 @@ object (self)
 	  Lexicon.config_class_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_a; unit })
 	| _ -> ());
+      (* adding property increments + hierarchy + LatLong *)
       int_index_has#iter
 	(function
 	| (Rdf.URI uri, count) ->
