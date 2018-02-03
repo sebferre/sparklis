@@ -93,6 +93,16 @@ head, body, input, textarea, select {
     background-color:#a0f0a0;
 }
 
+.affix {
+    top: 0;
+    width: 100%;
+    z-index: 9999 !important;
+}
+
+.incr-box .panel-body {
+    padding: 0px;
+}
+
 .list-incrs {
     height:200px;
     resize:vertical;
@@ -106,7 +116,7 @@ head, body, input, textarea, select {
     line-height:90%; // avoids wasted space between items
 }
 .list-incrs.css-treeview > ul {
-    padding-top: 0px;
+    padding-top: 8px;
 }
 .list-incrs.css-treeview ul ul {
     width: 100%;
@@ -115,7 +125,7 @@ head, body, input, textarea, select {
     margin-right: 0px;
 }
 .list-incrs.css-treeview li {
-    width: 100%;
+    width: 95%;
     margin-left: 0px;
     margin-right: 0px;
     margin-top:8px;
