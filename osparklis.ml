@@ -264,18 +264,17 @@ object
   method update_focus ~(push_in_history : bool) (f : Lisql.focus -> Lisql.focus option) : unit = ()
 end
 
-class increment_selection (sel_list_items : string) =
+class increment_selection (sel_selection : string) =
 object (self)
   val mutable l_incr : Lisql.increment list = []
   method get = List.rev l_incr
   method private refresh =
     let n_incr = List.length l_incr in
-    let display = if n_incr=0 then "none" else "block" in
-    jquery_all sel_list_items (fun elt_li ->
-      jquery_from elt_li ".selection-increment" (fun elt ->
-	elt_li##style##display <- string display;
-        jquery_from elt ".selection-count" (fun elt_count ->
-          elt_count##innerHTML <- string (string_of_int n_incr))))
+    jquery sel_selection (fun elt ->
+      elt##style##display <-
+	string (if n_incr=0 then "none" else "block");
+      jquery_from elt ".selection-count" (fun elt_count ->
+        elt_count##innerHTML <- string (string_of_int n_incr)))
   method toggle (incr : Lisql.increment) : unit =
     let _ =
       if List.mem incr l_incr
@@ -298,8 +297,8 @@ object (self)
   val mutable term_constr = Lisql.True
   val mutable property_constr = Lisql.True
 
-  val term_selection = new increment_selection "#list-terms li"
-  val property_selection = new increment_selection "#list-properties li"
+  val term_selection = new increment_selection "#selection-terms"
+  val property_selection = new increment_selection "#selection-properties"
 				  
   (* UI state *)
   val mutable document_scroll = 0
@@ -532,17 +531,22 @@ object (self)
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
       jquery_input "#pattern-terms" (fun input ->
+        jquery "#selection-terms-items" (fun elt_sel_items ->
 	jquery "#list-terms" (fun elt_list ->
 	  (*filtering_terms <- true;*)
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
-	    (fun ~partial index ->
-	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
-	      jquery "#list-terms" (fun elt -> elt##scrollTop <- term_scroll);
+	     (fun ~partial index ->
+	      let html_sel, html_list = html_index lis#focus html_state index in
+	      elt_sel_items##innerHTML <- string html_sel;
+	      elt_list##innerHTML <- string html_list;
+	      elt_list##scrollTop <- term_scroll;
 	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
 		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      term_selection#reset;			   
 	      stop_propagation_from elt_list "a, .term-input";
+	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
+	        apply_incr elt));
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		if to_bool ev##ctrlKey
 		then toggle_incr elt
@@ -555,7 +559,7 @@ object (self)
 	      refreshing_terms <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
-	      self#set_term_constr new_constr))))
+	      self#set_term_constr new_constr)))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
@@ -589,17 +593,21 @@ object (self)
     in
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
-      jquery_input "#pattern-properties" (fun input ->
+      jquery_input "#pattern-properties" (fun input ->				 jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
 	  (*filtering_properties <- true;*)
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
-	    (fun ~partial index ->
-	      elt_list##innerHTML <- string (html_index lis#focus html_state index);
-	      jquery "#list-properties" (fun elt -> elt##scrollTop <- property_scroll);
+	     (fun ~partial index ->
+	      let html_sel, html_list = html_index lis#focus html_state index in
+	      elt_sel_items##innerHTML <- string html_sel;
+	      elt_list##innerHTML <- string html_list;
+	      elt_list##scrollTop <- property_scroll;
 	      self#restore_expanded_properties;
 	      jquery_set_innerHTML "#count-properties"
 				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      property_selection#reset;
+	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
+		 apply_incr elt));
 	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 		 if to_bool ev##ctrlKey
 		 then toggle_incr elt
@@ -607,7 +615,7 @@ object (self)
 	      refreshing_properties <- false;
 	      let new_constr = self#get_constr select input in
 	      self#filter_increments elt_list new_constr;
-	      self#set_property_constr new_constr))))
+	      self#set_property_constr new_constr)))))
 
   method private refresh_modifier_increments =
     let apply_incr elt =
@@ -625,13 +633,16 @@ object (self)
     in
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
-      elt_list##innerHTML <- string (html_index lis#focus html_state index);
-      jquery "#list-modifiers" (fun elt -> elt##scrollTop <- modifier_scroll);    
+      let _html_sel, html_list = html_index lis#focus html_state index in
+      elt_list##innerHTML <- string html_list;
+      elt_list##scrollTop <- modifier_scroll;
       jquery_set_innerHTML "#count-modifiers"
 	(html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
       stop_propagation_from elt_list ".term-input";
       jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-	apply_incr elt));
+	if to_bool ev##ctrlKey
+	then () (* no multiple selection on modifiers so far *)
+	else apply_incr elt));
       jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
 	Opt.iter (elt##parentNode) (fun node ->
 	  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->

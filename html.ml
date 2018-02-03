@@ -196,7 +196,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
     | Kwd s -> s
     | Word w -> html_word w
     | Input dt -> html_input dt
-    | Selection xml_selop -> html_of_nl_xml ~highlight state xml_selop ^ " <span class=\"selection-count\"></span> " ^ Lisql2nl.config_lang#grammar#selected_item_s
+    | Selection xml_selop -> html_of_nl_xml ~highlight state xml_selop
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
     | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
     | Quote (left, xml, right) -> left ^ html_of_nl_xml ~highlight state xml ^ right
@@ -278,7 +278,7 @@ let html_count_unit freq (unit,units) =
   else if count = 1 then s_count ^ " " ^ unit
   else s_count ^ " " ^ units
 
-let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : compare_incr_data * string * string =
+let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : compare_incr_data * string * bool * string =
   let key = state#dico_incrs#add incr in
   let grammar = Lisql2nl.config_lang#grammar in
   let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
@@ -352,50 +352,55 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     | IncrTriple _
     | IncrTriplify -> false
     | _ -> true in
-  let selection_incr =
-    match incr with
-    | IncrSelection _ -> true
-    | _ -> false
-  in
   let sort_data = (f_opt, rank, data) in
-  let classe =
-    if filterable then "increment filterable-increment"
-    else if selection_incr then "increment selection-increment"
-    else "increment" in
-  sort_data, key, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq)
+  let is_selection_incr, html =
+    match incr with
+    | IncrSelection _ ->
+       true, "<button id=\"" ^ key ^ "\" class=\"btn btn-default selection-increment\">" ^ html ^ "</button> "
+    | _ ->
+       let classe =
+	 if filterable then "increment filterable-increment"
+	 else "increment" in
+       false, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq) in
+  sort_data, key, is_selection_incr, html
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lis.incr_freq_index) =
+let html_index focus (state : state) (index : Lis.incr_freq_index) : string * string =
   let sort_node_list nodes =
     List.sort
-      (fun (`Node ((data1,_,_),_)) (`Node ((data2,_,_),_)) -> compare_incr data1 data2)
+      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr data1 data2)
       nodes in
-  let rec aux buf nodes =
+  let rec aux buf_sel buf_tree nodes =
     let sorted_nodes = sort_node_list nodes in
-    Buffer.add_string buf "<ul>";
+    Buffer.add_string buf_tree "<ul>";
     List.iter
-      (fun (`Node ((_,key,html), children)) ->
-	let check_id = collapse_of_key key in
-	Buffer.add_string buf "<li class=\"col-xs-11\">";
-	if children = [] then begin
-	    Buffer.add_string buf "<label style=\"visibility:hidden;\">►&nbsp;</label>";
-	    Buffer.add_string buf html
-	end
-	else begin
-	  Buffer.add_string buf ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
-	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
-	  Buffer.add_string buf ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
-	  Buffer.add_string buf html;
-	  aux buf children
-	end;
-	Buffer.add_string buf "</li>")
+      (fun (`Node ((_,key,is_selection_incr,html), children)) ->
+       if is_selection_incr
+       then begin
+	   Buffer.add_string buf_sel html end
+       else begin
+	 let check_id = collapse_of_key key in
+	 Buffer.add_string buf_tree "<li class=\"col-xs-11\">";
+	 if children = [] then begin
+	     Buffer.add_string buf_tree "<label style=\"visibility:hidden;\">►&nbsp;</label>";
+	     Buffer.add_string buf_tree html
+	   end
+	 else begin
+	     Buffer.add_string buf_tree ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
+	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
+	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
+	     Buffer.add_string buf_tree html;
+	     aux buf_sel buf_tree children
+	   end;
+	 Buffer.add_string buf_tree "</li>" end)
       sorted_nodes;
-    Buffer.add_string buf "</ul>"
+    Buffer.add_string buf_tree "</ul>"
   in
   let enriched_index_tree = index#map_tree (freq_text_html_increment_frequency focus state) in
-  let buf = Buffer.create 1000 in
-  aux buf enriched_index_tree;
-  Buffer.contents buf
+  let buf_sel = Buffer.create 100 in
+  let buf_tree = Buffer.create 1000 in
+  aux buf_sel buf_tree enriched_index_tree;
+  Buffer.contents buf_sel, Buffer.contents buf_tree
 
 (* HTML of results *)
 

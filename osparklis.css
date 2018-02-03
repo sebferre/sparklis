@@ -18,6 +18,12 @@ head, body, input, textarea, select {
     pointer-events: none;
 }
 
+.affix {
+    top: 0;
+    width: 100%;
+    z-index: 9999 !important;
+}
+
 .navbar {
     margin: 0;
 }
@@ -89,14 +95,16 @@ head, body, input, textarea, select {
 .term-input {
 }
 
-.selected-incr {
-    background-color:#a0f0a0;
+.selection-incrs {
+    background-color:#f0f0a0;
+    padding:8px;
 }
 
-.affix {
-    top: 0;
-    width: 100%;
-    z-index: 9999 !important;
+.selection-increment {
+}
+
+.selected-incr {
+    background-color:#a0f0a0;
 }
 
 .incr-box .panel-body {
@@ -104,7 +112,7 @@ head, body, input, textarea, select {
 }
 
 .list-incrs {
-    height:200px;
+    height:240px;
     resize:vertical;
     overflow:auto;
     padding-top:0;
@@ -140,10 +148,6 @@ head, body, input, textarea, select {
     vertical-align:top;
     line-height:100%;
     white-space:normal;
-}
-
-.selection-increment {
-    background-color:#f0f0a0;
 }
 
 .frequency-results, .frequency-entities {

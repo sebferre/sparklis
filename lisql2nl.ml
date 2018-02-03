@@ -1015,9 +1015,12 @@ let xml_not grammar annot_opt xml =
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
-let xml_selection_op grammar : Lisql.selection_op -> xml = function
-  | `And | `NAnd -> [Word (`Op grammar#and_)]
-  | `Or | `NOr -> [Word (`Op grammar#or_)]
+let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
+  let w =
+    match selop with
+    | `And | `NAnd -> grammar#and_
+    | `Or | `NOr -> grammar#or_ in
+  [Kwd "..."; Word (`Op w); Kwd "..."]
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =
