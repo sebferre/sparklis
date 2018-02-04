@@ -784,7 +784,7 @@ and copy_s (s : unit elt_s) : unit elt_s =
 type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
 (* a sub-type of Sparql.datatype *)
 
-type selection_op = [`And | `Or | `NAnd | `NOr]
+type selection_op = [`And | `Or | `NAnd | `NOr | `Aggreg]
 		     
 type increment =
   | IncrSelection of selection_op * increment list
@@ -1206,10 +1206,10 @@ let insert_aggreg_bis g = function
     | Some id2 ->
        let s = elt_s_of_focus focus in
        let aggregs = [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)] in
-       let aggregs =
+       (*let aggregs =
 	 match focus with
 	 | AtS1 _ -> ForEachResult () :: aggregs
-	 | _ -> aggregs in
+	 | _ -> aggregs in*)
        let focus2 = append_seq_s Root (SAggreg ((), aggregs)) s in
        down_focus focus2 )
 
@@ -1341,57 +1341,21 @@ let insert_selection_nand =
 let insert_selection_nor =
   insert_selection_s1 ~coord:(fun l -> NOr ((), l))
 
-(*		      
-let insert_selection_and (l_incr : increment list) (focus : focus) : focus option =
-  let l_f_incr = Common.mapfilter elt_p1_of_increment l_incr in
-  let f_incr_opt =
-    match l_f_incr with
-    | [] -> None
-    | [f_incr] -> Some f_incr
-    | _ -> Some (And ((), l_f_incr)) in
-  match f_incr_opt with
-  | None -> None
-  | Some f_incr -> insert_elt_p1 f_incr focus
-	   
-let insert_selection_or (l_incr : increment list) (focus : focus) : focus option =
-  let l_f_incr = Common.mapfilter elt_p1_of_increment l_incr in
-  let f_incr_opt =
-    match l_f_incr with
-    | [] -> None
-    | [f_incr] -> Some f_incr
-    | _ -> Some (Or ((), l_f_incr)) in
-  match f_incr_opt with
-  | None -> None
-  | Some f_incr -> insert_elt_p1 f_incr focus
-
-				 
-let insert_selection_nand (l_incr : increment list) (focus : focus) : focus option =
-  let focus2_opt =
-    match focus with
-    | AtS1 (np,ctx) ->
-       let l_np_incr = Common.mapfilter elt_s1_of_increment l_incr in
-       ( match l_np_incr with
-	 | [] -> None
-	 | [np_incr] -> Some (append_and_s1 ctx np_incr np)
-	 | _ -> Some (append_and_s1 ctx (NAnd ((), l_np_incr)) np) )
-    | _ -> None in
-  focus_opt_moves [focus_up_at_root_s1] focus2_opt
-
-let insert_selection_nor (l_incr : increment list) (focus : focus) : focus option =
-  let l_np_incr = Common.mapfilter elt_s1_of_increment l_incr in
-  let np_incr_opt =
-    match l_np_incr with
-    | [] -> None
-    | [np_incr] -> Some np_incr
-    | _ -> Some (NOr ((), l_np_incr)) in
-  let focus2_opt =
-    match np_incr_opt, focus with
-    | None, _ -> None
-    | Some np_incr, AtS1 (np,ctx) -> Some (append_or_s1 ctx np_incr np)
-    | Some np_incr, _ -> insert_elt_p1 (Is ((), np_incr)) focus in
-  focus_opt_moves [focus_up_at_root_s1] focus2_opt  
- *)
-				     
+let insert_selection_aggreg l_incr focus =
+  match focus with
+  | AtAggreg _
+  | AtS (SAggreg _, _) ->
+     List.fold_left
+       (fun focus2_opt incr ->
+	match incr with
+	| IncrForeachId id ->
+	   focus_opt_moves [insert_foreach_id id] focus2_opt
+	| IncrAggregId (g,id) ->
+	   focus_opt_moves [insert_aggreg_id g id] focus2_opt
+	| _ -> focus2_opt)
+       (Some focus) l_incr
+  | _ -> None
+	     
 let insert_increment incr focus =
   match incr with
     | IncrSelection (selop, l_incr) ->
@@ -1399,7 +1363,8 @@ let insert_increment incr focus =
 	 | `And -> insert_selection_and l_incr focus
 	 | `Or -> insert_selection_or l_incr focus
 	 | `NAnd -> insert_selection_nand l_incr focus
-	 | `NOr -> insert_selection_nor l_incr focus )
+	 | `NOr -> insert_selection_nor l_incr focus
+	 | `Aggreg -> insert_selection_aggreg l_incr focus )
     | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus

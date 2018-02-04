@@ -299,6 +299,7 @@ object (self)
 
   val term_selection = new increment_selection "#selection-terms"
   val property_selection = new increment_selection "#selection-properties"
+  val modifier_selection = new increment_selection "#selection-modifiers"
 				  
   (* UI state *)
   val mutable document_scroll = 0
@@ -618,36 +619,57 @@ object (self)
 	      self#set_property_constr new_constr)))))
 
   method private refresh_modifier_increments =
-    let apply_incr elt =
+    let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
-      let incr =
-	match incr with
-	| Lisql.IncrName name ->
-	  let ref_name = ref name in
-	  jquery_input_from elt ".term-input" (fun input ->
+      match incr with
+      | Lisql.IncrName name ->
+	 let ref_name = ref name in
+	 jquery_input_from elt ".term-input" (fun input ->
 	    ref_name := to_string input##value);
-	  let name = !ref_name in
-	  Lisql.IncrName name
-	| _ -> incr in
-      navigation#update_focus ~push_in_history:true (Lisql.insert_increment incr)
+	 let name = !ref_name in
+	 Some (Lisql.IncrName name)
+      | Lisql.IncrSelection (selop,_) ->
+	 let l_incr = modifier_selection#get in
+	 if l_incr = []
+	 then begin alert "Empty selection"; None end
+	 else Some (Lisql.IncrSelection (selop, l_incr))
+      | _ -> Some incr in
+    let apply_incr elt =
+      match get_incr_opt elt with
+      | None -> ()
+      | Some incr ->
+	 navigation#update_focus
+	   ~push_in_history:true
+	   (Lisql.insert_increment incr) in
+    let toggle_incr elt =
+      match get_incr_opt elt with
+      | Some (Lisql.IncrForeachId _ | Lisql.IncrAggregId _ as incr) ->
+	 let _present = toggle_class elt "selected-incr" in
+	 modifier_selection#toggle incr
+      | _ -> ()
     in
+    jquery "#selection-modifiers-items" (fun elt_sel_items ->
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
-      let _html_sel, html_list = html_index lis#focus html_state index in
+      let html_sel, html_list = html_index lis#focus html_state index in
+      elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
       elt_list##scrollTop <- modifier_scroll;
       jquery_set_innerHTML "#count-modifiers"
-	(html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+			   (html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+      modifier_selection#reset;
       stop_propagation_from elt_list ".term-input";
+      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
+	 apply_incr elt));
       jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 	if to_bool ev##ctrlKey
-	then () (* no multiple selection on modifiers so far *)
+	then toggle_incr elt
 	else apply_incr elt));
       jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
 	Opt.iter (elt##parentNode) (fun node ->
 	  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 	    let incr_elt = Dom_html.element dom_elt in
-	    apply_incr incr_elt)))))
+	    apply_incr incr_elt))))))
 
   method refresh =
     Dom_html.document##body##scrollTop <- document_scroll;

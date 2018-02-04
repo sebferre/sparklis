@@ -905,6 +905,7 @@ object (self)
       else
 	let incrs = [] in
 	let incrs =
+	  IncrSelection (`Aggreg, []) ::
 	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
