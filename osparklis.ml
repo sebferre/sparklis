@@ -393,7 +393,8 @@ object (self)
       (fun (sel_select, sel_input, constr) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
-	    select##value <- string (operator_of_constr constr);
+	    (*select##value <- string (operator_of_constr constr);*)
+	    selectpicker_set_value select (operator_of_constr constr);
 	    input##value <- string (pattern_of_constr constr))))
       [("#select-terms", "#pattern-terms", term_constr);
        ("#select-properties", "#pattern-properties", property_constr);
@@ -1017,7 +1018,7 @@ let _ =
   Dom_html.window##onload <- Dom.handler (fun ev ->
    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
     firebug "Loaded document and google charts";
-    (* initializing YASGUI *)
+    (* initializing YASGUI and other libs *)
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
     (* defining navigation history *)

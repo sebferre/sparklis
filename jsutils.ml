@@ -72,8 +72,9 @@ let jquery_enable_all sel =
      let classes = elt##classList in
      classes##remove (string "disabled");
      classes##remove (string "disabledClick"))
-			       
-let jquery_click sel = jquery sel (fun elt -> Unsafe.(meth_call elt "click" [||]))
+
+let jquery_click_from elt sel = jquery_from elt sel (fun elt -> Unsafe.(meth_call elt "click" [||]))
+let jquery_click sel = jquery_click_from Dom_html.document sel
 
 let onclick k elt =
   elt##onclick <- Dom.handler (fun ev -> k elt ev; bool true)
@@ -145,7 +146,34 @@ struct
   let array ar = Unsafe.inject (array ar)
   let obj ar = Unsafe.obj ar
 end
-    
+
+(* bootstrap-select / selectpicker bindings *)
+
+(* elt_select##selectpicker(string "val", string v) SHOULD be enough but not working *)
+let selectpicker_set_value (elt_select : #Dom_html.element Js.t) (v : string) : unit =
+  jquery_from
+    elt_select
+    ("option[value=\"" ^ v ^ "\"]")
+    (fun elt_option ->
+     Opt.iter
+       (Dom_html.CoerceTo.option elt_option)
+       (fun elt_option ->
+	let index = string_of_int elt_option##index in
+	Opt.iter
+	  (elt_select##previousSibling)
+	  (fun node_dropdown ->
+	   Opt.iter
+	     (Dom_html.CoerceTo.element node_dropdown)
+	     (fun elt_dropdown ->
+	      let active_elt_opt = (Unsafe.coerce Dom_html.document)##activeElement in
+	      jquery_click_from
+		elt_dropdown
+		("li[data-original-index=\"" ^ index ^ "\"] a");
+	      Opt.iter active_elt_opt
+		       (fun elt -> (Unsafe.coerce elt)##focus())
+	     ))))
+
+  
 (* YASGUI bindings *)
 
 let opt_iter (opt : 'a option) (k : 'a -> unit) : unit =
