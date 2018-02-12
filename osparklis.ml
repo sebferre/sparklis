@@ -165,7 +165,7 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
 let subsumed_constr constr1 constr2 : bool =
   (* must avoid to return true when false, but can return false when true *)
   let open Lisql in
-  match constr1, constr2 with
+  match norm_constr constr1, norm_constr constr2 with
   | _, True -> true
   | MatchesAll ls1, MatchesAll ls2 ->
     List.for_all (fun s2 ->
@@ -760,7 +760,6 @@ object (self)
     Lisql.is_home_focus lis#focus
 
   method set_term_constr constr =
-    let constr = norm_constr constr in
     let to_refresh =
       if constr = term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
@@ -776,7 +775,6 @@ object (self)
     end
 
   method set_property_constr constr =
-    let constr = norm_constr constr in
     let to_refresh =
       if constr = property_constr then false
       else if subsumed_constr constr property_constr then not refreshing_properties
