@@ -191,26 +191,22 @@ let filter_constr_entity gv t c = filter_constr_gen gv ~label_property_lang:Lexi
 let filter_constr_class gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
 let filter_constr_property gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
 
-
-let search_constr (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula =
-  let term_l = (Sparql.var (gv#new_var "search_label") :> Sparql.term) in
-  match c with
-    | MatchesAll (w::lw) ->
-      Sparql.formula_and_list
-	[ Sparql.Pattern (Sparql.search_label t term_l);
-	  Sparql.Pattern (Sparql.bif_contains term_l w);
-	  Sparql.Filter (Sparql.log_and (List.map (fun w -> Sparql.expr_regex (term_l :> Sparql.expr) w) lw)) ]
-    | MatchesAny lw ->
-      Sparql.formula_or_list
-	(List.map
-	   (fun w ->
-	     Sparql.formula_and_list
-	       [Sparql.Pattern (Sparql.search_label t term_l);
-		Sparql.Pattern (Sparql.bif_contains term_l w)])
-	   lw)
-    | _ ->
-      Sparql.Pattern (Sparql.something t)
-
+let search_constr_entity (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula =
+  let op_kwds_opt =
+    match c with
+    | MatchesAll lpat when lpat<>[] -> Some (`All, lpat)
+    | MatchesAny lpat when lpat<>[] -> Some (`Any, lpat)
+    | _ -> None in
+  match op_kwds_opt with
+  | Some (op,kwds) ->
+     let label_property_lang = Lexicon.config_entity_lexicon#property_lang in
+     let f = filter_kwds_gen gv ~label_property_lang t ~op ~kwds in
+     if fst label_property_lang = ""
+	&& config_fulltext_search#value = "regex"
+     then Sparql.formula_and (Sparql.Pattern (Sparql.something t)) f
+     else f (* text:query and bif:contains modes are binding [t] *)
+  | _ -> Sparql.Pattern (Sparql.something t)
+  
 
 let triple_arg arg x y z =
   Sparql.Pattern
@@ -344,7 +340,7 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
-  | Search (annot,c) -> (fun x -> search_constr state#genvar x c)
+  | Search (annot,c) -> (fun x -> search_constr_entity state#genvar x c)
   | Filter (annot,c) -> (fun x -> filter_constr_entity state#genvar x c)
   | And (annot,lr) ->
     let lr_d = List.map (fun elt -> form_p1 state elt) lr in

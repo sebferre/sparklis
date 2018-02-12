@@ -1024,7 +1024,10 @@ let toggle_transitive inv = function
 	   
 let insert_constr constr focus =
   match focus with
-    | AtS1 (f, ReturnX _) when is_top_s1 f -> insert_elt_p1 (Search ((),constr)) focus
+  | AtS1 (f, ReturnX _) when is_top_s1 f ->
+     ( match constr with
+       | MatchesAll _ | MatchesAny _ -> insert_elt_p1 (Search ((),constr)) focus
+       | _ -> None )
     | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
 let insert_that_is = function

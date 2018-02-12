@@ -508,23 +508,12 @@ object (self)
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
     let sparql_term =
       "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	(Sparql.pattern_of_formula (Lisql2sparql.search_constr sparql_genvar (Sparql.var "term" :> Sparql.term) constr) :> string) ^
+	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term" :> Sparql.term) constr) :> string) ^
 	filter_hidden_URIs "term" ^
 	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
-      (fun code -> (* trying standard yet inefficient approach *)
-	let sparql_term =
-	  "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	    (Sparql.pattern_of_formula
-	       (Sparql.formula_and_list
-		  [ Sparql.Pattern (Sparql.something (Sparql.var "term" :> Sparql.term));
-		    Lisql2sparql.filter_constr_entity sparql_genvar (Sparql.var "term" :> Sparql.term) constr;
-		    formula_hidden_URIs "term" ]) :> string) ^
-	    " } LIMIT " ^  string_of_int config_max_results#value in
-	Sparql_endpoint.ajax_in elt ajax_pool endpoint sparql_term
-	  (fun results_term -> process results_term)
-	  (fun code -> process Sparql_endpoint.empty_results))
+      (fun code -> process Sparql_endpoint.empty_results)
 
   method ajax_index_terms_inputs_ids constr elt (k : partial:bool -> incr_freq_index -> unit) =
     if focus_descr#term = `Undefined then
