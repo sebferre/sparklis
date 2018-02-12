@@ -129,16 +129,24 @@ let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
 let matches s re = Regexp.search re s 0 <> None
 let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
 
-let compile_constr constr : string -> bool =
+let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   let open Lisql in
   match norm_constr constr with
   | True -> (fun s -> true)
   | MatchesAll lpat ->
-    let lre = List.map regexp_of_pat lpat in
-    (fun s -> List.for_all (fun re -> matches s re) lre)
+     if on_modifiers || Lisql2sparql.config_fulltext_search#value = "regex"
+     then
+       let lre = List.map regexp_of_pat lpat in
+       (fun s -> List.for_all (fun re -> matches s re) lre)
+     else (* not safe/possible to mimick text:query or bif:contains *)
+       (fun s -> true)
   | MatchesAny lpat ->
-    let lre = List.map regexp_of_pat lpat in
-    (fun s -> List.exists (fun re -> matches s re) lre)
+     if on_modifiers || Lisql2sparql.config_fulltext_search#value = "regex"
+     then
+       let lre = List.map regexp_of_pat lpat in
+       (fun s -> List.exists (fun re -> matches s re) lre)
+     else (* not safe/possible to mimick text:query or bif:contains *)
+       (fun s -> true)
   | After pat -> (fun s -> s >= pat)
   | Before pat -> (fun s -> s <= pat)
   | FromTo (pat1,pat2) -> (fun s -> pat1 <= s && s <= pat2)
@@ -151,7 +159,7 @@ let compile_constr constr : string -> bool =
   | HasDatatype pat ->
     let re = regexp_of_pat pat in
     (fun s_dt -> matches s_dt re)
-      
+
 (* constraint subsumption *)
 
 let subsumed_constr constr1 constr2 : bool =
@@ -219,6 +227,7 @@ let config =
       (Lexicon.config_property_lexicon :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
+      (Lisql2sparql.config_fulltext_search :> Config.input);
       (config_logging :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
@@ -535,7 +544,6 @@ object (self)
       jquery_input "#pattern-terms" (fun input ->
         jquery "#selection-terms-items" (fun elt_sel_items ->
 	jquery "#list-terms" (fun elt_list ->
-	  (*filtering_terms <- true;*)
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	     (fun ~partial index ->
 	      let html_sel, html_list = html_index lis#focus html_state index in
@@ -597,7 +605,6 @@ object (self)
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->				 jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
-	  (*filtering_properties <- true;*)
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
 	      let html_sel, html_list = html_index lis#focus html_state index in
@@ -709,8 +716,8 @@ object (self)
 	      self#refresh_property_increments;
 	      self#refresh_term_increments)))
 
-  method private filter_increments elt_list constr =
-    let matcher = compile_constr constr in
+  method private filter_increments ?on_modifiers elt_list constr =
+    let matcher = compile_constr ?on_modifiers constr in
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
       jquery_from elt_li ".filterable-increment" (fun elt_incr ->
@@ -753,8 +760,8 @@ object (self)
     Lisql.is_home_focus lis#focus
 
   method set_term_constr constr =
+    let constr = norm_constr constr in
     let to_refresh =
-      let constr = norm_constr constr in
       if constr = term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
@@ -769,8 +776,8 @@ object (self)
     end
 
   method set_property_constr constr =
+    let constr = norm_constr constr in
     let to_refresh =
-      let constr = norm_constr constr in
       if constr = property_constr then false
       else if subsumed_constr constr property_constr then not refreshing_properties
       else begin self#abort_all_ajax; true end in	
@@ -783,13 +790,14 @@ object (self)
     end
 
   method pattern_changed
+    ?on_modifiers
     ~(select : Dom_html.selectElement t)
     ~(input : Dom_html.inputElement t)
     ~(elt_list : Dom_html.element t)
     (k : Lisql.constr -> unit)
     =
     let new_constr = self#get_constr select input in
-    self#filter_increments elt_list new_constr;
+    self#filter_increments ?on_modifiers elt_list new_constr;
     k new_constr
 (*	
       let n = String.length pat in
@@ -1128,16 +1136,16 @@ let _ =
     jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter
-      (fun (sel_select, sel_input, sel_list, k) ->
+      (fun (on_modifiers, sel_select, sel_input, sel_list, k) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
 	    jquery sel_list (fun elt_list ->
 	      (oninput
-		 (fun input ev -> history#present#pattern_changed ~select ~input ~elt_list k)
+		 (fun input ev -> history#present#pattern_changed ~on_modifiers ~select ~input ~elt_list k)
 		 input)))))
-      [("#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
-       ("#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
-       ("#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
+      [(false, "#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
+       (false, "#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
+       (true, "#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
 
     List.iter
       (fun (sel_btn,sel_list_incrs,checked) ->

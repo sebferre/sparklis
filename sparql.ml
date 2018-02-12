@@ -59,7 +59,8 @@ object (self)
   method reset : unit =
     cpt <- 0;
     map <- (* default namespaces (reverse order of declarations) *)
-      [("http://purl.org/dc/terms/", "dcterms:");
+      [("http://jena.apache.org/text#", "text:");
+       ("http://purl.org/dc/terms/", "dcterms:");
        ("http://purl.org/dc/elements/1.1/", "dc:");
        ("http://dbpedia.org/property/", "dbp:");
        ("http://dbpedia.org/ontology/", "dbo:");
@@ -209,9 +210,11 @@ let service (s : term) (p : pattern) : pattern = "SERVICE " ^< s ^^ " { " ^< p ^
   
 let search_label (t : term) (l : term) : pattern =
   t ^^ " rdfs:label " ^< l ^> " ." (* ^ sparql_constr l (HasLang "en") *)
-let search_contains (l : term) (w : string) : pattern =
+				
+let bif_contains (l : term) (w : string) : pattern =
   l ^^ " bif:contains " ^< string w ^> " ."
-
+let text_query (s : term) (q : string) : pattern =
+  s ^^ " text:query " ^< string q ^> " ."
 
 let ask (pattern : pattern) : query =
   "ASK\nWHERE { " ^< indent 8 pattern ^> " }"

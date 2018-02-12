@@ -668,13 +668,13 @@ object (self)
       in
       let sparql_class =
 	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
-	  (graph_opt (Sparql.sparql "[] a ?class " : Sparql.pattern) :> string) ^
+	  (graph_opt (Sparql.sparql "[] a ?class . " : Sparql.pattern) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
 	  " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
-	  (graph_opt (Sparql.sparql "[] ?prop [] " : Sparql.pattern) :> string) ^
+	  (graph_opt (Sparql.sparql "[] ?prop [] . " : Sparql.pattern) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_property sparql_genvar (Sparql.var "prop" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "prop" ^
 	  " } LIMIT " ^ string_of_int config_max_properties#value in

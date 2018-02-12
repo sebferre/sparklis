@@ -112,6 +112,7 @@ end
 
 
 class string_input ~(key : string) ~(input_selector : string) ~default () =
+(* only requires a ##value property at [input_selector] *)
 object (self)
   inherit input
   val mutable init_v : string = default (* default value for reset *)
@@ -148,3 +149,43 @@ object (self)
 	input)
   method reset = self#set_input init_v
 end
+
+class select_input ~(key : string) ~(select_selector : string) ~default () =
+object (self)
+  inherit input
+  val mutable init_v : string = default (* default value for reset *)
+  val mutable current_v : string = default (* current value *)
+
+  method private set_select (v : string) : unit =
+    if v <> current_v then begin
+      jquery_select select_selector (fun select -> selectpicker_set_value select v);
+      current_v <- v;
+      self#changed
+    end
+
+  method value : string = current_v
+
+  method get_permalink =
+    if current_v <> init_v
+    then [(key, current_v)]
+    else []
+  method set_permalink args =
+    try self#set_select (List.assoc key args)
+    with _ -> ()
+
+  method init =
+    jquery_select select_selector (fun select ->
+      init_v <- to_string select##value; (* default value from HTML *)
+      current_v <- init_v;
+      onchange
+	(fun select ev ->
+	  let v = to_string select##value in
+	  if current_v <> v then begin
+	    current_v <- v;
+	    self#changed
+	  end)
+	select)
+  method reset = self#set_select init_v
+end
+
+

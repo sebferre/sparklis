@@ -584,6 +584,18 @@
 	      <input id="input-show-datatypes" type="checkbox"> <!-- Edit to change default value -->
 	    </div>
 	  </li>
+	  <li class="list-group-item">
+	    <div id="config-fulltext-search" class="config-param">
+	      <span class="texte lang-en">For suggestion filtering, use </span>
+	      <span class="texte lang-fr">Pour le filtrage des suggestions, utiliser </span>
+	      <span class="texte lang-es">Para filtrar los sugerencias, use </span>
+	      <select id="input-fulltext-search-select" class="selectpicker"> <!-- Move 'selected' to change default value -->
+		<option value="regex" selected>SPARQL's REGEX</option>
+		<option value="text:query">Jena's <code>text:query</code></option>
+		<!-- <option value="bif:contains">Virtuoso's <code>bif:contains</code></option> -->
+	      </select>
+	    </div>
+	  </li>
 	</ul>
       </div>
       <div class="modal-footer">

@@ -8,6 +8,10 @@ open Jsutils
 open Lisql
 open Lisql_annot
 
+(* configs *)
+
+let config_fulltext_search = new Config.select_input ~key:"fulltext_search" ~select_selector:"#input-fulltext-search-select" ~default:"regex" ()
+       
 (* translation from LISQL elts to SPARQL queries *)
 
 (* SPARQL variable generator *)
@@ -91,39 +95,69 @@ let sparql_order = function
   | Lowest conv_opt -> Some (Sparql.ASC (sparql_converter conv_opt))
   | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
+let filter_kwds_gen (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) ~(op : [`All|`Any]) ~(kwds : string list) : Sparql.formula =
+  let label_prop, label_lang = label_property_lang in
+  let log_op =
+    match op with
+    | `All -> Sparql.log_and
+    | `Any -> Sparql.log_or in
+  let make_filter (e : Sparql.expr) : Sparql.formula =
+    Sparql.Filter
+      (log_op
+	 (List.map
+	    (fun pat -> Sparql.expr_regex e pat)
+	    kwds)) in
+  let str_filter =
+    make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]) in
+  let label_filter =
+    match config_fulltext_search#value with
+    | "text:query" ->
+       let terms =
+	 Common.mapfilter
+	   (fun kwd ->
+	    let n = String.length kwd in
+	    if n < 3 then None
+	    else if kwd.[n-1] = '~' then Some kwd
+	    else Some (kwd ^ "*"))
+	   kwds in
+       let lucene_query =
+	 let sep = match op with `All -> " AND " | `Any -> " OR " in
+	 match terms with
+	 | [] -> ""
+	 | [term] -> term
+	 | _ -> "(" ^ String.concat sep terms ^ ")" in
+       firebug ("Lucene query: " ^ lucene_query);
+       if lucene_query = ""
+       then Sparql.True
+       else Sparql.Pattern (Sparql.text_query t lucene_query)
+(*  | "bif:contains" -> TODO *)
+    | _ -> (* using REGEX *)
+       if label_prop = ""
+       then Sparql.True
+       else
+	 let open Sparql in
+	 let term_l = (var (gv#new_var "constr_label") :> term) in
+	 formula_and_list
+	   [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
+	     (if label_lang = ""
+	      then True
+	      else Filter (expr_regex (expr_func "lang" [(term_l :> expr)]) label_lang));
+	     make_filter (term_l :> Sparql.expr) ]
+  in
+  Sparql.formula_or_list
+    [ str_filter;
+      label_filter ]
+	     
 let filter_constr_gen (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
-  let label_prop, label_lang = label_property_lang in
-  let label_wrapper (make_filter : Sparql.expr -> Sparql.formula) =
-    if label_prop = ""
-    then make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)])
-    else
-      let open Sparql in
-      let term_l = (var (gv#new_var "constr_label") :> term) in
-      formula_or_list
-	[ make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]);
-	  formula_and_list
-	    [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
-	      if label_lang = "" then True else Filter (expr_regex (expr_func "lang" [(term_l :> expr)]) label_lang);
-	      make_filter (term_l :> Sparql.expr) ] ] in
   match c with
     | True -> Sparql.True
     | MatchesAll [] -> Sparql.True
     | MatchesAll lpat ->
-      label_wrapper (fun e ->
-	Sparql.Filter
-	  (Sparql.log_and
-	     (List.map
-		(fun pat -> Sparql.expr_regex e pat)
-		lpat)))
+       filter_kwds_gen gv ~label_property_lang t ~op:`All ~kwds:lpat
     | MatchesAny [] -> Sparql.True
     | MatchesAny lpat ->
-      label_wrapper (fun e ->
-	Sparql.Filter
-	  (Sparql.log_or
-	     (List.map
-		(fun pat -> Sparql.expr_regex e pat)
-		lpat)))
+       filter_kwds_gen gv ~label_property_lang t ~op:`Any ~kwds:lpat
     | After pat ->
       Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [(t :> Sparql.expr)]) (Sparql.string pat :> Sparql.expr))
     | Before pat ->
@@ -164,7 +198,7 @@ let search_constr (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula 
     | MatchesAll (w::lw) ->
       Sparql.formula_and_list
 	[ Sparql.Pattern (Sparql.search_label t term_l);
-	  Sparql.Pattern (Sparql.search_contains term_l w);
+	  Sparql.Pattern (Sparql.bif_contains term_l w);
 	  Sparql.Filter (Sparql.log_and (List.map (fun w -> Sparql.expr_regex (term_l :> Sparql.expr) w) lw)) ]
     | MatchesAny lw ->
       Sparql.formula_or_list
@@ -172,7 +206,7 @@ let search_constr (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula 
 	   (fun w ->
 	     Sparql.formula_and_list
 	       [Sparql.Pattern (Sparql.search_label t term_l);
-		Sparql.Pattern (Sparql.search_contains term_l w)])
+		Sparql.Pattern (Sparql.bif_contains term_l w)])
 	   lw)
     | _ ->
       Sparql.Pattern (Sparql.something t)

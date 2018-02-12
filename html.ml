@@ -348,7 +348,6 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     | IncrAnything
     | IncrSelection _
     | IncrTransitive _
-    | IncrRel _
     | IncrTriple _
     | IncrTriplify -> false
     | _ -> true in
