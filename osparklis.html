@@ -67,7 +67,7 @@
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=DBpedia&endpoint=http%3A//dbpedia.org/sparql&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%29">
+		<a href="osparklis.html?title=DBpedia&endpoint=http://dbpedia.org/sparql&regexp_hidden_URIs=^(http://www.w3.org/2002/07/owl%23|http://www.openlinksw.com/|nodeID://|%23|http://www.wikidata.org/|http://dbpedia.org/(class/yago/|ontology/Wikidata))&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&entity_lexicon_lang=en&fulltext_search=bif:contains">
 		  DBpedia
 		</a>
 	      </li>
@@ -592,7 +592,7 @@
 	      <select id="input-fulltext-search-select" class="selectpicker"> <!-- Move 'selected' to change default value -->
 		<option value="regex" selected>SPARQL's REGEX</option>
 		<option value="text:query">Jena's <code>text:query</code></option>
-		<!-- <option value="bif:contains">Virtuoso's <code>bif:contains</code></option> -->
+		<option value="bif:contains">Virtuoso's <code>bif:contains</code></option>
 	      </select>
 	    </div>
 	  </li>
@@ -1037,9 +1037,9 @@
       <br/>
     </span>
 
-    <span class="texte lang-en">Last modified February 1st, 2018. Visit </span>
-    <span class="texte lang-fr">Dernière modification le 1 février 2018. Visiter </span>
-    <span class="texte lang-es">Última modificación 1 de Februare, 2018. Visite </span>
+    <span class="texte lang-en">Last modified February 22nd, 2018. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 22 février 2018. Visiter </span>
+    <span class="texte lang-es">Última modificación 22 de Februare, 2018. Visite </span>
     <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/">
       <span class="texte lang-en">my homepage</span>
       <span class="texte lang-fr">ma page Web</span>

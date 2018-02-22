@@ -682,7 +682,7 @@ object (self)
 	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "class" :> Sparql.term) constr) :> string) ^
 	  filter_hidden_URIs "class" ^
-	  " } LIMIT " ^ string_of_int config_max_classes#value in
+	    " } LIMIT " ^ string_of_int config_max_classes#value in
       let sparql_prop =
 	"SELECT DISTINCT ?prop " ^ sparql_froms ^ "WHERE { " ^
 	  "{ ?prop a rdf:Property } UNION { ?prop a owl:ObjectProperty } UNION { ?prop a owl:DatatypeProperty } " ^
@@ -692,8 +692,9 @@ object (self)
 	  " } LIMIT " ^ string_of_int config_max_properties#value in
       Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop]
 	(function
-	| [results_class; results_prop] -> process results_class results_prop
-	| _ -> assert false)
+	  | [results_class; results_prop] ->
+	     process results_class results_prop
+	  | _ -> assert false)
 	(fun _ -> ajax_extent ()) (* looking at facts *)
     in
     if config_intentional_init_concepts#value && s_sparql.Lisql2sparql.focus_graph_opt = None

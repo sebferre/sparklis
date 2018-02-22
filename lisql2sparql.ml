@@ -95,7 +95,9 @@ let sparql_order = function
   | Lowest conv_opt -> Some (Sparql.ASC (sparql_converter conv_opt))
   | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
-let filter_kwds_gen (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) ~(op : [`All|`Any]) ~(kwds : string list) : Sparql.formula =
+type filter_context = [`Properties|`Terms] * [`Bind|`Filter]
+			     
+let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) ~(op : [`All|`Any]) ~(kwds : string list) : bool * Sparql.formula =
   let label_prop, label_lang = label_property_lang in
   let log_op =
     match op with
@@ -105,13 +107,13 @@ let filter_kwds_gen (gv : genvar) ~(label_property_lang : string * string) (t : 
     Sparql.Filter
       (log_op
 	 (List.map
-	    (fun pat -> Sparql.expr_regex e pat)
+	    (fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [e]) pat)
 	    kwds)) in
   let str_filter =
-    make_filter (Sparql.expr_func "str" [(t :> Sparql.expr)]) in
-  let label_filter =
-    match config_fulltext_search#value with
-    | "text:query" ->
+    make_filter (t :> Sparql.expr) in
+  let label_filter_opt =
+    match config_fulltext_search#value, ctx with
+    | "text:query", _ ->
        let terms =
 	 Common.mapfilter
 	   (fun kwd ->
@@ -126,38 +128,72 @@ let filter_kwds_gen (gv : genvar) ~(label_property_lang : string * string) (t : 
 	 | [] -> ""
 	 | [term] -> term
 	 | _ -> "(" ^ String.concat sep terms ^ ")" in
-       firebug ("Lucene query: " ^ lucene_query);
+       let _ = firebug ("Lucene query: " ^ lucene_query) in
        if lucene_query = ""
-       then Sparql.True
-       else Sparql.Pattern (Sparql.text_query t lucene_query)
-(*  | "bif:contains" -> TODO *)
+       then None
+       else Some (Sparql.Pattern (Sparql.text_query t lucene_query))
+    | "bif:contains", (`Terms,`Bind) -> (* only efficient in this context *)
+       if label_prop = ""
+       then None
+       else
+	 let terms =
+	   Common.mapfilter
+	     (fun kwd ->
+	      let n = String.length kwd in
+	      if n < 4 then None
+	      else Some ("'" ^ kwd ^ "*'"))
+	     kwds in
+	 let sql_query =
+	   let sep = match op with `All -> " AND " | `Any -> " OR " in
+	   match terms with
+	   | [] -> ""
+	   | [term] -> term
+	   | _ -> String.concat sep terms in
+	 let _ = firebug ("SQL full-text query: " ^ sql_query) in
+	 if sql_query = ""
+	 then None
+	 else
+	   let open Sparql in
+	   let term_l = (var (gv#new_var "constr_label") :> term) in
+	   Some (formula_and_list
+		   [ Pattern (triple t (uri label_prop :> pred) term_l);
+		     (if label_lang = ""
+		      then True
+		      else Filter (expr_comp "=" (expr_func "lang" [(term_l :> expr)]) (string label_lang :> expr)));
+		     Pattern (bif_contains term_l sql_query) ])
     | _ -> (* using REGEX *)
        if label_prop = ""
-       then Sparql.True
+       then None
        else
 	 let open Sparql in
 	 let term_l = (var (gv#new_var "constr_label") :> term) in
-	 formula_and_list
-	   [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
-	     (if label_lang = ""
-	      then True
-	      else Filter (expr_regex (expr_func "lang" [(term_l :> expr)]) label_lang));
-	     make_filter (term_l :> Sparql.expr) ]
+	 Some (formula_and_list
+		 [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
+		   (if label_lang = ""
+		    then True
+		    else Filter (expr_comp "=" (expr_func "lang" [(term_l :> expr)]) (string label_lang :> expr)));
+		   make_filter (term_l :> Sparql.expr) ])
   in
-  Sparql.formula_or_list
-    [ str_filter;
-      label_filter ]
-	     
-let filter_constr_gen (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
+  let binding, f =
+    match label_filter_opt with
+    | None -> false, str_filter
+    | Some label_filter ->
+       true,
+       Sparql.formula_or_list
+	 [ str_filter;
+	   label_filter ] in
+  binding, f
+
+let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang : string * string) (t : Sparql.term) (c : constr) : Sparql.formula =
   (* both [label_prop] and [label_lang] may be the empty string, meaning undefined *)
   match c with
     | True -> Sparql.True
     | MatchesAll [] -> Sparql.True
     | MatchesAll lpat ->
-       filter_kwds_gen gv ~label_property_lang t ~op:`All ~kwds:lpat
+       snd (filter_kwds_gen ctx gv ~label_property_lang t ~op:`All ~kwds:lpat)
     | MatchesAny [] -> Sparql.True
     | MatchesAny lpat ->
-       filter_kwds_gen gv ~label_property_lang t ~op:`Any ~kwds:lpat
+       snd (filter_kwds_gen ctx gv ~label_property_lang t ~op:`Any ~kwds:lpat)
     | After pat ->
       Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [(t :> Sparql.expr)]) (Sparql.string pat :> Sparql.expr))
     | Before pat ->
@@ -187,9 +223,9 @@ let filter_constr_gen (gv : genvar) ~(label_property_lang : string * string) (t 
 	   [Sparql.expr_func "isLiteral" [(t :> Sparql.expr)];
 	    Sparql.expr_regex (Sparql.expr_func "str" [Sparql.expr_func "datatype" [(t :> Sparql.expr)]]) pat])
 
-let filter_constr_entity gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_entity_lexicon#property_lang t c
-let filter_constr_class gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
-let filter_constr_property gv t c = filter_constr_gen gv ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
+let filter_constr_entity gv t c = filter_constr_gen (`Terms,`Filter) gv ~label_property_lang:Lexicon.config_entity_lexicon#property_lang t c
+let filter_constr_class gv t c = filter_constr_gen (`Properties,`Filter) gv ~label_property_lang:Lexicon.config_class_lexicon#property_lang t c
+let filter_constr_property gv t c = filter_constr_gen (`Properties,`Filter) gv ~label_property_lang:Lexicon.config_property_lexicon#property_lang t c
 
 let search_constr_entity (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.formula =
   let op_kwds_opt =
@@ -200,11 +236,10 @@ let search_constr_entity (gv : genvar) (t : Sparql.term) (c : constr) : Sparql.f
   match op_kwds_opt with
   | Some (op,kwds) ->
      let label_property_lang = Lexicon.config_entity_lexicon#property_lang in
-     let f = filter_kwds_gen gv ~label_property_lang t ~op ~kwds in
-     if fst label_property_lang = ""
-	&& config_fulltext_search#value = "regex"
+     let binding, f = filter_kwds_gen (`Terms,`Bind) gv ~label_property_lang t ~op ~kwds in
+     if not binding
      then Sparql.formula_and (Sparql.Pattern (Sparql.something t)) f
-     else f (* text:query and bif:contains modes are binding [t] *)
+     else f
   | _ -> Sparql.Pattern (Sparql.something t)
   
 
