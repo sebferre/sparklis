@@ -402,7 +402,6 @@ object (self)
       (fun (sel_select, sel_input, constr) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
-	    (*select##value <- string (operator_of_constr constr);*)
 	    selectpicker_set_value select (operator_of_constr constr);
 	    input##value <- string (pattern_of_constr constr))))
       [("#select-terms", "#pattern-terms", term_constr);

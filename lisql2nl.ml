@@ -16,42 +16,13 @@ let config_lang =
   let select_selector = "#lang-select" in
   let default = "en" in
 object (self)
-  inherit Config.input
-  val mutable init_v : string = default
-  val mutable current_v : string = default
+  inherit Config.select_input ~key ~select_selector ~default ()
 
-  method value : string = current_v
   method grammar : Grammar.grammar =
-    match current_v with
+    match self#value with
     | "fr" -> Grammar.french
     | "es" -> Grammar.spanish
     | _ -> Grammar.english
-
-  method private set_select (v : string) : unit =
-    if v <> current_v then begin
-      jquery_select select_selector (fun select -> select##value <- string v);
-      current_v <- v;
-      self#changed
-    end
-
-  method get_permalink =
-    if current_v <> init_v
-    then [(key, current_v)]
-    else []
-  method set_permalink args =
-    try self#set_select (List.assoc key args)
-    with _ -> ()
-
-  method init =
-    jquery_select select_selector (fun select ->
-      init_v <- to_string select##value;
-      current_v <- init_v;
-      onchange
-	(fun select ev ->
-	  current_v <- to_string select##value;
-	  self#changed)
-	select)
-  method reset = self#set_select init_v
 end
 
 let config_show_datatypes = new Config.boolean_input ~key:"show_datatypes" ~input_selector:"#input-show-datatypes" ~default:false ()
