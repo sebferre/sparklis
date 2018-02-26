@@ -130,11 +130,11 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang :
 	 | _ -> "(" ^ String.concat sep terms ^ ")" in
        let _ = firebug ("Lucene query: " ^ lucene_query) in
        if lucene_query = ""
-       then None
-       else Some (Sparql.Pattern (Sparql.text_query t lucene_query))
+       then `NoFilter
+       else `Filter (Sparql.Pattern (Sparql.text_query t lucene_query))
     | "bif:contains", (`Terms,`Bind) -> (* only efficient in this context *)
        if label_prop = ""
-       then None
+       then `Undefined
        else
 	 let terms =
 	   Common.mapfilter
@@ -151,11 +151,11 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang :
 	   | _ -> String.concat sep terms in
 	 let _ = firebug ("SQL full-text query: " ^ sql_query) in
 	 if sql_query = ""
-	 then None
+	 then `NoFilter
 	 else
 	   let open Sparql in
 	   let term_l = (var (gv#new_var "constr_label") :> term) in
-	   Some (formula_and_list
+	   `Filter (formula_and_list
 		   [ Pattern (triple t (uri label_prop :> pred) term_l);
 		     (if label_lang = ""
 		      then True
@@ -163,11 +163,11 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang :
 		     Pattern (bif_contains term_l sql_query) ])
     | _ -> (* using REGEX *)
        if label_prop = ""
-       then None
+       then `Undefined
        else
 	 let open Sparql in
 	 let term_l = (var (gv#new_var "constr_label") :> term) in
-	 Some (formula_and_list
+	 `Filter (formula_and_list
 		 [ Pattern (triple t (uri label_prop :> Sparql.pred) term_l);
 		   (if label_lang = ""
 		    then True
@@ -176,8 +176,9 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_property_lang :
   in
   let binding, f =
     match label_filter_opt with
-    | None -> false, str_filter
-    | Some label_filter ->
+    | `Undefined -> false, str_filter
+    | `NoFilter -> false, Sparql.True (* kwds not specific enough *)
+    | `Filter label_filter ->
        true,
        Sparql.formula_or_list
 	 [ str_filter;
