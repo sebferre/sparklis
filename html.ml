@@ -56,15 +56,20 @@ class state (id_labelling : Lisql2nl.id_labelling) =
 object
   method id_labelling = id_labelling
   val dico_foci : Lisql.focus dico = new dico "focus"
+  val alias : (string,string) Hashtbl.t = Hashtbl.create 13
   method add_focus (focus : Lisql.focus) : string =
     let key = dico_foci#add focus in
-    if Lisql.is_root_focus focus then
-      dico_foci#add_key focus_key_of_root focus;
+    (if Lisql.is_root_focus focus then
+      Hashtbl.add alias focus_key_of_root key);
     ( match Lisql.id_of_focus focus with
-      | Some id -> dico_foci#add_key (focus_key_of_id id) focus
+      | Some id -> Hashtbl.add alias (focus_key_of_id id) key
       | None -> () );
     key
-  method get_focus (key : string) : Lisql.focus = dico_foci#get key
+  method get_focus (key : string) : Lisql.focus =
+    let key =
+      try Hashtbl.find alias key (* in case [key] is an alias *)
+      with Not_found -> key in
+    dico_foci#get key
 
   val dico_incrs : Lisql.increment dico = new dico "incr"
   method dico_incrs = dico_incrs
