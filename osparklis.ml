@@ -297,7 +297,7 @@ end
   
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
-  val lis = new Lis.place endpoint foc
+  val mutable lis = new Lis.place endpoint foc
   method lis = lis
 
   val mutable offset = 0
@@ -889,6 +889,10 @@ object (self)
        | None -> ())
       expanded
 
+  method reinit =
+    lis <- new Lis.place lis#endpoint lis#focus;
+    html_state <- new Html.state lis#id_labelling
+    
       
   method new_place endpoint focus =
     let lis = new Lis.place endpoint focus in 
@@ -977,6 +981,11 @@ object (self)
 	 future <- lp;
 	 p#refresh
 
+  method refresh : unit =
+    present#abort_all_ajax;
+    present#save_ui_state;
+    present#reinit;
+    present#refresh
 end
 
 (* main *)
@@ -1076,7 +1085,7 @@ let _ =
     jquery "#button-home" (onclick (fun elt ev -> history#home));
     jquery "#button-back" (onclick (fun elt ev -> history#back));
     jquery "#button-forward" (onclick (fun elt ev -> history#forward));
-    jquery "#button-refresh" (onclick (fun elt ev -> history#update_focus ~push_in_history:false (fun focus -> Some focus)));
+    jquery "#button-refresh" (onclick (fun elt ev -> history#refresh));
     jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
       jquery_input "#sparql-endpoint-input" (fun input ->
 	let url = to_string (input##value) in
