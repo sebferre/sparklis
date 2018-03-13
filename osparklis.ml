@@ -340,7 +340,7 @@ object (self)
 	match Url.Current.get () with
 	  | None -> raise Not_found
 	  | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	  | Some (Url.Https url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
+	  | Some (Url.Https url) -> Url.string_of_url (Url.Https { url with Url.hu_arguments = args })
 	  | Some (Url.File url) ->
 	     ( match Url.url_of_string
 		       "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html" with
