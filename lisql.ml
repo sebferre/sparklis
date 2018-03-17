@@ -874,9 +874,21 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
 
+let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
+  let default = Rel ((), p, m, factory#top_s1) in
+  match m with
+  | Fwd, Direct -> (* only for hierarchy display, according to declared rdfs:inheritsThrough *)
+     let lhp = Ontology.config_hierarchy_inheritance#value#info p in
+     ( match lhp with
+       | [] -> default
+       | hp::_ -> (* TODO: what about other properties ? *)
+	  let np = Hier ((), factory#new_id, factory#top_modif, hp, (Fwd, Transitive false), factory#top_s1) in
+	  Rel ((), p, m, np) )
+  | _ -> default
+  
 let elt_p1_of_increment : increment -> unit elt_p1 option = function
   | IncrType c -> Some (Type ((), c))
-  | IncrRel (p,m) -> Some (Rel ((), p, m, factory#top_s1))
+  | IncrRel (p,m) -> Some (elt_p1_of_rel p m)
   | IncrLatLong (plat,plong) -> Some (LatLong ((), plat, plong, factory#new_id, factory#new_id))
   | _ -> None
 	   
@@ -1033,7 +1045,7 @@ let insert_type c = function
   | focus -> insert_elt_p1 (Type ((),c)) focus
 
 let insert_rel p m focus =
-  let foc_opt = insert_elt_p1 (Rel ((), p, m, factory#top_s1)) focus in
+  let foc_opt = insert_elt_p1 (elt_p1_of_rel p m) focus in
   focus_opt_moves [down_focus] foc_opt
 
 let insert_latlong plat plong focus =
