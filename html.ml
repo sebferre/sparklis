@@ -323,7 +323,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrName _ -> 2, Some grammar#tooltip_input_name
       | IncrTerm _ -> 2, None
 	
-      | IncrTransitive _ -> 2, Some grammar#tooltip_transitive
+      | IncrHierarchy _ -> 2, Some grammar#tooltip_hierarchy
       | IncrTriple _ -> 3, None
       | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
@@ -352,7 +352,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     match incr with
     | IncrAnything
     | IncrSelection _
-    | IncrTransitive _
+    | IncrHierarchy _
     | IncrTriple _
     | IncrTriplify -> false
     | _ -> true in

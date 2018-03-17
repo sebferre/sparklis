@@ -120,7 +120,7 @@ object
   method virtual tooltip_header_hide_focus : string
   method virtual tooltip_header_set_focus : string
   method virtual tooltip_geolocation : string
-  method virtual tooltip_transitive : string
+  method virtual tooltip_hierarchy : string
 
   method virtual msg_permalink : string
   method virtual result_results : string * string
@@ -321,7 +321,7 @@ object
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
   method tooltip_header_set_focus = "Click on this column header to set the focus on it"
   method tooltip_geolocation = "Retrieve geolocations to show entities on a map"
-  method tooltip_transitive = "Show a hierarchy of entities according to the property at the left"
+  method tooltip_hierarchy = "Show a hierarchy of entities according to the property at the left"
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
   method result_results = "result", "results"
@@ -512,7 +512,7 @@ object
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"
   method tooltip_header_set_focus = "Cliquer sur cet entête de colonne pour mettre le focus dessus"
   method tooltip_geolocation = "Récupérer les géolocalisations pour montrer les entités sur une carte"
-  method tooltip_transitive = "Montrer une hiérarchie d'entités selon la propriété à gauche"
+  method tooltip_hierarchy = "Montrer une hiérarchie d'entités selon la propriété à gauche"
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
   method result_results = "résultat", "résultats"
@@ -704,7 +704,7 @@ object
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
   method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
   method tooltip_geolocation = "Recuperar geolocaciones para mostrar entidades en un mapa"
-  method tooltip_transitive = "Mostrar una jerarquía de entidades de acuerdo con la propiedad a la izquierda"
+  method tooltip_hierarchy = "Mostrar una jerarquía de entidades de acuerdo con la propiedad a la izquierda"
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"

@@ -176,6 +176,7 @@ and print_path = function
   | Transitive inv -> print_un "Transitive" (print_bool inv)
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
+  | Hier (_,id,mid,p,mp,np) -> print_nary "Hier" [print_id id; print_modif mid; print_uri p; print_modif_p2 mp; print_s1 np]
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
   | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
@@ -342,6 +343,7 @@ and parse_path ~version = parser
   | [< inv = parse_un ~version "Transitive" parse_bool >] -> Transitive inv
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
+  | [< id, mid, p, mp, np = parse_quin ~version "Hier" parse_id parse_modif parse_uri parse_modif_p2 parse_s1 >] -> Hier ((),id,mid,p,mp,np)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
   | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)

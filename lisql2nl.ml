@@ -65,6 +65,7 @@ type ng_label =
   | `Of of word * ng_label
   | `AggregNoun of word * ng_label
   | `AggregAdjective of word * ng_label
+  | `Hierarchy of bool * ng_label
   | `Nth of int * ng_label ]
     
 type ('a,'b) annotated = X of 'b | A of 'a * 'b
@@ -85,6 +86,7 @@ and 'a nl_np =
   | `Qu of qu * adj * 'a ng
   | `QuOneOf of qu * word list
   | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
+  | `Hierarchy of bool * 'a np
   | `And of 'a np list
   | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
   | `Choice of adj * 'a np list * 'a rel
@@ -95,7 +97,8 @@ and 'a nl_ng =
   [ `That of word * 'a rel
   | `LabelThat of ng_label * 'a rel
   | `OfThat of word * 'a np * 'a rel
-  | `Aggreg of bool * 'a ng_aggreg * 'a ng ] (* the bool indicates suspension *)
+  | `Aggreg of bool * 'a ng_aggreg * 'a ng (* the bool indicates suspension *)
+  | `Hierarchy of bool * 'a ng ]
 and qu = [ `A | `Any of bool | `The | `Every | `Each | `All | `One | `No of bool ]
 and adj =
   [ `Nil
@@ -160,6 +163,8 @@ let nl_and = function
   
 (* verbalization of terms, classes, properties *)
 
+let word_hierarchy grammar inv = `Op ("(" ^ grammar#hierarchy inv ^ ")")
+	   
 let word_of_entity uri = `Entity (uri, Lexicon.config_entity_lexicon#value#info uri)
 let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri)
 let word_syntagm_of_property grammar uri path =
@@ -244,7 +249,7 @@ let word_of_incr grammar = function
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrTransitive inv -> `Op (grammar#hierarchy inv)
+  | IncrHierarchy (trans_rel,inv) -> `Op (grammar#hierarchy inv)
   | IncrAnything -> `Op grammar#anything
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
@@ -367,6 +372,13 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
   | Det (_, _, rel_opt) ->
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels rel_opt in
     ls_rel, lab_rel
+  | Hier (_, id, mid, p, mp, np) ->
+     (* TODO: how to use 'p' ? *)
+     let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels np in
+     let labels_id =
+       let inv = match mp with _, Transitive inv -> inv | _ -> false in
+       List.map (fun (v,l) -> "hier_"^v, `Hierarchy (inv,l)) labels in
+     ls_np, if as_p1 then lab_np else (id, `Labels labels_id) :: lab_np
   | AnAggreg (_, id, modif, g, rel_opt, np) ->
     let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels np in
     let id =
@@ -433,7 +445,8 @@ let rec size_ng_label ~(size_id_label : Lisql.id -> int) : ng_label -> int = fun
   | `Of (w,l) -> 1 + size_ng_label ~size_id_label l
   | `AggregNoun (w,l) -> size_ng_label ~size_id_label l
   | `AggregAdjective (w,l) -> size_ng_label ~size_id_label l
-     (* not favoring 'the average' w.r.t. 'the average <prop>' *)
+  (* not favoring 'the average' w.r.t. 'the average <prop>' *)
+  | `Hierarchy (inv,l) -> 1 + size_ng_label ~size_id_label l
   | `Nth (k,l) -> 1 + size_ng_label ~size_id_label l
 
 
@@ -647,6 +660,9 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | Det (annot, det, rel_opt) ->
     let nl_rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     det_of_elt_s2 grammar ~id_labelling annot nl_rel det
+  | Hier (annot, id, mid, p, mp, np) -> (* TODO: render mid, p, mp *)
+     let inv = match mp with (_, Transitive inv) -> inv | _ -> false in
+     A (annot, `Hierarchy (inv, np_of_elt_s1 grammar ~id_labelling np))
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     np_of_aggreg grammar (Some annot)
       `A modif g
@@ -658,7 +674,10 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | NNot (annot,x) -> A (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
 and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
   | Det (annot, An (id,modif,head), rel_opt) ->
-    A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
+     A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
+  | Hier (annot, id, mid, p, mp, np) -> (* TODO: render mid, p, mp *)
+     let inv = match mp with (_, Transitive inv) -> inv | _ -> false in
+     A (annot, `Hierarchy (inv, ng_of_elt_s1 grammar ~id_labelling np))
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let ng_aggreg =
@@ -775,6 +794,7 @@ and map_np transf np =
     | `Label (l,w_opt) -> `Label (l,w_opt)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
     | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
+    | `Hierarchy (inv,np) -> `Hierarchy (inv, map_np transf np)
     | `And (lr) -> `And (List.map (map_np transf) lr)
     | `Or (lr) -> `Or (List.map (map_np transf) lr)
     | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
@@ -787,7 +807,8 @@ and map_ng transf ng =
     | `That (w,rel) -> `That (w, map_rel transf rel)
     | `LabelThat (l,rel) -> `LabelThat (l, map_rel transf rel)
     | `OfThat (w,np,rel) -> `OfThat (w, map_np transf np, map_rel transf rel)
-    | `Aggreg (susp,ngg,ng) -> `Aggreg (susp, map_ng_aggreg transf ngg, map_ng transf ng) )
+    | `Aggreg (susp,ngg,ng) -> `Aggreg (susp, map_ng_aggreg transf ngg, map_ng transf ng)
+    | `Hierarchy (inv,ng) -> `Hierarchy (inv, map_ng transf ng) )
 and map_adj transf adj =
   match transf#adj adj with
   | `Nil -> `Nil
@@ -960,6 +981,8 @@ let xml_suspended susp xml =
   then [Suspended xml]
   else xml
 
+let xml_hierarchy grammar inv =
+  [ Word (word_hierarchy grammar inv) ]
 let xml_seq grammar annot_opt (lr : xml list) =
   let seq_susp : bool list =
     match annot_opt with
@@ -1029,6 +1052,7 @@ and xml_np grammar ~id_labelling np =
     | `Label (l,w_opt) -> xml_np_label grammar ~id_labelling l @ (match w_opt with None -> [] | Some w -> [Word w])
     | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
     | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
+    | `Hierarchy (inv,np) -> xml_hierarchy grammar inv @ xml_np grammar ~id_labelling np
     | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
     | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
     | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
@@ -1055,7 +1079,8 @@ and xml_ng grammar ~id_labelling rel =
     | `That (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
     | `LabelThat (l,rel) -> xml_ng_label grammar ~id_labelling l @ xml_rel grammar ~id_labelling rel
     | `OfThat (w,np,rel) -> Word w :: Kwd grammar#of_ :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
-    | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg )
+    | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg
+    | `Hierarchy (inv,ng) -> xml_hierarchy grammar inv @ xml_ng grammar ~id_labelling ng )
 and xml_qu grammar qu xml =
   match xml with
     | Word `Thing :: xml_rem ->
@@ -1171,6 +1196,7 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     if grammar#adjective_before_noun
     then Word w :: xml_ng_label grammar ~id_labelling ng
     else xml_ng_label grammar ~id_labelling ng @ [Word w]
+  | `Hierarchy (inv,ng) -> xml_ng_label grammar ~id_labelling ng @ xml_hierarchy grammar inv
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
 and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
   match ng with
@@ -1260,7 +1286,10 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
-  | IncrTransitive inv -> Word (`Prop ("", "... (" ^ grammar#hierarchy inv ^ ")")) :: Word dummy_word :: []
+  | IncrHierarchy (trans_rel,inv) ->
+     if trans_rel
+     then Word (`Prop ("", "...")) :: Word (word_hierarchy grammar inv) ::  Word dummy_word :: []
+     else Word (word_hierarchy grammar inv) :: []
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word dummy_word :: []

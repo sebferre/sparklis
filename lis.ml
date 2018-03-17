@@ -75,7 +75,9 @@ type freq = { value : int; max_value : int option; partial : bool; unit : freq_u
 class incr_freq_index = [Lisql.increment, freq option] index ()
 
 let term_hierarchy_of_focus focus =
-  match Lisql.property_range_of_focus focus with
+  match Lisql.hierarchy_of_focus focus with
+  | Some (id,mid,p,(ori, Lisql.Transitive inv)) ->
+(*	  match Lisql.property_range_of_focus focus with
   | None -> Ontology.no_relation
   | Some (p,ori,path) ->
      ( match path with
@@ -88,11 +90,12 @@ let term_hierarchy_of_focus focus =
 	    Ontology.sparql_relations#get
 	      ~froms:Sparql_endpoint.config_default_graphs#froms
 	      hierarchy_spec
-       | Lisql.Transitive inv ->
+       | Lisql.Transitive inv -> *)
 	  let hierarchy_spec = Ontology.Hierarchy (p, if inv then Lisql.inverse_orientation ori else ori) in
 	  Ontology.sparql_relations#get
 	    ~froms:Sparql_endpoint.config_default_graphs#froms
-	    hierarchy_spec )
+	    hierarchy_spec
+  | _ -> Ontology.no_relation
 						       
 let increment_parents (term_hierarchy : Ontology.relation) = function
   | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
@@ -720,6 +723,7 @@ object (self)
       let int_index_has = index_of_results_column "prop" results_has in
       let int_index_isof = index_of_results_column "prop" results_isof in
       let incr_index = new incr_freq_tree_index term_hierarchy in
+      let trans_rel = ref false in
       (* adding selection increments *)
       incr_index#add (Lisql.IncrSelection (`And, []), None);
       incr_index#add (Lisql.IncrSelection (`Or, []), None);
@@ -740,11 +744,7 @@ object (self)
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), freq_opt);
-	  if focus_prop_ori_opt = Some (uri,Lisql.Fwd) then
-	    begin
-	      incr_index#add (Lisql.IncrTransitive false, None);
-	      incr_index#add (Lisql.IncrTransitive true, None)
-	    end;
+	  if focus_prop_ori_opt = Some (uri,Lisql.Fwd) then trans_rel := true;
 	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
 	| _ -> ());
       int_index_isof#iter
@@ -755,12 +755,16 @@ object (self)
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), freq_opt);
-	  if focus_prop_ori_opt = Some (uri,Lisql.Bwd) then
-	    begin
-	      incr_index#add (Lisql.IncrTransitive false, None);
-	      incr_index#add (Lisql.IncrTransitive true, None)
-	    end
+	  if focus_prop_ori_opt = Some (uri,Lisql.Bwd) then trans_rel := true;
 	| _ -> ());
+      (* adding hierarchy increments *)
+      if !trans_rel then
+	List.iter
+	  (fun incr ->
+	   if Lisql.insert_increment incr focus <> None
+	   then incr_index#add (incr,None))
+	  [Lisql.IncrHierarchy (true,false);
+	   Lisql.IncrHierarchy (true,true)];
 (*	
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_a ~unit
 	(fun c ->
@@ -900,6 +904,7 @@ object (self)
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
+	    IncrHierarchy (false,false) :: IncrHierarchy (false,true) ::
 	    incrs in
 	let incrs =
 	  List.fold_left

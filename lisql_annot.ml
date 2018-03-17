@@ -443,40 +443,52 @@ and annot_elt_s1 pos np ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtS1 (np,ctx)) in
   let pos_down = focus_pos_down pos in
   match np with
-  | Det (_,det,rel_opt) -> let ids_det =
-			     let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det rel_opt ctx in
-			     ids_elt_s2 ~inactive det in
-			   let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (DetThatX (det,ctx)) in
-			   let a = annot ~ids:(union_ids ids_det ids_rel) () in
-			   a, Det (a, det, a_rel_opt)
-  | AnAggreg (_,id,modif,g,rel_opt,x) -> let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
-					 let a1, a_x = annot_elt_s1 pos_down x (AnAggregX (id,modif,g,rel_opt,ctx)) in
-					 let ids_aggreg = { empty_ids with all = Ids.singleton id; defs = Ids.singleton id } in
-					 let ids = list_union_ids [ids_aggreg; ids_rel; a1#ids] in
-					 let ids =
-					   match id_of_s1 x with
-					   | None -> assert false
-					   | Some id2 -> { ids with defs = Ids.remove id2 ids.defs; dims = Ids.remove id2 ids.dims; refs = Ids.add id2 ids.refs } in
-					 let a = annot ~ids () in
-					 a, AnAggreg (a, id, modif, g, a_rel_opt, a_x)
-  | NAnd (_,lr) -> let la, lax =
-		     List.split (List.map
-				   (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NAndX (ll_rr,ctx)))
-				   (ctx_of_list lr)) in
-		   let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
-		   a, NAnd (a, lax)
-  | NOr (_,lr) -> let la, lax =
-		    List.split (List.map
-				  (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NOrX (ll_rr,ctx)))
-				  (ctx_of_list lr)) in
-		  let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+  | Det (_,det,rel_opt) ->
+     let ids_det =
+       let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det rel_opt ctx || is_hierarchy_ctx_s1 ctx in
+       ids_elt_s2 ~inactive det in
+     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (DetThatX (det,ctx)) in
+     let a = annot ~ids:(union_ids ids_det ids_rel) () in
+     a, Det (a, det, a_rel_opt)
+  | Hier (_,id,mid,p,mp,x) ->
+     let ids_hier = ids_an_id ~inactive:false id in
+     let a1, a_x = annot_elt_s1 pos_down x (HierX (id,mid,p,mp,ctx)) in
+     let ids = union_ids ids_hier a1#ids in
+     let a = annot ~ids () in
+     a, Hier (a, id, mid, p, mp, a_x)
+  | AnAggreg (_,id,modif,g,rel_opt,x) ->
+     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
+     let a1, a_x = annot_elt_s1 pos_down x (AnAggregX (id,modif,g,rel_opt,ctx)) in
+     let ids_aggreg = { empty_ids with all = Ids.singleton id; defs = Ids.singleton id } in
+     let ids = list_union_ids [ids_aggreg; ids_rel; a1#ids] in
+     let ids =
+       match id_of_s1 x with
+       | None -> assert false
+       | Some id2 -> { ids with defs = Ids.remove id2 ids.defs; dims = Ids.remove id2 ids.dims; refs = Ids.add id2 ids.refs } in
+     let a = annot ~ids () in
+     a, AnAggreg (a, id, modif, g, a_rel_opt, a_x)
+  | NAnd (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NAndX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     a, NAnd (a, lax)
+  | NOr (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NOrX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
 		  a, NOr (a, lax)
-  | NMaybe (_,x) -> let a1, a_x = annot_elt_s1 pos_down x (NMaybeX ctx) in
-		    let a = annot ~ids:a1#ids () in
-		    a, NMaybe (a, a_x)
-  | NNot (_,x) -> let a1, a_x = annot_elt_s1 pos_down x (NNotX ctx) in
-		  let a = annot ~ids:{a1#ids with defs = Ids.empty; dims = Ids.empty} () in
-		  a, NNot (a, a_x)
+  | NMaybe (_,x) ->
+     let a1, a_x = annot_elt_s1 pos_down x (NMaybeX ctx) in
+     let a = annot ~ids:a1#ids () in
+     a, NMaybe (a, a_x)
+  | NNot (_,x) ->
+     let a1, a_x = annot_elt_s1 pos_down x (NNotX ctx) in
+     let a = annot ~ids:{a1#ids with defs = Ids.empty; dims = Ids.empty} () in
+     a, NNot (a, a_x)
 and annot_elt_aggreg pos aggreg ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtAggreg (aggreg,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -577,7 +589,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#resolve_focus_graph (focus_graph_s2 det);
     let f = Det ((),det,Some x) in
     let ids_det =
-      let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det (Some x) ctx in
+      let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det (Some x) ctx || is_hierarchy_ctx_s1 ctx in
       ids_elt_s2 ~inactive det in
     let ids = union_ids ids_det a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
@@ -695,6 +707,13 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, Return (a, a_x)) f ctx
+  | HierX (id,mid,p,mp,ctx) ->
+     fd#define_focus_term `Undefined;
+     let f = Hier ((),id,mid,p,mp,x) in
+     let ids_hier = ids_an_id ~inactive:false id in
+     let ids = union_ids ids_hier a1#ids in
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
+     annot_ctx_s1 fd (a, Hier (a, id, mid, p, mp, a_x)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in
     let _ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside true) rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
@@ -848,17 +867,25 @@ and annot_focus_aux =
     let f_annot = annot_elt_p1 `At f ctx in
     annot_ctx_p1 fd f_annot f ctx
   | AtS1 (np,ctx) ->
-    let fd = new focus_descr in
-    if not (is_s1_as_p1_ctx_s1 ctx)
-    then
-      ( match np with
-      | Det (_,det,rel_opt) ->
-	fd#define_focus_term (focus_term_s2 det);
-	if is_unconstrained_det det rel_opt ctx then fd#set_unconstrained
-      | AnAggreg (_,id,_,g,_,_) -> fd#define_focus_term (`Id id); fd#set_no_incr
-      | _ -> fd#define_focus_term `Undefined );
-    let np_annot = annot_elt_s1 `At np ctx in
-    annot_ctx_s1 fd np_annot np ctx
+     let fd = new focus_descr in
+     ( match hierarchy_of_ctx_s1 ctx with
+       | Some (id,_,_,_) ->
+	  fd#define_focus_term (`Id id)
+       | None ->
+	  ( match np with
+	    | Hier (_,id,_,_,_,_) ->
+	       fd#define_focus_term (`Id id)
+	    | Det (_,det,rel_opt) when not (is_s1_as_p1_ctx_s1 ctx) ->
+	       fd#define_focus_term (focus_term_s2 det);
+	       if is_unconstrained_det det rel_opt ctx then
+		 fd#set_unconstrained
+	    | AnAggreg (_,id,_,g,_,_) when not (is_s1_as_p1_ctx_s1 ctx) ->
+	       fd#define_focus_term (`Id id);
+	       fd#set_no_incr
+	    | _ ->
+	       fd#define_focus_term `Undefined ) );
+     let np_annot = annot_elt_s1 `At np ctx in
+     annot_ctx_s1 fd np_annot np ctx
 (*  | AtDim (dim,ctx) ->
     let fd = new focus_descr in
     ( match dim with
