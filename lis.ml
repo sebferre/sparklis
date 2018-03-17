@@ -91,10 +91,12 @@ let term_hierarchy_of_focus focus =
 	      ~froms:Sparql_endpoint.config_default_graphs#froms
 	      hierarchy_spec
        | Lisql.Transitive inv -> *)
-	  let hierarchy_spec = Ontology.Hierarchy (p, if inv then Lisql.inverse_orientation ori else ori) in
-	  Ontology.sparql_relations#get
-	    ~froms:Sparql_endpoint.config_default_graphs#froms
-	    hierarchy_spec
+     let hierarchy_spec =
+       let inverse = match ori with Lisql.Fwd -> inv | Lisql.Bwd -> not inv in
+       Ontology.Hierarchy (p, inverse) in
+     Ontology.sparql_relations#get
+       ~froms:Sparql_endpoint.config_default_graphs#froms
+       hierarchy_spec
   | _ -> Ontology.no_relation
 						       
 let increment_parents (term_hierarchy : Ontology.relation) = function

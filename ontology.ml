@@ -78,13 +78,13 @@ let sparql_relation
   new tabled_relation (fun uri -> []) bind_images
 
 (* SPARQL-based relation, retrieving data from endpoint *)
-let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(orientation : Lisql.orientation) : relation =
+let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : relation =
   let make_pattern v_source v_image : Sparql.pattern =
     let open Sparql in
     let uri_property = (uri property :> pred) in
-    match orientation with
-    | Lisql.Fwd -> triple (v_source :> term) uri_property (v_image :> term)
-    | Lisql.Bwd -> triple (v_image :> term) uri_property (v_source :> term)
+    if inverse
+    then triple (v_image :> term) uri_property (v_source :> term)
+    else triple (v_source :> term) uri_property (v_image :> term)
   in
   sparql_relation
     ~name:("property <" ^ property ^ ">")
@@ -93,14 +93,14 @@ let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(orientatio
     ~make_pattern
 
 (* SPARQL-based hierarchy, retrieving hierarchical relation from endpoint *)    
-let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(orientation : Lisql.orientation) : relation =
+let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : relation =
   let make_pattern v_child v_parent : Sparql.pattern =
     let open Sparql in
     let has_parent s o =
       let uri_property = (uri property :> pred) in
-      match orientation with
-      | Lisql.Fwd -> triple s uri_property o
-      | Lisql.Bwd -> triple o uri_property s
+      if inverse
+      then triple o uri_property s
+      else triple s uri_property o
     in
     let v_middle = var "middle" in
     join
@@ -205,8 +205,8 @@ let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(orientati
 (* pool of hierarchies for an endpoint as a configuration *)
 
 type relation_spec =
-  | Property of Rdf.uri * Lisql.orientation
-  | Hierarchy of Rdf.uri * Lisql.orientation
+  | Property of Rdf.uri * bool (* inverse *)
+  | Hierarchy of Rdf.uri * bool (* inverse *)
     
 let sparql_relations =
   object (self)
@@ -230,16 +230,16 @@ let sparql_relations =
       with Not_found ->
 	let rel =
 	  match rel_spec with
-	  | Property (property,orientation) -> sparql_relation_property ~endpoint ~froms ~property ~orientation
-	  | Hierarchy (property,orientation) -> sparql_relation_hierarchy ~endpoint ~froms ~property ~orientation in
+	  | Property (property,inverse) -> sparql_relation_property ~endpoint ~froms ~property ~inverse
+	  | Hierarchy (property,inverse) -> sparql_relation_hierarchy ~endpoint ~froms ~property ~inverse in
 	Hashtbl.add spec_relation rel_spec rel;
 	rel
 
-    method subclassof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subClassOf, Lisql.Fwd))
-    method subpropertyof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subPropertyOf, Lisql.Fwd))
-    method domain ~froms = self#get ~froms (Property (Rdf.rdfs_domain, Lisql.Fwd))
-    method range ~froms = self#get ~froms (Property (Rdf.rdfs_range, Lisql.Fwd))
-    method inheritsthrough ~froms = self#get ~froms (Property (Rdf.rdfs_inheritsThrough, Lisql.Fwd))
+    method subclassof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subClassOf, false))
+    method subpropertyof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subPropertyOf, false))
+    method domain ~froms = self#get ~froms (Property (Rdf.rdfs_domain, false))
+    method range ~froms = self#get ~froms (Property (Rdf.rdfs_range, false))
+    method inheritsthrough ~froms = self#get ~froms (Property (Rdf.rdfs_inheritsThrough, false))
 													 
   end
 							     
