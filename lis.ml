@@ -76,28 +76,17 @@ class incr_freq_index = [Lisql.increment, freq option] index ()
 
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
-  | Some (id,mid,p,(ori, Lisql.Transitive inv)) ->
-(*	  match Lisql.property_range_of_focus focus with
   | None -> Ontology.no_relation
-  | Some (p,ori,path) ->
-     ( match path with
-       | Lisql.Direct ->
-	  let lp = Ontology.config_hierarchy_inheritance#value#info p in
-	  if lp = []
-	  then Ontology.no_relation
-	  else (* TODO: use all list lp instead of first only *)
-	    let hierarchy_spec = Ontology.Hierarchy (List.hd lp, Lisql.Fwd) in
-	    Ontology.sparql_relations#get
-	      ~froms:Sparql_endpoint.config_default_graphs#froms
-	      hierarchy_spec
-       | Lisql.Transitive inv -> *)
+  | Some (head,(p,ori),inv) ->
      let hierarchy_spec =
-       let inverse = match ori with Lisql.Fwd -> inv | Lisql.Bwd -> not inv in
+       let inverse =
+	 match ori with
+	 | Lisql.Fwd -> inv
+	 | Lisql.Bwd -> not inv in
        Ontology.Hierarchy (p, inverse) in
      Ontology.sparql_relations#get
        ~froms:Sparql_endpoint.config_default_graphs#froms
        hierarchy_spec
-  | _ -> Ontology.no_relation
 						       
 let increment_parents (term_hierarchy : Ontology.relation) = function
   | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
@@ -625,8 +614,8 @@ object (self)
 	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq = { value=count; max_value; partial=partial_prop; unit } in
-	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), Some freq);
-	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), Some freq)
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), Some freq);
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), Some freq)
 	| _ -> ());
   (*
       let index_a = index_incr_of_index_term_uri ~max_value ~partial:partial_class ~unit
@@ -714,7 +703,7 @@ object (self)
     else
     let focus_prop_ori_opt =
       match focus with
-      | Lisql.AtS1 (np, Lisql.RelX (p,(ori,path),ctx)) -> Some (p,ori)
+      | Lisql.AtS1 (np, Lisql.RelX (p,ori,ctx)) -> Some (p,ori)
       | _ -> None in
     let process ~max_value ~partial ~unit results_a results_has results_isof =
       let partial_a = partial || results_a.Sparql_endpoint.length = config_max_classes#value in
@@ -745,7 +734,7 @@ object (self)
 	  Ontology.config_hierarchy_inheritance#value#enqueue uri; 
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
-	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Fwd,Lisql.Direct)), freq_opt);
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), freq_opt);
 	  if focus_prop_ori_opt = Some (uri,Lisql.Fwd) then trans_rel := true;
 	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
 	| _ -> ());
@@ -756,7 +745,7 @@ object (self)
 	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_property_lexicon#value#enqueue uri;
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
-	  incr_index#add (Lisql.IncrRel (uri,(Lisql.Bwd,Lisql.Direct)), freq_opt);
+	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), freq_opt);
 	  if focus_prop_ori_opt = Some (uri,Lisql.Bwd) then trans_rel := true;
 	| _ -> ());
       (* adding hierarchy increments *)

@@ -167,16 +167,16 @@ and print_p1 = function
   | InWhichThereIs (_,np) -> print_un "InWhichThereIs" (print_s1 np)
   | IsThere _ -> print_atom "IsThere"
 and print_modif_p2 = function
-  | ori, path -> print_bin "ModifP2" (print_orientation ori) (print_path path)
+  | ori -> print_orientation ori
 and print_orientation = function
   | Fwd -> print_atom "Fwd"
   | Bwd -> print_atom "Bwd"
-and print_path = function
+(*and print_path = function
   | Direct -> print_atom "Direct"
-  | Transitive inv -> print_un "Transitive" (print_bool inv)
+  | Transitive inv -> print_un "Transitive" (print_bool inv)*)
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
-  | Hier (_,id,mid,p,mp,np) -> print_nary "Hier" [print_id id; print_modif mid; print_uri p; print_modif_p2 mp; print_s1 np]
+  | Hier (_,(id,mid,h),(p,ori),inv,np) -> print_nary "Hier" [print_id id; print_modif mid; print_head h; print_uri p; print_modif_p2 ori; print_bool inv; print_s1 np]
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
   | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
@@ -263,6 +263,7 @@ let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? 
 let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/3"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/3"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
 let parse_quad ~version f ps1 ps2 ps3 ps4 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/4"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/4"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/4"; x4 = ps4 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4
 let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/5"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/5"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/5"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/5"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
+let parse_sept ~version f ps1 ps2 ps3 ps4 ps5 ps6 ps7 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/7"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/7"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/7"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/7"; x5 = ps5 ~version; 'Kwd "," ?? "missing , 5/7"; x6 = ps6 ~version; 'Kwd "," ?? "missing , 6/7"; x7 = ps7 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5, x6, x7
 
 let parse_opt ps ~version = parser
   | [< () = parse_atom ~version "None" >] -> None
@@ -315,8 +316,8 @@ and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
   | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
-  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,(Fwd,Direct),np) (* for backward compatibility *)
-  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,(Bwd,Direct),np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
   | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((),plat,plong,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
@@ -331,19 +332,19 @@ and parse_p1 ~version = parser
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
 and parse_modif_p2 ~version = parser
-  | [< ori, path = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> (ori,path)
-  | [< ori = parse_orientation ~version >] -> (ori, Direct)  (* for backward compatibility *)
+  | [< ori, () = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> ori  (* for backward compatibility *)
+  | [< ori = parse_orientation ~version >] -> ori
   | [<>] -> syntax_error "invalid modif_p2"
 and parse_orientation ~version = parser
   | [< () = parse_atom ~version "Fwd" >] -> Fwd
   | [< () = parse_atom ~version "Bwd" >] -> Bwd
   | [<>] -> syntax_error "invalid orientation"
 and parse_path ~version = parser
-  | [< () = parse_atom ~version "Direct" >] -> Direct
-  | [< inv = parse_un ~version "Transitive" parse_bool >] -> Transitive inv
+  | [< () = parse_atom ~version "Direct" >] -> ()
+  | [< _inv = parse_un ~version "Transitive" parse_bool >] -> ()
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
-  | [< id, mid, p, mp, np = parse_quin ~version "Hier" parse_id parse_modif parse_uri parse_modif_p2 parse_s1 >] -> Hier ((),id,mid,p,mp,np)
+  | [< id, mid, h, p, ori, inv, np = parse_sept ~version "Hier" parse_id parse_modif parse_head parse_uri parse_modif_p2 parse_bool parse_s1 >] -> Hier ((),(id,mid,h),(p,ori),inv,np)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
   | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)

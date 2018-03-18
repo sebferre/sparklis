@@ -450,12 +450,12 @@ and annot_elt_s1 pos np ctx =
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (DetThatX (det,ctx)) in
      let a = annot ~ids:(union_ids ids_det ids_rel) () in
      a, Det (a, det, a_rel_opt)
-  | Hier (_,id,mid,p,mp,x) ->
+  | Hier (_,(id,mid,h as head),prop,inv,x) ->
      let ids_hier = ids_an_id ~inactive:false id in
-     let a1, a_x = annot_elt_s1 pos_down x (HierX (id,mid,p,mp,ctx)) in
+     let a1, a_x = annot_elt_s1 pos_down x (HierX (head,prop,inv,ctx)) in
      let ids = union_ids ids_hier a1#ids in
      let a = annot ~ids () in
-     a, Hier (a, id, mid, p, mp, a_x)
+     a, Hier (a, head, prop, inv, a_x)
   | AnAggreg (_,id,modif,g,rel_opt,x) ->
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
      let a1, a_x = annot_elt_s1 pos_down x (AnAggregX (id,modif,g,rel_opt,ctx)) in
@@ -707,13 +707,13 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, Return (a, a_x)) f ctx
-  | HierX (id,mid,p,mp,ctx) ->
+  | HierX ((id,_,_ as head),prop,inv,ctx) ->
      fd#define_focus_term `Undefined;
-     let f = Hier ((),id,mid,p,mp,x) in
+     let f = Hier ((),head,prop,inv,x) in
      let ids_hier = ids_an_id ~inactive:false id in
      let ids = union_ids ids_hier a1#ids in
      let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-     annot_ctx_s1 fd (a, Hier (a, id, mid, p, mp, a_x)) f ctx
+     annot_ctx_s1 fd (a, Hier (a, head, prop, inv, a_x)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in
     let _ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside true) rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
@@ -869,11 +869,11 @@ and annot_focus_aux =
   | AtS1 (np,ctx) ->
      let fd = new focus_descr in
      ( match hierarchy_of_ctx_s1 ctx with
-       | Some (id,_,_,_) ->
+       | Some ((id,_,_),_,_) ->
 	  fd#define_focus_term (`Id id)
        | None ->
 	  ( match np with
-	    | Hier (_,id,_,_,_,_) ->
+	    | Hier (_,(id,_,_),_,_,_) ->
 	       fd#define_focus_term (`Id id)
 	    | Det (_,det,rel_opt) when not (is_s1_as_p1_ctx_s1 ctx) ->
 	       fd#define_focus_term (focus_term_s2 det);
