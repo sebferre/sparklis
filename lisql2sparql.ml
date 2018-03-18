@@ -418,13 +418,10 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
        match ori with
        | Fwd -> Sparql.Pattern (Sparql.triple x ptrans y)
        | Bwd -> Sparql.Pattern (Sparql.triple y ptrans x) in
-     let q_np =
-       if is_top_s1 np
-       then (fun _ -> Sparql.True)
-       else form_s1 state np in
+     let q_np = form_s1 ~ignore_top:true state np in
      (fun x ->
       state#add_var vy;
-      Sparql.formula_and_list [q_np (fun z -> hier x z); head y; hier x y])
+      Sparql.formula_and_list [q_np (fun z -> hier x z); head x; hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1_as_p1 state np
@@ -469,11 +466,14 @@ and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
 and form_head_as_p1 state : elt_head -> sparql_p1 = function
   | Thing -> (fun x -> Sparql.True)
   | Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
-and form_s1 state : annot elt_s1 -> sparql_s1 = function
+and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
   | Det (annot,det,rel_opt) ->
-    let qu = form_s2 state det in
-    let d1 = form_p1_opt state rel_opt in
-    (fun d -> qu d1 d)
+     if ignore_top && is_top_s2 det && is_top_p1_opt rel_opt
+     then (fun d -> Sparql.True)
+     else
+       let qu = form_s2 state det in
+       let d1 = form_p1_opt state rel_opt in
+       (fun d -> qu d1 d)
   | Hier (annot,(id,mid,h),(p,ori),inv,np) ->
      let vy, vx = state#id_labelling#get_id_var id, state#genvar#new_var "direct_"  in
      state#set_modif vy mid;
@@ -484,13 +484,10 @@ and form_s1 state : annot elt_s1 -> sparql_s1 = function
        match ori with
        | Fwd -> Sparql.Pattern (Sparql.triple x ptrans y)
        | Bwd -> Sparql.Pattern (Sparql.triple y ptrans x) in
-     let q_np =
-       if is_top_s1 np
-       then (fun _ -> Sparql.True)
-       else form_s1 state np in
+     let q_np = form_s1 ~ignore_top:true state np in
      (fun d ->
       state#add_var vy;
-      Sparql.formula_and_list [d x; q_np (fun z -> hier x z); head y; hier x y])
+      Sparql.formula_and_list [d x; q_np (fun z -> hier x z); head x; hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1 state np
@@ -502,25 +499,25 @@ and form_s1 state : annot elt_s1 -> sparql_s1 = function
 	form_s1 state np
       | _ -> assert false )
   | NAnd (annot,lr) ->
-    let lr_q = List.map (fun elt -> form_s1 state elt) lr in
+    let lr_q = List.map (fun elt -> form_s1 ~ignore_top state elt) lr in
     (fun d -> Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
   | NOr (annot,lr) ->
     ( match annot#get_susp_focus_index with
-    | Some i -> form_s1 state (List.nth lr i)
+    | Some i -> form_s1 ~ignore_top state (List.nth lr i)
     | None ->
-      let lr_q = List.map (fun elt -> form_s1 state elt) lr in
+      let lr_q = List.map (fun elt -> form_s1 ~ignore_top state elt) lr in
       (fun d -> Sparql.formula_or_list (List.map (fun q -> q d) lr_q)) )
   | NMaybe (annot,f) ->
     if annot#is_susp_focus
-    then form_s1 state f
+    then form_s1 ~ignore_top state f
     else
-      let q = form_s1 state f in
+      let q = form_s1 ~ignore_top state f in
       (fun d -> Sparql.formula_optional (q d))
   | NNot (annot,f) ->
     if annot#is_susp_focus
-    then form_s1 state f
+    then form_s1 ~ignore_top state f
     else
-      let q = form_s1 (Oo.copy state) f in
+      let q = form_s1 ~ignore_top (Oo.copy state) f in
       (fun d -> Sparql.formula_not (q d))
 (*      
   | NRelax f ->

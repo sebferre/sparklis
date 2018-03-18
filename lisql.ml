@@ -203,6 +203,7 @@ object (self)
 end
 
 let is_top_p1 = function IsThere _ -> true | _ -> false
+let is_top_p1_opt = function None -> true | Some f -> is_top_p1 f
 let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
 let is_top_s1 = function Det (_, det, None) -> is_top_s2 det | _ -> false
 let is_top_expr = function Undef _ -> true | _ -> false
@@ -1066,8 +1067,10 @@ let toggle_hierarchy trans_rel inv = function
      if inv = inv0
      then Some (AtS1 (np, RelX (p, ori, DetThatX (An (id,mid,h), ctx))))
      else Some (AtS1 (Hier ((),(id,mid,h),(p,ori),inv,np),ctx))
-  | AtS1 (np, RelX (p, ori, DetThatX (An (id,mid,h), ctx))) when trans_rel ->
-     Some (AtS1 (np, HierX ((id,mid,h), (p,ori), inv, ctx)))
+  | AtS1 (np, RelX (p, ori, DetThatX (An (id,mid,h), ctx))) ->
+       if trans_rel && (h <> Thing || not (is_unconstrained_ctx_s1 ctx))
+       then Some (AtS1 (np, HierX ((id,mid,h), (p,ori), inv, ctx)))
+       else None
   | _ -> None
 	   
 let insert_constr constr focus =
