@@ -960,6 +960,16 @@ let insert_elt_p1_in_rel_opt ctx elt = function
 let insert_elt_p1 (elt : unit elt_p1) = function
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
+  | AtS1 (Hier (_, head, prop, inv, np), ctx) ->
+     let move, elt_s1 =
+       match elt with
+       | Type (_,c) ->
+	  (fun foc -> Some foc),
+	  Det ((), An (factory#new_id, factory#top_modif, Class c), None)
+       | _ ->
+	  down_focus,
+	  Det ((), factory#top_s2, Some elt) in
+     move (append_and_s1 (HierX (head,prop,inv,ctx)) elt_s1 np)
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
   | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForEachThatX (id,modif,id2,ctx)) elt rel_opt
@@ -1079,7 +1089,7 @@ let insert_constr constr focus =
      ( match constr with
        | MatchesAll _ | MatchesAny _ -> insert_elt_p1 (Search ((),constr)) focus
        | _ -> None )
-    | _ -> insert_elt_p1 (Filter ((),constr)) focus
+  | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
 let insert_that_is = function
   (*  | AtS1 (f, IsX ctx) when is_top_s1 f -> None *)
@@ -1199,6 +1209,10 @@ let insert_modif_transf f = function
     let modif2 = f modif in
     let foc2 = AtS1 (Det ((), An (id, modif2, head), rel_opt), ctx) in
     out_of_unselect modif2 foc2
+  | AtS1 (Hier (_, (id, modif, head), prop, inv, np), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
+     let modif2 = f modif in
+     let foc2 = AtS1 (Hier ((), (id, modif2, head), prop, inv, np), ctx) in
+     out_of_unselect modif2 foc2
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (AnAggreg ((), id, modif2, g, rel_opt, np), ctx) in

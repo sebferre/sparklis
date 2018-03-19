@@ -421,7 +421,7 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
      let q_np = form_s1 ~ignore_top:true state np in
      (fun x ->
       state#add_var vy;
-      Sparql.formula_and_list [q_np (fun z -> hier x z); head x; hier x y])
+      Sparql.formula_and_list [head x; q_np (fun z -> hier x z); hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1_as_p1 state np
@@ -487,7 +487,7 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
      let q_np = form_s1 ~ignore_top:true state np in
      (fun d ->
       state#add_var vy;
-      Sparql.formula_and_list [d x; q_np (fun z -> hier x z); head x; hier x y])
+      Sparql.formula_and_list [d x; head x; q_np (fun z -> hier x z); hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1 state np
