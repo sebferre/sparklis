@@ -397,6 +397,12 @@ let rec annot_elt_p1 pos f ctx =
   | Rel(_,p,m,np) -> let a1, a_np = annot_elt_s1 pos_down np (RelX (p,m,ctx)) in
 		     let a = annot ~ids:a1#ids () in
 		     a, Rel (a, p, m, a_np)
+  | Hier (_,id,p,ori,inv,x) ->
+     let ids_hier = ids_an_id ~inactive:false id in
+     let a1, a_x = annot_elt_s1 pos_down x (HierX (id,p,ori,inv,ctx)) in
+     let ids = union_ids ids_hier a1#ids in
+     let a = annot ~ids () in
+     a, Hier (a, id, p, ori, inv, a_x)
   | LatLong (_,plat,plong,id1,id2) -> let a = annot ~ids:(union_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
 				      a, LatLong (a, plat, plong, id1, id2)
   | Triple (_,arg,np1,np2) -> let a1, a_np1 = annot_elt_s1 pos_down np1 (TripleX1 (arg,np2,ctx)) in
@@ -450,12 +456,6 @@ and annot_elt_s1 pos np ctx =
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (DetThatX (det,ctx)) in
      let a = annot ~ids:(union_ids ids_det ids_rel) () in
      a, Det (a, det, a_rel_opt)
-  | Hier (_,(id,mid,h as head),prop,inv,x) ->
-     let ids_hier = ids_an_id ~inactive:false id in
-     let a1, a_x = annot_elt_s1 pos_down x (HierX (head,prop,inv,ctx)) in
-     let ids = union_ids ids_hier a1#ids in
-     let a = annot ~ids () in
-     a, Hier (a, head, prop, inv, a_x)
   | AnAggreg (_,id,modif,g,rel_opt,x) ->
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
      let a1, a_x = annot_elt_s1 pos_down x (AnAggregX (id,modif,g,rel_opt,ctx)) in
@@ -707,13 +707,13 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, Return (a, a_x)) f ctx
-  | HierX ((id,_,_ as head),prop,inv,ctx) ->
+  | HierX (id,p,ori,inv,ctx) ->
      fd#define_focus_term `Undefined;
-     let f = Hier ((),head,prop,inv,x) in
+     let f = Hier ((),id,p,ori,inv,x) in
      let ids_hier = ids_an_id ~inactive:false id in
      let ids = union_ids ids_hier a1#ids in
-     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
-     annot_ctx_s1 fd (a, Hier (a, head, prop, inv, a_x)) f ctx
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
+     annot_ctx_p1 fd (a, Hier (a, id, p, ori, inv, a_x)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in
     let _ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside true) rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
@@ -862,19 +862,19 @@ and annot_ctx_s fd (a1,a_x) x = function
 and annot_focus_aux =
   function
   | AtP1 (f,ctx) ->
-    let fd = new focus_descr in
-    if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained;
-    let f_annot = annot_elt_p1 `At f ctx in
-    annot_ctx_p1 fd f_annot f ctx
+     let fd = new focus_descr in
+     ( match f with
+       | Hier (_,id,_,_,_,_) -> fd#define_focus_term (`Id id)
+       | _ -> if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained );
+     let f_annot = annot_elt_p1 `At f ctx in
+     annot_ctx_p1 fd f_annot f ctx
   | AtS1 (np,ctx) ->
      let fd = new focus_descr in
      ( match hierarchy_of_ctx_s1 ctx with
-       | Some ((id,_,_),_,_) ->
+       | Some (id,_,_,_) ->
 	  fd#define_focus_term (`Id id)
        | None ->
 	  ( match np with
-	    | Hier (_,(id,_,_),_,_,_) ->
-	       fd#define_focus_term (`Id id)
 	    | Det (_,det,rel_opt) when not (is_s1_as_p1_ctx_s1 ctx) ->
 	       fd#define_focus_term (focus_term_s2 det);
 	       if is_unconstrained_det det rel_opt ctx then

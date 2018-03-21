@@ -357,6 +357,19 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
        | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y p x)) in
      let q_np = form_s1 state np in
      (fun x -> q_np (fun y -> rel x y))
+  | Hier (annot,id,p,ori,inv,np) ->
+     let vy = state#id_labelling#get_id_var id in
+     state#set_modif vy (Lisql.Unselect,Lisql.Unordered);
+     let y = (Sparql.var vy :> Sparql.term) in
+     let hier =
+       let ptrans = Sparql.path_transitive (Sparql.uri p :> Sparql.pred) in
+       match ori with
+       | Fwd -> (fun x y -> Sparql.Pattern (Sparql.triple x ptrans y))
+       | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y ptrans x)) in
+     let q_np = form_s1 ~ignore_top:true state np in
+     (fun x ->
+      state#add_var vy;
+      Sparql.formula_and_list [q_np (fun z -> hier x z); hier x y])
   | LatLong (annot,plat,plong,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in
     let v2 = state#id_labelling#get_id_var id2 in
@@ -408,20 +421,6 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
     let d1 = form_s2_as_p1 state det in
     let d2 = form_p1_opt state rel_opt in
     (fun x -> Sparql.formula_and (d1 x) (d2 x))
-  | Hier (annot,(id,mid,h),(p,ori),inv,np) ->
-     let vy = state#id_labelling#get_id_var id in
-     state#set_modif vy mid;
-     let y = (Sparql.var vy :> Sparql.term) in
-     let ptrans = Sparql.path_transitive (Sparql.uri p :> Sparql.pred) in
-     let head = form_head_as_p1 state h in
-     let hier x y =
-       match ori with
-       | Fwd -> Sparql.Pattern (Sparql.triple x ptrans y)
-       | Bwd -> Sparql.Pattern (Sparql.triple y ptrans x) in
-     let q_np = form_s1 ~ignore_top:true state np in
-     (fun x ->
-      state#add_var vy;
-      Sparql.formula_and_list [head x; q_np (fun z -> hier x z); hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1_as_p1 state np
@@ -474,20 +473,6 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
        let qu = form_s2 state det in
        let d1 = form_p1_opt state rel_opt in
        (fun d -> qu d1 d)
-  | Hier (annot,(id,mid,h),(p,ori),inv,np) ->
-     let vy, vx = state#id_labelling#get_id_var id, state#genvar#new_var "direct_"  in
-     state#set_modif vy mid;
-     let y, x = (Sparql.var vy :> Sparql.term), (Sparql.var vx :> Sparql.term) in
-     let ptrans = Sparql.path_transitive (Sparql.uri p :> Sparql.pred) in
-     let head = form_head_as_p1 state h in
-     let hier x y =
-       match ori with
-       | Fwd -> Sparql.Pattern (Sparql.triple x ptrans y)
-       | Bwd -> Sparql.Pattern (Sparql.triple y ptrans x) in
-     let q_np = form_s1 ~ignore_top:true state np in
-     (fun d ->
-      state#add_var vy;
-      Sparql.formula_and_list [d x; head x; q_np (fun z -> hier x z); hier x y])
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1 state np

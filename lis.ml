@@ -77,7 +77,7 @@ class incr_freq_index = [Lisql.increment, freq option] index ()
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
   | None -> Ontology.no_relation
-  | Some (head,(p,ori),inv) ->
+  | Some (id,p,ori,inv) ->
      let hierarchy_spec =
        let inverse =
 	 match ori with
