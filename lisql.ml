@@ -870,18 +870,21 @@ let term_of_increment : increment -> Rdf.term option = function
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
 
+let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
+  let lhp = Ontology.config_hierarchy_inheritance#value#info uri in
+  match lhp with
+  | [] -> None
+  | hp::_ -> (* TODO: what about other properties ? *)
+     Some (Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1))
+       
 let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
   let default = Rel ((), p, m, factory#top_s1) in
   match m with
   | Fwd -> (* only for hierarchy display, according to declared rdfs:inheritsThrough *)
-     let lhp = Ontology.config_hierarchy_inheritance#value#info p in
-     ( match lhp with
-       | [] -> default
-       | hp::_ -> (* TODO: what about other properties ? *)
-	  let det = factory#top_s2 in
-	  let f = Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1) in
-	  let np = Det ((), det, Some f) in
-	  Rel ((), p, m, np) )
+     let det = factory#top_s2 in
+     ( match hierarchy_of_uri p with
+       | None -> Rel ((), p, m, Det ((), det, None))
+       | Some fh -> Rel ((), p, m, Det ((), det, Some fh)) )
   | Bwd -> default
   
 let elt_p1_of_increment : increment -> unit elt_p1 option = function
@@ -960,6 +963,9 @@ let insert_elt_p1_in_rel_opt ctx elt = function
   | Some rel -> Some (append_and_p1 ctx elt rel)
     
 let insert_elt_p1 (elt : unit elt_p1) = function
+  | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
+     let elt_s1 = Det ((), factory#top_s2, Some elt) in
+     down_focus (append_and_s1 (HierX (id,p,ori,inv,ctx)) elt_s1 np)
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
   | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
@@ -1034,7 +1040,16 @@ let insert_type c = function
       | Term _ ->
 	Some (AtS1 (Det ((), An (factory#new_id, factory#top_modif, Class c), rel_opt), ctx))
       | An (id, modif, Thing) ->
-	Some (AtS1 (Det ((), An (id, modif, Class c), rel_opt), ctx))
+	 let moves, rel_opt =
+	   match rel_opt with
+	   | Some _ -> [], rel_opt
+	   | None ->
+	      ( match hierarchy_of_uri c with
+		| Some fh -> [down_focus; down_focus], Some fh
+		| None -> [], None ) in
+	 focus_opt_moves
+	   moves
+	   (Some (AtS1 (Det ((), An (id, modif, Class c), rel_opt), ctx)))
       | An (id, modif, Class c2) when c2 = c ->
 	Some (AtS1 (Det ((), An (id, modif, Thing), rel_opt), ctx))
       | _ ->

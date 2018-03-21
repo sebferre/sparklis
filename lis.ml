@@ -604,6 +604,7 @@ object (self)
 	(function
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_class_hierarchy#value#enqueue uri;
+	  Ontology.config_hierarchy_inheritance#value#enqueue uri;
 	  Lexicon.config_class_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_prop; unit })
 	| _ -> ());
@@ -723,6 +724,7 @@ object (self)
 	(function
 	| (Rdf.URI uri, count) ->
 	  Ontology.config_class_hierarchy#value#enqueue uri;
+	  Ontology.config_hierarchy_inheritance#value#enqueue uri; 
 	  Lexicon.config_class_lexicon#value#enqueue uri;
 	  incr_index#add (Lisql.IncrType uri, Some { value=count; max_value; partial=partial_a; unit })
 	| _ -> ());
