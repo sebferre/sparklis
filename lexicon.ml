@@ -120,8 +120,8 @@ let sparql_lexicon
 	(fun l_uri ->
 	  select ~projections:[(`Bare,u); (`Bare,l)] ~froms
 	    (join
-	       [ union
-		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_u) l_uri);
+	       [ values v_u
+		   (List.map (fun x_uri -> (uri x_uri :> term)) l_uri);
 		 optional
 		   (join
 		      ( triple (v_u :> term) (uri property :> pred) (v_l :> term)

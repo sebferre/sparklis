@@ -35,8 +35,8 @@ let sparql_relation
 	(fun l_uri ->
 	  select ~projections:[(`Bare,source); (`Bare,image)] ~froms
 	    (join
-	       [ union
-		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_source) l_uri);
+	       [ values v_source
+		   (List.map (fun x_uri -> (uri x_uri :> term)) l_uri);
 		 optional
 		   (make_pattern v_source v_image) ]))
 	l_l_uri in
@@ -121,86 +121,6 @@ let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse :
     ~froms
     ~make_pattern
 
-(*  
-  let ajax_pool = new Sparql_endpoint.ajax_pool in
-  let bind_parents l_uri k =
-    Jsutils.firebug ("Retrieving parent URIs with property " ^ property ^ ", for " ^ string_of_int (List.length l_uri) ^ " URIs");
-    let l_l_uri =
-      if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
-      then Common.bin_list 50 l_uri (* creating bins of 50 uris max *)
-      else [l_uri] in
-    let child, middle, parent = "child", "middle", "parent" in (* SPARQL vars *)
-    let l_sparql =
-      let open Sparql in
-      let v_child, v_middle, v_parent = var child, var middle, var parent in
-      let t_child, t_middle, t_parent = (v_child :> term), (v_middle :> term), (v_parent :> term) in
-      let e_child, e_middle, e_parent = (v_child :> expr), (v_middle :> expr), (v_parent :> expr) in
-      let has_parent s o =
-	let uri_property = (uri property :> pred) in
-	match orientation with
-	| Lisql.Fwd -> triple s uri_property o
-	| Lisql.Bwd -> triple o uri_property s
-      in
-      List.map
-	(fun l_uri ->
-	  select ~projections:[(`Bare,child); (`Bare,parent)] ~froms
-	    (join
-	       [ union
-		   (List.map (fun x_uri -> bind (uri x_uri :> expr) v_child) l_uri);
-		 optional
-		   (join
-		      [ has_parent t_child t_parent;
-			filter (expr_comp "!=" e_child e_parent);
-			filter (not_exists (has_parent t_parent t_child));
-			filter (not_exists (join
-					      [ has_parent t_child t_middle;
-						has_parent t_middle t_parent;
-						filter (log_and [ expr_comp "!=" e_middle e_child;
-								  expr_comp "!=" e_middle e_parent ])
-					      ]))
-		      ])
-	       ]))
-	l_l_uri in
-    let add_child_parent ht_parents uri_child uri_parent =
-      let parents_ref =
-	try Hashtbl.find ht_parents uri_child
-	with Not_found ->
-	  let p_ref = ref [] in
-	  Hashtbl.add ht_parents uri_child p_ref;
-	  p_ref in
-      if not (List.mem uri_parent !parents_ref)
-	     (* uri_parent <> uri_child
-	 && not (List.mem uri_parent !parents_ref)
-	 && not (List.mem uri_child (try !(Hashtbl.find ht_parents uri_parent) with _ -> [])) *)
-      then parents_ref := uri_parent :: !parents_ref
-      else ()
-    in
-    Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
-      (fun l_results ->
-	let ht_parents : (Rdf.uri, Rdf.uri list ref) Hashtbl.t = Hashtbl.create 101 in
-	List.iter
-	  (fun results ->
-	    let i = List.assoc child results.Sparql_endpoint.vars in
-	    let j = List.assoc parent results.Sparql_endpoint.vars in
-	    List.iter
-	      (fun binding ->
-		match binding.(i), binding.(j) with
-		| Some (Rdf.URI uri_child), Some (Rdf.URI uri_parent) -> add_child_parent ht_parents uri_child uri_parent
-		| Some (Rdf.URI uri_child), None -> Hashtbl.add ht_parents uri_child (ref []) (* recording absence of parents *)
-		| _ -> ())
-	      results.Sparql_endpoint.bindings)
-	  l_results;
-	let l_uri_info_opt =
-	  Hashtbl.fold
-	    (fun uri parents_ref res -> (uri, Some !parents_ref)::res)
-	    ht_parents [] in
-	k l_uri_info_opt)
-      (fun code ->
-	ajax_pool#alert ("The parent URIs could not be retrieved for property <" ^ property ^ ">.");
-	k [])
-  in	 
-  new tabled_hierarchy (fun uri -> []) bind_parents
- *)
     
 (* pool of hierarchies for an endpoint as a configuration *)
 

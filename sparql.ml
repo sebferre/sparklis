@@ -187,6 +187,7 @@ let something (s : term) : pattern = s ^> " a [] ."
 let rdf_type (s : term) (c : term) : pattern = s ^^ " a " ^< c ^> " ."
 let triple (s : term) (p : pred) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
 let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
+let values (v : var) (l : term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
 let filter (e : expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^< indent 9 e ^> " )"
