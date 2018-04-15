@@ -203,6 +203,11 @@ th, td {
     height: 500px;
 }
 
+#results-carousel .carousel-inner .item > img {
+    height:98vh;
+    margin: 0 auto;
+}
+
 footer {
     clear:both;
 }
