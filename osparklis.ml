@@ -206,7 +206,8 @@ let check_input s = function
 
 let config =
   let config_inputs : Config.input list =
-    [ (Sparql_endpoint.config_proxy :> Config.input);
+    [ (Rdf.config_wikidata_mode :> Config.input);
+      (Sparql_endpoint.config_proxy :> Config.input);
       (Sparql_endpoint.config_proxy_url :> Config.input);
       (Sparql_endpoint.config_method_get :> Config.input);
       (Sparql_endpoint.config_withCredentials :> Config.input);

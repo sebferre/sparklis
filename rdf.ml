@@ -39,6 +39,13 @@ let lat_long_properties =
   
 (* ------------------------- *)
 
+let config_wikidata_mode =
+  new Config.boolean_input
+      ~key:"wikidata_mode"
+      ~input_selector:"#input-wikidata-mode"
+      ~default:false
+      ()
+    
 type var = string
 
 type term =

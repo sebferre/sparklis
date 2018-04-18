@@ -60,6 +60,7 @@ object (self)
     cpt <- 0;
     map <- (* default namespaces (reverse order of declarations) *)
       [("http://jena.apache.org/text#", "text:");
+       ("http://www.wikidata.org/prop/direct/","wdt:");
        ("http://purl.org/dc/terms/", "dcterms:");
        ("http://purl.org/dc/elements/1.1/", "dc:");
        ("http://dbpedia.org/property/", "dbp:");
@@ -183,8 +184,14 @@ let path_alt (p1 : pred) (p2 : pred) : pred = "(" ^< p1 ^^ "|" ^< p2 ^> ")"
 let path_transitive (p : pred) : pred = "(" ^< p ^> ")*"
 								   
 let empty : pattern = sparql ""
-let something (s : term) : pattern = s ^> " a [] ."
-let rdf_type (s : term) (c : term) : pattern = s ^^ " a " ^< c ^> " ."
+let something (s : term) : pattern =
+  if Rdf.config_wikidata_mode#value
+  then s ^> " wdt:P31 [] ."
+  else s ^> " a [] ."
+let rdf_type (s : term) (c : term) : pattern =
+  if Rdf.config_wikidata_mode#value
+  then s ^^ " wdt:P31 " ^< c ^> " ."
+  else s ^^ " a " ^< c ^> " ."
 let triple (s : term) (p : pred) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
 let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
 let values (v : var) (l : term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"

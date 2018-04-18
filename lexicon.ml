@@ -82,18 +82,7 @@ let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
 let wikidata_entity_of_predicate uri =
   let prefix_predicate = "http://www.wikidata.org/prop/" in
   if Common.has_prefix uri prefix_predicate
-  then 
-    (*let prefix_length = String.length prefix_predicate in
-    let suffix_predicate = String.sub uri prefix_length (String.length uri - prefix_length) in
-    let l_middle_predicate =
-      ["direct/"; "novalue/";
-       "statement/"; "statement/value/";
-       "qualifier/"; "qualifier/value/";
-       "reference/"; "reference/value/"] in
-    let middle_predicate = try List.find (fun middle -> Common.has_prefix suffix_predicate middle) l_middle_predicate with _ -> "" in
-    let middle_length = String.length middle_predicate in
-      let property_id = String.sub suffix_predicate middle_length (String.length suffix_predicate middle_length) in*)
-    "http://www.wikidata.org/entity/" ^ name_of_uri uri
+  then "http://www.wikidata.org/entity/" ^ name_of_uri uri
   else uri
   
 (* from label property and optional language *)
@@ -105,7 +94,7 @@ let sparql_lexicon
   let bind_labels l_uri k =
     Jsutils.firebug ("Retrieving labels for " ^ string_of_int (List.length l_uri) ^ " URIs");
     let l_uri =
-      if endpoint = Sparql_endpoint.wikidata_endpoint
+      if Rdf.config_wikidata_mode#value
       then List.map wikidata_entity_of_predicate l_uri (* converting Wikidata predicates to entities *)
       else l_uri in
     let l_l_uri =
@@ -182,57 +171,9 @@ let sparql_lexicon
       (fun code ->
 	ajax_pool#alert ("The labels could not be retrieved for property <"
 			 ^ property ^ (match language with None -> ">." | Some lang -> "> and for language tag @" ^ lang ^ ".")
-			 ^ " This may be because the endpoint does not support the BIND operator.");
+			 ^ " This may be because the endpoint does not support the VALUES operator.");
 	k [])
   in
-(*
-  let bind_labels_wikidata l_uri k =
-    let l_l_uri = Common.bin_list 20 l_uri in
-    let l_l_var_uri_sparql =
-      List.map
-	(fun l_uri ->
-	  let _, l_var_uri = List.fold_left (fun (i,l) uri -> i+1, ("l" ^ string_of_int i, uri)::l) (1,[]) l_uri in
-	  let open Sparql in
-	  let sparql =
-	    select ~projections:(List.map (fun (v,u) -> (`Bare,v)) l_var_uri)
-	      (service (qname "wikibase:label")
-		 (join (triple (qname "bd:serviceParam") (qname "wikibase:language")
-			  (string (match language with None -> "en" | Some lang -> lang))
-			:: List.map (fun (v,u) -> triple (uri u) (uri property) (var v :> term)) l_var_uri))) in
-	  Jsutils.firebug (sparql :> string);
-	  (l_var_uri, sparql))
-	l_l_uri in
-    let l_l_var_uri, l_sparql = List.split l_l_var_uri_sparql in
-    Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
-      (fun l_results ->
-	let l_uri_info_opt =
-	  List.fold_left2
-	    (fun l_uri_info_opt l_var_uri results ->
-	      let l_uri_pos_opt =
-		List.fold_left
-		  (fun res (v,u) ->
-		    try (u, Some (List.assoc v results.Sparql_endpoint.vars))::res
-		    with _ -> (u,None)::res)
-		  [] l_var_uri in
-	      match results.Sparql_endpoint.bindings with
-	      | [] -> []
-	      | binding::_ -> (* should be a single binding *)
-		List.fold_left
-		  (fun l_uri_info_opt -> function
-		  | (u, None) -> (u, None)::l_uri_info_opt
-		  | (u, Some pos) ->
-		    ( match binding.(pos) with
-		    | Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> (u, Some (map label))::l_uri_info_opt
-		    | _ -> (u, None)::l_uri_info_opt ))
-		  l_uri_info_opt l_uri_pos_opt)
-	    [] l_l_var_uri l_results in
-	k l_uri_info_opt)
-      (fun code ->
-	ajax_pool#alert ("The Wikidata labels could not be retrieved for property <"
-			 ^ property ^ (match language with None -> ">." | Some lang -> "> and for language tag @" ^ lang ^ "."));
-	k [])
-  in
-*)
   new tabled_lexicon default_label bind_labels
 
 let sparql_entity_lexicon ~endpoint ~froms ~property ?language () =

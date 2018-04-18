@@ -692,9 +692,33 @@ object (self)
 	  | _ -> assert false)
 	(fun _ -> ajax_extent ()) (* looking at facts *)
     in
-    if config_intentional_init_concepts#value && s_sparql.Lisql2sparql.focus_graph_opt = None
-    then ajax_intent ()
-    else ajax_extent ()
+    let ajax_wikidata () =
+      let sparql_genvar = new Lisql2sparql.genvar in
+      let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
+      let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
+	match s_sparql.Lisql2sparql.focus_graph_opt with
+	| None -> gp
+	| Some _ ->  Sparql.union (focus_graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
+      in      
+      let sparql_class =
+	"SELECT DISTINCT ?class " ^ sparql_froms ^ "WHERE { " ^
+	  (graph_opt (Sparql.sparql "?x wdt:P31 ?class . " : Sparql.pattern) :> string) ^
+	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "class" :> Sparql.term) constr) :> string) ^
+	    (*filter_hidden_URIs "class" ^*)
+	  " } GROUP BY ?class ORDER BY DESC(COUNT(?x)) LIMIT " ^ string_of_int config_max_classes#value in	
+      Sparql_endpoint.ajax_list_in
+	[elt] ajax_pool endpoint [sparql_class]
+	(function
+	  | [results_class] -> process results_class Sparql_endpoint.empty_results
+	  | _ -> assert false)
+	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+    in
+    if Rdf.config_wikidata_mode#value
+    then ajax_wikidata ()
+    else
+      if config_intentional_init_concepts#value && s_sparql.Lisql2sparql.focus_graph_opt = None
+      then ajax_intent ()
+      else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
     if focus_descr#term = `Undefined || not focus_descr#incr then

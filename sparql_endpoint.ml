@@ -10,8 +10,6 @@ open Jsutils
 
 let sparql_ns = "http://www.w3.org/2005/sparql-results#"
 
-let wikidata_endpoint = "https://query.wikidata.org/sparql"
-
 (* endpoint-specific aspects *)
 
 let uri_of_id (id : string) : Rdf.uri option =
