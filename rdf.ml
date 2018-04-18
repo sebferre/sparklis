@@ -31,6 +31,8 @@ let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough
 
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
 
+let p_P625 = "http://www.wikidata.org/prop/P625" (* Wikidata: geographical coordinates *)
+
 let lat_long_properties =
   [ "http://www.w3.org/2003/01/geo/wgs84_pos#lat", "http://www.w3.org/2003/01/geo/wgs84_pos#long";
     "http://www.semwebtech.org/mondial/10/meta#latitude", "http://www.semwebtech.org/mondial/10/meta#longitude";

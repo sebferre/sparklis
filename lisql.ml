@@ -35,6 +35,7 @@ type modif_s2 = project * order
 type orientation = Fwd | Bwd
 type inverse = bool
 type modif_p2 = orientation
+type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
 type aggreg =
 | NumberOf | ListOf | Sample
 | Total of num_conv option | Average of num_conv option | Maximum of num_conv option | Minimum of num_conv option
@@ -64,7 +65,7 @@ type 'a elt_p1 =
   | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
   | Hier of 'a * id * Rdf.uri * modif_p2 * inverse * 'a elt_s1
   | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
-  | LatLong of 'a * Rdf.uri * Rdf.uri * id * id (* specialization of two Rel to get latitude and longitude *)
+  | LatLong of 'a * latlong * id * id (* specialization of two Rel to get latitude and longitude *)
   | Search of 'a * constr
   | Filter of 'a * constr
   | And of 'a * 'a elt_p1 list
@@ -399,6 +400,13 @@ let at_p1 f ctx =
      AtP1 (Or ((), list_of_list_ctx l ll_rr), ctx2)
   | _ -> AtP1 (f, ctx)
 
+
+let latlong_of_property_uri (uri : Rdf.uri) : latlong option =
+  if uri = Rdf.p_P625
+  then Some `Wikidata
+  else
+    try Some (`Custom (uri, List.assoc uri Rdf.lat_long_properties))
+    with Not_found -> None
 	      
 (* getting element annotation *)
 
@@ -408,7 +416,7 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Rel (a,p,modif,np) -> a
   | Hier (a,id,p,ori,inv,np) -> a
   | Triple (a,arg,np1,np2) -> a
-  | LatLong (a,plat,plong,id1,id2) -> a
+  | LatLong (a,ll,id1,id2) -> a
   | Search (a,constr) -> a
   | Filter (a,constr) -> a
   | And (a,lr) -> a
@@ -767,7 +775,7 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
   | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
   | Hier (a,id,p,ori,inv,np) -> Hier (a, factory#new_id, p, ori, inv, copy_s1 np)
   | Triple (a,arg,np1,np2) -> Triple (a,arg, copy_s1 np1, copy_s1 np2)
-  | LatLong (a,plat,plong,id1,id2) -> LatLong (a, plat, plong, factory#new_id, factory#new_id)
+  | LatLong (a,ll,id1,id2) -> LatLong (a, ll, factory#new_id, factory#new_id)
   | Search _ -> f
   | Filter _ -> f
   | And (a,lr) -> And (a, List.map copy_p1 lr)
@@ -827,7 +835,7 @@ type increment =
   | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
-  | IncrLatLong of Rdf.uri * Rdf.uri
+  | IncrLatLong of latlong
   | IncrTriplify
   | IncrHierarchy of bool * bool (* trans_rel, inv *)
   (* trans_rel: to indicate that relation in context can be made transitive *)
@@ -890,7 +898,7 @@ let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
 let elt_p1_of_increment : increment -> unit elt_p1 option = function
   | IncrType c -> Some (Type ((), c))
   | IncrRel (p,m) -> Some (elt_p1_of_rel p m)
-  | IncrLatLong (plat,plong) -> Some (LatLong ((), plat, plong, factory#new_id, factory#new_id))
+  | IncrLatLong ll -> Some (LatLong ((), ll, factory#new_id, factory#new_id))
   | _ -> None
 	   
 let elt_s2_of_increment : increment -> elt_s2 option = function
@@ -1061,8 +1069,10 @@ let insert_rel p m focus =
   let foc_opt = insert_elt_p1 (elt_p1_of_rel p m) focus in
   focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
 
-let insert_latlong plat plong focus =
-  insert_elt_p1 (LatLong ((), plat, plong, factory#new_id, factory#new_id)) focus
+let insert_latlong ll focus =
+  let id_lat = factory#new_id in
+  let id_long = factory#new_id in
+  insert_elt_p1 (LatLong ((), ll, id_lat, id_long)) focus
 
 let insert_triple arg focus =
   let foc_opt =
@@ -1447,7 +1457,7 @@ let insert_increment incr focus =
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
-    | IncrLatLong (plat,plong) -> insert_latlong plat plong focus
+    | IncrLatLong ll -> insert_latlong ll focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrHierarchy (trans_rel,inv) -> toggle_hierarchy trans_rel inv focus

@@ -315,7 +315,7 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
      let labels_id =
        List.map (fun (v,l) -> "hier_"^v, `Hierarchy (inv,l)) labels in
      ls_np, (id, `Labels labels_id) :: lab_np
-  | LatLong (_,_plat,_plong,id1,id2) ->
+  | LatLong (_,_ll,id1,id2) ->
     let ls_lat = List.map (fun (v,l) -> (v ^ "_lat", `Gen (l, `Op  grammar#latitude))) labels in
     let ls_long = List.map (fun (v,l) -> (v ^ "_long", `Gen (l, `Op grammar#longitude))) labels in 
     [], [(id1, `Labels ls_lat); (id2, `Labels ls_long)]
@@ -613,7 +613,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
   | Hier (annot, id, p, ori, inv, np) -> (* TODO: render p, ori *)
      A (annot, `IsPP (`Prep (`Op (grammar#hierarchy_in ~inv ~in_:true), np_of_elt_s1 grammar ~id_labelling np)))
-  | LatLong (annot,_plat,_plong,_id1,_id2) ->
+  | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
     let np1 = np_of_elt_s1 grammar ~id_labelling np1 in
@@ -1262,7 +1262,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
 	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `TransVerb -> xml_ellipsis @ Word word :: []
 	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: [])
-  | IncrLatLong (_plat,_plong) ->
+  | IncrLatLong _ll ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])	 
   | IncrTriple (S | O as arg) ->

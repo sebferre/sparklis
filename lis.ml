@@ -762,7 +762,9 @@ object (self)
 	  let freq_opt = Some { value=count; max_value; partial=partial_has; unit } in
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Fwd), freq_opt);
 	  if focus_prop_ori_opt = Some (uri,Lisql.Fwd) then trans_rel := true;
-	  (try incr_index#add (Lisql.IncrLatLong (uri, List.assoc uri Rdf.lat_long_properties), freq_opt) with Not_found -> ())
+	  (match Lisql.latlong_of_property_uri uri with
+	   | Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
+	   | None -> ())
 	| _ -> ());
       int_index_isof#iter
 	(function

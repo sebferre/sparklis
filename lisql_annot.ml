@@ -403,8 +403,8 @@ let rec annot_elt_p1 pos f ctx =
      let ids = union_ids ids_hier a1#ids in
      let a = annot ~ids () in
      a, Hier (a, id, p, ori, inv, a_x)
-  | LatLong (_,plat,plong,id1,id2) -> let a = annot ~ids:(union_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
-				      a, LatLong (a, plat, plong, id1, id2)
+  | LatLong (_,ll,id1,id2) -> let a = annot ~ids:(union_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
+				      a, LatLong (a, ll, id1, id2)
   | Triple (_,arg,np1,np2) -> let a1, a_np1 = annot_elt_s1 pos_down np1 (TripleX1 (arg,np2,ctx)) in
 			      let a2, a_np2 = annot_elt_s1 pos_down np2 (TripleX2 (arg,np1,ctx)) in
 			      let a = annot ~ids:(union_ids a1#ids a2#ids) () in

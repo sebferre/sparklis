@@ -157,7 +157,7 @@ and print_p1 = function
   | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
   | Hier (_,id,p,ori,inv,np) -> print_nary "Hier" [print_id id; print_uri p; print_modif_p2 ori; print_bool inv; print_s1 np]
   | Triple (_,arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
-  | LatLong (_,plat,plong,id1,id2) -> print_nary "LatLong" [print_uri plat; print_uri plong; print_id id1; print_id id2]
+  | LatLong (_,ll,id1,id2) -> print_ter "LatLong3" (print_latlong ll) (print_id id1) (print_id id2)
   | Search (_,c) -> print_un "Search" (print_constr c)
   | Filter (_,c) -> print_un "Filter" (print_constr c)
   | And (_,lr) -> print_lr print_p1 "And" lr
@@ -167,6 +167,9 @@ and print_p1 = function
   | In (_,npg,f) -> print_bin "In" (print_s1 npg) (print_p1 f)
   | InWhichThereIs (_,np) -> print_un "InWhichThereIs" (print_s1 np)
   | IsThere _ -> print_atom "IsThere"
+and print_latlong = function
+  | `Custom (plat,plong) -> print_bin "Custom" (print_uri plat) (print_uri plong)
+  | `Wikidata -> print_atom "Wikidata"
 and print_modif_p2 = function
   | ori -> print_orientation ori
 and print_orientation = function
@@ -320,7 +323,8 @@ and parse_p1 ~version = parser
   | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
   | [< id, p, ori, inv, np = parse_quin ~version "Hier" parse_id parse_uri parse_modif_p2 parse_bool parse_s1 >] -> Hier ((),id,p,ori,inv,np)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
-  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((),plat,plong,id1,id2)
+  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
+  | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c)
   | [< c = parse_un ~version "Constr" parse_constr >] -> Filter ((),c) (* for backward compatibility *)
@@ -332,6 +336,9 @@ and parse_p1 ~version = parser
   | [< np = parse_un ~version "InWhichThereIs" parse_s1 >] -> InWhichThereIs ((),np)
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
+and parse_latlong ~version = parser
+  | [< plat, plong = parse_bin ~version "Custom" parse_uri parse_uri >] -> `Custom (plat,plong)
+  | [< () = parse_atom ~version "Wikidata" >] -> `Wikidata
 and parse_modif_p2 ~version = parser
   | [< ori, () = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> ori  (* for backward compatibility *)
   | [< ori = parse_orientation ~version >] -> ori

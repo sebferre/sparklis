@@ -370,14 +370,14 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
      (fun x ->
       state#add_var vy;
       Sparql.formula_and_list [q_np (fun z -> hier x z); hier x y])
-  | LatLong (annot,plat,plong,id1,id2) ->
+  | LatLong (annot,ll,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in
     let v2 = state#id_labelling#get_id_var id2 in
+    let lat, long = Sparql.var v1, Sparql.var v2 in
+    let f_ll = form_latlong ll in
     (fun x ->
-      state#add_geoloc x v1 v2;
-      Sparql.formula_and
-	(Sparql.Pattern (Sparql.triple x (Sparql.uri plat :> Sparql.pred) (Sparql.var v1 :> Sparql.term)))
-	(Sparql.Pattern (Sparql.triple x (Sparql.uri plong :> Sparql.pred) (Sparql.var v2 :> Sparql.term))))
+     state#add_geoloc x v1 v2;
+     f_ll x lat long)
   | Triple (annot,arg,np1,np2) ->
     let q_np1 = form_s1 state np1 in
     let q_np2 = form_s1 state np2 in
@@ -413,6 +413,14 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     let q = form_s1 state np in
     (fun g -> Sparql.formula_graph g (q (fun x -> Sparql.True)))
   | IsThere annot -> (fun x -> Sparql.True)
+and form_latlong = function
+  | `Custom (plat,plong) ->
+     (fun x lat long ->
+      Sparql.formula_and
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plat :> Sparql.pred) (lat :> Sparql.term)))
+	(Sparql.Pattern (Sparql.triple x (Sparql.uri plong :> Sparql.pred) (long :> Sparql.term))))
+  | `Wikidata ->
+     (fun x lat long -> Sparql.Pattern (Sparql.wikidata_lat_long x lat long))
 and form_p1_opt state = function
   | None -> (fun x -> Sparql.True)
   | Some rel -> form_p1 state rel

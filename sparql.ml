@@ -60,7 +60,11 @@ object (self)
     cpt <- 0;
     map <- (* default namespaces (reverse order of declarations) *)
       [("http://jena.apache.org/text#", "text:");
+       ("http://www.wikidata.org/prop/statement/value/","psv:");
+       ("http://www.wikidata.org/prop/statement/","ps:");
+       ("http://www.wikidata.org/prop/","p:");
        ("http://www.wikidata.org/prop/direct/","wdt:");
+       ("http://wikiba.se/ontology#","wikibase:");
        ("http://purl.org/dc/terms/", "dcterms:");
        ("http://purl.org/dc/elements/1.1/", "dc:");
        ("http://dbpedia.org/property/", "dbp:");
@@ -289,7 +293,10 @@ let select
 let select_from_service url query : query =
   "SELECT * FROM { SERVICE <" ^< url ^< "> { " ^< query ^> " }}"
 
+let wikidata_lat_long (x : term) (lat : var) (long : var) : pattern =
+  (x ^^ " p:P625/psv:P625 [ wikibase:geoLatitude " ^< lat ^^ "; wikibase:geoLongitude " ^< long ^> " ]." :> pattern)
 
+							     
 (* formulas *)
 
 type formula =
