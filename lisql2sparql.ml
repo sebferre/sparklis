@@ -340,15 +340,30 @@ and name_func = function
     
 type sparql_p1 = Sparql.term -> Sparql.formula
 type sparql_p2 = Sparql.term -> Sparql.term -> Sparql.formula
+type sparql_pn = (arg * Sparql.term) list -> Sparql.formula
 type sparql_s1 = sparql_p1 -> Sparql.formula
 type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
+type sparql_sn = sparql_pn -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
 type sparql_s = Sparql.formula
 
+let get_arg (arg : arg) (l : (arg * Sparql.term) list) : Sparql.term =
+  try List.assoc arg l
+  with Not_found -> Sparql.bnode ""
 
-let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
+let rec form_pred state : pred -> sparql_pn = function
+  | Class c ->
+     (fun l -> Sparql.Pattern (Sparql.rdf_type (get_arg S l) (Sparql.uri c)))
+  | Prop p ->
+     (fun l -> Sparql.Pattern (Sparql.triple (get_arg S l) (Sparql.uri p :> Sparql.pred) (get_arg O l)))
+and form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
-  | Type (annot,c) -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
+  | Pred (annot,arg,pred,cp) ->
+     let pred = form_pred state pred in
+     let cp = form_sn state cp in
+     (fun x -> cp (fun l -> pred ((arg,x)::l)))
+  | Type (annot,c) ->
+     (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
   | Rel (annot,prop,ori,np) ->
      let p = (Sparql.uri prop :> Sparql.pred) in
      let rel =
@@ -473,6 +488,34 @@ and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
 and form_head_as_p1 state : elt_head -> sparql_p1 = function
   | Thing -> (fun x -> Sparql.True)
   | Class c -> (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
+and form_sn state : annot elt_sn -> sparql_sn = function
+  | CNil annot ->
+     (fun p -> p [])
+  | CCons (annot,arg,np,cp) ->
+     let np = form_s1 state np in
+     let cp = form_sn state cp in
+     (fun p -> np (fun x -> cp (fun l -> p ((arg,x)::l))))
+  | CAnd (annot,lr) ->
+    let lr_q = List.map (fun elt -> form_sn state elt) lr in
+    (fun p -> Sparql.formula_and_list (List.map (fun q -> q p) lr_q))
+  | COr (annot,lr) ->
+    ( match annot#get_susp_focus_index with
+    | Some i -> form_sn state (List.nth lr i)
+    | None ->
+      let lr_q = List.map (fun elt -> form_sn state elt) lr in
+      (fun p -> Sparql.formula_or_list (List.map (fun q -> q p) lr_q)) )
+  | CMaybe (annot,f) ->
+    if annot#is_susp_focus
+    then form_sn state f
+    else
+      let q = form_sn state f in
+      (fun p -> Sparql.formula_optional (q p))
+  | CNot (annot,f) ->
+    if annot#is_susp_focus
+    then form_sn state f
+    else
+      let q = form_sn (Oo.copy state) f in
+      (fun p -> Sparql.formula_not (q p))
 and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
   | Det (annot,det,rel_opt) ->
      if ignore_top && is_top_s2 det && is_top_p1_opt rel_opt

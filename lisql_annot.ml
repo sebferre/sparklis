@@ -392,6 +392,10 @@ let rec annot_elt_p1 pos f ctx =
   | Is (_,np) -> let a1, a_np = annot_elt_s1 pos_down np (IsX ctx) in
 		 let a = annot ~ids:a1#ids () in
 		 a, Is (a, a_np)
+  | Pred (_,arg,pred,cp) ->
+     let a1, a_cp = annot_elt_sn pos_down cp (PredX (arg,pred,ctx)) in
+     let a = annot ~ids:a1#ids () in
+     a, Pred (a, arg, pred, a_cp)
   | Type (_,c) -> let a = annot () in
 		  a, Type (a, c)
   | Rel(_,p,m,np) -> let a1, a_np = annot_elt_s1 pos_down np (RelX (p,m,ctx)) in
@@ -444,7 +448,41 @@ and annot_elt_p1_opt pos rel_opt ctx =
   match rel_opt with
   | None -> empty_ids, None
   | Some rel -> let a, a_rel = annot_elt_p1 pos rel ctx in
-		       a#ids, Some a_rel
+		a#ids, Some a_rel
+and annot_elt_sn pos cp ctx =
+  let annot = new annot ~focus_pos:pos ~focus:(AtSn (cp,ctx)) in
+  let pos_down = focus_pos_down pos in
+  match cp with
+  | CNil _ ->
+     let a = annot () in
+     a, CNil a
+  | CCons (_,arg,np,cp) ->
+     let a1, a_np = annot_elt_s1 pos_down np (CConsX1 (arg,cp,ctx)) in
+     let a2, a_cp = annot_elt_sn pos_down cp (CConsX2 (arg,np,ctx)) in
+     let a = annot ~ids:(union_ids a1#ids a2#ids) () in
+     a, CCons (a, arg, a_np, a_cp)
+  | CAnd (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_sn pos_down x (CAndX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     a, CAnd (a, lax)
+  | COr (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_sn pos_down x (COrX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     a, COr (a, lax)
+  | CMaybe (_,x) ->
+     let a1, a_x = annot_elt_sn pos_down x (CMaybeX ctx) in
+     let a = annot ~ids:a1#ids () in
+     a, CMaybe (a, a_x)
+  | CNot (_,x) ->
+     let a1, a_x = annot_elt_sn pos_down x (CNotX ctx) in
+     let a = annot ~ids:{a1#ids with defs = Ids.empty; dims = Ids.empty} () in
+     a, CNot (a, a_x)
 and annot_elt_s1 pos np ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtS1 (np,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -675,12 +713,62 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     let ids = union_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, In (a,a_npg,a_x)) f ctx
+and annot_ctx_sn fd (a1,a_x) x = function
+  | PredX (arg,pred,ctx) ->
+     let f = Pred ((),arg,pred,x) in
+     let ids = a1#ids in
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
+     annot_ctx_p1 fd (a, Pred (a, arg, pred, a_x)) f ctx
+  | CConsX2 (arg,np,ctx) ->
+     let f = CCons ((),arg,np,x) in
+     let a2, a_np = annot_elt_s1 (`Aside false) np (CConsX1 (arg,x,ctx)) in
+     let ids = union_ids a1#ids a2#ids in
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
+     annot_ctx_sn fd (a, CCons (a, arg, a_np, a_x)) f ctx
+  | CAndX (ll_rr,ctx) ->
+    let f = CAnd ((), list_of_ctx x ll_rr) in
+    let la, lar =
+      List.split
+	(list_of_ctx (a1,a_x)
+	   (map_ctx_list
+	      (fun (x2,ll_rr2) -> annot_elt_sn (`Aside false) x2 (CAndX (ll_rr2,ctx)))
+	      (ctx_of_ctx_list x ll_rr))) in
+    let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+    let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
+    annot_ctx_sn fd (a, CAnd (a, lar)) f ctx
+  | COrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
+    let f = COr ((), list_of_ctx x ll_rr) in
+    let la, lar =
+      List.split
+	(list_of_ctx (a1,a_x)
+	   (map_ctx_list
+	      (fun (x2,ll_rr2) -> annot_elt_sn (`Aside true) x2 (COrX (ll_rr2,ctx)))
+	      (ctx_of_ctx_list x ll_rr))) in
+    let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
+    let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtSn (f,ctx)) ~ids () in
+    annot_ctx_sn fd (a, COr (a, lar)) f ctx
+  | CMaybeX ctx ->
+    let f = CMaybe ((),x) in
+    let ids = a1#ids in
+    let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtSn (f,ctx)) ~ids () in (* suspended *)
+    annot_ctx_sn fd (a, CMaybe (a, a_x)) f ctx
+  | CNotX ctx ->
+    let f = CNot ((),x) in
+    let ids = a1#ids in
+    let a = new annot ~focus_pos:(`Above (true,None)) ~focus:(AtSn (f,ctx)) ~ids () in (* suspended *)
+    annot_ctx_sn fd (a, CNot (a, a_x)) f ctx
 and annot_ctx_s1 fd (a1,a_x) x = function
   | IsX ctx ->
     let f = Is ((),x) in
     let ids = a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, Is (a, a_x)) f ctx
+  | CConsX1 (arg,cp,ctx) ->
+     let f = CCons ((),arg,x,cp) in
+     let a2, a_cp = annot_elt_sn (`Aside false) cp (CConsX2 (arg,x,ctx)) in
+     let ids = union_ids a1#ids a2#ids in
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
+     annot_ctx_sn fd (a, CCons (a, arg, a_x, a_cp)) f ctx
   | RelX (p,modif,ctx) ->
     fd#define_focus_term `Undefined;
     let f = Rel ((),p,modif,x) in
@@ -868,6 +956,13 @@ and annot_focus_aux =
        | _ -> if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained );
      let f_annot = annot_elt_p1 `At f ctx in
      annot_ctx_p1 fd f_annot f ctx
+  | AtSn (CCons (_,arg,np,cp),ctx) ->
+     annot_focus_aux (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | AtSn (cp,ctx) ->
+     let fd = new focus_descr in
+     fd#define_focus_term `Undefined;
+     let cp_annot = annot_elt_sn `At cp ctx in
+     annot_ctx_sn fd cp_annot cp ctx
   | AtS1 (np,ctx) ->
      let fd = new focus_descr in
      ( match hierarchy_of_ctx_s1 ctx with
@@ -886,15 +981,6 @@ and annot_focus_aux =
 	       fd#define_focus_term `Undefined ) );
      let np_annot = annot_elt_s1 `At np ctx in
      annot_ctx_s1 fd np_annot np ctx
-(*  | AtDim (dim,ctx) ->
-    let fd = new focus_descr in
-    ( match dim with
-    | ForEachResult _ -> fd#define_focus_term `Undefined
-    | ForEach (_,id,_,_,_) -> fd#define_focus_term (`Id id)
-    | ForTerm (_,t,_) -> fd#define_focus_term (`Term t); fd#set_no_incr );
-    let dim_annot = annot_elt_dim `At dim ctx in
-    annot_ctx_dim fd dim_annot dim ctx
- *)
   | AtAggreg (aggreg,ctx) ->
     let fd = new focus_descr in
     ( match aggreg with

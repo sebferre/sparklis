@@ -29,6 +29,7 @@ type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates wheth
 
 type id = int
 type arg = S | P | O
+type pred = Class of Rdf.uri | Prop of Rdf.uri
 type project = Unselect | Select
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 type modif_s2 = project * order
@@ -61,6 +62,7 @@ type func =
 (* LISQL elts : 'a param is for element annotations (hook) *)
 type 'a elt_p1 =
   | Is of 'a * 'a elt_s1
+  | Pred of 'a * arg * pred * 'a elt_sn
   | Type of 'a * Rdf.uri
   | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
   | Hier of 'a * id * Rdf.uri * modif_p2 * inverse * 'a elt_s1
@@ -75,6 +77,13 @@ type 'a elt_p1 =
   | In of 'a * 'a elt_s1 * 'a elt_p1 (* the [elt_s1] should be atomic/Det *)
   | InWhichThereIs of 'a * 'a elt_s1
   | IsThere of 'a
+and 'a elt_sn = (* predicate complements *)
+  | CNil of 'a
+  | CCons of 'a * arg * 'a elt_s1 * 'a elt_sn
+  | CAnd of 'a * 'a elt_sn list
+  | COr of 'a * 'a elt_sn list
+  | CMaybe of 'a * 'a elt_sn
+  | CNot of 'a * 'a elt_sn
 and 'a elt_s1 =
   | Det of 'a * elt_s2 * 'a elt_p1 option
   | AnAggreg of 'a * id * modif_s2 * aggreg * 'a elt_p1 option * 'a elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
@@ -152,8 +161,16 @@ type ctx_p1 =
   | MaybeX of ctx_p1
   | NotX of ctx_p1
   | InX of unit elt_s1 * ctx_p1
+and ctx_sn =
+  | PredX of arg * pred * ctx_p1
+  | CConsX2 of arg * unit elt_s1 * ctx_sn
+  | CAndX of unit elt_sn ctx_list * ctx_sn
+  | COrX of unit elt_sn ctx_list * ctx_sn
+  | CMaybeX of ctx_sn
+  | CNotX of ctx_sn
 and ctx_s1 =
   | IsX of ctx_p1
+  | CConsX1 of arg * unit elt_sn * ctx_sn
   | RelX of Rdf.uri * modif_p2 * ctx_p1
   | TripleX1 of arg * unit elt_s1 * ctx_p1 (* context on first S1 arg *)
   | TripleX2 of arg * unit elt_s1 * ctx_p1 (* context on second S1 arg *)
@@ -180,6 +197,7 @@ and ctx_s =
 (* LISQL focus: no annotations in focus *)
 type focus =
   | AtP1 of unit elt_p1 * ctx_p1
+  | AtSn of unit elt_sn * ctx_sn
   | AtS1 of unit elt_s1 * ctx_s1
   | AtAggreg of unit elt_aggreg * ctx_aggreg
   | AtExpr of unit elt_expr * ctx_expr
@@ -196,6 +214,7 @@ object (self)
   method top_modif = (Select, Unordered)
   method top_s2 = An (self#new_id, self#top_modif, Thing)
   method top_s1 = Det ((), self#top_s2, None)
+  method top_sn = CNil ()
   method top_expr = Undef ()
   method top_dim = ForEachResult ()
   method top_dim_foreach id2 = ForEach ((), self#new_id, self#top_modif, None, id2)
@@ -207,6 +226,7 @@ let is_top_p1 = function IsThere _ -> true | _ -> false
 let is_top_p1_opt = function None -> true | Some f -> is_top_p1 f
 let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
 let is_top_s1 = function Det (_, det, None) -> is_top_s2 det | _ -> false
+let is_top_sn = function CNil _ -> true | _ -> false
 let is_top_expr = function Undef _ -> true | _ -> false
 let is_top_s = function Return (_, np) -> is_top_s1 np | _ -> false
 let is_home_focus = function AtS1 (f, ReturnX Root) -> is_top_s1 f | _ -> false
@@ -233,6 +253,7 @@ let rec is_s1_as_p1_focus = function
   | _ -> false
 and is_s1_as_p1_ctx_s1 = function
   | IsX _ -> true
+  | CConsX1 _ -> false
   | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
@@ -251,6 +272,7 @@ let rec is_unconstrained_elt_p1_opt = function
   | Some rel -> is_unconstrained_elt_p1 rel
 and is_unconstrained_elt_p1 = function
   | Is (_,np) -> is_unconstrained_elt_s1_as_p1 np
+  | Pred _ -> false
   | Type _ -> false
   | Rel _ -> false
   | Hier _ -> false
@@ -279,6 +301,7 @@ and is_unconstrained_elt_s2 = function
 
 let rec is_unconstrained_ctx_s1 = function
   | IsX _ -> false
+  | CConsX1 _ -> false
   | RelX _ -> false
   | TripleX1 _ -> false
   | TripleX2 _ -> false
@@ -318,6 +341,7 @@ let is_unconstrained_focus_p1 f ctx =
     
 let rec hierarchy_of_ctx_s1 = function
   | IsX _ -> None
+  | CConsX1 _ -> None
   | RelX _ -> None
   | TripleX1 _ -> None
   | TripleX2 _ -> None
@@ -344,6 +368,9 @@ let id_of_s1 = function
   | Det (_,det,_) -> id_of_s2 det
   | AnAggreg (_,id,_,_,_,_) -> Some id
   | _ -> None
+let id_of_sn = function
+  | CCons (_,_,np,_) -> id_of_s1 np
+  | _ -> None
 let id_of_aggreg = function
   | ForEachResult _ -> None
   | ForEach (_,id,_,_,_) -> Some id
@@ -365,6 +392,7 @@ let inverse_orientation = function
   | Fwd -> Bwd
   | Bwd -> Fwd
 
+(* deprecated
 let rec property_range_of_focus = function
   | AtS1 (np,ctx) -> property_range_of_ctx_s1 ctx
   | AtP1 (f,ctx) -> property_range_of_ctx_p1 ctx
@@ -383,7 +411,16 @@ and property_range_of_ctx_p1 = function
   | MaybeX ctx
   | NotX ctx -> property_range_of_ctx_p1 ctx
   | _ -> None
-
+ *)
+	     
+let at_sn cp ctx =
+  match cp, ctx with
+  | CAnd (_,l), CAndX (ll_rr,ctx2) ->
+     AtSn (CAnd ((), list_of_list_ctx l ll_rr), ctx2)
+  | COr (_,l), COrX (ll_rr,ctx2) ->
+     AtSn (COr ((), list_of_list_ctx l ll_rr), ctx2)
+  | _ -> AtSn (cp, ctx)
+	       
 let at_s1 np ctx =
   match np, ctx with
   | NAnd (_,l), NAndX (ll_rr,ctx2) ->
@@ -412,6 +449,7 @@ let latlong_of_property_uri (uri : Rdf.uri) : latlong option =
 
 let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Is (a,np) -> a
+  | Pred (a,arg,pred,cp) -> a
   | Type (a,c) -> a
   | Rel (a,p,modif,np) -> a
   | Hier (a,id,p,ori,inv,np) -> a
@@ -429,6 +467,13 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
 and annot_p1_opt : 'a elt_p1 option -> 'a option = function
   | None -> None
   | Some f -> Some (annot_p1 f)
+and annot_sn = function
+  | CNil a -> a
+  | CCons (a,arg,np,cp) -> a
+  | CAnd (a,lr) -> a
+  | COr (a,lr) -> a
+  | CNot (a,cp) -> a
+  | CMaybe (a,cp) -> a
 and annot_s1 = function
   | Det (a,det,rel_opt) -> a
   | AnAggreg (a,id,modif,g,rel_opt,np) -> a
@@ -476,8 +521,16 @@ let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
   | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe ((),f)) ctx
   | NotX ctx -> elt_s_of_ctx_p1 (Not ((),f)) ctx
   | InX (npg,ctx) -> elt_s_of_ctx_p1 (In ((),npg,f)) ctx
+and elt_s_of_ctx_sn (f : unit elt_sn) = function
+  | PredX (arg,pred,ctx) -> elt_s_of_ctx_p1 (Pred ((),arg,pred,f)) ctx
+  | CConsX2 (arg,np,ctx) -> elt_s_of_ctx_sn (CCons ((),arg,np,f)) ctx
+  | CAndX (ll_rr,ctx) -> elt_s_of_ctx_sn (CAnd ((),list_of_ctx f ll_rr)) ctx
+  | COrX (ll_rr,ctx) -> elt_s_of_ctx_sn (COr ((),list_of_ctx f ll_rr)) ctx
+  | CMaybeX ctx -> elt_s_of_ctx_sn (CMaybe ((),f)) ctx
+  | CNotX ctx -> elt_s_of_ctx_sn (CNot ((),f)) ctx
 and elt_s_of_ctx_s1 (f : unit elt_s1) = function
   | IsX ctx -> elt_s_of_ctx_p1 (Is ((),f)) ctx
+  | CConsX1 (arg,cp,ctx) -> elt_s_of_ctx_sn (CCons ((),arg,f,cp)) ctx
   | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel ((),p,modif,f)) ctx
   | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,f,np)) ctx
   | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,np,f)) ctx
@@ -503,6 +556,7 @@ and elt_s_of_ctx_s (f : unit elt_s) = function
 
 let elt_s_of_focus = function
   | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
+  | AtSn (f,ctx) -> elt_s_of_ctx_sn f ctx
   | AtS1 (f,ctx) -> elt_s_of_ctx_s1 f ctx
   | AtAggreg (f,ctx) -> elt_s_of_ctx_aggreg f ctx
   | AtExpr (f,ctx) -> elt_s_of_ctx_expr f ctx
@@ -516,6 +570,7 @@ let move_alt move1 move2 = fun focus -> match move1 focus with None -> move2 foc
     
 let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
   | Is (_,np) -> Some (AtS1 (np, IsX ctx))
+  | Pred (_,arg,pred,cp) -> Some (AtSn (cp, PredX (arg,pred,ctx)))
   | Type _ -> None
   | Rel (_,p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
   | Hier (_, id,p,ori,inv,np) -> Some (AtS1 (np, HierX (id,p,ori,inv,ctx)))
@@ -536,6 +591,15 @@ let down_p1_opt (ctx : ctx_p1) : unit elt_p1 option -> focus option = function
   | Some (And (_,x::rr)) -> Some (AtP1 (x, AndX (([],rr), ctx)))
   | Some rel -> Some (AtP1 (rel, ctx))
   | None -> None
+let down_sn (ctx : ctx_sn) : unit elt_sn -> focus option = function
+  | CNil _ -> None
+  | CCons (_,arg,np,cp) -> Some (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | CAnd (_,[]) -> None
+  | CAnd (_,x::rr) -> Some (AtSn (x, CAndX (([],rr),ctx)))
+  | COr (_,[]) -> None
+  | COr (_,x::rr) -> Some (AtSn (x, COrX (([],rr),ctx)))
+  | CMaybe (_,elt) -> Some (AtSn (elt, CMaybeX ctx))
+  | CNot (_,elt) -> Some (AtSn (elt, CNotX ctx))
 let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
   | Det (_, det, rel_opt) -> down_p1_opt (DetThatX (det, ctx)) rel_opt
   | AnAggreg (_, id, modif, g, Some rel, np) -> down_p1_opt (AnAggregThatX (id,modif,g,np,ctx)) (Some rel)
@@ -569,6 +633,7 @@ let down_s (ctx : ctx_s) : unit elt_s -> focus option = function
   | Seq (_,x::rr) -> Some (AtS (x, SeqX (([],rr),ctx)))
 let down_focus = function
   | AtP1 (f,ctx) -> down_p1 ctx f
+  | AtSn (f,ctx) -> down_sn ctx f
   | AtS1 (f,ctx) -> down_s1 ctx f
   | AtAggreg (f,ctx) -> down_aggreg ctx f
   | AtExpr (f,ctx) -> down_expr ctx f
@@ -585,8 +650,16 @@ let rec up_p1 f = function
   | MaybeX ctx -> Some (AtP1 (Maybe ((), f), ctx))
   | NotX ctx -> Some (AtP1 (Not ((), f), ctx))
   | InX (npg,ctx) -> Some (AtP1 (In ((), npg, f), ctx))
+let rec up_sn f = function
+  | PredX (arg,pred,ctx) -> Some (AtP1 (Pred ((),arg,pred,f), ctx))
+  | CConsX2 (arg,np,ctx) -> Some (AtSn (CCons ((),arg,np,f), ctx))
+  | CAndX (ll_rr,ctx) -> up_sn (CAnd ((), list_of_ctx f ll_rr)) ctx
+  | COrX (ll_rr,ctx) -> Some (AtSn (COr ((), list_of_ctx f ll_rr), ctx))
+  | CMaybeX ctx -> Some (AtSn (CMaybe ((),f), ctx))
+  | CNotX ctx -> Some (AtSn (CNot ((),f), ctx))
 let rec up_s1 f = function
   | IsX ctx -> Some (AtP1 (Is ((), f), ctx))
+  | CConsX1 (arg,cp,ctx) -> Some (AtSn (CCons ((),arg,f,cp), ctx))
   | RelX (p,m,ctx) -> Some (AtP1 (Rel ((),p,m,f), ctx))
   | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
@@ -611,6 +684,7 @@ let up_s f = function
   | SeqX (ll_rr,ctx) -> Some (AtS (Seq ((), list_of_ctx f ll_rr), ctx))
 let up_focus = function
   | AtP1 (f,ctx) -> up_p1 f ctx
+  | AtSn (f,ctx) -> up_sn f ctx
   | AtS1 (f,ctx) -> up_s1 f ctx
   | AtAggreg (f,ctx) -> up_aggreg f ctx
   | AtExpr (f,ctx) -> up_expr f ctx
@@ -629,8 +703,18 @@ let right_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | MaybeX ctx -> None
   | NotX ctx -> None
   | InX (npg,ctx) -> None
+let right_sn (f : unit elt_sn) : ctx_sn -> focus option = function
+  | PredX _ -> None
+  | CConsX2 _ -> None
+  | CAndX ((ll,[]),ctx) -> None
+  | CAndX ((ll,x::rr),ctx) -> Some (AtSn (x, CAndX ((f::ll,rr),ctx)))
+  | COrX ((ll,[]),ctx) -> None
+  | COrX ((ll,x::rr),ctx) -> Some (AtSn (x, COrX ((f::ll,rr),ctx)))
+  | CMaybeX ctx -> None
+  | CNotX ctx -> None
 let right_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
+  | CConsX1 (arg,cp,ctx) -> Some (AtSn (cp, CConsX2 (arg,f,ctx)))
   | RelX _ -> None
   | TripleX1 (arg,np,ctx) -> Some (AtS1 (np, TripleX2 (arg,f,ctx)))
   | TripleX2 _ -> None
@@ -662,6 +746,7 @@ let right_s (f : unit elt_s) : ctx_s -> focus option = function
   | SeqX ((ll,x::rr),ctx) -> Some (AtS (x, SeqX ((f::ll,rr),ctx)))
 let right_focus = function
   | AtP1 (f,ctx) -> right_p1 f ctx
+  | AtSn (f,ctx) -> right_sn f ctx
   | AtS1 (f,ctx) -> right_s1 f ctx
   | AtAggreg (f,ctx) -> right_aggreg f ctx
   | AtExpr (f,ctx) -> right_expr f ctx
@@ -680,8 +765,18 @@ let left_p1 (f : unit elt_p1) : ctx_p1 -> focus option = function
   | MaybeX ctx -> None
   | NotX ctx -> None
   | InX (npg,ctx) -> Some (AtS1 (npg, InGraphX (f,ctx)))
+let left_sn (f : unit elt_sn) : ctx_sn -> focus option = function
+  | PredX _ -> None
+  | CConsX2 (arg,np,ctx) -> Some (AtS1 (np, CConsX1 (arg,f,ctx)))
+  | CAndX (([],rr),ctx) -> None
+  | CAndX ((x::ll,rr),ctx) -> Some (AtSn (x, CAndX ((ll,f::rr),ctx)))
+  | COrX (([],rr),ctx) -> None
+  | COrX ((x::ll,rr),ctx) -> Some (AtSn (x, COrX ((ll,f::rr),ctx)))
+  | CMaybeX ctx -> None
+  | CNotX ctx -> None
 let left_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | IsX _ -> None
+  | CConsX1 _ -> None
   | RelX _ -> None
   | TripleX1 _ -> None
   | TripleX2 (arg,np,ctx) -> Some (AtS1 (np, TripleX1 (arg,f,ctx)))
@@ -713,6 +808,7 @@ let left_s (f : unit elt_s) : ctx_s -> focus option = function
   | SeqX ((x::ll,rr),ctx) -> Some (AtS (x, SeqX ((ll,f::rr),ctx)))
 let left_focus = function
   | AtP1 (f,ctx) -> left_p1 f ctx
+  | AtSn (f,ctx) -> left_sn f ctx
   | AtS1 (f,ctx) -> left_s1 f ctx
   | AtAggreg (f,ctx) -> left_aggreg f ctx
   | AtExpr (f,ctx) -> left_expr f ctx
@@ -747,6 +843,7 @@ let rec next_undef_focus focus =
   | _ -> Some focus
 
 let focus_up_at_root_s1 = function
+  | AtS1 (f, CConsX1 (arg2,cp, PredX (arg1,pred,ctx))) -> Some (AtP1 (Pred ((),arg1,pred,CCons ((),arg2,f,cp)), ctx)) (* TODO: generalize *)
   | AtS1 (f, RelX (p, m, ctx)) -> Some (AtP1 (Rel ((),p,m,f), ctx))
   | AtS1 (f, TripleX1 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
   | AtS1 (f, TripleX2 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
@@ -771,6 +868,7 @@ let rec focus_opt_moves (steps : (focus -> focus option) list) (foc_opt : focus 
 let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
   match f with
   | Is (a,np) -> Is (a, copy_s1 np)
+  | Pred (a,arg,pred,cp) -> Pred (a, arg, pred, copy_sn cp)
   | Type (a,uri) -> Type (a,uri)
   | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
   | Hier (a,id,p,ori,inv,np) -> Hier (a, factory#new_id, p, ori, inv, copy_s1 np)
@@ -788,6 +886,14 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
 and copy_p1_opt = function
   | None -> None
   | Some f -> Some (copy_p1 f)
+and copy_sn (cp : unit elt_sn) : unit elt_sn =
+  match cp with
+  | CNil a -> CNil a
+  | CCons (a,arg,np,cp) -> CCons (a, arg, copy_s1 np, copy_sn cp)
+  | CAnd (a,lr) -> CAnd (a, List.map copy_sn lr)
+  | COr (a,lr) -> COr (a, List.map copy_sn lr)
+  | CMaybe (a,cp1) -> CMaybe (a, copy_sn cp1)
+  | CNot (a,cp1) -> CNot (a, copy_sn cp1)
 and copy_s1 (np : unit elt_s1) : unit elt_s1 =
   match np with
   | Det (a,det,rel_opt) -> Det (a, copy_s2 det, copy_p1_opt rel_opt)
