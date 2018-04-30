@@ -70,124 +70,124 @@ type ng_label =
   | `Hierarchy of bool * ng_label
   | `Nth of int * ng_label ]
     
-type ('a,'b) annotated = X of 'b | A of 'a * 'b
+type 'b annotated = X of 'b | A of annot * 'b
     
-type 'a s = ('a, 'a nl_s) annotated
-and 'a nl_s =
-  [ `Return of 'a np
-  | `ThereIs of 'a np
-  | `ThereIs_That of 'a np * 'a s
-  | `Truth of 'a np * 'a vp
-  | `PP of 'a pp * 'a s
-  | `Where of 'a np (* when expr np acts as a sentence *)
-  | `For of 'a np * 'a s
+type s = nl_s annotated
+and nl_s =
+  [ `Return of np
+  | `ThereIs of np
+  | `ThereIs_That of np * s
+  | `Truth of np * vp
+  | `PP of pp * s
+  | `Where of np (* when expr np acts as a sentence *)
+  | `For of np * s
   | `Nil
-  | `Seq of 'a s list
-  | `And of 'a s list
-  | `Or of 'a s list
-  | `Not of 'a s
-  | `Maybe of 'a s ]
-and 'a np = ('a, 'a nl_np) annotated
-and 'a nl_np =
+  | `Seq of s list
+  | `And of s list
+  | `Or of s list
+  | `Not of s
+  | `Maybe of s ]
+and np = nl_np annotated
+and nl_np =
   [ `Void
-  | `PN of word * 'a rel
+  | `PN of word * rel
   | `Label of ng_label * word option
-  | `Qu of qu * adj * 'a ng
+  | `Qu of qu * adj * ng
   | `QuOneOf of qu * word list
-  | `Expr of adj * Grammar.func_syntax * 'a np list * 'a rel
-  | `And of 'a np list
-  | `Or of 'a np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
-  | `Choice of adj * 'a np list * 'a rel
-  | `Maybe of 'a np (* (* the bool indicates whether negation is suspended *) *)
-  | `Not of 'a np ] (* (* the bool indicates whether negation is suspended *) *)
-and 'a ng = ('a, 'a nl_ng) annotated
-and 'a nl_ng =
-  [ `That of word * 'a rel
-  | `LabelThat of ng_label * 'a rel
-  | `OfThat of word * 'a np * 'a rel
-  | `Aggreg of bool * 'a ng_aggreg * 'a ng ] (* the bool indicates suspension *)
+  | `Expr of adj * Grammar.func_syntax * np list * rel
+  | `And of np list
+  | `Or of np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
+  | `Choice of adj * np list * rel
+  | `Maybe of np (* (* the bool indicates whether negation is suspended *) *)
+  | `Not of np ] (* (* the bool indicates whether negation is suspended *) *)
+and ng = nl_ng annotated
+and nl_ng =
+  [ `That of word * rel
+  | `LabelThat of ng_label * rel
+  | `OfThat of word * np * rel
+  | `Aggreg of bool * ng_aggreg * ng ] (* the bool indicates suspension *)
 and qu = [ `A | `Any of bool | `The | `Every | `Each | `All | `One | `No of bool ]
 and adj =
   [ `Nil
   | `Order of word
   | `Optional of bool * adj
   | `Adj of adj * word ]
-and 'a ng_aggreg =
-  [ `AdjThat of word * 'a rel
-  | `NounThatOf of word * 'a rel ]
-and 'a rel = ('a, 'a nl_rel) annotated
-and 'a nl_rel =
+and ng_aggreg =
+  [ `AdjThat of word * rel
+  | `NounThatOf of word * rel ]
+and rel = nl_rel annotated
+and nl_rel =
   [ `Nil
-  | `That of 'a vp
-  | `ThatS of 'a s
-  | `Whose of 'a ng * 'a vp
-  (*  | `Of of 'a np *)
-  | `PP of 'a pp list
-  | `Ing of word * 'a np
-  | `InWhich of 'a s
-  | `And of 'a rel list
-  | `Or of 'a rel list
-  | `Maybe of 'a rel
-  | `Not of 'a rel
-  | `In of 'a np * 'a rel
+  | `That of vp
+  | `ThatS of s
+  | `Whose of ng * vp
+  (*  | `Of of np *)
+  | `PP of pp list
+  | `Ing of word * np
+  | `InWhich of s
+  | `And of rel list
+  | `Or of rel list
+  | `Maybe of rel
+  | `Not of rel
+  | `In of np * rel
   | `Ellipsis ]
-and 'a vp = ('a, 'a nl_vp) annotated
-and 'a nl_vp =
-  [ `IsNP of 'a np * 'a pp list
-  | `IsPP of 'a pp
-  | `IsCP of 'a cp
-  | `IsTheNounCP of word * 'a cp
-  | `IsAdjCP of word * 'a cp
-  | `IsInWhich of 'a s
-  | `HasProp of word * 'a np * 'a pp list
-  | `HasPropCP of word * 'a cp
-  | `Has of 'a np * 'a pp list
-  | `VT of word * 'a np * 'a pp list
-  | `VT_CP of word * 'a cp
-  | `Subject of 'a np * 'a vp (* np is the subject of vp *)
-  | `And of 'a vp list
-  | `Or of 'a vp list (* the optional int indicates that the disjunction is in the context of the i-th element *)
-  | `Maybe of 'a vp (* the bool indicates whether negation is suspended *)
-  | `Not of 'a vp (* the bool indicates whether negation is suspended *)
-  | `In of 'a np * 'a vp
+and vp = nl_vp annotated
+and nl_vp =
+  [ `IsNP of np * pp list
+  | `IsPP of pp
+  | `IsCP of cp
+  | `IsTheNounCP of word * cp
+  | `IsAdjCP of word * cp
+  | `IsInWhich of s
+  | `HasProp of word * np * pp list
+  | `HasPropCP of word * cp
+  | `Has of np * pp list
+  | `VT of word * np * pp list
+  | `VT_CP of word * cp
+  | `Subject of np * vp (* np is the subject of vp *)
+  | `And of vp list
+  | `Or of vp list (* the optional int indicates that the disjunction is in the context of the i-th element *)
+  | `Maybe of vp (* the bool indicates whether negation is suspended *)
+  | `Not of vp (* the bool indicates whether negation is suspended *)
+  | `In of np * vp
   | `Ellipsis ]
-and 'a cp = ('a, 'a nl_cp) annotated
-and 'a nl_cp =
+and cp = nl_cp annotated
+and nl_cp =
   [ `Nil
-  | `Cons of 'a pp * 'a cp
-  | `And of 'a cp list
-  | `Or of 'a cp list
-  | `Not of 'a cp
-  | `Maybe of 'a cp ]
-and 'a pp =
-  [ `Bare of 'a np
-  | `Prep of word * 'a np
-  | `PrepBin of word * 'a np * word * 'a np ]
+  | `Cons of pp * cp
+  | `And of cp list
+  | `Or of cp list
+  | `Not of cp
+  | `Maybe of cp ]
+and pp =
+  [ `Bare of np
+  | `Prep of word * np
+  | `PrepBin of word * np * word * np ]
 
 let top_adj : adj = `Nil
-let top_rel : 'a rel = X `Nil
-let top_np : 'a np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
-let top_expr : 'a np = X (`PN (`Undefined, top_rel))
-let top_s : 'a s = X (`Return top_np)
+let top_rel : rel = X `Nil
+let top_np : np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
+let top_expr : np = X (`PN (`Undefined, top_rel))
+let top_s : s = X (`Return top_np)
 
 let dummy_word : word = `DummyFocus
-let dummy_ng : 'a ng = X (`That (`DummyFocus, top_rel))
-let dummy_np : 'a np = X (`PN (`DummyFocus, top_rel))
-let undefined_np : 'a np = X (`PN (`Undefined, top_rel))
+let dummy_ng : ng = X (`That (`DummyFocus, top_rel))
+let dummy_np : np = X (`PN (`DummyFocus, top_rel))
+let undefined_np : np = X (`PN (`Undefined, top_rel))
 
-let np_of_word w : 'a np = X (`PN (w, top_rel))
-let np_of_literal l : 'a np = np_of_word (`Literal l)
+let np_of_word w : np = X (`PN (w, top_rel))
+let np_of_literal l : np = np_of_word (`Literal l)
 
 let nl_and = function
   | [] -> assert false
   | [x] -> x
   | l -> X (`And l)
 
-let nl_is : 'a np -> 'a nl_vp = fun np -> `IsNP (np, [])
+let nl_is : np -> nl_vp = fun np -> `IsNP (np, [])
 let is np = X (nl_is np)
-let nl_something : 'a rel -> 'a nl_np = fun rel -> `Qu (`A, `Nil, X (`That (`Thing, rel)))
+let nl_something : rel -> nl_np = fun rel -> `Qu (`A, `Nil, X (`That (`Thing, rel)))
 let something rel = X (nl_something rel)
-let nl_that : 'a vp -> 'a nl_rel = fun vp -> `That vp
+let nl_that : vp -> nl_rel = fun vp -> `That vp
 let that vp = X (nl_that vp)
 	   
 (* verbalization of terms, classes, properties *)
@@ -618,7 +618,7 @@ let id_labelling_of_s_annot grammar s_annot : id_labelling =
       
 (* verbalization of focus *)
 
-let rec head_of_modif grammar annot_opt nn rel (modif : modif_s2) : annot np =
+let rec head_of_modif grammar annot_opt nn rel (modif : modif_s2) : np =
   let qu, adj =
     match modif with
       | Select, order -> qu_adj_of_order grammar `A order
@@ -641,10 +641,10 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
   | Highest _ -> `The, `Order (`Op grammar#order_highest)
   | Lowest _ -> `The, `Order (`Op grammar#order_lowest)
 
-let ng_of_id ~id_labelling id : annot ng =
+let ng_of_id ~id_labelling id : ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
-let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : annot rel) (ng : annot ng) =
+let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
   let qu_aggreg, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
   let ng_aggreg =
@@ -669,40 +669,40 @@ let syntax_of_func grammar (func : func)
   | _ -> failwith "TODO"
 *)
     
-let np_of_apply grammar annot_opt adj func (np_args : annot np list) (rel : annot rel) : annot np =
+let np_of_apply grammar annot_opt adj func (np_args : np list) (rel : rel) : np =
   let nl = `Expr (adj, grammar#func_syntax func, np_args, rel) in
   match annot_opt with
   | None -> X nl
   | Some annot -> A (annot, nl)
 
 
-type 'a make_arg_cp = arg -> 'a np -> 'a pp
- and 'a make_arg_s = arg -> 'a np -> 'a type_arg_s
- and 'a type_arg_s =
-   [ `CP of ('a cp -> 'a nl_s) * 'a make_arg_cp
-   | `S of ('a s -> 'a nl_s) * 'a make_arg_s ]
-type 'a type_arg_vp =
-   [ `CP of ('a cp -> 'a nl_vp) * 'a make_arg_cp
-   | `S of ('a s -> 'a nl_vp) * 'a make_arg_s ]
+type make_arg_cp = arg -> np -> pp
+ and make_arg_s = arg -> np -> type_arg_s
+ and type_arg_s =
+   [ `CP of (cp -> nl_s) * make_arg_cp
+   | `S of (s -> nl_s) * make_arg_s ]
+type type_arg_vp =
+   [ `CP of (cp -> nl_vp) * make_arg_cp
+   | `S of (s -> nl_vp) * make_arg_s ]
 
-let default_make_arg_cp grammar : 'a make_arg_cp =
+let default_make_arg_cp grammar : make_arg_cp =
   fun arg np ->
   match arg with
   | O -> `Bare np
   | S -> `Prep (`Op grammar#of_, np)
   | _ -> raise TODO
 
-let make_arg_pred grammar (arg : arg) (pred : pred) : 'a type_arg_vp =
+let make_arg_pred grammar (arg : arg) (pred : pred) : type_arg_vp =
   let word, synt = word_syntagm_of_pred grammar pred in
   match synt with
   | `Noun ->
      let make_arg_cp = default_make_arg_cp grammar in
      ( match arg with
        | S ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `HasPropCP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `HasPropCP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | O ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `IsTheNounCP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `IsTheNounCP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | _ -> raise TODO )
   | `InvNoun ->
@@ -711,24 +711,24 @@ let make_arg_pred grammar (arg : arg) (pred : pred) : 'a type_arg_vp =
        default_make_arg_cp grammar inv_arg np in
      ( match arg with
        | O ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `HasPropCP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `HasPropCP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | S ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `IsTheNounCP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `IsTheNounCP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | _ -> raise TODO )
   | `TransVerb ->
      let make_arg_cp = default_make_arg_cp grammar in
      ( match arg with
        | S ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `VT_CP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `VT_CP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | O ->
-	  let make_vp : 'a s -> 'a nl_vp = fun s -> nl_is (something (X (`ThatS s))) in
-	  let rec make_arg_s arg np : 'a type_arg_s =
+	  let make_vp : s -> nl_vp = fun s -> nl_is (something (X (`ThatS s))) in
+	  let rec make_arg_s arg np : type_arg_s =
 	    match arg with
 	    | S ->
-	       let make_s : 'a cp -> 'a nl_s = fun cp -> `Truth (np, X (`VT_CP (word, cp))) in
+	       let make_s : cp -> nl_s = fun cp -> `Truth (np, X (`VT_CP (word, cp))) in
 	       `CP (make_s, default_make_arg_cp grammar)
 	    | _ -> raise TODO in
 	  `S (make_vp, make_arg_s)
@@ -737,21 +737,21 @@ let make_arg_pred grammar (arg : arg) (pred : pred) : 'a type_arg_vp =
      let make_arg_cp = default_make_arg_cp grammar in
      ( match arg with
        | S ->
-	  let make_vp : 'a cp -> 'a nl_vp = fun cp -> `IsAdjCP (word, cp) in
+	  let make_vp : cp -> nl_vp = fun cp -> `IsAdjCP (word, cp) in
 	  `CP (make_vp, make_arg_cp)
        | O ->
-	  let make_vp : 'a s -> 'a nl_vp = fun s -> nl_is (something (X (`ThatS s))) in
+	  let make_vp : s -> nl_vp = fun s -> nl_is (something (X (`ThatS s))) in
 	  let rec make_arg_s arg np =
 	    match arg with
 	    | S ->
-	       let make_s : 'a cp -> 'a nl_s = fun cp -> `Truth (np, X (`IsAdjCP (word, cp))) in
+	       let make_s : cp -> nl_s = fun cp -> `Truth (np, X (`IsAdjCP (word, cp))) in
 	       `CP (make_s, default_make_arg_cp grammar)
 	    | _ -> raise TODO in
 	  `S (make_vp, make_arg_s)
        | _ -> raise TODO )
 
 		       
-let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> annot vp = function
+let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
   | IsThere annot -> A (annot, `Ellipsis)
   | Is (annot,np) -> A (annot, `IsNP (np_of_elt_s1 grammar ~id_labelling np, []))
   | Pred (annot,arg,pred,cp) ->
@@ -817,7 +817,7 @@ and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
   | Some (InWhichThereIs (annot,np)) -> A (annot, `InWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
   | Some rel -> X (`That (vp_of_elt_p1 grammar ~id_labelling rel))
-and cp_of_elt_sn grammar ~id_labelling ~(make_arg_cp : annot make_arg_cp) : annot elt_sn -> annot cp = function
+and cp_of_elt_sn grammar ~id_labelling ~(make_arg_cp : make_arg_cp) : annot elt_sn -> cp = function
   | CNil annot -> A (annot, `Nil)
   | CCons (annot, arg, np, cp) ->
      let np = np_of_elt_s1 grammar ~id_labelling np in
@@ -828,7 +828,7 @@ and cp_of_elt_sn grammar ~id_labelling ~(make_arg_cp : annot make_arg_cp) : anno
   | COr (annot,lr) -> A (annot, `Or (List.map (cp_of_elt_sn grammar ~id_labelling ~make_arg_cp) lr))
   | CMaybe (annot,x) -> A (annot, `Maybe (cp_of_elt_sn grammar ~id_labelling ~make_arg_cp x))
   | CNot (annot,x) -> A (annot, `Not (cp_of_elt_sn grammar ~id_labelling ~make_arg_cp x))
-and s_of_elt_sn grammar ~id_labelling ~(make_arg_s : annot make_arg_s) : annot elt_sn -> annot s = function
+and s_of_elt_sn grammar ~id_labelling ~(make_arg_s : make_arg_s) : annot elt_sn -> s = function
   | CNil annot -> A (annot, `Nil)
   | CCons (annot, arg, np, cp) ->
      let np = np_of_elt_s1 grammar ~id_labelling np in
@@ -843,7 +843,7 @@ and s_of_elt_sn grammar ~id_labelling ~(make_arg_s : annot make_arg_s) : annot e
   | COr (annot,lr) -> A (annot, `Or (List.map (s_of_elt_sn grammar ~id_labelling ~make_arg_s) lr))
   | CMaybe (annot,x) -> A (annot, `Maybe (s_of_elt_sn grammar ~id_labelling ~make_arg_s x))
   | CNot (annot,x) -> A (annot, `Not (s_of_elt_sn grammar ~id_labelling ~make_arg_s x))
-and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
+and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
   | Det (annot, det, rel_opt) ->
     let nl_rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     det_of_elt_s2 grammar ~id_labelling annot nl_rel det
@@ -856,7 +856,7 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot np = function
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
   | NNot (annot,x) -> A (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
-and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
+and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> ng = function
   | Det (annot, An (id,modif,head), rel_opt) ->
      A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
@@ -869,7 +869,7 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> annot ng = function
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
     A (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
-and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> annot np = function
+and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> np = function
   | Term t -> A (annot, `PN (word_of_term t, rel))
   | An (id, modif, head) -> head_of_modif grammar (Some annot) (word_of_elt_head head) rel modif
   | The id -> A (annot, `Qu (`The, `Nil, X (`LabelThat (id_labelling#get_id_label id, rel))))
@@ -877,7 +877,7 @@ and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> annot np = functio
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
-and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = function
+and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> np = function
   | ForEachResult annot ->
     A (annot, `Qu (`Each, `Nil, X (`That (`Op grammar#result, X `Nil))))
   | ForEach (annot,id,modif,rel_opt,id2) ->
@@ -889,7 +889,7 @@ and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> annot np = func
     np_of_aggreg grammar (Some annot) `The modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_id ~id_labelling id2)
-and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = function
+and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> np = function
   | Undef annot -> A (annot, `PN (`Undefined, rel))
   | Const (annot,t) -> A (annot, `PN (word_of_term t, rel))
   | Var (annot,id) ->
@@ -905,9 +905,9 @@ and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> annot np = 
   | Choice (annot,le) ->
     let lnp = List.map (fun expr -> np_of_elt_expr grammar ~id_labelling top_adj top_rel expr) le in
     A (annot, `Choice (adj, lnp, rel))
-and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> annot nl_s = function
+and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> nl_s = function
   | expr -> `Where (np_of_elt_expr grammar ~id_labelling top_adj top_rel expr)
-and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
+and s_of_elt_s grammar ~id_labelling : annot elt_s -> s = function
   | Return (annot,np) ->
     A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
   | SAggreg (annot,dims_aggregs) ->
@@ -941,14 +941,14 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> annot s = function
 
 class transf =
 object
-  method s : annot s -> annot s = fun s -> s
-  method np : annot np -> annot np = fun np -> np
-  method ng : annot ng -> annot ng = fun ng -> ng
+  method s : s -> s = fun s -> s
+  method np : np -> np = fun np -> np
+  method ng : ng -> ng = fun ng -> ng
   method adj : adj -> adj = fun adj -> adj
-  method ng_aggreg : annot ng_aggreg -> annot ng_aggreg = fun ngg -> ngg
-  method rel : annot rel -> annot rel = fun rel -> rel
-  method vp : annot vp -> annot vp = fun vp -> vp
-  method pp : annot pp -> annot pp = fun pp -> pp
+  method ng_aggreg : ng_aggreg -> ng_aggreg = fun ngg -> ngg
+  method rel : rel -> rel = fun rel -> rel
+  method vp : vp -> vp = fun vp -> vp
+  method pp : pp -> pp = fun pp -> pp
 end
 
 (* top-down recursive transformation using [transf] like a visitor *)
@@ -1214,7 +1214,7 @@ let xml_annotated x_annot f =
   | X x -> f None x
   | A (annot,x) -> xml_focus annot (f (Some annot) x)
 
-let rec xml_s grammar ~id_labelling (s : annot s) =
+let rec xml_s grammar ~id_labelling (s : s) =
   xml_annotated s
     ( fun annot_opt -> function
     | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
