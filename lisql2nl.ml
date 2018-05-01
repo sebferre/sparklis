@@ -81,7 +81,6 @@ and nl_s =
   | `PP of pp * s
   | `Where of np (* when expr np acts as a sentence *)
   | `For of np * s
-  | `Nil
   | `Seq of s list
   | `And of s list
   | `Or of s list
@@ -135,7 +134,6 @@ and vp = nl_vp annotated
 and nl_vp =
   [ `IsNP of np * pp list
   | `IsPP of pp
-  | `IsCP of cp
   | `IsTheNounCP of word * cp
   | `IsAdjCP of word * cp
   | `IsInWhich of s
@@ -189,6 +187,8 @@ let nl_something : rel -> nl_np = fun rel -> `Qu (`A, `Nil, X (`That (`Thing, re
 let something rel = X (nl_something rel)
 let nl_that : vp -> nl_rel = fun vp -> `That vp
 let that vp = X (nl_that vp)
+let nl_there_is : np -> nl_s = fun np -> `ThereIs np
+let there_is np = X (nl_there_is np)
 	   
 (* verbalization of terms, classes, properties *)
 
@@ -202,7 +202,13 @@ let word_syntagm_of_pred grammar (pred : pred) =
   match pred with
   | Class c -> word_of_class c, `Noun
   | Prop p -> word_syntagm_of_property grammar p
-		       
+
+let word_of_arg grammar (arg : arg) =
+  match arg with (* TODO: make it multilingual *)
+  | S -> `Op "subject"
+  | P -> `Op "predicate"
+  | O -> `Op "object"
+				       
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt))
@@ -272,6 +278,8 @@ let word_of_incr grammar = function
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
+  | IncrPred (arg,pred) -> fst (word_syntagm_of_pred grammar pred)
+  | IncrArg arg -> word_of_arg grammar arg
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p)
   | IncrLatLong _ -> `Op grammar#geolocation
@@ -829,7 +837,7 @@ and cp_of_elt_sn grammar ~id_labelling ~(make_arg_cp : make_arg_cp) : annot elt_
   | CMaybe (annot,x) -> A (annot, `Maybe (cp_of_elt_sn grammar ~id_labelling ~make_arg_cp x))
   | CNot (annot,x) -> A (annot, `Not (cp_of_elt_sn grammar ~id_labelling ~make_arg_cp x))
 and s_of_elt_sn grammar ~id_labelling ~(make_arg_s : make_arg_s) : annot elt_sn -> s = function
-  | CNil annot -> A (annot, `Nil)
+  | CNil annot -> A (annot, `ThereIs (something top_rel))
   | CCons (annot, arg, np, cp) ->
      let np = np_of_elt_s1 grammar ~id_labelling np in
      ( match make_arg_s arg np with
@@ -948,6 +956,7 @@ object
   method ng_aggreg : ng_aggreg -> ng_aggreg = fun ngg -> ngg
   method rel : rel -> rel = fun rel -> rel
   method vp : vp -> vp = fun vp -> vp
+  method cp : cp -> cp = fun cp -> cp
   method pp : pp -> pp = fun pp -> pp
 end
 
@@ -963,10 +972,16 @@ let rec map_s (transf : transf) s =
     ( function
     | `Return np -> `Return (map_np transf np)
     | `ThereIs np -> `ThereIs (map_np transf np)
+    | `ThereIs_That (np,s) -> `ThereIs_That (map_np transf np, map_s transf s)
     | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
+    | `PP (pp,s) -> `PP (map_pp transf pp, map_s transf s)
     | `Where np -> `Where (map_np transf np)
     | `For (np,s) -> `For (map_np transf np, map_s transf s)
-    | `Seq lr -> `Seq (List.map (map_s transf) lr) )
+    | `Seq lr -> `Seq (List.map (map_s transf) lr)
+    | `And lr -> `And (List.map (map_s transf) lr)
+    | `Or lr -> `Or (List.map (map_s transf) lr)
+    | `Maybe rel -> `Maybe (map_s transf s)
+    | `Not rel -> `Not (map_s transf s) )
 and map_np transf np =
   map_annotated (transf#np np)
     ( function
@@ -1003,6 +1018,7 @@ and map_rel transf rel =
     ( function
     | `Nil -> `Nil
     | `That vp -> `That (map_vp transf vp)
+    | `ThatS s -> `ThatS (map_s transf s)
     | `Whose (ng,vp) -> `Whose (map_ng transf ng, map_vp transf vp)
     (*    | `Of np -> `Of (map_np transf np) *)
     | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
@@ -1019,10 +1035,14 @@ and map_vp transf vp =
     ( function
     | `IsNP (np,lpp) -> `IsNP (map_np transf np, List.map (map_pp transf) lpp)
     | `IsPP pp -> `IsPP (map_pp transf pp)
+    | `IsTheNounCP (w,cp) -> `IsTheNounCP (w, map_cp transf cp)
+    | `IsAdjCP (w,cp) -> `IsAdjCP (w,map_cp transf cp)
     | `IsInWhich s -> `IsInWhich (map_s transf s)
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
+    | `HasPropCP (w,cp) -> `HasPropCP (w, map_cp transf cp)
     | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
     | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
+    | `VT_CP (w,cp) -> `VT_CP (w, map_cp transf cp)
     | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
     | `And lr -> `And (List.map (map_vp transf) lr)
     | `Or lr -> `Or (List.map (map_vp transf) lr)
@@ -1030,8 +1050,18 @@ and map_vp transf vp =
     | `Not vp -> `Not (map_vp transf vp)
     | `In (npg,vp) -> `In (map_np transf npg, map_vp transf vp)
     | `Ellipsis -> `Ellipsis )
+and map_cp transf cp =
+  map_annotated (transf#cp cp)
+    ( function
+    | `Nil -> `Nil
+    | `Cons (pp,cp) -> `Cons (map_pp transf pp, map_cp transf cp)
+    | `And lr -> `And (List.map (map_cp transf) lr)
+    | `Or lr -> `Or (List.map (map_cp transf) lr)
+    | `Maybe vp -> `Maybe (map_cp transf cp)
+    | `Not vp -> `Not (map_cp transf cp) )
 and map_pp transf pp =
   match transf#pp pp with
+    | `Bare np -> `Bare (map_np transf np)  
     | `Prep (w,np) -> `Prep (w, map_np transf np)
     | `PrepBin (w1,np1,w2,np2) -> `PrepBin (w1, map_np transf np1, w2, map_np transf np2)
 
@@ -1219,12 +1249,18 @@ let rec xml_s grammar ~id_labelling (s : s) =
     ( fun annot_opt -> function
     | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
     | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
+    | `ThereIs_That (np,s) -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np @ Kwd grammar#relative_that (* TODO: improve for French *) :: xml_s grammar ~id_labelling s
     | `Truth (np,vp) -> Kwd grammar#it_is_true_that :: xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+    | `PP (pp,s) -> xml_pp grammar ~id_labelling pp @ xml_s grammar ~id_labelling s
     | `Where np -> Kwd grammar#where :: xml_np grammar ~id_labelling np
     | `For (np,s) -> Kwd grammar#for_ :: xml_np grammar ~id_labelling np @ Coord ([], [xml_s grammar ~id_labelling s]) :: []    
       (* [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
 	 xml_s grammar ~id_labelling s])] *)
-    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr) )
+    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
+    | `And lr -> xml_and grammar (List.map (xml_s grammar ~id_labelling) lr)
+    | `Or lr -> xml_or grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
+    | `Maybe s -> xml_maybe grammar annot_opt (xml_s grammar ~id_labelling s)
+    | `Not s -> xml_not grammar annot_opt (xml_s grammar ~id_labelling s) )
 and xml_np grammar ~id_labelling np =
   xml_annotated np
     ( fun annot_opt -> function
@@ -1308,6 +1344,7 @@ and xml_rel grammar ~id_labelling = function
       (fun annot_opt -> function
       | `Nil -> []
       | `That vp -> Kwd grammar#relative_that :: xml_vp grammar ~id_labelling vp
+      | `ThatS s -> Kwd grammar#relative_that (* TODO: improved for French *) :: xml_s grammar ~id_labelling s
       | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
@@ -1327,10 +1364,14 @@ and xml_vp grammar ~id_labelling = function
       (fun annot_opt -> function
       | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `IsPP pp -> Kwd grammar#is :: xml_pp grammar ~id_labelling pp
+      | `IsTheNounCP (w,cp) -> Kwd grammar#is :: Kwd grammar#the :: Word w :: xml_cp grammar ~id_labelling cp
+      | `IsAdjCP (w,cp) -> Kwd grammar#is :: Word w :: xml_cp grammar ~id_labelling cp
       | `IsInWhich s -> Kwd grammar#is :: Kwd grammar#something :: xml_in_which grammar ~id_labelling s
       | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `HasPropCP (w,cp) -> Kwd grammar#has_as_a :: Word w :: xml_cp grammar ~id_labelling cp
       | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
       | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
       | `And lr -> xml_and grammar (List.map (xml_vp grammar ~id_labelling) lr)
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
@@ -1350,9 +1391,19 @@ and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_
     | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling (X vp))
+and xml_cp grammar ~id_labelling cp =
+  xml_annotated cp
+    (fun annot_opt -> function
+    | `Nil -> []
+    | `Cons (pp,cp) -> xml_pp grammar ~id_labelling pp @ xml_cp grammar ~id_labelling cp
+    | `And lr -> xml_and grammar (List.map (xml_cp grammar ~id_labelling) lr)
+    | `Or lr -> xml_or grammar annot_opt (List.map (xml_cp grammar ~id_labelling) lr)
+    | `Maybe cp -> xml_maybe grammar annot_opt (xml_cp grammar ~id_labelling cp)
+    | `Not cp -> xml_not grammar annot_opt (xml_cp grammar ~id_labelling cp) )
 and xml_pp_list grammar ~id_labelling lpp =
   List.concat (List.map (xml_pp grammar ~id_labelling) lpp)
 and xml_pp grammar ~id_labelling = function
+  | `Bare np -> xml_np grammar ~id_labelling np
   | `Prep (prep,np) -> Word prep :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
@@ -1422,6 +1473,19 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
       | _ ->
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )
+  | IncrPred (arg,pred) ->
+     let vp =
+       match make_arg_pred grammar arg pred with
+       | `CP (make_vp,_) -> X (make_vp (X `Nil))
+       | `S (make_vp,_) -> X (make_vp (there_is (something (X `Nil)))) in
+     xml_vp grammar ~id_labelling vp
+  | IncrArg arg -> (* TODO: make it multilingual (and better) *)
+     let s =
+       match arg with
+       | S -> "subject"
+       | P -> "predicate"
+       | O -> "object" in
+     Kwd "at" :: Word (`Op s) :: []
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with

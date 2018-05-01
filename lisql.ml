@@ -29,13 +29,16 @@ type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates wheth
 
 type id = int
 type arg = S | P | O
-type pred = Class of Rdf.uri | Prop of Rdf.uri
 type project = Unselect | Select
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 type modif_s2 = project * order
 type orientation = Fwd | Bwd
 type inverse = bool
 type modif_p2 = orientation
+type pred = (* E = Event, S = Subject, O = Object *)
+  | Class of Rdf.uri
+  | Prop of Rdf.uri
+(*  | SO of Rdf.uri * Rdf.uri (* properties: E -> S, E -> O *) *)
 type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
 type aggreg =
 | NumberOf | ListOf | Sample
@@ -938,6 +941,8 @@ type increment =
   | IncrAnything
   | IncrThatIs
   | IncrSomethingThatIs
+  | IncrPred of arg * pred
+  | IncrArg of arg
   | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
@@ -977,12 +982,19 @@ let term_of_input s = function
   | `IRI -> Rdf.URI s
   | typ -> Rdf.TypedLiteral (s, datatype_of_input_type typ)
 
-let term_of_increment : increment -> Rdf.term option = function
+let rec term_of_increment : increment -> Rdf.term option = function
   | IncrInput (s,dt) -> Some (term_of_input s dt)
   | IncrTerm t -> Some t
+  | IncrPred (arg,pred) -> term_of_pred pred
+  | IncrArg arg -> term_of_arg arg
   | IncrType c -> Some (Rdf.URI c)
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
+and term_of_pred : pred -> Rdf.term option = function
+  | Class c -> Some (Rdf.URI c)
+  | Prop p -> Some (Rdf.URI p)
+and term_of_arg : arg -> Rdf.term option = function
+  | S | P | O -> None
 
 let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   let lhp = Ontology.config_hierarchy_inheritance#value#info uri in
@@ -990,7 +1002,18 @@ let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   | [] -> None
   | hp::_ -> (* TODO: what about other properties ? *)
      Some (Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1))
-       
+
+let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
+  match arg, pred with
+  | S, Class c -> Pred ((), arg, pred, CNil ())
+  | _, Class c -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ()))
+  | S, Prop p -> Pred ((), S, pred, CCons ((), O, factory#top_s1, CNil ()))
+  | O, Prop p -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))
+  | _, Prop p ->
+     Pred ((), arg, pred,
+	   CCons ((), S, factory#top_s1,
+		  CCons ((), O, factory#top_s1, CNil ())))
+	  
 let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
   let default = Rel ((), p, m, factory#top_s1) in
   match m with
@@ -1002,6 +1025,7 @@ let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
   | Bwd -> default
   
 let elt_p1_of_increment : increment -> unit elt_p1 option = function
+  | IncrPred (arg,pred) -> Some (elt_p1_of_arg_pred arg pred)
   | IncrType c -> Some (Type ((), c))
   | IncrRel (p,m) -> Some (elt_p1_of_rel p m)
   | IncrLatLong ll -> Some (LatLong ((), ll, factory#new_id, factory#new_id))
@@ -1076,11 +1100,13 @@ let insert_elt_p1_in_rel_opt ctx elt = function
   | None -> Some (AtP1 (elt, ctx))
   | Some rel -> Some (append_and_p1 ctx elt rel)
     
-let insert_elt_p1 (elt : unit elt_p1) = function
+let rec insert_elt_p1 (elt : unit elt_p1) = function
   | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
      let elt_s1 = Det ((), factory#top_s2, Some elt) in
      down_focus (append_and_s1 (HierX (id,p,ori,inv,ctx)) elt_s1 np)
   | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | AtSn _ -> None
   | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
@@ -1171,6 +1197,19 @@ let insert_type c = function
 	insert_elt_p1 (Type ((),c)) (AtP1 (rel, DetThatX (det, ctx))) )
   | focus -> insert_elt_p1 (Type ((),c)) focus
 
+let insert_pred arg pred focus =
+  let foc_opt = insert_elt_p1 (elt_p1_of_arg_pred arg pred) focus in
+  focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
+
+let insert_arg arg = function
+  | AtP1 (Pred (_,arg0,pred,cp), ctx) ->
+     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, PredX (arg0, pred, ctx))))
+  | AtSn (cp,ctx) ->
+     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, ctx)))
+  | AtS1 (np, CConsX1 (arg0, cp, ctx)) ->
+     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, CConsX2 (arg0, np, ctx))))
+  | _ -> None
+		  
 let insert_rel p m focus =
   let foc_opt = insert_elt_p1 (elt_p1_of_rel p m) focus in
   focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
@@ -1561,6 +1600,8 @@ let insert_increment incr focus =
     | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus
+    | IncrPred (arg,pred) -> insert_pred arg pred focus
+    | IncrArg arg -> insert_arg arg focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
     | IncrLatLong ll -> insert_latlong ll focus
@@ -1626,6 +1667,28 @@ let rec delete_ctx_p1 = function
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
   | InX (npg,ctx) -> delete_ctx_p1 ctx
+and delete_ctx_sn f_opt ctx =
+  match ctx with
+  | PredX (arg,pred,ctx2) ->
+     ( match f_opt with
+       | None -> delete_ctx_p1 ctx2
+       | Some f -> Some (AtSn (factory#top_sn, ctx)) )
+  | CConsX2 (arg,np,ctx2) ->
+     ( match f_opt with
+       | None -> delete_ctx_sn None ctx2
+       | Some f -> Some (AtSn (CCons ((),arg,np,CNil ()), ctx2)) )
+  | CAndX (ll_rr,ctx2) ->
+     ( match delete_list ll_rr with
+       | `Empty -> delete_ctx_sn None ctx2
+       | `Single elt -> Some (AtSn (elt, ctx2))
+       | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))) )
+  | COrX (ll_rr,ctx2) ->
+     ( match delete_list ll_rr with
+       | `Empty -> delete_ctx_sn None ctx2
+       | `Single elt -> Some (AtSn (elt, ctx2))
+       | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))) )
+  | CMaybeX ctx2 -> delete_ctx_sn f_opt ctx2
+  | CNotX ctx2 -> delete_ctx_sn f_opt ctx2
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
@@ -1644,6 +1707,10 @@ and delete_ctx_s1 f_opt ctx =
 	 | None -> delete_ctx_p1 ctx2
 	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
+    | CConsX1 (arg,cp,ctx2) ->
+       ( match f_opt with
+	 | None -> Some (at_sn cp ctx2)
+	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | NAndX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
@@ -1698,6 +1765,7 @@ and delete_ctx_s f_opt ctx =
 
 let delete_focus = function
   | AtP1 (_, ctx) -> delete_ctx_p1 ctx
+  | AtSn (f, ctx) -> delete_ctx_sn (if is_top_sn f then None else Some f) ctx
   | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
   | AtAggreg (ForTerm (_,t,id2), ctx) -> Some (AtAggreg (factory#top_dim_foreach id2, ctx))
   | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx

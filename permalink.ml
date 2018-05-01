@@ -153,6 +153,7 @@ and print_apply_arg = function
   | Some conv, expr -> print_bin "Conv" (print_num_conv conv) (print_expr expr)
 and print_p1 = function
   | Is (_,np) -> print_un "Is" (print_s1 np)
+  | Pred (_,arg,pred,cp) -> print_ter "Pred" (print_arg arg) (print_pred pred) (print_sn cp)
   | Type (_,c) -> print_un "Type" (print_uri c)
   | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
   | Hier (_,id,p,ori,inv,np) -> print_nary "Hier" [print_id id; print_uri p; print_modif_p2 ori; print_bool inv; print_s1 np]
@@ -167,6 +168,9 @@ and print_p1 = function
   | In (_,npg,f) -> print_bin "In" (print_s1 npg) (print_p1 f)
   | InWhichThereIs (_,np) -> print_un "InWhichThereIs" (print_s1 np)
   | IsThere _ -> print_atom "IsThere"
+and print_pred = function
+  | Class c -> print_un "Class" (print_uri c)
+  | Prop p -> print_un "Prop" (print_uri p)
 and print_latlong = function
   | `Custom (plat,plong) -> print_bin "Custom" (print_uri plat) (print_uri plong)
   | `Wikidata -> print_atom "Wikidata"
@@ -178,6 +182,13 @@ and print_orientation = function
 (*and print_path = function
   | Direct -> print_atom "Direct"
   | Transitive inv -> print_un "Transitive" (print_bool inv)*)
+and print_sn = function
+  | CNil _ -> print_atom "CNil"
+  | CCons (_,arg,np,cp) -> print_ter "CCons" (print_arg arg) (print_s1 np) (print_sn cp)
+  | CAnd (_,lr) -> print_lr print_sn "CAnd" lr
+  | COr (_,lr) -> print_lr print_sn "COr" lr
+  | CMaybe (_,f) -> print_un "CMaybe" (print_sn f)
+  | CNot (_,f) -> print_un "CNot" (print_sn f)
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
@@ -317,6 +328,7 @@ and parse_apply_arg ~version = parser
     | [< expr = parse_expr ~version >] -> (None, expr)
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
+  | [< arg, pred, cp = parse_ter ~version "Pred" parse_arg parse_pred parse_sn >] -> Pred ((),arg,pred,cp)
   | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
   | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
   | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
@@ -336,6 +348,9 @@ and parse_p1 ~version = parser
   | [< np = parse_un ~version "InWhichThereIs" parse_s1 >] -> InWhichThereIs ((),np)
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
+and parse_pred ~version = parser
+  | [< c = parse_un ~version "Class" parse_uri >] -> Class c
+  | [< p = parse_un ~version "Prop" parse_uri >] -> Prop p
 and parse_latlong ~version = parser
   | [< plat, plong = parse_bin ~version "Custom" parse_uri parse_uri >] -> `Custom (plat,plong)
   | [< () = parse_atom ~version "Wikidata" >] -> `Wikidata
@@ -350,6 +365,14 @@ and parse_orientation ~version = parser
 and parse_path ~version = parser
   | [< () = parse_atom ~version "Direct" >] -> ()
   | [< _inv = parse_un ~version "Transitive" parse_bool >] -> ()
+and parse_sn ~version = parser
+  | [< _ = parse_atom ~version "CNil" >] -> CNil ()
+  | [< arg, np, cp = parse_ter ~version "CCons" parse_arg parse_s1 parse_sn >] -> CCons ((),arg,np,cp)
+  | [< lr = parse_lr parse_sn ~version "CAnd" >] -> CAnd ((),lr)
+  | [< lr = parse_lr parse_sn ~version "COr" >] -> COr ((),lr)
+  | [< f = parse_un ~version "CMaybe" parse_sn >] -> CMaybe ((),f)
+  | [< f = parse_un ~version "CNot" parse_sn >] -> CNot ((),f)
+  | [<>] -> syntax_error "invalid sn"
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
