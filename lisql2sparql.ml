@@ -356,6 +356,17 @@ let rec form_pred state : pred -> sparql_pn = function
      (fun l -> Sparql.Pattern (Sparql.rdf_type (get_arg S l) (Sparql.uri c)))
   | Prop p ->
      (fun l -> Sparql.Pattern (Sparql.triple (get_arg S l) (Sparql.uri p :> Sparql.pred) (get_arg O l)))
+  | SO (ps,po) ->
+     (fun l ->
+      Sparql.Pattern
+	(Sparql.bnode_triples
+	   (List.fold_left
+	      (fun lpo (arg,z) ->
+	       match arg with
+	       | S -> ((Sparql.uri ps :> Sparql.pred), z) :: lpo
+	       | O -> ((Sparql.uri po :> Sparql.pred), z) :: lpo
+	       | P -> lpo)
+	      [] l)))
 and form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
   | Pred (annot,arg,pred,cp) ->

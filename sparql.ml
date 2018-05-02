@@ -197,6 +197,8 @@ let rdf_type (s : term) (c : term) : pattern =
   then s ^^ " wdt:P31 " ^< c ^> " ."
   else s ^^ " a " ^< c ^> " ."
 let triple (s : term) (p : pred) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
+let bnode_triples (lpo : (pred * term) list) : pattern =
+  "[ " ^< concat " ; " (List.map (fun (p,o) -> p ^^ " " ^< o) lpo) ^> " ] ."
 let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
 let values (v : var) (l : term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
 let filter (e : expr) : pattern =

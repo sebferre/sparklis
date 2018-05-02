@@ -48,6 +48,10 @@ head, body, input, textarea, select {
     color:darkviolet;
 }
 
+.naryURI {
+    color:darkcyan;
+}
+
 .URI {
     color:darkblue;
 }

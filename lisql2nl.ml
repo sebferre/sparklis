@@ -40,6 +40,7 @@ type word =
   | `Blank of string
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
+  | `Nary of string
   | `Func of string
   | `Op of string
   | `Undefined
@@ -54,6 +55,7 @@ let word_text_content grammar : word -> string = function
   | `Blank id -> id
   | `Class (uri,s) -> s
   | `Prop (uri,s) -> s
+  | `Nary s -> s
   | `Func s -> s
   | `Op s -> s
   | `Undefined -> ""
@@ -197,11 +199,16 @@ let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri
 let word_syntagm_of_property grammar uri =
   let synt, name = Lexicon.config_property_lexicon#value#info uri in
   `Prop (uri, name), synt
+let word_syntagm_of_nary grammar uri =
+  let synt, name = Lexicon.config_property_lexicon#value#info uri in
+  `Nary name, synt
 
-let word_syntagm_of_pred grammar (pred : pred) =
-  match pred with
-  | Class c -> word_of_class c, `Noun
-  | Prop p -> word_syntagm_of_property grammar p
+let word_syntagm_of_arg_pred grammar (arg : arg) (pred : pred) =
+  match arg, pred with
+  | _, Class c -> word_of_class c, `Noun
+  | _, Prop p -> word_syntagm_of_property grammar p
+  | O, SO (ps,po) -> word_syntagm_of_nary grammar ps
+  | _, SO (ps,po) -> word_syntagm_of_nary grammar po
 
 let word_of_arg grammar (arg : arg) =
   match arg with (* TODO: make it multilingual *)
@@ -278,7 +285,7 @@ let word_of_incr grammar = function
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
-  | IncrPred (arg,pred) -> fst (word_syntagm_of_pred grammar pred)
+  | IncrPred (arg,pred) -> fst (word_syntagm_of_arg_pred grammar arg pred)
   | IncrArg arg -> word_of_arg grammar arg
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p)
@@ -328,6 +335,7 @@ let var_of_pred (pred : pred) : string =
   match pred with
   | Class c -> var_of_uri c
   | Prop p -> var_of_uri p
+  | SO (ps,po) -> var_of_uri po
 		
 let var_of_aggreg = function
   | NumberOf -> "number_of"
@@ -342,7 +350,7 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
   | Is (_,np) -> labelling_s1 ~as_p1:true grammar ~labels np
   | Pred (_,arg,pred,cp) ->
      let v = var_of_pred pred in
-     let w, synt = word_syntagm_of_pred grammar pred in
+     let w, synt = word_syntagm_of_arg_pred grammar arg pred in
      let ls_cp =
        match arg, synt with
        | S, `Noun
@@ -701,7 +709,7 @@ let default_make_arg_cp grammar : make_arg_cp =
   | _ -> raise TODO
 
 let make_arg_pred grammar (arg : arg) (pred : pred) : type_arg_vp =
-  let word, synt = word_syntagm_of_pred grammar pred in
+  let word, synt = word_syntagm_of_arg_pred grammar arg pred in
   match synt with
   | `Noun ->
      let make_arg_cp = default_make_arg_cp grammar in
@@ -1480,12 +1488,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
        | `S (make_vp,_) -> X (make_vp (there_is (something (X `Nil)))) in
      xml_vp grammar ~id_labelling vp
   | IncrArg arg -> (* TODO: make it multilingual (and better) *)
-     let s =
-       match arg with
-       | S -> "subject"
-       | P -> "predicate"
-       | O -> "object" in
-     Kwd "at" :: Word (`Op s) :: []
+     Kwd "at" :: Word (word_of_arg grammar arg) :: []
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with

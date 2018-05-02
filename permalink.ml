@@ -171,6 +171,7 @@ and print_p1 = function
 and print_pred = function
   | Class c -> print_un "Class" (print_uri c)
   | Prop p -> print_un "Prop" (print_uri p)
+  | SO (ps,po) -> print_bin "SO" (print_uri ps) (print_uri po)
 and print_latlong = function
   | `Custom (plat,plong) -> print_bin "Custom" (print_uri plat) (print_uri plong)
   | `Wikidata -> print_atom "Wikidata"
@@ -351,6 +352,7 @@ and parse_p1 ~version = parser
 and parse_pred ~version = parser
   | [< c = parse_un ~version "Class" parse_uri >] -> Class c
   | [< p = parse_un ~version "Prop" parse_uri >] -> Prop p
+  | [< ps, po = parse_bin ~version "SO" parse_uri parse_uri >] -> SO (ps,po)
 and parse_latlong ~version = parser
   | [< plat, plong = parse_bin ~version "Custom" parse_uri parse_uri >] -> `Custom (plat,plong)
   | [< () = parse_atom ~version "Wikidata" >] -> `Wikidata

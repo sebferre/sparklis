@@ -38,7 +38,7 @@ type modif_p2 = orientation
 type pred = (* E = Event, S = Subject, O = Object *)
   | Class of Rdf.uri
   | Prop of Rdf.uri
-(*  | SO of Rdf.uri * Rdf.uri (* properties: E -> S, E -> O *) *)
+  | SO of Rdf.uri * Rdf.uri (* properties: E -> S, E -> O *)
 type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
 type aggreg =
 | NumberOf | ListOf | Sample
@@ -993,6 +993,7 @@ let rec term_of_increment : increment -> Rdf.term option = function
 and term_of_pred : pred -> Rdf.term option = function
   | Class c -> Some (Rdf.URI c)
   | Prop p -> Some (Rdf.URI p)
+  | SO _ -> None
 and term_of_arg : arg -> Rdf.term option = function
   | S | P | O -> None
 
@@ -1004,15 +1005,20 @@ let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
      Some (Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1))
 
 let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
-  match arg, pred with
-  | S, Class c -> Pred ((), arg, pred, CNil ())
-  | _, Class c -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ()))
-  | S, Prop p -> Pred ((), S, pred, CCons ((), O, factory#top_s1, CNil ()))
-  | O, Prop p -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))
-  | _, Prop p ->
-     Pred ((), arg, pred,
-	   CCons ((), S, factory#top_s1,
-		  CCons ((), O, factory#top_s1, CNil ())))
+  match pred with
+  | Class _ ->
+     ( match arg with
+       | S -> Pred ((), arg, pred, CNil ())
+       | _ -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ())) )
+  | Prop _
+  | SO _ ->
+     ( match arg with
+       | S -> Pred ((), S, pred, CCons ((), O, factory#top_s1, CNil ()))
+       | O -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))
+       | _ ->
+	  Pred ((), arg, pred,
+		CCons ((), S, factory#top_s1,
+		       CCons ((), O, factory#top_s1, CNil ()))) )
 	  
 let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
   let default = Rel ((), p, m, factory#top_s1) in

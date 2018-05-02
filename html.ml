@@ -154,6 +154,7 @@ let html_word = function
   | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
   | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
   | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
+  | `Nary s -> html_span ~classe:"naryURI" (escapeHTML s)
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
