@@ -28,7 +28,7 @@ type constr =
 type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
 
 type id = int
-type arg = S | P | O
+type arg = S | P | O | Q of Rdf.uri (* qualifier *)
 type project = Unselect | Select
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 type modif_s2 = project * order
@@ -996,6 +996,7 @@ and term_of_pred : pred -> Rdf.term option = function
   | SO _ -> None
 and term_of_arg : arg -> Rdf.term option = function
   | S | P | O -> None
+  | Q q -> Some (Rdf.URI q)
 
 let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   let lhp = Ontology.config_hierarchy_inheritance#value#info uri in

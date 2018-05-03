@@ -249,7 +249,8 @@ let triple_arg arg x y z =
     ( match arg with
       | S -> Sparql.triple x (y :> Sparql.pred) z
       | P -> Sparql.triple y (x :> Sparql.pred) z
-      | O -> Sparql.triple y (z :> Sparql.pred) x )
+      | O -> Sparql.triple y (z :> Sparql.pred) x
+      | Q _ -> assert false)
 
 let rec expr_apply func args =
   match func with
@@ -365,7 +366,8 @@ let rec form_pred state : pred -> sparql_pn = function
 	       match arg with
 	       | S -> ((Sparql.uri ps :> Sparql.pred), z) :: lpo
 	       | O -> ((Sparql.uri po :> Sparql.pred), z) :: lpo
-	       | P -> lpo)
+	       | P -> lpo
+	       | Q q -> ((Sparql.uri q :> Sparql.pred), z) :: lpo)
 	      [] l)))
 and form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
@@ -828,8 +830,8 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
   let focus_graph_opt : Rdf.term option =
     match fd#graph with
     | `Default -> None
-    | `NamedTerm t -> Some t
-    | `NamedId id -> Some (Rdf.Var (id_labelling#get_id_var id)) in
+    | `Named (`Term t) -> Some t
+    | `Named (`Id id) -> Some (Rdf.Var (id_labelling#get_id_var id)) in
   let query_opt =
     if Sparql.is_empty_view view
     then None

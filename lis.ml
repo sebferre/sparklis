@@ -900,68 +900,52 @@ object (self)
       let max_value = Some nb_focus_term in
       let partial = false in (* relative to computed entities *)
       let unit = `Entities in
+      let make_sparql config_max filter_constr lv make_pattern =
+	assert (lv <> []);
+	let main_v = List.hd lv in
+	let projections = List.map (fun v -> `Bare, v) lv in
+	let gp = Sparql.union
+		   (focus_term_index#map_list
+		      (fun (t,(_, graph_index)) ->
+		       Sparql.subquery
+			 (Sparql.select
+			    ~distinct:true ~projections
+			    ~limit:config_max#value
+			    (graph_opt graph_index (make_pattern (Sparql.term t)))))) in
+	(Sparql.select
+	   ~froms ~projections ~limit:(config_max#value * min 10 nb_focus_term)
+	   (Sparql.pattern_of_formula
+	      (Sparql.formula_and_list
+		 ( Sparql.Pattern gp
+		   :: filter_constr sparql_genvar (Sparql.var main_v :> Sparql.term) constr
+		   :: List.map (fun v -> formula_hidden_URIs v) lv )))
+	 :> string) in
       let sparql_a =
-	let gp = Sparql.union (focus_term_index#map_list
-				 (fun (t,(_, graph_index)) ->
-				   Sparql.subquery
-				     (Sparql.select ~distinct:true ~projections:[`Bare, "class"] ~limit:config_max_classes#value
-					(graph_opt graph_index (Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term)))))) in
-	(Sparql.select ~froms ~projections:[`Bare, "class"] ~limit:(config_max_classes#value * min 10 nb_focus_term)
-	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
-		   (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "class" :> Sparql.term) constr);
-		   formula_hidden_URIs "class" ]))
-	 :> string) in
+	make_sparql config_max_classes Lisql2sparql.filter_constr_class ["class"]
+		    (fun t -> Sparql.rdf_type t (Sparql.var "class" :> Sparql.term)) in
       let sparql_has =
-	let gp =
-	  Sparql.union (focus_term_index#map_list
-			  (fun (t, (_, graph_index)) ->
-			    Sparql.subquery
-			      (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-				 (graph_opt graph_index (Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")))))) in
-	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
-	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
-		   Lisql2sparql.filter_constr_property sparql_genvar (Sparql.var "prop" :> Sparql.term) constr;
-		   formula_hidden_URIs "prop" ]))
-	 :> string) in
+	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["prop"]
+		    (fun t -> Sparql.triple t (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")) in
       let sparql_isof =
-	let gp = Sparql.union (focus_term_index#map_list
-				 (fun (t, (_, graph_index)) ->
-				   Sparql.subquery
-				     (Sparql.select ~distinct:true ~projections:[`Bare, "prop"] ~limit:config_max_properties#value
-					(graph_opt graph_index (Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) (Sparql.term t)))))) in
-	(Sparql.select ~froms ~projections:[`Bare, "prop"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
-	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
-		   Lisql2sparql.filter_constr_property sparql_genvar (Sparql.var "prop" :> Sparql.term) constr;
-		   formula_hidden_URIs "prop" ]))
-	 :> string) in
+	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["prop"]
+		    (fun t -> Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) t) in
       let sparql_pred =
-	let gp =
-	  Sparql.union (focus_term_index#map_list
-			  (fun (t, (_, graph_index)) ->
-			    Sparql.subquery
-			      (Sparql.select ~distinct:true ~projections:[`Bare, "ps"; `Bare, "po"] ~limit:config_max_properties#value
-				  (graph_opt graph_index
-					     (Sparql.join
-						[ Sparql.triple (Sparql.var "ps" :> Sparql.term) (Sparql.uri Rdf.nary_subjectObject :> Sparql.pred) (Sparql.var "po" :> Sparql.term);
-						  Sparql.bnode_triples
-						    [ (Sparql.var "ps" :> Sparql.pred), (Sparql.term t);
-						      (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "")
-						    ]
-						]))))) in
-	(Sparql.select ~froms ~projections:[`Bare, "ps"; `Bare, "po"] ~limit:(config_max_properties#value * min 10 nb_focus_term)
-	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 [ Sparql.Pattern gp;
-		   Lisql2sparql.filter_constr_property sparql_genvar (Sparql.var "po" :> Sparql.term) constr;
-		   formula_hidden_URIs "po";
-		   formula_hidden_URIs "ps"]))
-	 :> string) in
+	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["po"; "ps"]
+		    (fun t -> (Sparql.join
+				 [ Sparql.triple
+				     (Sparql.var "ps" :> Sparql.term)
+				     (Sparql.uri Rdf.nary_subjectObject :> Sparql.pred)
+				     (Sparql.var "po" :> Sparql.term);
+				   Sparql.bnode_triples
+				     [ (Sparql.var "ps" :> Sparql.pred), t;
+				       (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "") ]
+				 ])) in
+(*      let sparql_arg =
+	match focus_descr#pred_args with
+	| `Undefined -> "SELECT ?pq WHERE { }"
+	| `PredArgs (pred,args) ->
+	   make_sparql config_max_properties Lisql2sparql.filter_constr_property ["pq"]
+		       (fun t ->  *)
       Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof; sparql_pred]
 	(function
 	| [results_a; results_has; results_isof; results_pred] -> process ~max_value ~partial ~unit results_a results_has results_isof results_pred

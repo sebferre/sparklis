@@ -208,6 +208,7 @@ and print_arg = function
   | S -> print_atom "S"
   | P -> print_atom "P"
   | O -> print_atom "O"
+  | Q q -> print_un "Q" (print_uri q)
 and print_modif = function
   | p, o -> print_bin "Modif" (print_project p) (print_order o)
 and print_project = function
@@ -400,6 +401,7 @@ and parse_arg ~version = parser
   | [< () = parse_atom ~version "S" >] -> S
   | [< () = parse_atom ~version "P" >] -> P
   | [< () = parse_atom ~version "O" >] -> O
+  | [< q = parse_un ~version "Q" parse_uri >] -> Q q
   | [<>] -> syntax_error "invalid arg"
 and parse_modif ~version = parser
   | [< p, o = parse_bin ~version "Modif" parse_project parse_order >] -> (p,o)

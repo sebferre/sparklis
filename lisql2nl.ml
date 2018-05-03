@@ -210,12 +210,13 @@ let word_syntagm_of_arg_pred grammar (arg : arg) (pred : pred) =
   | O, SO (ps,po) -> word_syntagm_of_nary grammar ps
   | _, SO (ps,po) -> word_syntagm_of_nary grammar po
 
-let word_of_arg grammar (arg : arg) =
-  match arg with (* TODO: make it multilingual *)
-  | S -> `Op "subject"
-  | P -> `Op "predicate"
-  | O -> `Op "object"
-				       
+let word_syntagm_of_arg grammar (arg : arg) =
+  match arg with (* TODO: make it multilingual, and specific to args *)
+  | S -> `Op "subject", `Noun
+  | P -> `Op "predicate", `Noun
+  | O -> `Op "object", `Noun
+  | Q q -> word_syntagm_of_nary grammar q
+
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt))
@@ -286,7 +287,7 @@ let word_of_incr grammar = function
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
   | IncrPred (arg,pred) -> fst (word_syntagm_of_arg_pred grammar arg pred)
-  | IncrArg arg -> word_of_arg grammar arg
+  | IncrArg arg -> fst (word_syntagm_of_arg grammar arg)
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p)
   | IncrLatLong _ -> `Op grammar#geolocation
@@ -704,9 +705,12 @@ type type_arg_vp =
 let default_make_arg_cp grammar : make_arg_cp =
   fun arg np ->
   match arg with
-  | O -> `Bare np
   | S -> `Prep (`Op grammar#of_, np)
-  | _ -> raise TODO
+  | P -> `Bare np (* in 'has relation P from S to O' *)
+  | O -> `Bare np
+  | Q q ->
+     let w, _synt = word_syntagm_of_nary grammar q in
+     `Prep (w, np)
 
 let make_arg_pred grammar (arg : arg) (pred : pred) : type_arg_vp =
   let word, synt = word_syntagm_of_arg_pred grammar arg pred in
@@ -746,7 +750,10 @@ let make_arg_pred grammar (arg : arg) (pred : pred) : type_arg_vp =
 	    | S ->
 	       let make_s : cp -> nl_s = fun cp -> `Truth (np, X (`VT_CP (word, cp))) in
 	       `CP (make_s, default_make_arg_cp grammar)
-	    | _ -> raise TODO in
+	    | _ ->
+	       let pp = make_arg_cp arg np in
+	       let make_s : s -> nl_s = fun s -> `PP (pp,s) in
+	       `S (make_s, make_arg_s) in
 	  `S (make_vp, make_arg_s)
        | _ -> raise TODO )
   | `TransAdj ->
@@ -762,7 +769,10 @@ let make_arg_pred grammar (arg : arg) (pred : pred) : type_arg_vp =
 	    | S ->
 	       let make_s : cp -> nl_s = fun cp -> `Truth (np, X (`IsAdjCP (word, cp))) in
 	       `CP (make_s, default_make_arg_cp grammar)
-	    | _ -> raise TODO in
+	    | _ ->
+	       let pp = make_arg_cp arg np in
+	       let make_s : s -> nl_s = fun s -> `PP (pp,s) in
+	       `S (make_s, make_arg_s) in
 	  `S (make_vp, make_arg_s)
        | _ -> raise TODO )
 
@@ -808,7 +818,8 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
     | O -> (* has relation npp from nps / is the value of npp of nps / is the p of nps *)
       A (annot, `HasProp (`Relation, np2, [`Prep (`Op grammar#rel_from, np1)]))
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
-      A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (`Relation, top_rel)))), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)])) )
+       A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (`Relation, top_rel)))), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)]))
+    | _ -> assert false )
   | Search (annot,c) -> vp_of_constr grammar annot c
   | Filter (annot,c) -> vp_of_constr grammar annot c
   | And (annot,lr) -> A (annot, `And (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
@@ -1488,7 +1499,8 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
        | `S (make_vp,_) -> X (make_vp (there_is (something (X `Nil)))) in
      xml_vp grammar ~id_labelling vp
   | IncrArg arg -> (* TODO: make it multilingual (and better) *)
-     Kwd "at" :: Word (word_of_arg grammar arg) :: []
+     let w, _synt = word_syntagm_of_arg grammar arg in
+     Word w :: xml_ellipsis
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with
@@ -1532,6 +1544,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrTriple P ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
+  | IncrTriple (Q _) -> assert false
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
   | IncrHierarchy (trans_rel,inv) ->
      if trans_rel
