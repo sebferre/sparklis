@@ -44,7 +44,16 @@ let focus_graph_s1 : 'a elt_s1 -> focus_graph = function
 type focus_pred_args = [ `Undefined | `PredArgs of pred * (arg * term_id) list ]
 
 let rec focus_pred_args : focus -> focus_pred_args = function
+  | AtP1 (Pred (_,arg,pred,cp),ctx) ->
+     let args =
+       match focus_pred_args_ctx_p1 ctx with
+       | None -> []
+       | Some x -> (arg,x)::[] in
+     `PredArgs (pred,args)
   | AtSn (cp,ctx) -> focus_pred_args_ctx_sn [] ctx
+  | AtS1 (np, CConsX1 (arg,cp,ctx)) ->
+     let args = match term_id_s1 np with None -> [] | Some ti -> [arg,ti] in
+     focus_pred_args_ctx_sn args ctx
   | _ -> `Undefined
 and focus_pred_args_ctx_sn (args : (arg * term_id) list) : ctx_sn -> focus_pred_args = function
   | PredX (arg,pred,ctx) ->
@@ -992,6 +1001,10 @@ and annot_ctx_s fd (a1,a_x) x = function
 
 and annot_focus_aux (focus : focus) =
   let pred_args = focus_pred_args focus in
+  let _ =
+    match pred_args with
+    | `PredArgs (SO _, args) -> Jsutils.firebug ("some pred args with " ^ string_of_int (List.length args) ^ " args")
+    | _ -> Jsutils.firebug "no pred args" in
   let fd = new focus_descr ~pred_args in
   match focus with
   | AtP1 (f,ctx) ->
@@ -1000,10 +1013,15 @@ and annot_focus_aux (focus : focus) =
        | _ -> if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained );
      let f_annot = annot_elt_p1 `At f ctx in
      annot_ctx_p1 fd f_annot f ctx
-  | AtSn (CCons (_,arg,np,cp),ctx) ->
-     annot_focus_aux (AtS1 (np, CConsX1 (arg,cp,ctx)))
+(*  | AtSn (CCons (_,arg,np,cp),ctx) ->
+     annot_focus_aux (AtS1 (np, CConsX1 (arg,cp,ctx)))*)
   | AtSn (cp,ctx) ->
-     fd#define_focus_term `Undefined;
+     ( match cp with
+       | CCons (_,arg,np,cp) ->
+	  ( match term_id_s1 np with
+	    | Some ti -> fd#define_focus_term (ti :> focus_term)
+	    | None -> fd#define_focus_term `Undefined )
+       | _ -> fd#define_focus_term `Undefined );
      let cp_annot = annot_elt_sn `At cp ctx in
      annot_ctx_sn fd cp_annot cp ctx
   | AtS1 (np,ctx) ->

@@ -23,6 +23,8 @@ let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
 let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
+let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+		 
 let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
 let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
 let rdfs_domain = "http://www.w3.org/2000/01/rdf-schema#domain"
@@ -60,6 +62,10 @@ type term =
   | Bnode of string
   | Var of var
 
+let term_is_var = function
+  | Var _ -> true
+  | _ -> false
+	     
 let string_of_term = function
   | URI uri -> uri
   | Number (f,s,dt) -> s

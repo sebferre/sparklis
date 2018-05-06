@@ -1463,9 +1463,10 @@ let xml_np_id ?isolated grammar ~id_labelling id = xml_np_label ?isolated gramma
 
 let xml_incr_coordinate grammar focus xml =
   match focus with
-    | AtS1 _ -> xml
-    | AtP1 (IsThere _, _) -> xml
-    | _ -> Kwd grammar#and_ :: xml
+  | AtSn _
+  | AtS1 _
+  | AtP1 (IsThere _, _) -> xml
+  | _ -> Kwd grammar#and_ :: xml
 
 let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrSelection (selop,_) ->
@@ -1477,8 +1478,9 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrTerm t ->
     let xml_t = [Word (word_of_term t)] in
     ( match focus with
+      | AtSn (CCons (_,_,Det (_, Term t0, _),_), _) -> xml_t @ [DeleteIncr]
       | AtS1 (Det (_, Term t0, _), _) when t0 = t -> xml_t @ [DeleteIncr]
-      | AtS1 _ | AtExpr _ -> xml_t
+      | AtSn _ | AtS1 _ | AtExpr _ -> xml_t
       | AtAggreg (aggreg, _) when is_dim aggreg -> xml_t (* for ForTerm dimensions *)
       | AtP1 (Hier _, _) -> xml_t
       | _ ->
@@ -1487,7 +1489,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrId (id,_) ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
-      | AtS1 _ | AtExpr _ -> xml
+      | AtSn _ | AtS1 _ | AtExpr _ -> xml
       | AtAggreg (aggreg, _) when is_dim aggreg -> xml (* for ForTerm dimensions *)
       | _ ->
 	xml_incr_coordinate grammar focus
@@ -1504,6 +1506,12 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with
+      | AtSn (cp,ctx) ->
+	 let xml_delete_opt =
+	  match cp with
+	  | CCons (_, _, Det (_, An (_, _, Class c0), _), _) when c0 = c -> [DeleteIncr]
+	  | _ -> [] in
+	 xml_a_an grammar xml_c @ xml_delete_opt
       | AtS1 (np,ctx) ->
 	let xml_qu =
 	  match ctx with

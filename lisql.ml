@@ -395,6 +395,16 @@ let inverse_orientation = function
   | Fwd -> Bwd
   | Bwd -> Fwd
 
+let rec last_arg_of_sn : 'a elt_sn -> arg option = function
+  | CNil _ -> None
+  | CCons (_,arg,np,cp) -> Some arg
+  | CAnd (_,[]) -> None
+  | CAnd (_,lr) -> last_arg_of_sn (List.hd (List.rev lr))
+  | COr (_,[]) -> None
+  | COr (_,lr) -> last_arg_of_sn (List.hd (List.rev lr))
+  | CNot (_,cp) -> last_arg_of_sn cp
+  | CMaybe (_,cp) -> last_arg_of_sn cp
+	     
 (* deprecated
 let rec property_range_of_focus = function
   | AtS1 (np,ctx) -> property_range_of_ctx_s1 ctx
@@ -846,7 +856,7 @@ let rec next_undef_focus focus =
   | _ -> Some focus
 
 let focus_up_at_root_s1 = function
-  | AtS1 (f, CConsX1 (arg2,cp, PredX (arg1,pred,ctx))) -> Some (AtP1 (Pred ((),arg1,pred,CCons ((),arg2,f,cp)), ctx)) (* TODO: generalize *)
+  | AtS1 (f, CConsX1 (arg2,cp, PredX (arg1,pred,ctx))) -> Some (AtP1 (Pred ((),arg1,pred,CCons ((),arg2,f,cp)), ctx))
   | AtS1 (f, RelX (p, m, ctx)) -> Some (AtP1 (Rel ((),p,m,f), ctx))
   | AtS1 (f, TripleX1 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
   | AtS1 (f, TripleX2 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
@@ -1071,6 +1081,29 @@ let append_or_p1 ctx (elt_p1 : unit elt_p1) = function
        | _ -> OrX (([f], []), ctx) in
      at_p1 elt_p1 f_ctx
 
+let append_and_sn ctx (elt_sn : unit elt_sn) = function
+  | CAnd (_,lr) -> at_sn elt_sn (CAndX ((List.rev lr, []), ctx))
+  | cp ->
+     if is_top_sn cp
+     then at_sn elt_sn ctx
+     else
+       let cp_ctx =
+	 match ctx with
+	 | CAndX ((ll,rr), ctx2) -> CAndX ((cp::ll,rr), ctx2)
+	 | _ -> CAndX (([cp], []), ctx) in
+       at_sn elt_sn cp_ctx
+let append_or_sn ctx (elt_sn : unit elt_sn) = function
+  | COr (_,lr) -> at_sn elt_sn (COrX ((List.rev lr, []), ctx))
+  | cp ->
+     if is_top_sn cp
+     then at_sn elt_sn ctx
+     else
+       let cp_ctx =
+	 match ctx with
+	 | COrX ((ll,rr), ctx2) -> COrX ((cp::ll,rr), ctx2)
+	 | _ -> COrX (([cp], []), ctx) in
+       at_sn elt_sn cp_ctx
+
 let append_and_s1 ctx (elt_s1 : unit elt_s1) = function
   | NAnd (_,lr) -> at_s1 elt_s1 (NAndX ((List.rev lr, []), ctx))
   | np ->
@@ -1128,6 +1161,8 @@ let rec insert_elt_p1 (elt : unit elt_p1) = function
 let rec insert_elt_s1 elt focus =
   let focus2_opt =
     match focus with
+    | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
+    | AtSn _ -> None
     | AtS1 (_,ctx) when is_hierarchy_ctx_s1 ctx -> Some (at_s1 elt ctx)
     | AtS1 ((Det _ as np), ctx) ->
        if is_top_s1 np
@@ -1144,6 +1179,8 @@ let rec insert_elt_s1 elt focus =
   focus_opt_moves [focus_up_at_root_s1] focus2_opt
 
 let rec insert_elt_s2 det : focus -> focus option = function
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s2 det (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | AtSn _ -> None
   | AtS1 (Det (_, det0, rel_opt), ctx) ->
      let focus2 =
        if det0 = det (* erasing existing det *)
@@ -1172,16 +1209,22 @@ let insert_id id conv_opt = function
   | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id), apply_conv_ctx_expr conv_opt ctx))
   | focus -> insert_elt_s2 (The id) focus
 
-let insert_anything focus =
-  let focus2_opt =
-    match focus with
-    | AtS1 (Det (_, det, rel_opt), ctx) ->
-      Some (AtS1 (Det ((), (if is_top_s2 det then det else factory#top_s2), rel_opt), ctx))
-    | AtS1 _ -> None (* no insertion of terms on complex NPs *)
-    | _ -> None in
-  focus_opt_moves [focus_up_at_root_s1] focus2_opt
+let rec insert_anything focus =
+  match focus with
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_anything (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | AtSn _ -> None
+  | _ ->
+     let focus2_opt =
+       match focus with
+       | AtS1 (Det (_, det, rel_opt), ctx) ->
+	  Some (AtS1 (Det ((), (if is_top_s2 det then det else factory#top_s2), rel_opt), ctx))
+       | AtS1 _ -> None (* no insertion of terms on complex NPs *)
+       | _ -> None in
+     focus_opt_moves [focus_up_at_root_s1] focus2_opt
 			   
-let insert_type c = function
+let rec insert_type c = function
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_type c (AtS1 (np, CConsX1 (arg,cp,ctx)))
+  | AtSn _ -> None
   | AtS1 (Det (_,det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
@@ -1264,8 +1307,9 @@ let insert_constr constr focus =
        | _ -> None )
   | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
-let insert_that_is = function
+let rec insert_that_is = function
   (*  | AtS1 (f, IsX ctx) when is_top_s1 f -> None *)
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id,modif,Class _), None), _) as focus ->
     (*  | focus -> *)
     let foc_opt = insert_elt_p1 (Is ((),factory#top_s1)) focus in
@@ -1273,21 +1317,31 @@ let insert_that_is = function
   | _ -> None
 
 (* introduces a NP id when there is none *)
-let insert_something_that_is = function
+let rec insert_something_that_is = function
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_something_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) -> Some (AtS1 (np,ctx))
   | AtS1 (np,ctx) when id_of_s1 np = None -> Some (AtS1 (Det ((), factory#top_s2, Some (Is ((), np))), ctx))
   | _ -> None
 
 let insert_and = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
+  | AtSn (f,ctx) ->
+     let cp =
+       match last_arg_of_sn f with
+       | None -> factory#top_sn
+       | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
+     Some (append_and_sn ctx cp f)
   | AtS1 (f, ReturnX ctx) ->
      Some (AtS1 (factory#top_s1, ReturnX (SeqX (([Return ((),f)],[]), ctx))))
+  | AtS1 (f, CConsX1 ((S|O as arg),cp,ctx)) -> (* because S|O miss a preposition to catch the Sn focus *)
+     Some (append_and_sn ctx (CCons ((), arg, factory#top_s1, CNil ())) (CCons ((),arg,f,cp)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
      Some (append_and_s1 ctx factory#top_s1 f)
   | _ -> None
 
 let insert_duplicate = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
+  | AtSn (f, ctx) -> Some (append_and_sn ctx (copy_sn f) f)
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (_, InGraphX _) -> None (* to avoid duplication of focus, and complex focus graphs *)
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx (copy_s1 f) f)
@@ -1297,6 +1351,12 @@ let insert_duplicate = function
 
 let insert_or = function
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx (IsThere ()) f)
+  | AtSn (f, ctx) when not (is_top_sn f) ->
+     let cp =
+       match last_arg_of_sn f with
+       | None -> factory#top_sn
+       | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
+     Some (append_and_sn ctx cp f)
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
   | _ -> None
@@ -1328,6 +1388,11 @@ let insert_maybe = function
   | AtP1 (_, NotX ctx) -> None				     
   | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe ((),f), ctx))
   (*if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))*)
+  | AtSn (CMaybe (_,f), ctx) -> Some (AtSn (f,ctx))
+  | AtSn (_, CMaybeX ctx) -> None
+  | AtSn (CNot _, ctx) -> None
+  | AtSn (_, CNotX ctx) -> None				     
+  | AtSn (f, ctx) when not (is_top_sn f) -> Some (AtSn (CMaybe ((),f), ctx))
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (NMaybe (_,f), ctx) -> Some (AtS1 (f,ctx))
   | AtS1 (_, NMaybeX ctx) -> None
@@ -1345,6 +1410,12 @@ let insert_not = function
   | AtP1 (_, MaybeX ctx) -> None
   | AtP1 (f, ctx) ->
     if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not ((),f), ctx))
+  | AtSn (CNot (_,f), ctx) -> Some (AtSn (f,ctx))
+  | AtSn (_, CNotX ctx) -> None
+  | AtSn (CMaybe _, ctx) -> None
+  | AtSn (_, CMaybeX ctx) -> None
+  | AtSn (f, ctx) ->
+    if is_top_sn f then Some (AtSn (f, CNotX ctx)) else Some (AtSn (CNot ((),f), ctx))
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx))
   | AtS1 (_, NNotX ctx) -> None
@@ -1355,7 +1426,7 @@ let insert_not = function
     if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot ((),f), ctx))
   | _ -> None
 
-let insert_in = function
+let rec insert_in = function
   | AtP1 (f,ctx) -> Some (AtS1 (factory#top_s1, InGraphX (f,ctx)))
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (Det (_,det,None), ctx) -> Some (AtS1 (factory#top_s1, InGraphX (IsThere (), DetThatX (det, ctx))))
@@ -1377,7 +1448,8 @@ let out_of_unselect modif foc =
   | Unselect -> up_focus foc (* to enforce hidden column *)
   | Select -> Some foc
 
-let insert_modif_transf f = function
+let rec insert_modif_transf f = function
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_modif_transf f (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (Det ((), An (id, modif2, head), rel_opt), ctx) in

@@ -352,24 +352,33 @@ let get_arg (arg : arg) (l : (arg * Sparql.term) list) : Sparql.term =
   try List.assoc arg l
   with Not_found -> Sparql.bnode ""
 
-let rec form_pred state : pred -> sparql_pn = function
-  | Class c ->
-     (fun l -> Sparql.Pattern (Sparql.rdf_type (get_arg S l) (Sparql.uri c)))
-  | Prop p ->
-     (fun l -> Sparql.Pattern (Sparql.triple (get_arg S l) (Sparql.uri p :> Sparql.pred) (get_arg O l)))
+let pattern_pred_args (pred : pred) (args : (arg * Sparql.term) list) (var_args : (string * Sparql.term) list) : Sparql.pattern =
+  match pred with
+  | Class c -> Sparql.rdf_type (get_arg S args) (Sparql.uri c)
+  | Prop p -> Sparql.triple (get_arg S args) (Sparql.uri p :> Sparql.pred) (get_arg O args)
   | SO (ps,po) ->
-     (fun l ->
-      Sparql.Pattern
-	(Sparql.bnode_triples
-	   (List.fold_left
-	      (fun lpo (arg,z) ->
-	       match arg with
-	       | S -> ((Sparql.uri ps :> Sparql.pred), z) :: lpo
-	       | O -> ((Sparql.uri po :> Sparql.pred), z) :: lpo
-	       | P -> lpo
-	       | Q q -> ((Sparql.uri q :> Sparql.pred), z) :: lpo)
-	      [] l)))
-and form_p1 state : annot elt_p1 -> sparql_p1 = function
+     let args = if List.mem_assoc S args then args else (S, Sparql.bnode "")::args in
+     let args = if List.mem_assoc O args then args else (O, Sparql.bnode "")::args in
+     let lpo = [] in
+     let lpo =
+       List.fold_right
+	 (fun (v,t) lpo -> ((Sparql.var v :> Sparql.pred), t) :: lpo)
+	 var_args lpo in
+     let lpo =
+       List.fold_right
+	 (fun (arg,t) lpo ->
+	  match arg with
+	  | S -> ((Sparql.uri ps :> Sparql.pred), t) :: lpo
+	  | O -> ((Sparql.uri po :> Sparql.pred), t) :: lpo
+	  | P -> lpo
+	  | Q q -> ((Sparql.uri q :> Sparql.pred), t) :: lpo)
+	 args lpo in
+     Sparql.bnode_triples lpo
+				 
+let form_pred state (pred : pred) : sparql_pn =
+  (fun l -> Sparql.Pattern (pattern_pred_args pred l []))
+	      
+let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
   | Pred (annot,arg,pred,cp) ->
      let pred = form_pred state pred in
@@ -813,6 +822,7 @@ type s_sparql =
   { state : state;
     focus_term_opt : Rdf.term option;
     focus_graph_opt : Rdf.term option;
+    focus_pred_args_opt : (pred * (arg * Rdf.term) list) option;
     query_opt : template option;
     query_class_opt : template option;
     query_prop_has_opt : template option;
@@ -822,16 +832,23 @@ type s_sparql =
 let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot : annot elt_s) : s_sparql =
   let state = new state id_labelling in
   let seq_view, view = form_s state s_annot in
+  let rdf_term_of_term_id : term_id -> Rdf.term = function
+    | `Term t -> t
+    | `Id id -> Rdf.Var (id_labelling#get_id_var id) in
   let focus_term_opt : Rdf.term option =
     match fd#term with
-    | `Term t -> Some t
-    | `Id id -> Some (Rdf.Var (id_labelling#get_id_var id))
-    | `Undefined -> None in
+    | `Undefined -> None
+    | (#term_id as ti) -> Some (rdf_term_of_term_id ti) in
   let focus_graph_opt : Rdf.term option =
     match fd#graph with
     | `Default -> None
-    | `Named (`Term t) -> Some t
-    | `Named (`Id id) -> Some (Rdf.Var (id_labelling#get_id_var id)) in
+    | `Named ti -> Some (rdf_term_of_term_id ti) in
+  let focus_pred_args_opt : (pred * (arg * Rdf.term) list) option =
+    match fd#pred_args with
+    | `Undefined -> None
+    | `PredArgs (pred,args) ->
+       let rdf_args = List.map (fun (arg,ti) -> (arg, rdf_term_of_term_id ti)) args in
+       Some (pred,rdf_args) in
   let query_opt =
     if Sparql.is_empty_view view
     then None
@@ -855,9 +872,11 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
   let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
   let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t (tp :> Sparql.pred) (Sparql.bnode ""))) in
   let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") (tp :> Sparql.pred) t)) in
+  (* TODO: handle n-ary predicates *)
   { state;
     focus_term_opt;
     focus_graph_opt;
+    focus_pred_args_opt;
     query_opt;
     query_class_opt;
     query_prop_has_opt;

@@ -67,6 +67,12 @@ object (self)
 	  h []
 end
   
+let empty_index () = new index ()
+let singleton_index elt_info =
+  let index = new index () in
+  index#add elt_info;
+  index
+							  
 class ['a] int_index = ['a,int] index ()
 class ['a,'b] nested_int_index = ['a, int * 'b int_index] index ()
 
@@ -159,6 +165,8 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
     Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
     []
 
+(* deprecated
+      
 let fill_index_of_results_column index ?(filter : Rdf.term -> bool = fun _ -> true) (var : Rdf.var) results : unit =
   let open Sparql_endpoint in
   try
@@ -283,7 +291,142 @@ let nested_index_of_results_columns ?filter1 ?filter2 var1 nested_spec results :
   fill_nested_index_of_results_columns index ?filter1 ?filter2 var1 nested_spec results;
   index
 
+ *)
       
+(* private intermediate functions, used to produce index *)
+let nested_hashtbl_of_results_varterm_list
+      (keys_vt : Rdf.term list) (nested_vt_opt : Rdf.term option)
+      results : (Rdf.term list, int ref * (Rdf.term, int ref) Hashtbl.t) Hashtbl.t =
+  let open Sparql_endpoint in
+  let get vt : binding -> Rdf.term option =
+    match vt with
+    | Rdf.Var v ->
+       if List.mem_assoc v results.vars
+       then
+	 let i = List.assoc v results.vars in
+	 (fun binding -> binding.(i))
+       else (fun binding -> None)
+    | t ->
+       (fun binding -> Some t) in
+  let get_keys =
+    let keys_get = List.map get keys_vt in
+    (fun binding ->
+     List.fold_right
+       (fun get keys_opt ->
+	match get binding, keys_opt with
+	| _, None -> None
+	| None, _ -> None
+	| Some key, Some keys -> Some (key::keys))
+       keys_get (Some [])) in
+  let get_nested =
+    match nested_vt_opt with
+    | None -> (fun binding -> None)
+    | Some nested_vt -> get nested_vt
+  in
+  let ht = Hashtbl.create 1000 in
+  List.iter
+    (fun binding ->
+     match get_keys binding with
+     | None -> ()
+     | Some keys ->
+	let cpt1, nested_ht =
+	  try Hashtbl.find ht keys
+	  with Not_found ->
+	    let data = ref 0, Hashtbl.create 3 in
+	    Hashtbl.add ht keys data;
+	    data in
+	incr cpt1;
+	( match get_nested binding with
+	  | None -> ()
+	  | Some nested ->
+	     let cpt2 =
+	       try Hashtbl.find nested_ht nested
+	       with Not_found ->
+		 let cpt2 = ref 0 in
+		 Hashtbl.add nested_ht nested cpt2;
+		 cpt2 in
+	     incr cpt2 ))
+    results.bindings;
+  ht
+
+let int_index_of_nested_hashtbl ~mapfilter ht =
+  let index = new int_index in
+  Hashtbl.iter
+    (fun k cpt ->
+     match mapfilter k with
+     | None -> ()
+     | Some k -> index#add (k, !cpt))
+    ht;
+  index
+let nested_int_index_of_hashtbl ~mapfilter ~nested_mapfilter ht =
+  let index = new nested_int_index in
+  Hashtbl.iter
+    (fun k (cpt1,nested_ht) ->
+     match mapfilter k with
+     | None -> ()
+     | Some k -> index#add (k, (!cpt1, int_index_of_nested_hashtbl ~mapfilter:nested_mapfilter nested_ht)))
+    ht;
+  index
+let int_index_of_hashtbl ~mapfilter ht =
+  let index = new int_index in
+  Hashtbl.iter
+    (fun k (cpt,_) ->
+     match mapfilter k with
+     | None -> ()
+     | Some k -> index#add (k, !cpt))
+    ht;
+  index
+
+    
+let index_of_results_varterm ?(filter = fun _ -> true) vt results : Rdf.term int_index =
+  match vt with
+  | Rdf.Var _ ->
+     let ht = nested_hashtbl_of_results_varterm_list [vt] None results in
+     int_index_of_hashtbl
+       ~mapfilter:(function [key] when filter key -> Some key | _ -> None)
+       ht
+  | t -> singleton_index (t,1)
+    
+let index_of_results_varterm_list ?(filter = fun _ -> true) keys_vt results : Rdf.term list int_index =
+  if List.exists Rdf.term_is_var keys_vt
+  then
+    let ht = nested_hashtbl_of_results_varterm_list keys_vt None results in
+    int_index_of_hashtbl
+      ~mapfilter:(fun keys -> if List.for_all filter keys then Some keys else None)
+      ht
+  else singleton_index (keys_vt,1)
+
+let nested_index_of_results_varterm ?(filter = fun _ -> true) key_vt nested_vt_opt results : (Rdf.term, Rdf.term) nested_int_index =
+  match key_vt, nested_vt_opt with
+  | Rdf.Var _, _
+  | _, Some (Rdf.Var _) ->
+     let ht = nested_hashtbl_of_results_varterm_list [key_vt] nested_vt_opt results in
+     nested_int_index_of_hashtbl
+       ~mapfilter:(function [key] when filter key -> Some key | _ -> None)
+       ~nested_mapfilter:(fun nested -> if filter nested then Some nested else None)
+       ht
+  | t, None -> singleton_index (t, (1,empty_index ()))
+  | t, Some nested_t -> singleton_index (t, (1,singleton_index (nested_t,1)))
+					
+let nested_index_of_results_varterm_list ?(filter = fun _ -> true) keys_vt nested_vt_opt results : (Rdf.term list, Rdf.term) nested_int_index =
+  if List.exists Rdf.term_is_var keys_vt
+  then
+    let ht = nested_hashtbl_of_results_varterm_list keys_vt nested_vt_opt results in
+    nested_int_index_of_hashtbl
+      ~mapfilter:(fun keys -> if List.for_all filter keys then Some keys else None)
+      ~nested_mapfilter:(fun nested -> if filter nested then Some nested else None)
+      ht
+  else
+    let nested_index =
+      match nested_vt_opt with
+      | None -> empty_index ()
+      | Some nested_vt ->
+	 ( match nested_vt with
+	   | Rdf.Var _ -> index_of_results_varterm ~filter nested_vt results
+	   | nested_t -> singleton_index (nested_t,1) ) in
+    singleton_index (keys_vt, (1, nested_index))
+			      
+
 let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : Rdf.term int_index =
   let open Sparql_endpoint in
   let index = new int_index in
@@ -401,6 +544,7 @@ object (self)
       state = new Lisql2sparql.state (new Lisql2nl.id_labelling []);
       focus_term_opt = None;
       focus_graph_opt = None;
+      focus_pred_args_opt = None;
       query_opt = None;
       query_class_opt = None;
       query_prop_has_opt = None;
@@ -409,6 +553,7 @@ object (self)
     
   method focus_term_opt = s_sparql.Lisql2sparql.focus_term_opt
   method focus_graph_opt = s_sparql.Lisql2sparql.focus_graph_opt
+  method focus_pred_args_opt = s_sparql.Lisql2sparql.focus_pred_args_opt
     
   method private init =
     begin
@@ -426,6 +571,17 @@ object (self)
 
   (* utilities *)
 
+  method private is_qualifier_property pq =
+    match s_sparql.Lisql2sparql.focus_pred_args_opt with
+    | None -> false
+    | Some (pred,args) ->
+       let open Lisql in
+       match pred with
+       | Class _ -> false
+       | Prop _ -> false
+       | SO (ps,po) -> pq <> Rdf.rdf_type && pq <> ps && pq <> po
+	       
+
   val ajax_pool = new Sparql_endpoint.ajax_pool
   method abort_all_ajax = ajax_pool#abort_all
 
@@ -434,8 +590,9 @@ object (self)
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
   val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
-  val mutable focus_term_index : (Rdf.term,Rdf.term) nested_int_index = new nested_int_index (* used when some focus term *)
+  val mutable focus_term_index : (Rdf.term, Rdf.term) nested_int_index = new nested_int_index (* used when some focus term *)
   val mutable focus_graph_index : Rdf.term int_index = new int_index (* used when no focus_term but some focus graph *)
+  val mutable focus_pred_args_index : (Rdf.term list, Rdf.term) nested_int_index = new nested_int_index (* used when some focus-pred-args *)
   val mutable some_focus_term_is_blank : bool = false
 
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
@@ -463,15 +620,18 @@ object (self)
     results_typing <- [||];
     focus_term_index <- new nested_int_index;
     focus_graph_index <- new int_index;
+    focus_pred_args_index <- new nested_int_index;
     some_focus_term_is_blank <- false;
     (* computing results and derived attributes *)
     match s_sparql.Lisql2sparql.query_opt with
     | None ->
         k_sparql None;
 	( match s_sparql.Lisql2sparql.focus_term_opt with
-	| Some (Rdf.Var _) -> ()
+	  | None -> ()
+	  | Some vt -> focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt None results );
+(*	| Some (Rdf.Var _) -> ()
 	| Some term -> focus_term_index#add (term, (1, new int_index))
-	| None -> () );
+	| None -> () ); *)
 	k_results None
     | Some query ->
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
@@ -491,12 +651,28 @@ object (self)
 		(if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
 	        s_sparql.Lisql2sparql.focus_graph_opt
 	      with
-	    | None, None -> ()
+	      | None, None -> ()
+	      | None, Some vtg ->
+		 focus_graph_index <- index_of_results_varterm ~filter:filter_term vtg results
+(*							       
 	    | None, Some (Rdf.Var vg) ->
 	      fill_index_of_results_column focus_graph_index ~filter:filter_term vg results
 	    | None, Some tg ->
 	      focus_graph_index#add (tg,1)
-	    | Some (Rdf.Var v), tg_opt ->
+ *)
+	      | Some vt, vtg_opt ->
+		 focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt vtg_opt results ;
+	    );
+	    ( match s_sparql.Lisql2sparql.focus_pred_args_opt with
+	      | None -> ()
+	      | Some (pred,args) ->
+		 let keys_vt = List.map snd args in
+		 let _ = Jsutils.firebug ("pred_args_vt: " ^ String.concat ", " (List.map Rdf.string_of_term keys_vt)) in
+		 focus_pred_args_index <- nested_index_of_results_varterm_list
+					    ~filter:filter_term
+					    keys_vt s_sparql.Lisql2sparql.focus_graph_opt results;
+		 Jsutils.firebug (string_of_int focus_pred_args_index#length ^ " indexed tuples") );
+(*	    | Some (Rdf.Var v), tg_opt ->
 	      fill_nested_index_of_results_columns focus_term_index
 		~filter1:filter_term
 		~filter2:filter_term
@@ -509,6 +685,7 @@ object (self)
 	      | Some (Rdf.Var vg) -> fill_index_of_results_column nested_index ~filter:filter_term vg results
 	      | Some tg -> nested_index#add (tg,1) );
 	      focus_term_index#add (t, (1, nested_index)) );
+*)
 	    (* callback *)
 	    k_results (Some sparql))
 	  (fun code -> k_results (Some sparql))
@@ -633,8 +810,8 @@ object (self)
       let partial_prop = results_prop.Sparql_endpoint.length = config_max_properties#value in
       let partial = partial_class || partial_prop in
       let unit = `Entities in
-      let int_index_class = index_of_results_column "class" results_class in
-      let int_index_prop = index_of_results_column "prop" results_prop in
+      let int_index_class = index_of_results_varterm (Rdf.Var "class") results_class in
+      let int_index_prop = index_of_results_varterm (Rdf.Var "prop") results_prop in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       int_index_class#iter
 	(function
@@ -757,7 +934,7 @@ object (self)
       else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
-    if focus_descr#term = `Undefined || not focus_descr#incr then
+    if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
       k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_index_properties_init constr elt k
@@ -766,16 +943,18 @@ object (self)
       match focus with
       | Lisql.AtS1 (np, Lisql.RelX (p,ori,ctx)) -> Some (p,ori)
       | _ -> None in
-    let process ~max_value ~partial ~unit results_a results_has results_isof results_pred =
+    let process ~max_value ~partial ~unit results_a results_has results_isof results_pred results_arg =
       let partial_a = partial || results_a.Sparql_endpoint.length = config_max_classes#value in
       let partial_has = partial || results_has.Sparql_endpoint.length = config_max_properties#value in
       let partial_isof = partial || results_isof.Sparql_endpoint.length = config_max_properties#value in
       let partial_pred = partial || results_pred.Sparql_endpoint.length = config_max_properties#value in (* TODO: should be max_predicates *)
-      let partial = partial_a || partial_has || partial_isof || partial_pred in
-      let int_index_a = index_of_results_column "class" results_a in
-      let int_index_has = index_of_results_column "prop" results_has in
-      let int_index_isof = index_of_results_column "prop" results_isof in
-      let int_index_pred = index_of_results_column_list ["ps"; "po"] results_pred in
+      let partial_arg = partial || results_arg.Sparql_endpoint.length = config_max_properties#value in
+      let partial = partial_a || partial_has || partial_isof || partial_pred || partial_arg in
+      let int_index_a = index_of_results_varterm (Rdf.Var "class") results_a in
+      let int_index_has = index_of_results_varterm (Rdf.Var "prop") results_has in
+      let int_index_isof = index_of_results_varterm (Rdf.Var "prop") results_isof in
+      let int_index_pred = index_of_results_varterm_list [Rdf.Var "ps"; Rdf.Var "po"] results_pred in
+      let int_index_arg = index_of_results_varterm (Rdf.Var "pq") results_arg in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       let trans_rel = ref false in
       (* adding selection increments *)
@@ -814,12 +993,23 @@ object (self)
 	  incr_index#add (Lisql.IncrRel (uri,Lisql.Bwd), freq_opt);
 	  if focus_prop_ori_opt = Some (uri,Lisql.Bwd) then trans_rel := true;
 	| _ -> ());
+      (* adding pred+arg increments *)
       int_index_pred#iter
 	(function
 	  | ([Rdf.URI ps; Rdf.URI po], count) ->
 	     Lexicon.config_property_lexicon#value#enqueue po;
 	     let freq_opt = Some { value=count; max_value; partial=partial_pred; unit } in
 	     incr_index#add (Lisql.(IncrPred (S, SO (ps,po))), freq_opt)
+	  | _ -> ());
+      int_index_arg#iter
+	(function
+	  | (Rdf.URI pq, count) ->
+	     if self#is_qualifier_property pq
+	     then begin
+		 Lexicon.config_property_lexicon#value#enqueue pq;
+		 let freq_opt = Some { value=count; max_value; partial=partial_pred; unit } in
+		 incr_index#add (Lisql.(IncrArg (Q pq)), freq_opt)
+	       end
 	  | _ -> ());
       (* adding hierarchy increments *)
       if !trans_rel then
@@ -871,7 +1061,7 @@ object (self)
 	s_sparql.Lisql2sparql.query_prop_has_opt,
 	s_sparql.Lisql2sparql.query_prop_isof_opt
       with
-	| None, None, None -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
+	| None, None, None -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results
 	| Some query_a, Some query_has, Some query_isof ->
 	  let sparql_a = query_a
 	    ~hook:(fun tx -> Sparql.formula_and (Lisql2sparql.filter_constr_class sparql_genvar tx constr) (formula_hidden_URIs_term tx))
@@ -884,9 +1074,9 @@ object (self)
 	    ~froms ~limit:config_max_properties#value in
 	  Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof]
 	    (function
-	      | [results_a; results_has; results_isof] -> process ~max_value ~partial ~unit results_a results_has results_isof Sparql_endpoint.empty_results (* TODO: results_pred *)
+	      | [results_a; results_has; results_isof] -> process ~max_value ~partial ~unit results_a results_has results_isof Sparql_endpoint.empty_results Sparql_endpoint.empty_results (* TODO: results_pred + results_arg *)
 	      | _ -> assert false)
-	    (fun code -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	    (fun code -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
 	| _ -> assert false
     in
     let ajax_extent () =
@@ -900,18 +1090,18 @@ object (self)
       let max_value = Some nb_focus_term in
       let partial = false in (* relative to computed entities *)
       let unit = `Entities in
-      let make_sparql config_max filter_constr lv make_pattern =
+      let make_sparql (type a) (index : (a,'b) nested_int_index) config_max filter_constr (lv : Rdf.var list) (make_pattern : a -> Sparql.pattern) =
 	assert (lv <> []);
 	let main_v = List.hd lv in
 	let projections = List.map (fun v -> `Bare, v) lv in
 	let gp = Sparql.union
-		   (focus_term_index#map_list
-		      (fun (t,(_, graph_index)) ->
+		   (index#map_list
+		      (fun (key,(_, graph_index)) ->
 		       Sparql.subquery
 			 (Sparql.select
 			    ~distinct:true ~projections
 			    ~limit:config_max#value
-			    (graph_opt graph_index (make_pattern (Sparql.term t)))))) in
+			    (graph_opt graph_index (make_pattern key))))) in
 	(Sparql.select
 	   ~froms ~projections ~limit:(config_max#value * min 10 nb_focus_term)
 	   (Sparql.pattern_of_formula
@@ -921,40 +1111,44 @@ object (self)
 		   :: List.map (fun v -> formula_hidden_URIs v) lv )))
 	 :> string) in
       let sparql_a =
-	make_sparql config_max_classes Lisql2sparql.filter_constr_class ["class"]
-		    (fun t -> Sparql.rdf_type t (Sparql.var "class" :> Sparql.term)) in
+	make_sparql focus_term_index config_max_classes Lisql2sparql.filter_constr_class ["class"]
+		    (fun t -> Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term)) in
       let sparql_has =
-	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["prop"]
-		    (fun t -> Sparql.triple t (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")) in
+	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property ["prop"]
+		    (fun t -> Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")) in
       let sparql_isof =
-	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["prop"]
-		    (fun t -> Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) t) in
+	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property ["prop"]
+		    (fun t -> Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) (Sparql.term t)) in
       let sparql_pred =
-	make_sparql config_max_properties Lisql2sparql.filter_constr_property ["po"; "ps"]
+	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property ["po"; "ps"]
 		    (fun t -> (Sparql.join
 				 [ Sparql.triple
 				     (Sparql.var "ps" :> Sparql.term)
 				     (Sparql.uri Rdf.nary_subjectObject :> Sparql.pred)
 				     (Sparql.var "po" :> Sparql.term);
 				   Sparql.bnode_triples
-				     [ (Sparql.var "ps" :> Sparql.pred), t;
+				     [ (Sparql.var "ps" :> Sparql.pred), (Sparql.term t);
 				       (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "") ]
 				 ])) in
-(*      let sparql_arg =
-	match focus_descr#pred_args with
-	| `Undefined -> "SELECT ?pq WHERE { }"
-	| `PredArgs (pred,args) ->
-	   make_sparql config_max_properties Lisql2sparql.filter_constr_property ["pq"]
-		       (fun t ->  *)
-      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof; sparql_pred]
+      let sparql_arg =
+	match s_sparql.Lisql2sparql.focus_pred_args_opt with
+	| Some ((Lisql.SO _ as pred),args) -> 
+	   let args_args = List.map fst args in
+	   make_sparql focus_pred_args_index config_max_properties Lisql2sparql.filter_constr_property ["pq"]
+		       (fun lt -> Lisql2sparql.pattern_pred_args
+				    pred
+				    (List.combine args_args (List.map Sparql.term lt))
+				    ["pq", Sparql.bnode ""])
+	| _ -> "SELECT ?pq WHERE { }" in
+      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof; sparql_pred; sparql_arg]
 	(function
-	| [results_a; results_has; results_isof; results_pred] -> process ~max_value ~partial ~unit results_a results_has results_isof results_pred
+	| [results_a; results_has; results_isof; results_pred; results_arg] -> process ~max_value ~partial ~unit results_a results_has results_isof results_pred results_arg
 	| _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
     if focus_term_index#is_empty then
-      if some_focus_term_is_blank
-      then ajax_intent ()
+      if some_focus_term_is_blank then ajax_intent ()
+      else if not focus_pred_args_index#is_empty then ajax_extent ()
       else self#ajax_index_properties_init constr elt k
     else
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
