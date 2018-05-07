@@ -1,0 +1,11 @@
+# description of main changes
+
+2018-05-03
+
+[lisql] conversion  focus <--> elt_s * path
+- elt_s_path_of_focus : focus -> unit elt_s * path
+  // decomposes a query focus AtX (x,ctx) into the whole query (without focus), and a path to the focus
+- focus_of_elt_s_path : unit elt_s * path -> focus
+  // the inverse function
+  // composes a whole query and a path into a query focus AtX (x,ctx)
+those functions can be used to recover a precise focus from a permalink, which does not contain the focus location

@@ -513,69 +513,147 @@ and annot_s = function
   | Seq (a,lr) -> a
 
 
-(* going to root expr *)
-    
-let rec root_expr_of_ctx_expr (f : unit elt_expr) : ctx_expr -> unit elt_s * ctx_s = function
-  | SExprX (name,id,modif,rel_opt,ctx2) -> SExpr ((),name,id,modif,f,rel_opt), ctx2
-  | SFilterX (id,ctx2) -> SFilter ((),id,f), ctx2
-  | ApplyX (func,ll_rr,conv_opt,ctx) -> root_expr_of_ctx_expr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
-  | ChoiceX (ll_rr,ctx) -> root_expr_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
+(* conversion between focus and sentence+path *)
 
-(* extraction of LISQL s element from focus *)
+type step = DOWN | RIGHT
+type path = step list
 
-let rec elt_s_of_ctx_p1 (f : unit elt_p1) = function
-  | DetThatX (det,ctx) -> elt_s_of_ctx_s1 (Det ((), det, Some f)) ctx
-  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_of_ctx_s1 (AnAggreg ((), id, modif, g, Some f, np)) ctx
-  | ForEachThatX (id,modif,id2,ctx) -> elt_s_of_ctx_aggreg (ForEach ((), id, modif, Some f, id2)) ctx
-  | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_of_ctx_aggreg (TheAggreg ((), id, modif, g, Some f, id2)) ctx
-  | SExprThatX (name,id,modif,expr,ctx) -> elt_s_of_ctx_s (SExpr ((), name, id, modif, expr, Some f)) ctx
-  | AndX (ll_rr,ctx) -> elt_s_of_ctx_p1 (And ((), list_of_ctx f ll_rr)) ctx
-  | OrX (ll_rr,ctx) -> elt_s_of_ctx_p1 (Or ((), list_of_ctx f ll_rr)) ctx
-  | MaybeX ctx -> elt_s_of_ctx_p1 (Maybe ((),f)) ctx
-  | NotX ctx -> elt_s_of_ctx_p1 (Not ((),f)) ctx
-  | InX (npg,ctx) -> elt_s_of_ctx_p1 (In ((),npg,f)) ctx
-and elt_s_of_ctx_sn (f : unit elt_sn) = function
-  | PredX (arg,pred,ctx) -> elt_s_of_ctx_p1 (Pred ((),arg,pred,f)) ctx
-  | CConsX2 (arg,np,ctx) -> elt_s_of_ctx_sn (CCons ((),arg,np,f)) ctx
-  | CAndX (ll_rr,ctx) -> elt_s_of_ctx_sn (CAnd ((),list_of_ctx f ll_rr)) ctx
-  | COrX (ll_rr,ctx) -> elt_s_of_ctx_sn (COr ((),list_of_ctx f ll_rr)) ctx
-  | CMaybeX ctx -> elt_s_of_ctx_sn (CMaybe ((),f)) ctx
-  | CNotX ctx -> elt_s_of_ctx_sn (CNot ((),f)) ctx
-and elt_s_of_ctx_s1 (f : unit elt_s1) = function
-  | IsX ctx -> elt_s_of_ctx_p1 (Is ((),f)) ctx
-  | CConsX1 (arg,cp,ctx) -> elt_s_of_ctx_sn (CCons ((),arg,f,cp)) ctx
-  | RelX (p,modif,ctx) -> elt_s_of_ctx_p1 (Rel ((),p,modif,f)) ctx
-  | TripleX1 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,f,np)) ctx
-  | TripleX2 (arg,np,ctx) -> elt_s_of_ctx_p1 (Triple ((),arg,np,f)) ctx
-  | ReturnX ctx -> elt_s_of_ctx_s (Return ((),f)) ctx
-  | HierX (id,p,ori,inv,ctx) -> elt_s_of_ctx_p1 (Hier ((),id,p,ori,inv,f)) ctx
-  | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_of_ctx_s1 (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
-  | NAndX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NAnd ((),list_of_ctx f ll_rr)) ctx
-  | NOrX (ll_rr,ctx) -> elt_s_of_ctx_s1 (NOr ((),list_of_ctx f ll_rr)) ctx
-  | NMaybeX ctx -> elt_s_of_ctx_s1 (NMaybe ((),f)) ctx
-  | NNotX ctx -> elt_s_of_ctx_s1 (NNot ((),f)) ctx
-  | InGraphX (f1,ctx) -> elt_s_of_ctx_p1 (In ((),f,f1)) ctx
-  | InWhichThereIsX ctx -> elt_s_of_ctx_p1 (InWhichThereIs ((),f)) ctx
-and elt_s_of_ctx_aggreg (f : unit elt_aggreg) = function
-  | SAggregX (ll_rr,ctx) -> elt_s_of_ctx_s (SAggreg ((), list_of_ctx f ll_rr)) ctx
-and elt_s_of_ctx_expr (f : unit elt_expr) = function
-  | SExprX (name,id,modif,rel_opt,ctx) -> elt_s_of_ctx_s (SExpr ((), name, id, modif, f, rel_opt)) ctx
-  | SFilterX (id,ctx) -> elt_s_of_ctx_s (SFilter ((), id, f)) ctx
-  | ApplyX (func,ll_rr,conv_opt,ctx) -> elt_s_of_ctx_expr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
-  | ChoiceX (ll_rr,ctx) -> elt_s_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
-and elt_s_of_ctx_s (f : unit elt_s) = function
-  | Root -> f
-  | SeqX (ll_rr,ctx) -> elt_s_of_ctx_s (Seq ((), list_of_ctx f ll_rr)) ctx
+let path_of_list_ctx (ll,rr) path =
+  List.fold_left
+    (fun path _ -> RIGHT::path)
+    path ll
+		 
+let rec elt_s_path_of_ctx_p1 path (f : unit elt_p1) = function
+  | DetThatX (det,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path) (Det ((), det, Some f)) ctx
+  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((), id, modif, g, Some f, np)) ctx
+  | ForEachThatX (id,modif,id2,ctx) -> elt_s_path_of_ctx_aggreg (DOWN::path) (ForEach ((), id, modif, Some f, id2)) ctx
+  | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_path_of_ctx_aggreg (DOWN::path) (TheAggreg ((), id, modif, g, Some f, id2)) ctx
+  | SExprThatX (name,id,modif,expr,ctx) -> elt_s_path_of_ctx_s (DOWN::RIGHT::path) (SExpr ((), name, id, modif, expr, Some f)) ctx
+  | AndX (ll_rr,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path_of_list_ctx ll_rr path) (And ((), list_of_ctx f ll_rr)) ctx
+  | OrX (ll_rr,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path_of_list_ctx ll_rr path) (Or ((), list_of_ctx f ll_rr)) ctx
+  | MaybeX ctx -> elt_s_path_of_ctx_p1 (DOWN::path) (Maybe ((),f)) ctx
+  | NotX ctx -> elt_s_path_of_ctx_p1 (DOWN::path) (Not ((),f)) ctx
+  | InX (npg,ctx) -> elt_s_path_of_ctx_p1 (DOWN::RIGHT::path) (In ((),npg,f)) ctx
+and elt_s_path_of_ctx_sn path (f : unit elt_sn) = function
+  | PredX (arg,pred,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Pred ((),arg,pred,f)) ctx
+  | CConsX2 (arg,np,ctx) -> elt_s_path_of_ctx_sn (DOWN::RIGHT::path) (CCons ((),arg,np,f)) ctx
+  | CAndX (ll_rr,ctx) -> elt_s_path_of_ctx_sn (DOWN::path_of_list_ctx ll_rr path) (CAnd ((),list_of_ctx f ll_rr)) ctx
+  | COrX (ll_rr,ctx) -> elt_s_path_of_ctx_sn (DOWN::path_of_list_ctx ll_rr path) (COr ((),list_of_ctx f ll_rr)) ctx
+  | CMaybeX ctx -> elt_s_path_of_ctx_sn (DOWN::path) (CMaybe ((),f)) ctx
+  | CNotX ctx -> elt_s_path_of_ctx_sn (DOWN::path) (CNot ((),f)) ctx
+and elt_s_path_of_ctx_s1 path (f : unit elt_s1) = function
+  | IsX ctx -> elt_s_path_of_ctx_p1 (DOWN::path) (Is ((),f)) ctx
+  | CConsX1 (arg,cp,ctx) -> elt_s_path_of_ctx_sn (DOWN::path) (CCons ((),arg,f,cp)) ctx
+  | RelX (p,modif,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Rel ((),p,modif,f)) ctx
+  | TripleX1 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Triple ((),arg,f,np)) ctx
+  | TripleX2 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::RIGHT::path) (Triple ((),arg,np,f)) ctx
+  | ReturnX ctx -> elt_s_path_of_ctx_s (DOWN::path) (Return ((),f)) ctx
+  | HierX (id,p,ori,inv,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Hier ((),id,p,ori,inv,f)) ctx
+  | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
+  | NAndX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NAnd ((),list_of_ctx f ll_rr)) ctx
+  | NOrX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NOr ((),list_of_ctx f ll_rr)) ctx
+  | NMaybeX ctx -> elt_s_path_of_ctx_s1 (DOWN::path) (NMaybe ((),f)) ctx
+  | NNotX ctx -> elt_s_path_of_ctx_s1 (DOWN::path) (NNot ((),f)) ctx
+  | InGraphX (f1,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (In ((),f,f1)) ctx
+  | InWhichThereIsX ctx -> elt_s_path_of_ctx_p1 (DOWN::path) (InWhichThereIs ((),f)) ctx
+and elt_s_path_of_ctx_aggreg path (f : unit elt_aggreg) = function
+  | SAggregX (ll_rr,ctx) -> elt_s_path_of_ctx_s (DOWN::path_of_list_ctx ll_rr path) (SAggreg ((), list_of_ctx f ll_rr)) ctx
+and elt_s_path_of_ctx_expr path (f : unit elt_expr) = function
+  | SExprX (name,id,modif,rel_opt,ctx) -> elt_s_path_of_ctx_s (DOWN::path) (SExpr ((), name, id, modif, f, rel_opt)) ctx
+  | SFilterX (id,ctx) -> elt_s_path_of_ctx_s (DOWN::path) (SFilter ((), id, f)) ctx
+  | ApplyX (func,ll_rr,conv_opt,ctx) -> elt_s_path_of_ctx_expr (DOWN::path_of_list_ctx ll_rr path) (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
+  | ChoiceX (ll_rr,ctx) -> elt_s_path_of_ctx_expr (DOWN::path_of_list_ctx ll_rr path) (Choice ((), list_of_ctx f ll_rr)) ctx
+and elt_s_path_of_ctx_s path (f : unit elt_s) = function
+  | Root -> (f, path)
+  | SeqX (ll_rr,ctx) -> elt_s_path_of_ctx_s (DOWN::path_of_list_ctx ll_rr path) (Seq ((), list_of_ctx f ll_rr)) ctx
 
-let elt_s_of_focus = function
-  | AtP1 (f,ctx) -> elt_s_of_ctx_p1 f ctx
-  | AtSn (f,ctx) -> elt_s_of_ctx_sn f ctx
-  | AtS1 (f,ctx) -> elt_s_of_ctx_s1 f ctx
-  | AtAggreg (f,ctx) -> elt_s_of_ctx_aggreg f ctx
-  | AtExpr (f,ctx) -> elt_s_of_ctx_expr f ctx
-  | AtS (f,ctx) -> elt_s_of_ctx_s f ctx
+let elt_s_path_of_focus : focus -> unit elt_s * path = function
+  | AtP1 (f,ctx) -> elt_s_path_of_ctx_p1 [] f ctx
+  | AtSn (f,ctx) -> elt_s_path_of_ctx_sn [] f ctx
+  | AtS1 (f,ctx) -> elt_s_path_of_ctx_s1 [] f ctx
+  | AtAggreg (f,ctx) -> elt_s_path_of_ctx_aggreg [] f ctx
+  | AtExpr (f,ctx) -> elt_s_path_of_ctx_expr [] f ctx
+  | AtS (f,ctx) -> elt_s_path_of_ctx_s [] f ctx
+
+let elt_s_of_focus foc = fst (elt_s_path_of_focus foc)
 
 
+let list_focus_of_path_list path lr =
+  let rec aux path (ll,rr) x =
+    match path, rr with
+    | RIGHT::_, [] -> assert false
+    | RIGHT::path1, y::rr1 -> aux path1 (x::ll,rr1) y
+    | _ -> path, (ll,rr), x
+  in
+  match lr with
+  | [] -> assert false
+  | x::rr -> aux path ([],rr) x
+			     
+let rec focus_of_path_p1 (ctx : ctx_p1) : path * unit elt_p1 -> focus = function
+  | [], f -> AtP1 (f,ctx)
+  | DOWN::path, Is (_,np) -> focus_of_path_s1 (IsX ctx) (path,np)
+  | DOWN::path, Rel (_,p,m,np) -> focus_of_path_s1 (RelX (p,m,ctx)) (path,np)
+  | DOWN::path, Hier (_, id,p,ori,inv,np) -> focus_of_path_s1 (HierX (id,p,ori,inv,ctx)) (path,np)
+  | DOWN::RIGHT::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX2 (arg,np1,ctx)) (path,np2)
+  | DOWN::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX1 (arg,np2,ctx)) (path,np1)
+  | DOWN::path, And (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_p1 (AndX (ll_rr, ctx)) (path,x)
+  | DOWN::path, Or (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_p1 (OrX (ll_rr, ctx)) (path,x)
+  | DOWN::path, Maybe (_,x) -> focus_of_path_p1 (MaybeX ctx) (path,x)
+  | DOWN::path, Not (_,x) -> focus_of_path_p1 (NotX ctx) (path,x)
+  | DOWN::RIGHT::path, In (_,npg,x) -> focus_of_path_p1 (InX (npg,ctx)) (path,x)
+  | DOWN::path, In (_,npg,x) -> focus_of_path_s1 (InGraphX (x,ctx)) (path,npg)
+  | DOWN::path, InWhichThereIs (_,np) -> focus_of_path_s1 (InWhichThereIsX ctx) (path,np)
+  | _ -> assert false
+and focus_of_path_s1 (ctx : ctx_s1) : path * unit elt_s1 -> focus = function
+  | [], np -> AtS1 (np,ctx)
+  | DOWN::path, Det (_, det, Some rel) -> focus_of_path_p1 (DetThatX (det, ctx)) (path,rel)
+  | DOWN::RIGHT::path, AnAggreg (_, id, modif, g, rel_opt, np) -> focus_of_path_s1 (AnAggregX (id,modif,g,rel_opt,ctx)) (path,np)
+  | DOWN::path, AnAggreg (_, id, modif, g, Some rel, np) -> focus_of_path_p1 (AnAggregThatX (id, modif, g, np, ctx)) (path,rel)
+  | DOWN::path, NAnd (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_s1 (NAndX (ll_rr, ctx)) (path,x)
+  | DOWN::path, NOr (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_s1 (NOrX (ll_rr, ctx)) (path,x)
+  | DOWN::path, NMaybe (_,x) -> focus_of_path_s1 (NMaybeX ctx) (path,x)
+  | DOWN::path, NNot (_,x) -> focus_of_path_s1 (NNotX ctx) (path,x)
+  | _ -> assert false
+and focus_of_path_aggreg (ctx : ctx_aggreg) : path * unit elt_aggreg -> focus = function
+  | [], aggreg -> AtAggreg (aggreg,ctx)
+  | DOWN::path, ForEach (_,id,modif,Some rel,id2) -> focus_of_path_p1 (ForEachThatX (id,modif,id2,ctx)) (path,rel)
+  | DOWN::path, TheAggreg (_,id,modif,g,Some rel,id2) -> focus_of_path_p1 (TheAggregThatX (id,modif,g,id2,ctx)) (path,rel)
+  | _ -> assert false
+and focus_of_path_expr (ctx : ctx_expr) : path * unit elt_expr -> focus = function
+  | [], expr -> AtExpr (expr,ctx)
+  | DOWN::path, Apply (_,func,args) ->
+     let path, ll_rr, (conv_opt,expr) = list_focus_of_path_list path args in
+     focus_of_path_expr (ApplyX (func, ll_rr, conv_opt, ctx)) (path,expr)
+  | DOWN::path, Choice (_,lr) ->
+     let path, ll_rr, expr = list_focus_of_path_list path lr in
+     focus_of_path_expr (ChoiceX (ll_rr,ctx)) (path,expr)
+  | _ -> assert false
+and focus_of_path_s (ctx : ctx_s) : path * unit elt_s -> focus = function
+  | [], s -> AtS (s,ctx)
+  | DOWN::path, Return (_,np) -> focus_of_path_s1 (ReturnX ctx) (path,np)
+  | DOWN::path, SAggreg (_,aggregs) ->
+     let path, ll_rr, aggreg = list_focus_of_path_list path aggregs in
+     focus_of_path_aggreg (SAggregX (ll_rr,ctx)) (path,aggreg)
+  | DOWN::RIGHT::path, SExpr (_,name,id,modif,expr,Some rel) -> focus_of_path_p1 (SExprThatX (name,id,modif,expr,ctx)) (path,rel)
+  | DOWN::path, SExpr (_,name,id,modif,expr,rel_opt) -> focus_of_path_expr (SExprX (name,id,modif,rel_opt,ctx)) (path,expr)
+  | DOWN::path, SFilter (_,id,expr) -> focus_of_path_expr (SFilterX (id,ctx)) (path,expr)
+  | DOWN::path, Seq (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_s (SeqX (ll_rr,ctx)) (path,x)
+  | _ -> assert false
+
+let focus_of_elt_s_path : unit elt_s * path -> focus =
+  fun (s,path) -> focus_of_path_s Root (path,s)
+
+				  
 (* focus moves *)
 
 let move_seq move1 move2 = fun focus -> match move1 focus with None -> None | Some focus2 -> move2 focus2
@@ -854,6 +932,15 @@ let rec next_undef_focus focus =
   | AtS (SExpr _,_) -> down_focus focus
   | AtS (SFilter _,_) -> down_focus focus
   | _ -> Some focus
+
+
+(* going to root expr *)    
+let rec root_expr_of_ctx_expr (f : unit elt_expr) : ctx_expr -> unit elt_s * ctx_s = function
+  | SExprX (name,id,modif,rel_opt,ctx2) -> SExpr ((),name,id,modif,f,rel_opt), ctx2
+  | SFilterX (id,ctx2) -> SFilter ((),id,f), ctx2
+  | ApplyX (func,ll_rr,conv_opt,ctx) -> root_expr_of_ctx_expr (Apply ((), func, list_of_ctx (conv_opt,f) ll_rr)) ctx
+  | ChoiceX (ll_rr,ctx) -> root_expr_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
+
 
 let focus_up_at_root_s1 = function
   | AtS1 (f, CConsX1 (arg2,cp, PredX (arg1,pred,ctx))) -> Some (AtP1 (Pred ((),arg1,pred,CCons ((),arg2,f,cp)), ctx))
