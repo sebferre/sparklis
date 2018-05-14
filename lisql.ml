@@ -525,7 +525,7 @@ let path_of_list_ctx (ll,rr) path =
 		 
 let rec elt_s_path_of_ctx_p1 path (f : unit elt_p1) = function
   | DetThatX (det,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path) (Det ((), det, Some f)) ctx
-  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((), id, modif, g, Some f, np)) ctx
+  | AnAggregThatX (id,modif,g,np,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path) (AnAggreg ((), id, modif, g, Some f, np)) ctx
   | ForEachThatX (id,modif,id2,ctx) -> elt_s_path_of_ctx_aggreg (DOWN::path) (ForEach ((), id, modif, Some f, id2)) ctx
   | TheAggregThatX (id,modif,g,id2,ctx) -> elt_s_path_of_ctx_aggreg (DOWN::path) (TheAggreg ((), id, modif, g, Some f, id2)) ctx
   | SExprThatX (name,id,modif,expr,ctx) -> elt_s_path_of_ctx_s (DOWN::RIGHT::path) (SExpr ((), name, id, modif, expr, Some f)) ctx
@@ -592,6 +592,7 @@ let list_focus_of_path_list path lr =
 let rec focus_of_path_p1 (ctx : ctx_p1) : path * unit elt_p1 -> focus = function
   | [], f -> AtP1 (f,ctx)
   | DOWN::path, Is (_,np) -> focus_of_path_s1 (IsX ctx) (path,np)
+  | DOWN::path, Pred (_,arg,pred,cp) -> focus_of_path_sn (PredX (arg,pred,ctx)) (path,cp)
   | DOWN::path, Rel (_,p,m,np) -> focus_of_path_s1 (RelX (p,m,ctx)) (path,np)
   | DOWN::path, Hier (_, id,p,ori,inv,np) -> focus_of_path_s1 (HierX (id,p,ori,inv,ctx)) (path,np)
   | DOWN::RIGHT::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX2 (arg,np1,ctx)) (path,np2)
@@ -607,6 +608,19 @@ let rec focus_of_path_p1 (ctx : ctx_p1) : path * unit elt_p1 -> focus = function
   | DOWN::RIGHT::path, In (_,npg,x) -> focus_of_path_p1 (InX (npg,ctx)) (path,x)
   | DOWN::path, In (_,npg,x) -> focus_of_path_s1 (InGraphX (x,ctx)) (path,npg)
   | DOWN::path, InWhichThereIs (_,np) -> focus_of_path_s1 (InWhichThereIsX ctx) (path,np)
+  | _ -> assert false
+and focus_of_path_sn (ctx : ctx_sn) : path * unit elt_sn -> focus = function
+  | [], cp -> AtSn (cp,ctx)
+  | DOWN::RIGHT::path, CCons (_,arg,np,cp) -> focus_of_path_sn (CConsX2 (arg,np,ctx)) (path,cp)
+  | DOWN::path, CCons (_,arg,np,cp) -> focus_of_path_s1 (CConsX1 (arg,cp,ctx)) (path,np)
+  | DOWN::path, CAnd (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_sn (CAndX (ll_rr, ctx)) (path,x)
+  | DOWN::path, COr (_,lr) ->
+     let path, ll_rr, x = list_focus_of_path_list path lr in
+     focus_of_path_sn (COrX (ll_rr, ctx)) (path,x)
+  | DOWN::path, CMaybe (_,x) -> focus_of_path_sn (CMaybeX ctx) (path,x)
+  | DOWN::path, CNot (_,x) -> focus_of_path_sn (CNotX ctx) (path,x)
   | _ -> assert false
 and focus_of_path_s1 (ctx : ctx_s1) : path * unit elt_s1 -> focus = function
   | [], np -> AtS1 (np,ctx)
