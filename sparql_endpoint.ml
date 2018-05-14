@@ -295,6 +295,9 @@ end
 let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
+ if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
+ then k1 empty_results
+ else
   let real_endpoint, real_sparql = (* use of proxy, if defined *)
     if config_proxy#value
     then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
