@@ -352,6 +352,33 @@ let get_arg (arg : arg) (l : (arg * Sparql.term) list) : Sparql.term =
   try List.assoc arg l
   with Not_found -> Sparql.bnode ""
 
+(* definitions to retrieve predicates from focus *)
+module WhichPred =
+  struct
+    let pattern_vars : Rdf.var list = ["ps"; "po"]
+    let intent_pattern : Sparql.pattern =
+      Sparql.triple
+	(Sparql.var "ps" :> Sparql.term)
+	(Sparql.uri Rdf.nary_subjectObject :> Sparql.pred)
+	(Sparql.var "po" :> Sparql.term)
+    let pattern_of_term (t : Rdf.term) : Sparql.pattern =
+      Sparql.join
+	[ Sparql.triple
+	    (Sparql.var "ps" :> Sparql.term)
+	    (Sparql.uri Rdf.nary_subjectObject :> Sparql.pred)
+	    (Sparql.var "po" :> Sparql.term);
+	  Sparql.bnode_triples
+	    [ (Sparql.var "ps" :> Sparql.pred), (Sparql.term t);
+	      (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "") ]
+	]
+    let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
+      (* ~init: for initial focus, remind to generate increments in all relevant directions S/P/O *)
+      match lt with
+      | [Some (Rdf.URI ps); Some (Rdf.URI po)] -> [Lisql.IncrPred (S, SO (ps,po))]
+      | _ -> []
+  end
+
+    
 let pattern_pred_args (pred : pred) (args : (arg * Sparql.term) list) (var_args : (string * Sparql.term) list) : Sparql.pattern =
   match pred with
   | Class c -> Sparql.rdf_type (get_arg S args) (Sparql.uri c)
@@ -827,6 +854,8 @@ type s_sparql =
     query_class_opt : template option;
     query_prop_has_opt : template option;
     query_prop_isof_opt : template option;
+    query_pred_opt : template option;
+    query_arg_opt : template option;
     seq_view : seq_view }
     
 let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot : annot elt_s) : s_sparql =
@@ -853,25 +882,52 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     if Sparql.is_empty_view view
     then None
     else Some (make_query state focus_term_opt view) in
-  let query_incr_opt (x : Rdf.var) triple =
+  let query_incr_opt (lx : Rdf.var list) (make_pattern : Rdf.term -> Sparql.pattern) =
+    let _ = assert (lx <> []) in
+    let x = List.hd lx in
     match focus_term_opt with
     | Some t when fd#incr -> (* no increments for this focus term (expressions, aggregations) *)
-      let term_t = Sparql.term t in
       let tx = (Sparql.var x :> Sparql.term) in
       Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ~limit ->
-	let form_x = triple term_t tx in
+	let form_x = Sparql.Pattern (make_pattern t) in
 	let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph (Sparql.term tg) form_x in
 	let form_x =
 	  match focus_term_opt with
 	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ~limit view) form_x
 	  | _ -> form_x in
 	let form_x = Sparql.formula_and form_x (hook tx) in
-	(Sparql.select ~projections:[(`Bare,x)] ~froms ~limit
+	let projections = List.map (fun x -> (`Bare,x)) lx in
+	(Sparql.select ~projections ~froms ~limit
 	   (Sparql.pattern_of_formula form_x) :> string))
     | _ -> None in
-  let query_class_opt = query_incr_opt "class" (fun t tc -> Sparql.Pattern (Sparql.rdf_type t tc)) in
-  let query_prop_has_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple t (tp :> Sparql.pred) (Sparql.bnode ""))) in
-  let query_prop_isof_opt = query_incr_opt "prop" (fun t tp -> Sparql.Pattern (Sparql.triple (Sparql.bnode "") (tp :> Sparql.pred) t)) in
+  let query_class_opt =
+    query_incr_opt
+      ["class"]
+      (fun t -> Sparql.rdf_type (Sparql.term t) (Sparql.var "class" :> Sparql.term)) in
+  let query_prop_has_opt =
+    query_incr_opt
+      ["prop"]
+      (fun t -> Sparql.triple (Sparql.term t) (Sparql.var "prop" :> Sparql.pred) (Sparql.bnode "")) in
+  let query_prop_isof_opt =
+    query_incr_opt
+      ["prop"]
+      (fun t -> Sparql.triple (Sparql.bnode "") (Sparql.var "prop" :> Sparql.pred) (Sparql.term t)) in
+  let query_pred_opt =
+    query_incr_opt
+      WhichPred.pattern_vars
+      (fun t -> WhichPred.pattern_of_term t) in
+  let query_arg_opt =
+    match focus_pred_args_opt with
+    | None
+    | Some ((Lisql.Class _ | Lisql.Prop _),_) -> None (* non-reified predicates *)
+    | Some (pred,args) ->
+       query_incr_opt
+	 ["pq"]
+	 (fun t -> (* [t] not used directly, should/may belong to [args] *)
+	  pattern_pred_args
+	    pred
+	    (List.map (fun (arg,t) -> (arg, Sparql.term t)) args)
+	    ["pq", Sparql.bnode ""]) in
   (* TODO: handle n-ary predicates *)
   { state;
     focus_term_opt;
@@ -881,4 +937,6 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     query_class_opt;
     query_prop_has_opt;
     query_prop_isof_opt;
+    query_pred_opt;
+    query_arg_opt;
     seq_view }

@@ -115,7 +115,17 @@ let mapfilter (f : 'a -> 'b option) (l : 'a list) : 'b list =
      | None -> res
      | Some y -> y::res)
     l []
-	    
+
+let mapforall (f : 'a -> 'b option) (l : 'a list) : 'b list option =
+  let ok, res =
+    List.fold_right
+      (fun x (ok, res) ->
+       match f x with
+       | None -> (false, res)
+       | Some y -> (ok, y::res))
+      l (true,[]) in
+  if ok then Some res else None
+    
 let list_fold_prod (f : 'a -> 'b list -> 'a) (acc : 'a) (list_col_x : 'b list list) : 'a =
   let rec aux acc rev_row_x = function
     | [] -> f acc (List.rev rev_row_x)
