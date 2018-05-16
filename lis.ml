@@ -113,7 +113,7 @@ let config_max_properties = new Config.integer_input ~key:"max_properties" ~inpu
 let formula_hidden_URIs_term (tx : Sparql.term) : Sparql.formula =
   match config_regexp_hidden_URIs#value with
   | "" -> Sparql.True
-  | re -> Sparql.(Filter (log_not (expr_regex (expr_func "str" [(tx :> expr)]) re)))
+  | re -> Sparql.(Filter (log_not (log_and [expr_func "BOUND" [(tx :> expr)]; expr_regex (expr_func "str" [(tx :> expr)]) re])))
 let formula_hidden_URIs (v : string) : Sparql.formula =
   formula_hidden_URIs_term (Sparql.var v :> Sparql.term)
 
@@ -1115,7 +1115,6 @@ object (self)
 	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property
 		    Lisql2sparql.WhichPred.pattern_vars
 		    (fun t -> Lisql2sparql.WhichPred.pattern_of_term t) in
-      let _ = Jsutils.firebug sparql_pred in
       let sparql_arg =
 	match s_sparql.Lisql2sparql.focus_pred_args_opt with
 	| None

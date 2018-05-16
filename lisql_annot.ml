@@ -1002,10 +1002,6 @@ and annot_ctx_s fd (a1,a_x) x = function
 
 and annot_focus_aux (focus : focus) =
   let pred_args = focus_pred_args focus in
-  let _ =
-    match pred_args with
-    | `PredArgs (SO _, args) -> Jsutils.firebug ("some pred args with " ^ string_of_int (List.length args) ^ " args")
-    | _ -> Jsutils.firebug "no pred args" in
   let fd = new focus_descr ~pred_args in
   match focus with
   | AtP1 (f,ctx) ->

@@ -1176,7 +1176,7 @@ let _ =
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
-    jquery_select "#limit-results" (fun select -> firebug "found #limit-results"; select |> onchange (fun select ev ->
+    jquery_select "#limit-results" (fun select -> select |> onchange (fun select ev ->
         firebug "changed limit-results";
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit));
