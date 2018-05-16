@@ -28,15 +28,34 @@ end
 
 include S
 
-type var = [`Var] sparql
-type term = [`Var|`Term] sparql
-type expr = [`Var|`Term|`Expr] sparql
-type pred = [`Var|`Term|`Path] sparql
-type pattern = [`Pattern] sparql
-type selector = [`Var|`Selector] sparql
-type ordering = [`Ordering] sparql
-type query = [`Query] sparql
+type var_kind = [`Var]
+type term_kind = [var_kind|`Term]
+type expr_kind = [term_kind|`Expr]
+type pred_kind = [term_kind|`Path]
+type pattern_kind = [`Pattern]
+type selector_kind = [var_kind|`Selector]
+type ordering_kind = [`Ordering]
+type query_kind = [`Query]
 
+type var = var_kind sparql
+type term = term_kind sparql
+type expr = expr_kind sparql
+type pred = pred_kind sparql
+type pattern = pattern_kind sparql
+type selector = selector_kind sparql
+type ordering = ordering_kind sparql
+type query = query_kind sparql
+
+type 'a any_var = ([<var_kind] as 'a) sparql
+type 'a any_term = ([<term_kind] as 'a) sparql
+type 'a any_expr = ([<expr_kind] as 'a) sparql
+type 'a any_pred = ([<pred_kind] as 'a) sparql
+type 'a any_pattern = ([<pattern_kind] as 'a) sparql
+type 'a any_selector = ([<selector_kind] as 'a) sparql
+type 'a any_ordering = ([<ordering_kind] as 'a) sparql
+type 'a any_query = ([<query_kind] as 'a) sparql
+
+			
 type converter = expr -> expr
 
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
@@ -141,7 +160,7 @@ type aggreg =
 | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
 | SUM of converter | AVG of converter | MAX of converter | MIN of converter
 
-let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
+let term_aggreg (g : aggreg) (term : _ any_term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
   let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
   match g with
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
@@ -153,20 +172,20 @@ let term_aggreg (g : aggreg) (term : term) : term = (* assuming aggregates are t
   | SAMPLE -> make_aggreg "SAMPLE(" term ")"
   | ID -> make_aggreg "" term ""
 
-let expr_func (f : string) (l_expr : expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
-let expr_infix (op : string) (l_expr : expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
-let expr_regex (expr : expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
-let expr_comp (relop : string) (expr1 : expr) (expr2 : expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
+let expr_func (f : string) (l_expr : _ any_expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
+let expr_infix (op : string) (l_expr : _ any_expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
+let expr_regex (expr : _ any_expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
+let expr_comp (relop : string) (expr1 : _ any_expr) (expr2 : _ any_expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
 
-let conv_numeric (e : expr) : expr = expr_func "xsd:double" [e]
+let conv_numeric (e : _ any_expr) : expr = expr_func "xsd:double" [e]
 
 let log_true : expr = sparql "true"
 let log_false : expr = sparql "false"
-let log_not (e : expr) : expr =
+let log_not (e : _ any_expr) : expr =
   if e = log_true then log_false
   else if e = log_false then log_true
   else "!( " ^< indent 3 e ^> " )"
-let log_and (le : expr list) : expr = 
+let log_and (le : _ any_expr list) : expr = 
   if List.mem log_false le then log_false
   else
     let le = List.filter ((<>) log_true) (Common.list_to_set le) in
@@ -174,7 +193,7 @@ let log_and (le : expr list) : expr =
       | [] -> log_true
       | [e] -> e
       | _ -> "(  " ^< concat "\n&& " (List.map (indent 3) le) ^> " )"
-let log_or (le : expr list) : expr =
+let log_or (le : _ any_expr list) : expr =
   if List.mem log_true le then log_true
   else
     let le = List.filter ((<>) log_false) (Common.list_to_set le) in
@@ -183,59 +202,59 @@ let log_or (le : expr list) : expr =
       | [e] -> e
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
-let path_seq (p1 : pred) (p2 : pred) : pred = p1 ^^ "/" ^< p2
-let path_alt (p1 : pred) (p2 : pred) : pred = "(" ^< p1 ^^ "|" ^< p2 ^> ")"
-let path_transitive (p : pred) : pred = "(" ^< p ^> ")*"
+let path_seq (p1 : _ any_pred) (p2 : _ any_pred) : pred = p1 ^^ "/" ^< p2
+let path_alt (p1 : _ any_pred) (p2 : _ any_pred) : pred = "(" ^< p1 ^^ "|" ^< p2 ^> ")"
+let path_transitive (p : _ any_pred) : pred = "(" ^< p ^> ")*"
 								   
 let empty : pattern = sparql ""
-let something (s : term) : pattern =
+let something (s : _ any_term) : pattern =
   if Rdf.config_wikidata_mode#value
   then s ^> " wdt:P31 [] ."
   else s ^> " a [] ."
-let rdf_type (s : term) (c : term) : pattern =
+let rdf_type (s : _ any_term) (c : _ any_term) : pattern =
   if Rdf.config_wikidata_mode#value
   then s ^^ " wdt:P31 " ^< c ^> " ."
   else s ^^ " a " ^< c ^> " ."
-let triple (s : term) (p : pred) (o : term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
-let bnode_triples (lpo : (pred * term) list) : pattern =
+let triple (s : _ any_term) (p : _ any_pred) (o : _ any_term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
+let bnode_triples (lpo : (_ any_pred * _ any_term) list) : pattern =
   "[ " ^< concat " ; " (List.map (fun (p,o) -> p ^^ " " ^< o) lpo) ^> " ] ."
-let bind (e : expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
-let values (v : var) (l : term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
-let filter (e : expr) : pattern =
+let bind (e : _ any_expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
+let values (v : _ any_var) (l : _ any_term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
+let filter (e : _ any_expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^< indent 9 e ^> " )"
-let join (lp : pattern list) : pattern =
+let join (lp : _ any_pattern list) : pattern =
   concat "\n" (List.filter ((<>) empty) (Common.list_to_set lp))
-let union (lp : pattern list) : pattern =
+let union (lp : _ any_pattern list) : pattern =
   if List.mem empty lp then invalid_arg "Sparql.union: empty pattern";
   match Common.list_to_set lp with
     | [] -> invalid_arg "Sparql.union: empty list"
     | [p] -> p
     | p::lp1 -> "{ " ^< indent 2 p ^^ " }\nUNION " ^< concat "\nUNION " (List.map (fun p -> "{ " ^< indent 8 p ^> " }") lp1)
-let optional (p : pattern) : pattern =
+let optional (p : _ any_pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
   "OPTIONAL { " ^< indent 11 p ^> " }"
-let not_exists (p : pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
-let graph (g : term) (p : pattern) : pattern = "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
+let not_exists (p : _ any_pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
+let graph (g : _ any_term) (p : _ any_pattern) : pattern = "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
 
-let subquery (q : query) : pattern = "{ " ^< indent 2 q ^> " }"
+let subquery (q : _ any_query) : pattern = "{ " ^< indent 2 q ^> " }"
 
-let service (s : term) (p : pattern) : pattern = "SERVICE " ^< s ^^ " { " ^< p ^> " }"
+let service (s : _ any_term) (p : _ any_pattern) : pattern = "SERVICE " ^< s ^^ " { " ^< p ^> " }"
   
-let search_label (t : term) (l : term) : pattern =
+let search_label (t : _ any_term) (l : _ any_term) : pattern =
   t ^^ " rdfs:label " ^< l ^> " ." (* ^ sparql_constr l (HasLang "en") *)
 				
-let bif_contains (l : term) (w : string) : pattern =
+let bif_contains (l : _ any_term) (w : string) : pattern =
   l ^^ " bif:contains " ^< string w ^> " ."
-let text_query (s : term) (q : string) : pattern =
+let text_query (s : _ any_term) (q : string) : pattern =
   s ^^ " text:query " ^< string q ^> " ."
 
-let ask (pattern : pattern) : query =
+let ask (pattern : _ any_pattern) : query =
   "ASK\nWHERE { " ^< indent 8 pattern ^> " }"
 
 type order = ASC of converter | DESC of converter
 
-let ordering (order : order) (term : term) : ordering =
+let ordering (order : order) (term : _ any_term) : ordering =
   match order with
   | ASC conv -> "ASC(" ^< conv (term :> expr) ^> ")"
   | DESC conv -> "DESC(" ^< conv (term :> expr) ^> ")"
@@ -262,11 +281,11 @@ let select
     ?(distinct=false)
     ~(projections : projection list)
     ?(froms : Rdf.uri list = [])
-    ?(groupings : var list = [])
-    ?(having : expr = log_true)
+    ?(groupings : _ any_var list = [])
+    ?(having : _ any_expr = log_true)
     ?(orderings : (order * var) list = [])
     ?(limit : int option)
-    (pattern : pattern) : query =
+    (pattern : _ any_pattern) : query =
   if projections = []
   then ask pattern
   else
@@ -288,15 +307,15 @@ let select
     let s =
       if orderings = []
       then s
-      else s ^^ "\nORDER BY " ^< concat " " (List.map (fun (order,v) -> ordering order (v :> term)) orderings) in
+      else s ^^ "\nORDER BY " ^< concat " " (List.map (fun (order,v) -> ordering order v) orderings) in
     let s = match limit with None -> s | Some n -> s ^> "\nLIMIT " ^ string_of_int n in
     s
 
 let select_from_service url query : query =
   "SELECT * FROM { SERVICE <" ^< url ^< "> { " ^< query ^> " }}"
 
-let wikidata_lat_long (x : term) (lat : var) (long : var) : pattern =
-  (x ^^ " p:P625/psv:P625 [ wikibase:geoLatitude " ^< lat ^^ "; wikibase:geoLongitude " ^< long ^> " ]." :> pattern)
+let wikidata_lat_long (x : _ any_term) (lat : _ any_var) (long : _ any_var) : pattern =
+  x ^^ " p:P625/psv:P625 [ wikibase:geoLatitude " ^< lat ^^ "; wikibase:geoLongitude " ^< long ^> " ]."
 
 							     
 (* formulas *)
@@ -318,7 +337,7 @@ and subquery =
 let make_subquery ~projections ?(groupings = []) ?(having = log_true) ?limit formula =
   { projections; formula; groupings; having; limit}
 
-let subquery_having (sq : subquery) (e : expr) : subquery =
+let subquery_having (sq : subquery) (e : _ any_expr) : subquery =
   { sq with having = log_and [sq.having; e] }
 
 let rec pattern_of_formula : formula -> pattern = function
@@ -408,7 +427,7 @@ let formula_not : formula -> formula = function
   | False -> True
   | Or (p,e) -> Filter (log_and [not_exists p; log_not e])
 
-let formula_bind (x : term) : formula -> formula = function
+let formula_bind (x : _ any_term) : formula -> formula = function
   | Pattern p -> Pattern p
   | Subquery sq -> Subquery sq
   | Filter e -> Pattern (join [something x; filter e])
@@ -416,7 +435,7 @@ let formula_bind (x : term) : formula -> formula = function
   | False -> False
   | Or (p,e) -> Pattern (union [p; join [something x; filter e]])
 
-let rec formula_graph (g : term) : formula -> formula = function
+let rec formula_graph (g : _ any_term) : formula -> formula = function
   | Pattern p -> Pattern (graph g p)
   | Subquery sq -> Subquery {sq with formula = formula_graph g sq.formula}
   | Filter e -> Pattern (graph g (filter e))
