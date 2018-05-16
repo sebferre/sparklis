@@ -162,6 +162,9 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
 
 (* constraint subsumption *)
 
+let equivalent_constr constr1 constr2 : bool =
+  norm_constr constr1 = norm_constr constr2
+
 let subsumed_constr constr1 constr2 : bool =
   (* must avoid to return true when false, but can return false when true *)
   let open Lisql in
@@ -304,8 +307,8 @@ object (self)
   val mutable offset = 0
   val mutable limit = 10
 
-  val mutable term_constr = Lisql.True
-  val mutable property_constr = Lisql.True
+  val mutable term_constr = Lisql.MatchesAll []
+  val mutable property_constr = Lisql.MatchesAll []
 
   val term_selection = new increment_selection "#selection-terms"
   val property_selection = new increment_selection "#selection-properties"
@@ -407,7 +410,7 @@ object (self)
 	    input##value <- string (pattern_of_constr constr))))
       [("#select-terms", "#pattern-terms", term_constr);
        ("#select-properties", "#pattern-properties", property_constr);
-       ("#select-modifiers", "#pattern-modifiers", Lisql.True)]
+       ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [])]
 
   method private refresh_extension =
     let open Sparql_endpoint in
@@ -573,7 +576,6 @@ object (self)
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
-    let _ = firebug "### refresh_property_increments ###" in
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       (* retrieving selected increments for selection *)
@@ -763,7 +765,7 @@ object (self)
 
   method set_term_constr constr =
     let to_refresh =
-      if constr = term_constr then false
+      if equivalent_constr constr term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_terms && constr <> term_constr *)
@@ -778,12 +780,11 @@ object (self)
 
   method set_property_constr constr =
     let to_refresh =
-      if constr = property_constr then false
+      if equivalent_constr constr property_constr then false
       else if subsumed_constr constr property_constr then not refreshing_properties
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_properties && constr <> property_constr *)
     then begin
-	firebug ("-- refreshing after changing property constr " ^ string_of_bool (constr = property_constr) ^ string_of_bool (subsumed_constr constr property_constr));
       refreshing_properties <- true;
       property_constr <- constr;
       self#save_ui_state;
@@ -903,8 +904,8 @@ object (self)
     {< lis = lis;
        html_state = new Html.state lis#id_labelling;
        offset = 0;
-       term_constr = Lisql.True;
-       property_constr = Lisql.True;
+       term_constr = Lisql.MatchesAll [];
+       property_constr = Lisql.MatchesAll [];
        (* keeping same document scroll *)
        property_scroll = 0;
        term_scroll = 0;

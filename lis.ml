@@ -934,7 +934,6 @@ object (self)
       else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
-    let _ = Jsutils.firebug "*** ajax_index_properties ***" in
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
       k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
@@ -1073,7 +1072,6 @@ object (self)
 	    (fun code -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
     in
     let ajax_extent () =
-      let _ = Jsutils.firebug "!!! ajax_extent !!!" in
       let sparql_genvar = new Lisql2sparql.genvar in
       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
