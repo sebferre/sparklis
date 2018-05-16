@@ -573,6 +573,7 @@ object (self)
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
+    let _ = firebug "### refresh_property_increments ###" in
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       (* retrieving selected increments for selection *)
@@ -603,7 +604,8 @@ object (self)
     in
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
-      jquery_input "#pattern-properties" (fun input ->				 jquery "#selection-properties-items" (fun elt_sel_items ->
+      jquery_input "#pattern-properties" (fun input ->
+       jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
@@ -781,6 +783,7 @@ object (self)
       else begin self#abort_all_ajax; true end in	
     if to_refresh (* not refreshing_properties && constr <> property_constr *)
     then begin
+	firebug ("-- refreshing after changing property constr " ^ string_of_bool (constr = property_constr) ^ string_of_bool (subsumed_constr constr property_constr));
       refreshing_properties <- true;
       property_constr <- constr;
       self#save_ui_state;

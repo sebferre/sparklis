@@ -28,6 +28,7 @@ object
   method virtual has : string
   method virtual has_as_a : string
   method virtual relative_that : string
+  method virtual relative_that_object : string
   method virtual whose : string
   method virtual according_to : string
   method virtual which : string
@@ -45,6 +46,7 @@ object
   method virtual genetive_suffix : string option
   method virtual rel_to : string
   method virtual rel_from : string
+  method virtual at : string
 
   method virtual a_an : following:string -> string
   method virtual the : string
@@ -93,6 +95,7 @@ object
   method virtual give_me : string
   method virtual there_is : string
   method virtual it_is_true_that : string
+  method virtual the_fact_that : string
   method virtual where : string
   method virtual undefined : string
 
@@ -146,6 +149,7 @@ object
   method has = "has"
   method has_as_a = "has as a"
   method relative_that = "that"
+  method relative_that_object = "that"
   method whose = "whose"
   method according_to = "according to" (* "from" *)
   method which = "which"
@@ -163,6 +167,7 @@ object
   method genetive_suffix = Some "'s"
   method rel_to = "to"
   method rel_from = "from"
+  method at = "at"
 
   method a_an ~following =
     let starts_with_vowel =
@@ -296,6 +301,7 @@ object
   method give_me = "give me"
   method there_is = "there is"
   method it_is_true_that = "it is true that"
+  method the_fact_that = "the fact that"
   method where = "where"
   method undefined = "undefined"
 
@@ -349,6 +355,7 @@ object
   method has = "a"
   method has_as_a = "a pour"
   method relative_that = "qui"
+  method relative_that_object = "que"
   method whose = "dont l'"
   method according_to = "selon"
   method which = "lequel"
@@ -366,6 +373,7 @@ object
   method genetive_suffix = None
   method rel_from = "de"
   method rel_to = "à"
+  method at = "au" (* à l'/le/la *)
 
   method a_an ~following = "un(e)"
   method the = "l'"
@@ -489,6 +497,7 @@ object
   method give_me = "donne moi"
   method there_is = "il y a"
   method it_is_true_that = "il est vrai que"
+  method the_fact_that = "le fait que"
   method where = "où"
   method undefined = "indéfini"
 
@@ -543,6 +552,7 @@ object
   method has = "tiene"
   method has_as_a = "tiene como"
   method relative_that = "que"
+  method relative_that_object = "que"
   method whose = "cuyo"
   method according_to = "según"
   method which = "el/la cual"
@@ -560,6 +570,7 @@ object
   method genetive_suffix = None
   method rel_from = "de"
   method rel_to = "a"
+  method at = "a"
 
   method a_an ~following = "un(a)"
   method the = "la"
@@ -683,6 +694,7 @@ object
   method give_me = "dame"
   method there_is = "hay"
   method it_is_true_that = "es verdad que"
+  method the_fact_that = "el hecho de que"
   method where = "donde"
   method undefined = "indefinido"
 

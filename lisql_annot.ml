@@ -189,6 +189,7 @@ object (self)
     else self
 end
 
+let dummy_annot = new annot ~focus_pos:(`Aside false) ~focus:factory#home_focus ()
 
 (* cleaning sequences based on dependencies *)
 

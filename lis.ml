@@ -898,7 +898,7 @@ object (self)
 			  (Lisql2sparql.WhichPred.intent_pattern :> string)
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
-      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
+      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	  | [results_class; results_prop; results_pred] ->
 	     process results_class results_prop results_pred
@@ -934,11 +934,12 @@ object (self)
       else ajax_extent ()
 
   method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
+    let _ = Jsutils.firebug "*** ajax_index_properties ***" in
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
       k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_index_properties_init constr elt k
-    else
+    else begin
     let focus_prop_ori_opt =
       match focus with
       | Lisql.AtS1 (np, Lisql.RelX (p,ori,ctx)) -> Some (p,ori)
@@ -1072,6 +1073,7 @@ object (self)
 	    (fun code -> process ~max_value ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
     in
     let ajax_extent () =
+      let _ = Jsutils.firebug "!!! ajax_extent !!!" in
       let sparql_genvar = new Lisql2sparql.genvar in
       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
@@ -1115,6 +1117,7 @@ object (self)
 	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property
 		    Lisql2sparql.WhichPred.pattern_vars
 		    (fun t -> Lisql2sparql.WhichPred.pattern_of_term t) in
+      let _ = Jsutils.firebug sparql_pred in
       let sparql_arg =
 	match s_sparql.Lisql2sparql.focus_pred_args_opt with
 	| None
@@ -1126,7 +1129,7 @@ object (self)
 				    pred
 				    (List.combine args_args (List.map Sparql.term lt))
 				    ["pq", Sparql.bnode ""]) in
-      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:true [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof; sparql_pred; sparql_arg]
+      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_a; sparql_has; sparql_isof; sparql_pred; sparql_arg]
 	(function
 	| [results_a; results_has; results_isof; results_pred; results_arg] -> process ~max_value ~partial ~unit results_a results_has results_isof results_pred results_arg
 	| _ -> assert false)
@@ -1140,6 +1143,7 @@ object (self)
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then ajax_intent ()
       else ajax_extent ()
+      end
 
   method index_modifiers : incr_freq_index =
     let open Lisql in

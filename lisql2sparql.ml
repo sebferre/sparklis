@@ -355,7 +355,7 @@ let get_arg (arg : arg) (l : (arg * Sparql.term) list) : Sparql.term =
 (* definitions to retrieve predicates from focus *)
 module WhichPred =
   struct
-    let pattern_vars : Rdf.var list = ["ps"; "po"]
+    let pattern_vars : Rdf.var list = ["ps"; "po"; "pq"]
     let intent_pattern : Sparql.pattern =
       Sparql.triple
 	(Sparql.var "ps" :> Sparql.term)
@@ -367,14 +367,29 @@ module WhichPred =
 	    (Sparql.var "ps" :> Sparql.term)
 	    (Sparql.uri Rdf.nary_subjectObject :> Sparql.pred)
 	    (Sparql.var "po" :> Sparql.term);
-	  Sparql.bnode_triples
-	    [ (Sparql.var "ps" :> Sparql.pred), (Sparql.term t);
-	      (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "") ]
+	  Sparql.union
+	    [ Sparql.bnode_triples
+		[ (Sparql.var "ps" :> Sparql.pred), (Sparql.term t);
+		  (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "") ];
+	      Sparql.join
+		[ Sparql.bnode_triples
+		    [ (Sparql.var "ps" :> Sparql.pred), (Sparql.bnode "");
+		      (Sparql.var "po" :> Sparql.pred), (Sparql.bnode "");
+		      (Sparql.var "pq" :> Sparql.pred), (Sparql.term t) ];
+		  Sparql.filter
+		    (Sparql.log_and
+		       [ Sparql.expr_infix "!=" [(Sparql.var "pq" :> Sparql.expr); (Sparql.var "ps" :> Sparql.expr)];
+			 Sparql.expr_infix "!=" [(Sparql.var "pq" :> Sparql.expr); (Sparql.var "po" :> Sparql.expr)] ])
+		]
+	    ]
 	]
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       (* ~init: for initial focus, remind to generate increments in all relevant directions S/P/O *)
       match lt with
-      | [Some (Rdf.URI ps); Some (Rdf.URI po)] -> [Lisql.IncrPred (S, SO (ps,po))]
+      | [Some (Rdf.URI ps); Some (Rdf.URI po); None] ->
+	 [Lisql.IncrPred (S, SO (ps,po))]
+      | [Some (Rdf.URI ps); Some (Rdf.URI po); Some (Rdf.URI pq)] ->
+	 if init then [] else [Lisql.IncrPred (Q pq, SO (ps,po))]
       | _ -> []
   end
 
