@@ -39,6 +39,7 @@ type pred = (* E = Event, S = Subject, O = Object *)
   | Class of Rdf.uri
   | Prop of Rdf.uri
   | SO of Rdf.uri * Rdf.uri (* properties: E -> S, E -> O *)
+  | EO of Rdf.uri * Rdf.uri (* properties: S -> E, E -> O *)
 type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
 type aggreg =
 | NumberOf | ListOf | Sample
@@ -1105,6 +1106,7 @@ and term_of_pred : pred -> Rdf.term option = function
   | Class c -> Some (Rdf.URI c)
   | Prop p -> Some (Rdf.URI p)
   | SO _ -> None
+  | EO _ -> None
 and term_of_arg : arg -> Rdf.term option = function
   | S | P | O -> None
   | Q q -> Some (Rdf.URI q)
@@ -1123,7 +1125,8 @@ let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
        | S -> Pred ((), arg, pred, CNil ())
        | _ -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ())) )
   | Prop _
-  | SO _ ->
+  | SO _
+  | EO _ ->
      ( match arg with
        | S -> Pred ((), S, pred, CCons ((), O, factory#top_s1, CNil ()))
        | O -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))

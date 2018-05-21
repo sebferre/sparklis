@@ -579,6 +579,7 @@ object (self)
        | Class _ -> false
        | Prop _ -> false
        | SO (ps,po) -> pq <> Rdf.rdf_type && pq <> ps && pq <> po
+       | EO (pe,po) -> pq <> Rdf.rdf_type && pq <> po
 	       
 
   val ajax_pool = new Sparql_endpoint.ajax_pool
@@ -895,7 +896,7 @@ object (self)
 			  config_max_properties in
       let sparql_pred = make_sparql
 			  Lisql2sparql.WhichPred.pattern_vars
-			  (Lisql2sparql.WhichPred.intent_pattern :> string)
+			  (Lisql2sparql.WhichPred.intent_pattern () :> string)
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
       Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]

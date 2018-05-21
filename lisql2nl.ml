@@ -40,7 +40,7 @@ type word =
   | `Blank of string
   | `Class of Rdf.uri * string
   | `Prop of Rdf.uri * string
-  | `Nary of string
+  | `Nary of Rdf.uri * string
   | `Func of string
   | `Op of string
   | `Undefined
@@ -55,7 +55,7 @@ let word_text_content grammar : word -> string = function
   | `Blank id -> id
   | `Class (uri,s) -> s
   | `Prop (uri,s) -> s
-  | `Nary s -> s
+  | `Nary (uri,s) -> s
   | `Func s -> s
   | `Op s -> s
   | `Undefined -> ""
@@ -203,13 +203,14 @@ let word_syntagm_of_property grammar uri =
   `Prop (uri, name), synt
 let word_syntagm_of_nary grammar uri =
   let synt, name = Lexicon.config_property_lexicon#value#info uri in
-  `Nary name, synt
+  `Nary (uri,name), synt
 
 let word_syntagm_of_pred grammar (pred : pred) =
   match pred with
   | Class c -> word_of_class c, `Noun
   | Prop p -> word_syntagm_of_property grammar p
   | SO (ps,po) -> word_syntagm_of_nary grammar po
+  | EO (pe,po) -> word_syntagm_of_nary grammar pe
 
 let word_syntagm_of_arg grammar (arg : arg) =
   match arg with (* TODO: make it multilingual, and specific to args *)
@@ -338,6 +339,7 @@ let var_of_pred (pred : pred) : string =
   | Class c -> var_of_uri c
   | Prop p -> var_of_uri p
   | SO (ps,po) -> var_of_uri po
+  | EO (pe,po) -> var_of_uri pe
 		
 let var_of_aggreg = function
   | NumberOf -> "number_of"

@@ -34,8 +34,15 @@ let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
 
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
+let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
 
-let p_P625 = "http://www.wikidata.org/prop/P625" (* Wikidata: geographical coordinates *)
+let wikibase_Property = "http://wikiba.se/ontology#Property"
+let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
+let wikibase_claim = "http://wikiba.se/ontology#claim"
+let wikibase_statementProperty = "http://wikiba.se/ontology#statementProperty"
+let wikidata_Q (n : int) = "http://www.wikidata.org/entity/Q" ^ string_of_int n
+let wikidata_P (n : int) = "http://www.wikidata.org/prop/P" ^ string_of_int n
+let p_P625 = wikidata_P 625 (* Wikidata: geographical coordinates *)
 
 let lat_long_properties =
   [ "http://www.w3.org/2003/01/geo/wgs84_pos#lat", "http://www.w3.org/2003/01/geo/wgs84_pos#long";

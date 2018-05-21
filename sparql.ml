@@ -79,6 +79,7 @@ object (self)
     cpt <- 0;
     map <- (* default namespaces (reverse order of declarations) *)
       [("http://jena.apache.org/text#", "text:");
+       ("http://www.irisa.fr/LIS/ferre/vocab/nary#", "nary:");
        ("http://www.wikidata.org/prop/statement/value/","psv:");
        ("http://www.wikidata.org/prop/statement/","ps:");
        ("http://www.wikidata.org/prop/","p:");
@@ -216,8 +217,10 @@ let rdf_type (s : _ any_term) (c : _ any_term) : pattern =
   then s ^^ " wdt:P31 " ^< c ^> " ."
   else s ^^ " a " ^< c ^> " ."
 let triple (s : _ any_term) (p : _ any_pred) (o : _ any_term) : pattern = s ^^ " " ^< p ^^ " " ^< o ^> " ."
-let bnode_triples (lpo : (_ any_pred * _ any_term) list) : pattern =
-  "[ " ^< concat " ; " (List.map (fun (p,o) -> p ^^ " " ^< o) lpo) ^> " ] ."
+let bnode_triples (lpo : (_ any_pred * _ any_term) list) : term =
+  "[ " ^< concat " ; " (List.map (fun (p,o) -> p ^^ " " ^< o) lpo) ^> " ]"
+let bnode_triples_as_pattern lpo : pattern =
+  bnode_triples lpo ^> " ."
 let bind (e : _ any_expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
 let values (v : _ any_var) (l : _ any_term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
 let filter (e : _ any_expr) : pattern =
