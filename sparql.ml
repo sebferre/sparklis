@@ -177,6 +177,7 @@ let expr_func (f : string) (l_expr : _ any_expr list) : expr = f ^< "(" ^< conca
 let expr_infix (op : string) (l_expr : _ any_expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
 let expr_regex (expr : _ any_expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : _ any_expr) (expr2 : _ any_expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
+let expr_not_in (t : _ any_term) (le : _ any_expr list) : expr = t ^^ " NOT IN (" ^< concat ", " le ^> ")"
 
 let conv_numeric (e : _ any_expr) : expr = expr_func "xsd:double" [e]
 
@@ -227,9 +228,11 @@ let filter (e : _ any_expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^< indent 9 e ^> " )"
 let join (lp : _ any_pattern list) : pattern =
-  concat "\n" (List.filter ((<>) empty) (Common.list_to_set lp))
+  let lp = List.filter ((<>) empty) lp in
+  let lp = Common.list_to_set lp in
+  concat "\n" lp
 let union (lp : _ any_pattern list) : pattern =
-  if List.mem empty lp then invalid_arg "Sparql.union: empty pattern";
+  let lp = List.filter ((<>) empty) lp in
   match Common.list_to_set lp with
     | [] -> invalid_arg "Sparql.union: empty list"
     | [p] -> p

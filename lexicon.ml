@@ -133,10 +133,10 @@ let sparql_lexicon
 		  match middle with
 		  | "direct/" -> label
 		  | "novalue/" -> label ^ " (novalue)"
-		  | "" -> label ^ " (statement)"
+		  | "" -> label (* ^ " (statement)"*)
 		  | "statement/" -> label ^ " (object)"
 		  | "statement/value/" -> label ^ " (object value)"
-		  | "qualifier/" -> label ^ " (qualifier)"
+		  | "qualifier/" -> label (*^ " (qualifier)"*)
 		  | "qualifier/value/" -> label ^ " (qualifier value)"
 		  | "reference/" -> label ^ " (reference)"
 		  | "reference/value/" -> label ^ " (reference value)"

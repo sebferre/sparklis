@@ -452,13 +452,6 @@ let at_p1 f ctx =
   | _ -> AtP1 (f, ctx)
 
 
-let latlong_of_property_uri (uri : Rdf.uri) : latlong option =
-  if uri = Rdf.p_P625
-  then Some `Wikidata
-  else
-    try Some (`Custom (uri, List.assoc uri Rdf.lat_long_properties))
-    with Not_found -> None
-	      
 (* getting element annotation *)
 
 let rec annot_p1 : 'a elt_p1 -> 'a = function
@@ -1110,6 +1103,18 @@ and term_of_pred : pred -> Rdf.term option = function
 and term_of_arg : arg -> Rdf.term option = function
   | S | P | O -> None
   | Q q -> Some (Rdf.URI q)
+
+let latlong_of_increment (incr : increment) : latlong option =
+  match incr with
+  | IncrRel (uri,Fwd) ->
+     if uri = Rdf.p_P625
+     then Some `Wikidata
+     else
+       (try Some (`Custom (uri, List.assoc uri Rdf.lat_long_properties))
+	with Not_found -> None)
+  | _ -> None
+
+					 
 
 let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   let lhp = Ontology.config_hierarchy_inheritance#value#info uri in

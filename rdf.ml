@@ -24,7 +24,9 @@ let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
 let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
 let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+let rdf_Property = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property"
 		 
+let rdfs_Class = "http://www.w3.org/2000/01/rdf-schema#Class"
 let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
 let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
 let rdfs_domain = "http://www.w3.org/2000/01/rdf-schema#domain"
@@ -32,6 +34,9 @@ let rdfs_range = "http://www.w3.org/2000/01/rdf-schema#range"
 let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough"
 
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
+let owl_Class = "http://www.w3.org/2002/07/owl#Class"
+let owl_ObjectProperty = "http://www.w3.org/2002/07/owl#ObjectProperty"
+let owl_DatatypeProperty = "http://www.w3.org/2002/07/owl#DatatypeProperty"
 
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"

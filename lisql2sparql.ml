@@ -353,44 +353,92 @@ let get_arg (arg : arg) (l : (arg * _ Sparql.any_term) list) : Sparql.term =
   with Not_found -> Sparql.bnode ""
 
 (* definitions to retrieve classes from focus *)
-(*module WhichClass =
+module WhichClass =
   struct
-    let pattern_vars = ["class"]
+    let pattern_vars = ["c"]
     let intent_pattern () =
-      ""
-    let pattern_of_term (t : Rdf.term)
-  end*)
-				 
+      Sparql.(union
+		[ rdf_type (var "c") (uri Rdf.rdfs_Class);
+		  rdf_type (var "c") (uri Rdf.owl_Class) ])
+    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+      let init, t =
+	match t_opt with
+	| None -> true, Rdf.Bnode ""
+	| Some t -> false, t in
+      Sparql.(rdf_type (term t) (var "c"))
+    let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
+      (* ~init: for initial focus *)
+      match lt with
+      | [Some (Rdf.URI c)] -> [Lisql.IncrType c]
+      | _ -> []
+  end
+
+(* definitions to retrieve properties from focus *)
+module WhichProp =
+  struct
+    let pattern_vars = ["p";"ip"] (* property, inverse property *)
+    let intent_pattern () =
+      Sparql.(union
+		[ rdf_type (var "p") (uri Rdf.rdf_Property);
+		  rdf_type (var "p") (uri Rdf.owl_ObjectProperty);
+		  rdf_type (var "p") (uri Rdf.owl_DatatypeProperty) ])
+    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+      let init, t =
+	match t_opt with
+	| None -> true, Rdf.Bnode ""
+	| Some t -> false, t in
+      Sparql.(union
+		[ triple (term t) (var "p") (bnode "");
+		  if init then empty
+		  else triple (bnode "") (var "ip") (term t) ])
+    let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
+      match lt with
+      | [Some (Rdf.URI p); None] ->
+	 if init
+	 then [Lisql.IncrRel (p,Fwd); Lisql.IncrRel (p,Bwd)]
+	 else [Lisql.IncrRel (p,Fwd)]
+      | [None; Some (Rdf.URI ip)] ->
+	 [Lisql.IncrRel (ip,Bwd)]
+      | _ -> []
+  end
+    
 (* definitions to retrieve predicates from focus *)
 module WhichPred =
   struct
     let pattern_vars : Rdf.var list = ["pe"; "ps"; "po"; "pq"]
 
     (* pattern_X defined as functions because [uri] has a side effect in Sparql.prologue *)
-    let pattern_SO () =
+    let pattern_SO ps po =
       Sparql.(triple
-		(var "ps")
+		(var ps)
 		(uri Rdf.nary_subjectObject)
-		(var "po"))
-    let pattern_EO () =
+		(var po))
+    let pattern_EO pe po =
       Sparql.(triple
-		(var "pe")
+		(var pe)
 		(uri Rdf.nary_eventObject)
-		(var "po"))
-    let pattern_wikidata () =
-      Sparql.(bnode_triples_as_pattern
-		[ (uri Rdf.wikibase_claim :> pred), var "pe";
-		  (uri Rdf.wikibase_statementProperty :> pred), var "po" ])
+		(var po))
+    let pattern_wikidata pe po =
+      Sparql.(join
+		[ filter (expr_func "strstarts" [expr_func "str" [var pe]; (string "http://www.wikidata.org/prop/P" :> expr)]);
+		  filter (expr_func "strstarts" [expr_func "str" [var po]; (string "http://www.wikidata.org/prop/statement/P" :> expr)]) ])
+      (*Sparql.(bnode_triples_as_pattern
+		[ (uri Rdf.wikibase_claim :> pred), var pe;
+		  (uri Rdf.wikibase_statementProperty :> pred), var po ])*)
 	    
     let intent_pattern () : Sparql.pattern =
       if Rdf.config_wikidata_mode#value
-      then pattern_wikidata ()
-      else Sparql.(union [pattern_SO (); pattern_EO ()])
+      then pattern_wikidata "pe" "po"
+      else Sparql.(union [pattern_SO "ps" "po"; pattern_EO "pe" "po"])
 		 
-    let pattern_of_term (t : Rdf.term) : Sparql.pattern =
+    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+      let init, t =
+	match t_opt with
+	| None -> true, Rdf.Bnode ""
+	| Some t -> false, t in		 
       let pat_SO =
 	Sparql.(join
-		  [ pattern_SO ();
+		  [ pattern_SO "ps" "po";
 		    union
 		      [ bnode_triples_as_pattern (* relation: ps, po *)
 			  [ var "ps", term t;
@@ -408,34 +456,36 @@ module WhichPred =
 		      ]
 		  ]) in
       let pat_EO_wikidata =
-	Sparql.(join
-		  [ (if Rdf.config_wikidata_mode#value
-		     then pattern_wikidata ()
-		     else pattern_EO ());
-		    union
-		      [ triple (* forward: pe, po *)
+	let pat_schema pe po =
+	  if Rdf.config_wikidata_mode#value
+	  then pattern_wikidata pe po
+	  else pattern_EO pe po in
+	Sparql.(union
+		  [ join
+		      [ pat_schema "pe" "po";
+			triple (* forward: pe, po *)
 			  (term t)
 			  (var "pe")
 			  (bnode_triples
-			     [ var "po", bnode "" ]);
-			join
-			  [ triple (* backward: pe, ps, po *)
-			      (bnode "")
-			      (var "pe")
-			      (bnode_triples
-				 [ var "po", term t ]);
-			    bind (var "po") (var "ps") ]; (* binding 'ps' to distinguish orientation *)
-			(*join (* qualifier: pe, po, pq *)
-			  [ triple
-			      (bnode "")
-			      (var "pe")
-			      (bnode_triples
-				 [ var "po", bnode "";
-				   var "pq", term t ]);
-			    filter
-			      (expr_infix "!=" [var "pq"; var "po"])
-			  ]*)
-		      ]
+			     [ var "po", bnode "" ]) ];
+		    if init then empty
+		    else join (* backward: pe, ps, po *)
+			   [ pat_schema "pe" "ps";
+			     triple
+			       (bnode "")
+			       (var "pe")
+			       (bnode_triples
+				  [ var "ps", term t ]) ]; (* binding 'ps' to distinguish orientation *)
+		    (*join (* qualifier: pe, po, pq *)
+		      [ triple
+			  (bnode "")
+			  (var "pe")
+			  (bnode_triples
+			     [ var "po", bnode "";
+			       var "pq", term t ]);
+			filter
+			  (expr_infix "!=" [var "pq"; var "po"])
+		      ]*)
 		  ]) in
       if Rdf.config_wikidata_mode#value
       then pat_EO_wikidata
@@ -447,18 +497,36 @@ module WhichPred =
       | [None; Some (Rdf.URI ps); Some (Rdf.URI po); None] ->
 	 [Lisql.IncrPred (S, SO (ps,po))]
       | [None; Some (Rdf.URI ps); Some (Rdf.URI po); Some (Rdf.URI pq)] ->
-	 if init then [] else [Lisql.IncrPred (Q pq, SO (ps,po))]
+	 [Lisql.IncrPred (Q pq, SO (ps,po))]
       | [Some (Rdf.URI pe); None; Some (Rdf.URI po); None] ->
 	 if init
 	 then [Lisql.IncrPred (S, EO (pe,po)); Lisql.IncrPred (O, EO (pe,po))]
 	 else [Lisql.IncrPred (S, EO (pe,po))]
-      | [Some (Rdf.URI pe); Some _; Some (Rdf.URI po); None] ->
-	 [Lisql.IncrPred (O, EO (pe,po))]
+      | [Some (Rdf.URI pe); Some (Rdf.URI ps); None; None] ->
+	 [Lisql.IncrPred (O, EO (pe,ps))]
       | [Some (Rdf.URI pe); None; Some (Rdf.URI po); Some (Rdf.URI pq)] ->
-	 if init
-	 then []
-	 else [Lisql.IncrPred (Q pq, EO (pe,po))]
+	 [Lisql.IncrPred (Q pq, EO (pe,po))]
       | _ -> []
+
+    let increments_hidden_by_increment ~(init : bool) (incr : increment) : increment list =
+      let open Lisql in
+      if init
+      then
+	let lp =
+	  match incr with
+	  | IncrPred (_, SO (ps,po)) -> [ps; po]
+	  | IncrPred (_, EO (pe,po)) -> [pe; po]
+	  | _ -> [] in
+	List.fold_right
+	  (fun p res -> IncrRel (p,Fwd) :: IncrRel (p,Bwd) :: res)
+	  lp []
+      else
+	match incr with
+	| IncrPred (S, SO (ps,po)) -> [IncrRel (ps,Bwd)]
+	| IncrPred (O, SO (ps,po)) -> [IncrRel (po,Bwd)]
+	| IncrPred (S, EO (pe,po)) -> [IncrRel (pe,Fwd)]
+	| IncrPred (O, EO (pe,po)) -> [IncrRel (po,Bwd)]
+	| _ -> []
   end
 
     
@@ -503,7 +571,34 @@ let pattern_pred_args (pred : pred) (args : (arg * _ Sparql.any_term) list) (var
 	       (get_arg S args)
 	       (uri pe)
 	       (bnode_triples lpo))
-				 
+
+module WhichArg =
+  struct
+    let pattern_vars = ["pq"]
+
+    let pattern_of_pred_args (pred : Lisql.pred) (args : (Lisql.arg * Rdf.term) list) : Sparql.pattern =
+      let filter_qualifier =
+	match pred with
+	| Class _ -> Sparql.empty
+	| Prop _ -> Sparql.empty
+	| SO (ps,po) -> Sparql.(filter (expr_not_in (var "pq") [uri Rdf.rdf_type; uri ps; uri po]))
+	| EO (pe,po) ->
+	   if Rdf.config_wikidata_mode#value
+	   then Sparql.(filter (expr_func "strstarts" [expr_func "str" [var "pq"]; (string "http://www.wikidata.org/prop/qualifier/P" :> expr)]))
+	   else Sparql.(filter (expr_not_in (var "pq") [uri Rdf.rdf_type; uri po])) in
+      Sparql.(join
+		[ pattern_pred_args
+		    pred
+		    (List.map (fun (arg,t) -> (arg, term t)) args)
+		    ["pq", bnode ""];
+		  filter_qualifier ])
+
+    let increments_of_terms (lt : Rdf.term option list) : Lisql.increment list =
+      match lt with
+      | [Some (Rdf.URI pq)] -> [Lisql.IncrArg (Q pq)]
+      | _ -> []
+  end
+	   
 let form_pred state (pred : pred) : sparql_pn =
   (fun l -> Sparql.Pattern (pattern_pred_args pred l []))
 	      
@@ -954,8 +1049,7 @@ type s_sparql =
     focus_pred_args_opt : (pred * (arg * Rdf.term) list) option;
     query_opt : template option;
     query_class_opt : template option;
-    query_prop_has_opt : template option;
-    query_prop_isof_opt : template option;
+    query_prop_opt : template option;
     query_pred_opt : template option;
     query_arg_opt : template option;
     seq_view : seq_view }
@@ -1004,32 +1098,24 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     | _ -> None in
   let query_class_opt =
     query_incr_opt
-      ["class"]
-      (fun t -> Sparql.rdf_type (Sparql.term t) (Sparql.var "class")) in
-  let query_prop_has_opt =
+      WhichClass.pattern_vars
+      (fun t -> WhichClass.pattern_of_term (Some t)) in
+  let query_prop_opt =
     query_incr_opt
-      ["prop"]
-      (fun t -> Sparql.triple (Sparql.term t) (Sparql.var "prop") (Sparql.bnode "")) in
-  let query_prop_isof_opt =
-    query_incr_opt
-      ["prop"]
-      (fun t -> Sparql.triple (Sparql.bnode "") (Sparql.var "prop") (Sparql.term t)) in
+      WhichProp.pattern_vars
+      (fun t -> WhichProp.pattern_of_term (Some t)) in
   let query_pred_opt =
     query_incr_opt
       WhichPred.pattern_vars
-      (fun t -> WhichPred.pattern_of_term t) in
+      (fun t -> WhichPred.pattern_of_term (Some t)) in
   let query_arg_opt =
     match focus_pred_args_opt with
     | None
     | Some ((Lisql.Class _ | Lisql.Prop _),_) -> None (* non-reified predicates *)
     | Some (pred,args) ->
        query_incr_opt
-	 ["pq"]
-	 (fun t -> (* [t] not used directly, should/may belong to [args] *)
-	  pattern_pred_args
-	    pred
-	    (List.map (fun (arg,t) -> (arg, Sparql.term t)) args)
-	    ["pq", Sparql.bnode ""]) in
+	 WhichArg.pattern_vars
+	 (fun _t -> WhichArg.pattern_of_pred_args pred args) in
   (* TODO: handle n-ary predicates *)
   { state;
     focus_term_opt;
@@ -1037,8 +1123,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     focus_pred_args_opt;
     query_opt;
     query_class_opt;
-    query_prop_has_opt;
-    query_prop_isof_opt;
+    query_prop_opt;
     query_pred_opt;
     query_arg_opt;
     seq_view }
