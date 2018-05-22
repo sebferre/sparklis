@@ -929,10 +929,10 @@ object (self)
       in      
       let sparql_class = (* use (List.hd Lisql2sparql.WhichClass.pattern_vars = "c") as result variable *)
 	"SELECT DISTINCT ?c " ^ sparql_froms ^ "WHERE { " ^
-	  (graph_opt (Sparql.(rdf_type (var "x") (var "c")) :> string) ^
-	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) :> string) ^
+	  (graph_opt (Sparql.(rdf_type (var "x") (var "c"))) :> string) ^
+	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
 	    (*filter_hidden_URIs "class" ^*)
-	  " } GROUP BY ?c ORDER BY DESC(COUNT(?x)) LIMIT " ^ string_of_int config_max_classes#value in	
+	  " } GROUP BY ?c ORDER BY DESC(COUNT(?x)) LIMIT " ^ string_of_int config_max_classes#value in
       Sparql_endpoint.ajax_list_in
 	[elt] ajax_pool endpoint [sparql_class]
 	(function
@@ -1025,6 +1025,9 @@ object (self)
 	   List.iter
 	     (fun incr ->
 	      incr_index#add (incr, freq_opt);
+	      ( match Lisql.latlong_of_increment incr with
+		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
+		| None -> () );
 	      Lisql2sparql.WhichPred.increments_hidden_by_increment ~init:false incr |>
 	       List.iter incr_index#remove));
       int_index_arg#iter

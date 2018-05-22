@@ -321,7 +321,16 @@ let select_from_service url query : query =
   "SELECT * FROM { SERVICE <" ^< url ^< "> { " ^< query ^> " }}"
 
 let wikidata_lat_long (x : _ any_term) (lat : _ any_var) (long : _ any_var) : pattern =
-  x ^^ " p:P625/psv:P625 [ wikibase:geoLatitude " ^< lat ^^ "; wikibase:geoLongitude " ^< long ^> " ]."
+  join
+    [ triple
+	x
+	(path_seq (qname "p:P625") (qname "psv:P625"))
+	(bnode_triples
+	   [ qname "wikibase:geoLatitude", lat;
+	     qname "wikibase:geoLongitude", long ]);
+      filter (log_and
+		[ expr_comp "=" (expr_func "datatype" [lat]) (qname "xsd:decimal");
+		  expr_comp "=" (expr_func "datatype" [long]) (qname "xsd:decimal") ]) ]
 
 							     
 (* formulas *)

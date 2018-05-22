@@ -1106,6 +1106,7 @@ and term_of_arg : arg -> Rdf.term option = function
 
 let latlong_of_increment (incr : increment) : latlong option =
   match incr with
+  | IncrPred (S, EO (pe,po)) when pe = Rdf.p_P625 -> Some `Wikidata
   | IncrRel (uri,Fwd) ->
      if uri = Rdf.p_P625
      then Some `Wikidata
