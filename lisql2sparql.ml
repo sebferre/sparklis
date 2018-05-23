@@ -387,10 +387,18 @@ module WhichProp =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
 	| Some t -> false, t in
+      let filt p =
+	if Rdf.config_wikidata_mode#value
+	then Sparql.(filter (expr_func "strstarts" [expr_func "str" [var p]; (string "http://www.wikidata.org/prop/direct/P" :> expr)]))
+	else Sparql.empty in
       Sparql.(union
-		[ triple (term t) (var "p") (bnode "");
+		[ join
+		    [ triple (term t) (var "p") (bnode "");
+		      filt "p" ];
 		  if init then empty
-		  else triple (bnode "") (var "ip") (term t) ])
+		  else join
+			 [ triple (bnode "") (var "ip") (term t);
+			   filt "ip" ] ])
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       match lt with
       | [Some (Rdf.URI p); None] ->

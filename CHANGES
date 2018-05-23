@@ -1,5 +1,16 @@
 # description of main changes
 
+2018-05-XX    N-ary relations, reified triples, support of wikidata
+
+- new configurations
+  - Rdf.config_wikidata_mode : bool
+  - Lis.config_nary_relations : bool
+- new increments (in left column)
+  - IncrPred (arg,pred) : insertion of a n-ary predicate
+  - IncrArg (arg) : insertion of an additional argument of the n-ary predicate at focus
+- new kind of word in XML
+  - Nary (uri,string): similar to Class/Prop (different color)
+
 2018-05-03
 
 [lisql] conversion  focus <--> elt_s * path

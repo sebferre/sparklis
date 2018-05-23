@@ -106,6 +106,7 @@ class incr_freq_tree_index th = [Lisql.increment, freq option] index ~parents:(i
 (* configuration *)
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
+let config_nary_relations = new Config.boolean_input ~key:"nary_relations" ~input_selector:"#input-nary-relations" ~default:true ()
 let config_regexp_hidden_URIs = new Config.string_input ~key:"regexp_hidden_URIs" ~input_selector:"#input-regexp-hidden-uris" ~default:"^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)" ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
@@ -874,11 +875,14 @@ object (self)
 			  (Lisql2sparql.WhichProp.pattern_of_term None)
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
-      let sparql_pred = make_sparql
-			  Lisql2sparql.WhichPred.pattern_vars
-			  (Lisql2sparql.WhichPred.pattern_of_term None)
-			  Lisql2sparql.filter_constr_property
-			  config_max_properties in
+      let sparql_pred =
+	if config_nary_relations#value
+	then make_sparql
+	       Lisql2sparql.WhichPred.pattern_vars
+	       (Lisql2sparql.WhichPred.pattern_of_term None)
+	       Lisql2sparql.filter_constr_property
+	       config_max_properties
+	else "" in
       Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	| [results_class; results_prop; results_pred] -> process results_class results_prop results_pred
@@ -907,11 +911,14 @@ object (self)
 			  (Lisql2sparql.WhichProp.intent_pattern () :> string)
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
-      let sparql_pred = make_sparql
-			  Lisql2sparql.WhichPred.pattern_vars
-			  (Lisql2sparql.WhichPred.intent_pattern () :> string)
-			  Lisql2sparql.filter_constr_property
-			  config_max_properties in
+      let sparql_pred =
+	if config_nary_relations#value
+	then make_sparql
+	       Lisql2sparql.WhichPred.pattern_vars
+	       (Lisql2sparql.WhichPred.intent_pattern () :> string)
+	       Lisql2sparql.filter_constr_property
+	       config_max_properties
+	else "" in
       Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	  | [results_class; results_prop; results_pred] ->
@@ -1076,16 +1083,19 @@ object (self)
 		       Lisql2sparql.filter_constr_class
 		       config_max_classes in
       let sparql_prop =
-	if Rdf.config_wikidata_mode#value
+	if Rdf.config_wikidata_mode#value && config_nary_relations#value
 	then ""
 	else make_sparql
 	       s_sparql.Lisql2sparql.query_prop_opt
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties in
-      let sparql_pred = make_sparql
-			  s_sparql.Lisql2sparql.query_pred_opt
-			  Lisql2sparql.filter_constr_property
-			  config_max_properties in
+      let sparql_pred =
+	if config_nary_relations#value
+	then make_sparql
+	       s_sparql.Lisql2sparql.query_pred_opt
+	       Lisql2sparql.filter_constr_property
+	       config_max_properties
+	else "" in
       let sparql_arg = make_sparql
 			 s_sparql.Lisql2sparql.query_arg_opt
 			 Lisql2sparql.filter_constr_property
@@ -1136,15 +1146,17 @@ object (self)
 		    Lisql2sparql.WhichClass.pattern_vars
 		    (fun t -> Lisql2sparql.WhichClass.pattern_of_term (Some t)) in
       let sparql_prop =
-	if Rdf.config_wikidata_mode#value
+	if Rdf.config_wikidata_mode#value && config_nary_relations#value
 	then ""
 	else make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property
 		    Lisql2sparql.WhichProp.pattern_vars
 		    (fun t -> Lisql2sparql.WhichProp.pattern_of_term (Some t)) in
       let sparql_pred =
-	make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property
-		    Lisql2sparql.WhichPred.pattern_vars
-		    (fun t -> Lisql2sparql.WhichPred.pattern_of_term (Some t)) in
+	if config_nary_relations#value
+	then make_sparql focus_term_index config_max_properties Lisql2sparql.filter_constr_property
+			 Lisql2sparql.WhichPred.pattern_vars
+			 (fun t -> Lisql2sparql.WhichPred.pattern_of_term (Some t))
+	else "" in
       let sparql_arg =
 	match s_sparql.Lisql2sparql.focus_pred_args_opt with
 	| None
