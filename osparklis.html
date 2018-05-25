@@ -599,6 +599,39 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
+	    <div id="config-label-arg" class="config-param">
+	      <span class="texte lang-en">For <span class="naryURI">qualifier</span> labels, use property</span>
+	      <span class="texte lang-fr">Pour les étiquettes des <span class="naryURI">qualifieurs</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para las etiquetas de los <span class="naryURI">calificadores</span>, utilizar la propiedad </span>
+	      <select id="config-label-arg-select" class="selectpicker">
+		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URI of the desired property</span>
+		<span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
+		<span class="tooltip lang-es">Ingrese aquí la URI de la propiedad requerida</span>
+		<input id="config-label-arg-input" type="url">
+	      </span>
+	      <span class="texte lang-en">and only with language (optional)</span>
+	      <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
+	      <span class="texte lang-es">y sólo con el idioma (opcional) </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tag</span>
+		<span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
+		<span class="tooltip lang-es">Ingrese aquí el tag del idioma requerido</span>
+		<input id="config-label-arg-input-lang" type="text" size="3">
+	      </span>
+	      <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
+	      <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
+	      <span class="texte lang-es">(ej., 'en' para Inglés, 'fr' para Francés) </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
 	    <div id="config-show-datatypes" class="config-param">
 	      <span class="texte lang-en">For <span class="Literal">literals</span>, show datatypes and language tags </span>
 	      <span class="texte lang-fr">Pour les <span class="Literal">littéraux</span>, montrer les types de données et les tags de langues </span>

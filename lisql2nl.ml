@@ -124,6 +124,7 @@ and nl_rel =
   | `ThatS of s
   | `Whose of ng * vp
   | `PrepWhich of word * s
+  | `AtWhichNoun of word * s
   (*  | `Of of np *)
   | `PP of pp list
   | `Ing of word * np
@@ -164,6 +165,7 @@ and nl_cp =
 and pp =
   [ `Bare of np
   | `Prep of word * np
+  | `AtNoun of word * np
   | `PrepBin of word * np * word * np ]
 
 let top_adj : adj = `Nil
@@ -201,23 +203,26 @@ let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri
 let word_syntagm_of_property grammar uri =
   let synt, name = Lexicon.config_property_lexicon#value#info uri in
   `Prop (uri, name), synt
-let word_syntagm_of_nary grammar uri =
+let word_syntagm_of_pred_uri grammar uri =
   let synt, name = Lexicon.config_property_lexicon#value#info uri in
+  `Nary (uri,name), synt
+let word_syntagm_of_arg_uri grammar uri =
+  let synt, name = Lexicon.config_arg_lexicon#value#info uri in
   `Nary (uri,name), synt
 
 let word_syntagm_of_pred grammar (pred : pred) =
   match pred with
   | Class c -> word_of_class c, `Noun
   | Prop p -> word_syntagm_of_property grammar p
-  | SO (ps,po) -> word_syntagm_of_nary grammar po
-  | EO (pe,po) -> word_syntagm_of_nary grammar pe
+  | SO (ps,po) -> word_syntagm_of_pred_uri grammar po
+  | EO (pe,po) -> word_syntagm_of_pred_uri grammar pe
 
 let word_syntagm_of_arg grammar (arg : arg) =
   match arg with (* TODO: make it multilingual, and specific to args *)
   | S -> `Op "subject", `Noun
   | P -> `Op "predicate", `Noun
   | O -> `Op "object", `Noun
-  | Q q -> word_syntagm_of_nary grammar q
+  | Q q -> word_syntagm_of_arg_uri grammar q
 
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
@@ -443,7 +448,13 @@ and labelling_sn grammar ~labels : 'a elt_sn -> id_label list * id_labelling_lis
      let ls_np =
        match arg with
        | S | O -> labels
-       | _ -> [] in (* TODO: refine with prepositions *)
+       | P ->
+	  let v, w = "relation", `Relation in
+	  [(v, `Word w)]
+       | Q q ->
+	  let v = var_of_uri q in
+	  let w, synt = word_syntagm_of_arg_uri grammar q in
+	  [(v, `Word w)] in
      let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels:ls_np np in
      let ls_cp, lab_cp = labelling_sn grammar ~labels cp in (* TODO: refine with [np] *)
      let ls =
@@ -868,12 +879,12 @@ and nl_vp_of_O_pred grammar ~id_labelling ~word ~synt cp =
   | `TransVerb -> nl_is (something (X (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
   | `TransAdj -> nl_is (something (X (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
 and nl_vp_of_Q_pred grammar ~id_labelling q ~word ~synt cp =
-  let word_q, synt_q = word_syntagm_of_nary grammar q in
+  let word_q, synt_q = word_syntagm_of_arg_uri grammar q in
   match synt_q with
-  | `Noun -> nl_is (something (X (`PrepWhich ((*grammar#at*) word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
-  | `InvNoun -> `HasProp (word_q, X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), [])
-  | `TransVerb -> nl_is (something (X (`ThatS (X (`Truth (X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), X (`VT_CP (word_q, X `Nil))))))))
+  | `Noun -> nl_is (something (X (`AtWhichNoun (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
   | `TransAdj -> nl_is (something (X (`PrepWhich (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
+  (*  | `InvNoun -> `HasProp (word_q, X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), []) *)
+  (*  | `TransVerb -> nl_is (something (X (`ThatS (X (`Truth (X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), X (`VT_CP (word_q, X `Nil)))))))) *)
 and s_of_elt_sn grammar ~id_labelling ~word ~synt : annot elt_sn -> s = function
   | CNil annot -> (* missing subject *)
      X (`Truth (something (X `Nil), X (nl_vp_of_S_pred grammar ~id_labelling ~word ~synt (CNil annot))))
@@ -904,8 +915,10 @@ and pp_of_arg_elt_np grammar ~id_labelling arg np =
   | O -> `Bare np
   | P -> `Bare np (* in 'has relation P from S to O' *)
   | Q q ->
-     let word_q, _synt_q = word_syntagm_of_nary grammar q in
-     `Prep (word_q, np) (* TODO : use synt *)
+     let word_q, synt_q = word_syntagm_of_arg_uri grammar q in
+     ( match synt_q with
+       | `Noun -> `AtNoun (word_q, np)
+       | `TransAdj -> `Prep (word_q, np) )
 
 (* linguistic transformations *)
 
@@ -984,6 +997,7 @@ and map_rel transf rel =
     | `ThatS s -> `ThatS (map_s transf s)
     | `Whose (ng,vp) -> `Whose (map_ng transf ng, map_vp transf vp)
     | `PrepWhich (w,s) -> `PrepWhich (w, map_s transf s)
+    | `AtWhichNoun (w,s) -> `AtWhichNoun (w, map_s transf s)
     (*    | `Of np -> `Of (map_np transf np) *)
     | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
     | `Ing (w,np) -> `Ing (w, map_np transf np)
@@ -1027,6 +1041,7 @@ and map_pp transf pp =
   match transf#pp pp with
     | `Bare np -> `Bare (map_np transf np)  
     | `Prep (w,np) -> `Prep (w, map_np transf np)
+    | `AtNoun (w,np) -> `AtNoun (w, map_np transf np)
     | `PrepBin (w1,np1,w2,np2) -> `PrepBin (w1, map_np transf np1, w2, map_np transf np2)
 
 
@@ -1315,6 +1330,7 @@ and xml_rel grammar ~id_labelling = function
       | `ThatS s -> Kwd grammar#relative_that (* TODO: improved for French *) :: xml_s grammar ~id_labelling s
       | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
       | `PrepWhich (w,s) -> Word w :: Kwd grammar#which :: xml_s grammar ~id_labelling s
+      | `AtWhichNoun (w,s) -> Kwd grammar#at :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
       | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
@@ -1373,7 +1389,8 @@ and xml_pp_list grammar ~id_labelling lpp =
   List.concat (List.map (xml_pp grammar ~id_labelling) lpp)
 and xml_pp grammar ~id_labelling = function
   | `Bare np -> xml_np grammar ~id_labelling np
-  | `Prep (prep,np) -> Word prep :: xml_np grammar ~id_labelling np
+  | `Prep (w,np) -> Word w :: xml_np grammar ~id_labelling np
+  | `AtNoun (w,np) -> Kwd grammar#at :: Word w :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
   | `Word w -> [Word w]
@@ -1449,8 +1466,10 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
      let rel = map_rel main_transf rel in
      xml_incr_coordinate grammar focus (xml_rel grammar ~id_labelling rel)
   | IncrArg arg -> (* TODO: make it multilingual (and better) *)
-     let w, _synt = word_syntagm_of_arg grammar arg in
-     Word w :: xml_ellipsis
+     let w, synt = word_syntagm_of_arg grammar arg in
+     ( match synt with
+       | `Noun -> Kwd grammar#at :: Word w :: xml_ellipsis
+       | `TransAdj -> Word w :: xml_ellipsis )
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in
     ( match focus with

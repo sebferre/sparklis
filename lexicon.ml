@@ -11,10 +11,12 @@ class ['a] pure_lexicon get_label = [Rdf.uri,'a] Cache.pure_cache ~get:get_label
 class ['a] tabled_lexicon default_label bind_labels = [Rdf.uri,'a] Cache.tabled_cache ~default:default_label ~bind:bind_labels
 
 type property_syntagm = [ `Noun | `InvNoun | `TransVerb | `TransAdj ]
+type arg_syntagm = [ `Noun | `TransAdj ]
 
 type entity_lexicon = string lexicon
 type class_lexicon = string lexicon
 type property_lexicon = (property_syntagm * string) lexicon
+type arg_lexicon = (arg_syntagm * string) lexicon
 
 
 (* default lexicon *)
@@ -72,9 +74,26 @@ let syntagm_name_of_uri_property =
     let name = name_of_uri_concept uri in
     syntagm_of_property_name name
 
+let syntagm_of_arg_name (name : string) : arg_syntagm * string =
+  try
+    if Common.has_prefix name "is " || List.exists (fun prep -> Common.has_suffix name (" " ^ prep)) prepositions then
+      let name =
+	if Common.has_prefix name "is "
+	then String.sub name 3 (String.length name - 3)
+	else name in
+      `TransAdj, name
+    else `Noun, name
+  with _ -> Jsutils.firebug ("Lexicon.syntagm_of_arg_name: exception raised for:" ^ name); `Noun, name
+
+let syntagm_name_of_uri_arg =
+  fun uri ->
+    let name = name_of_uri_concept uri in
+    syntagm_of_arg_name name
+
 let default_entity_lexicon = new pure_lexicon name_of_uri_entity
 let default_class_lexicon = new pure_lexicon name_of_uri_concept
 let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
+let default_arg_lexicon = new pure_lexicon syntagm_name_of_uri_arg
 
 
 (* lexicon retrieving labels from a SPARQL endpoint *)
@@ -182,6 +201,8 @@ let sparql_class_lexicon ~endpoint ~froms ~property ?language () =
   sparql_lexicon ~default_label:name_of_uri_concept ~endpoint ~froms ~property ?language (fun l -> l)
 let sparql_property_lexicon ~endpoint ~froms ~property ?language () =
   sparql_lexicon ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ~property ?language syntagm_of_property_name
+let sparql_arg_lexicon ~endpoint ~froms ~property ?language () =
+  sparql_lexicon ~default_label:syntagm_name_of_uri_arg ~endpoint ~froms ~property ?language syntagm_of_arg_name
 
 
 (* configuration *)
@@ -331,4 +352,14 @@ let config_property_lexicon =
     ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~default_lexicon:default_property_lexicon
     ~custom_lexicon:sparql_property_lexicon
+    ()
+let config_arg_lexicon =
+  new config_input
+    ~key:"arg_lexicon"
+    ~select_selector:"#config-label-arg-select"
+    ~input_selector:"#config-label-arg-input"
+    ~lang_input_selector:"#config-label-arg-input-lang"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
+    ~default_lexicon:default_arg_lexicon
+    ~custom_lexicon:sparql_arg_lexicon
     ()

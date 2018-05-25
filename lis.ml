@@ -1041,7 +1041,7 @@ object (self)
 	(fun (lt,count) ->
 	 List.iter
 	   (function
-	     | Some (Rdf.URI uri) -> Lexicon.config_property_lexicon#value#enqueue uri
+	     | Some (Rdf.URI uri) -> Lexicon.config_arg_lexicon#value#enqueue uri
 	     | _ -> ())
 	   lt;
 	 let freq_opt = Some { value=count; max_value; partial=partial_arg; unit } in
@@ -1063,7 +1063,8 @@ object (self)
 	  Ontology.config_hierarchy_inheritance#value#sync (fun () ->
 	    Lexicon.config_class_lexicon#value#sync (fun () ->
 	      Lexicon.config_property_lexicon#value#sync (fun () ->
-	        k ~partial incr_index)))))
+		Lexicon.config_arg_lexicon#value#sync (fun () ->
+	          k ~partial incr_index))))))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
