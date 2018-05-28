@@ -1047,7 +1047,7 @@ type increment =
   | IncrThatIs
   | IncrSomethingThatIs
   | IncrPred of arg * pred
-  | IncrArg of arg
+  | IncrArg of Rdf.uri
   | IncrTriple of arg
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
@@ -1091,7 +1091,7 @@ let rec term_of_increment : increment -> Rdf.term option = function
   | IncrInput (s,dt) -> Some (term_of_input s dt)
   | IncrTerm t -> Some t
   | IncrPred (arg,pred) -> term_of_pred pred
-  | IncrArg arg -> term_of_arg arg
+  | IncrArg q -> Some (Rdf.URI q)
   | IncrType c -> Some (Rdf.URI c)
   | IncrRel (p,m) -> Some (Rdf.URI p)
   | _ -> None
@@ -1100,9 +1100,6 @@ and term_of_pred : pred -> Rdf.term option = function
   | Prop p -> Some (Rdf.URI p)
   | SO _ -> None
   | EO _ -> None
-and term_of_arg : arg -> Rdf.term option = function
-  | S | P | O -> None
-  | Q q -> Some (Rdf.URI q)
 
 let latlong_of_increment (incr : increment) : latlong option =
   match incr with
@@ -1790,7 +1787,7 @@ let insert_increment incr focus =
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus
     | IncrPred (arg,pred) -> insert_pred arg pred focus
-    | IncrArg arg -> insert_arg arg focus
+    | IncrArg q -> insert_arg (Q q) focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
     | IncrLatLong ll -> insert_latlong ll focus

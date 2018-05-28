@@ -217,13 +217,6 @@ let word_syntagm_of_pred grammar (pred : pred) =
   | SO (ps,po) -> word_syntagm_of_pred_uri grammar po
   | EO (pe,po) -> word_syntagm_of_pred_uri grammar pe
 
-let word_syntagm_of_arg grammar (arg : arg) =
-  match arg with (* TODO: make it multilingual, and specific to args *)
-  | S -> `Op "subject", `Noun
-  | P -> `Op "predicate", `Noun
-  | O -> `Op "object", `Noun
-  | Q q -> word_syntagm_of_arg_uri grammar q
-
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt))
@@ -294,7 +287,7 @@ let word_of_incr grammar = function
   | IncrTerm t -> word_of_term t
   | IncrId (id,_) -> `Thing
   | IncrPred (arg,pred) -> fst (word_syntagm_of_pred grammar pred)
-  | IncrArg arg -> fst (word_syntagm_of_arg grammar arg)
+  | IncrArg q -> fst (word_syntagm_of_arg_uri grammar q)
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p)
   | IncrLatLong _ -> `Op grammar#geolocation
@@ -444,7 +437,7 @@ and labelling_p1_opt grammar ~labels : 'a elt_p1 option -> id_label list * id_la
   | Some rel -> labelling_p1 grammar ~labels rel
 and labelling_sn grammar ~labels : 'a elt_sn -> id_label list * id_labelling_list = function
   | CNil _ -> [], []
-  | CCons (_,arg,np,cp) -> (* TODO: improve, here only cover object/subject *)
+  | CCons (_,arg,np,cp) ->
      let ls_np =
        match arg with
        | S | O -> labels
@@ -456,7 +449,7 @@ and labelling_sn grammar ~labels : 'a elt_sn -> id_label list * id_labelling_lis
 	  let w, synt = word_syntagm_of_arg_uri grammar q in
 	  [(v, `Word w)] in
      let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels:ls_np np in
-     let ls_cp, lab_cp = labelling_sn grammar ~labels cp in (* TODO: refine with [np] *)
+     let ls_cp, lab_cp = labelling_sn grammar ~labels cp in
      let ls =
        match arg with
        | S | O -> ls_np @ ls_cp
@@ -1231,7 +1224,7 @@ let rec xml_s grammar ~id_labelling (s : s) =
     ( fun annot_opt -> function
     | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
     | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
-    | `ThereIs_That (np,s) -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np @ Kwd grammar#relative_that (* TODO: improve for French *) :: xml_s grammar ~id_labelling s
+    | `ThereIs_That (np,s) -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np @ Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
     | `Truth (np,vp) -> (*Kwd grammar#it_is_true_that ::*) xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
     | `PP (pp,s) -> xml_pp grammar ~id_labelling pp @ xml_s grammar ~id_labelling s
     | `Where np -> Kwd grammar#where :: xml_np grammar ~id_labelling np
@@ -1327,7 +1320,7 @@ and xml_rel grammar ~id_labelling = function
       (fun annot_opt -> function
       | `Nil -> []
       | `That vp -> Kwd grammar#relative_that :: xml_vp grammar ~id_labelling vp
-      | `ThatS s -> Kwd grammar#relative_that (* TODO: improved for French *) :: xml_s grammar ~id_labelling s
+      | `ThatS s -> Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
       | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
       | `PrepWhich (w,s) -> Word w :: Kwd grammar#which :: xml_s grammar ~id_labelling s
       | `AtWhichNoun (w,s) -> Kwd grammar#at :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
@@ -1465,8 +1458,8 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
      let rel = A (dummy_annot, `That (X (nl_vp_of_arg_pred grammar ~id_labelling arg pred (CNil dummy_annot)))) in
      let rel = map_rel main_transf rel in
      xml_incr_coordinate grammar focus (xml_rel grammar ~id_labelling rel)
-  | IncrArg arg -> (* TODO: make it multilingual (and better) *)
-     let w, synt = word_syntagm_of_arg grammar arg in
+  | IncrArg q ->
+     let w, synt = word_syntagm_of_arg_uri grammar q in
      ( match synt with
        | `Noun -> Kwd grammar#at :: Word w :: xml_ellipsis
        | `TransAdj -> Word w :: xml_ellipsis )

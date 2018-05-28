@@ -603,7 +603,7 @@ module WhichArg =
 
     let increments_of_terms (lt : Rdf.term option list) : Lisql.increment list =
       match lt with
-      | [Some (Rdf.URI pq)] -> [Lisql.IncrArg (Q pq)]
+      | [Some (Rdf.URI pq)] -> [Lisql.IncrArg pq]
       | _ -> []
   end
 	   
@@ -1124,7 +1124,6 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
        query_incr_opt
 	 WhichArg.pattern_vars
 	 (fun _t -> WhichArg.pattern_of_pred_args pred args) in
-  (* TODO: handle n-ary predicates *)
   { state;
     focus_term_opt;
     focus_graph_opt;
