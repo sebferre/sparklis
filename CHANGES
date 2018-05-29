@@ -1,10 +1,11 @@
 # description of main changes
 
-2018-05-XX    N-ary relations, reified triples, support of wikidata
+2018-05-29    N-ary relations, reified triples, support of wikidata
 
 - new configurations
   - Rdf.config_wikidata_mode : bool
   - Lis.config_nary_relations : bool
+  - Lexicon.config_arg_lexicon : lexicon
 - new increments (in left column)
   - IncrPred (arg,pred) : insertion of a n-ary predicate
   - IncrArg (arg) : insertion of an additional argument of the n-ary predicate at focus
