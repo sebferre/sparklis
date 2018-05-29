@@ -325,12 +325,12 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrTerm _ -> 2, None
 	
       | IncrHierarchy _ -> 2, Some grammar#tooltip_hierarchy
+      | IncrArg _ -> 2, None
       | IncrTriple _ -> 3, None
       | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
       | IncrType _ -> 4, None
       | IncrRel _ -> 5, None
       | IncrPred _ -> 6, None
-      | IncrArg _ -> 7, None
 	
       | IncrAnd -> 6, None
       | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus

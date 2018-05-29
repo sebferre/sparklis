@@ -1026,8 +1026,8 @@ let translate () =
 	      | "higherThan" -> grammar#higher_or_equal_to
 	      | "lowerThan" -> grammar#lower_or_equal_to
 	      | "between" -> grammar#interval_between
-	      | "hasLang" -> String.concat " " [grammar#has_as_a; grammar#language]
-	      | "hasDatatype" -> String.concat " " [grammar#has_as_a; grammar#datatype]
+	      | "hasLang" -> String.concat " " [grammar#has_as_a ~following:grammar#language; grammar#language]
+	      | "hasDatatype" -> String.concat " " [grammar#has_as_a ~following:grammar#datatype; grammar#datatype]
 	      | _ -> to_string option##innerHTML in
 	  option##innerHTML <- string new_text)
       done))

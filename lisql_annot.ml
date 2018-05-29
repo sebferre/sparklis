@@ -190,6 +190,7 @@ object (self)
 end
 
 let dummy_annot = new annot ~focus_pos:(`Aside false) ~focus:factory#home_focus ()
+let dummy_s1 = Det (dummy_annot, An (0, (Select, Unordered), Thing), None)
 
 (* cleaning sequences based on dependencies *)
 

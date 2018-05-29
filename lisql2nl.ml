@@ -1094,7 +1094,9 @@ object (self)
       | `HasProp (p, A (a2, `Maybe (A (a3, `Qu (qu, adj, X (`That (`Thing, rel)))))), lpp)
 	-> `Has (A (a2, `Qu (qu, `Optional (a3#is_susp_focus, adj), A (a3, `That (p, rel)))), lpp) (* TODO: adj out of a3 *)
       | `HasPropCP (p, A (a2, `Nil))
-	 -> `Has (A (a2, `Qu (`A, `Nil, X (`That (p, X `Nil)))), [])
+	-> `Has (A (a2, `Qu (`A, `Nil, X (`That (p, X `Nil)))), [])
+      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, `Nil))))
+	-> `Has (A (a2, `Qu (qu, adj, X (`That (p, rel)))), [])
       | nl -> nl)
 end
 
@@ -1159,6 +1161,8 @@ let xml_a_an grammar xml =
   Kwd (grammar#a_an ~following:(xml_text_content grammar xml)) :: xml
 let xml_every grammar xml =
   Kwd grammar#every :: xml
+let xml_has_as_a grammar xml =
+  Kwd (grammar#has_as_a ~following:(xml_text_content grammar xml)) :: xml
 
 let xml_suspended susp xml =
   if susp
@@ -1270,7 +1274,7 @@ and xml_ng grammar ~id_labelling rel =
     ( fun annot_opt -> function
     | `That (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
     | `LabelThat (l,rel) -> xml_ng_label grammar ~id_labelling l @ xml_rel grammar ~id_labelling rel
-    | `OfThat (w,np,rel) -> Word w :: Kwd grammar#of_ :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
+    | `OfThat (w,np,rel) -> Word w :: Word (`Op grammar#of_) :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
     | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg )
 and xml_qu grammar qu xml =
   match xml with
@@ -1311,7 +1315,7 @@ and xml_ng_aggreg grammar ~id_labelling susp xml_ng = function
     if grammar#adjective_before_noun
     then xml_suspended susp xml_g_rel @ xml_ng
     else xml_ng @ xml_suspended susp xml_g_rel
-  | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar ~id_labelling rel @ [Kwd grammar#of_]) @ xml_ng
+  | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar ~id_labelling rel @ [Word (`Op grammar#of_)]) @ xml_ng
 and xml_rel grammar ~id_labelling = function
   | A (a1, `Maybe (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
   | A (a1, `Not (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Not a1 a2 vp)
@@ -1345,8 +1349,8 @@ and xml_vp grammar ~id_labelling = function
       | `IsTheNounCP (w,cp) -> Kwd grammar#is :: Kwd grammar#the :: Word w :: xml_cp grammar ~id_labelling cp
       | `IsAdjCP (w,cp) -> Kwd grammar#is :: Word w :: xml_cp grammar ~id_labelling cp
       | `IsInWhich s -> Kwd grammar#is :: Kwd grammar#something :: xml_in_which grammar ~id_labelling s
-      | `HasProp (p,np,lpp) -> Kwd grammar#has_as_a :: Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `HasPropCP (w,cp) -> Kwd grammar#has_as_a :: Word w :: xml_cp grammar ~id_labelling cp
+      | `HasProp (p,np,lpp) -> xml_has_as_a grammar [Word p] @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `HasPropCP (w,cp) -> xml_has_as_a grammar [Word w] @ xml_cp grammar ~id_labelling cp
       | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
@@ -1366,7 +1370,7 @@ and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_
     | (`Not | `Maybe), `IsNP (np,lpp) -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | (`Not | `Maybe), `IsPP pp -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ xml_pp grammar ~id_labelling pp)
     | (`Not | `Maybe), `IsInWhich s -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ Kwd grammar#something :: xml_in_which grammar ~id_labelling s)
-    | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (Kwd grammar#has_as_a :: xml_mod @ Word p :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
+    | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (xml_has_as_a grammar (xml_mod @ [Word p]) @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling (X vp))
 and xml_cp grammar ~id_labelling cp =
@@ -1391,7 +1395,7 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     let xml = xml_np_label ~isolated grammar ~id_labelling (`Expr expr) in
     if isolated
     then xml
-    else Kwd grammar#value_ :: Kwd grammar#of_ :: xml
+    else Kwd grammar#value_ :: Word (`Op grammar#of_) :: xml
   | `Ref id ->
     xml_ng_label ~isolated grammar ~id_labelling (id_labelling#get_id_label id)
   | `Nth (k, `Expr expr) -> xml_ng_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
@@ -1399,7 +1403,7 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     ( match grammar#genetive_suffix with
       | Some suf -> Suffix (xml_ng_label grammar ~id_labelling ng, suf) :: Word w :: []
       | None -> xml_ng_label grammar ~id_labelling (`Of (w,ng)) )
-  | `Of (w,ng) -> Word w :: Kwd grammar#of_ :: xml_np_label grammar ~id_labelling ng
+  | `Of (w,ng) -> Word w :: Word (`Op grammar#of_) :: xml_np_label grammar ~id_labelling ng
   | `AggregNoun (w,ng) -> Word w :: Kwd grammar#of_ :: xml_ng_label grammar ~id_labelling ng
   | `AggregAdjective (w,ng) ->
     if grammar#adjective_before_noun
@@ -1455,7 +1459,16 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
 	xml_incr_coordinate grammar focus
 	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )
   | IncrPred (arg,pred) ->
-     let rel = A (dummy_annot, `That (X (nl_vp_of_arg_pred grammar ~id_labelling arg pred (CNil dummy_annot)))) in
+     let cp =
+       match arg, pred with
+       | S, Class _ -> CNil dummy_annot
+       | S, _ -> CCons (dummy_annot, O, dummy_s1, CNil dummy_annot)
+       | _, Class _
+       | O, _ -> CCons (dummy_annot, S, dummy_s1, CNil dummy_annot)
+       | _ -> CCons (dummy_annot, S, dummy_s1,
+		     CCons (dummy_annot, O, dummy_s1,
+			    CNil dummy_annot)) in
+     let rel = A (dummy_annot, `That (X (nl_vp_of_arg_pred grammar ~id_labelling arg pred cp))) in
      let rel = map_rel main_transf rel in
      xml_incr_coordinate grammar focus (xml_rel grammar ~id_labelling rel)
   | IncrArg q ->
@@ -1491,7 +1504,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
        let word, synt = word_syntagm_of_property grammar p in
        match synt with
 	 | `Noun -> Kwd grammar#has :: xml_a_an grammar [Word word]
-	 | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
+	 | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Word (`Op grammar#of_) :: xml_ellipsis
 	 | `TransVerb -> Word word :: xml_ellipsis
 	 | `TransAdj -> Kwd grammar#is :: Word word :: xml_ellipsis)
   | IncrRel (p,Lisql.Bwd) ->
@@ -1499,7 +1512,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
       (Kwd grammar#relative_that ::
        let word, synt = word_syntagm_of_property grammar p in
        match synt with
-	 | `Noun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Kwd grammar#of_ :: xml_ellipsis
+	 | `Noun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Word (`Op grammar#of_) :: xml_ellipsis
 	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `TransVerb -> xml_ellipsis @ Word word :: []
 	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: [])

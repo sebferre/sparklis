@@ -26,7 +26,7 @@ object
   method virtual longitude : string
   method virtual is : string
   method virtual has : string
-  method virtual has_as_a : string
+  method virtual has_as_a : following:string -> string
   method virtual relative_that : string
   method virtual relative_that_object : string
   method virtual whose : string
@@ -133,6 +133,11 @@ object
 end
 
 let english =
+  let starts_with_vowel following =
+    try
+      let c = Char.lowercase following.[0] in
+      c = 'a' || c = 'e' || c = 'i' || c = 'o' (* || c = 'u' : 'u' is more often pronounced [y] *)
+    with _ -> false in
 object
   inherit grammar
 
@@ -147,7 +152,7 @@ object
   method longitude = "longitude"
   method is = "is"
   method has = "has"
-  method has_as_a = "has as a"
+  method has_as_a ~following = if starts_with_vowel following then "has as an" else "has as a"
   method relative_that = "that"
   method relative_that_object = "that"
   method whose = "whose"
@@ -169,15 +174,7 @@ object
   method rel_from = "from"
   method at = "at"
 
-  method a_an ~following =
-    let starts_with_vowel =
-      try
-	let c = Char.lowercase following.[0] in
-	c = 'a' || c = 'e' || c = 'i' || c = 'o' (* || c = 'u' : 'u' is more often pronounced [y] *)
-      with _ -> false in
-    if starts_with_vowel
-    then "an"
-    else "a"
+  method a_an ~following = if starts_with_vowel following then "an" else "a"
   method the = "the"
   method every = "every"
   method each = "each"
@@ -353,7 +350,7 @@ object
   method longitude = "longitude"
   method is = "est"
   method has = "a"
-  method has_as_a = "a pour"
+  method has_as_a ~following = "a pour"
   method relative_that = "qui"
   method relative_that_object = "que"
   method whose = "dont l'"
@@ -550,7 +547,7 @@ object
   method longitude = "longitud"
   method is = "es"
   method has = "tiene"
-  method has_as_a = "tiene como"
+  method has_as_a ~following = "tiene como"
   method relative_that = "que"
   method relative_that_object = "que"
   method whose = "cuyo"
