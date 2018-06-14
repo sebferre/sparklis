@@ -84,7 +84,7 @@ struct
 	then
 	  Opt.case (node##nodeValue)
 	    (fun () -> "")
-	    (fun s -> to_string s)
+	    (fun s -> String.trim (to_string s))
 	else "")
 end
 
