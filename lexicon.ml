@@ -176,15 +176,17 @@ let sparql_lexicon
 	let l_uri_info_opt =
 	  List.fold_left
 	    (fun lui results ->
-	      let i = List.assoc u results.Sparql_endpoint.vars in
-	      let j = List.assoc l results.Sparql_endpoint.vars in
-	      List.fold_left
-		(fun lui binding ->
+	     try
+	       let i = List.assoc u results.Sparql_endpoint.vars in
+	       let j = List.assoc l results.Sparql_endpoint.vars in
+	       List.fold_left
+		 (fun lui binding ->
 		  match binding.(i), binding.(j) with
 		  | Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> add_uri_label uri (Some label) lui
 		  | Some (Rdf.URI uri), None -> add_uri_label uri None lui
 		  | _ -> lui)
-		lui results.Sparql_endpoint.bindings)
+		 lui results.Sparql_endpoint.bindings
+	     with _ -> lui)
 	    [] l_results in
 	k l_uri_info_opt)
       (fun code ->

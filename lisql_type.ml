@@ -61,7 +61,7 @@ let rec compatible_with dt1 dt2 : compatible =
     if comp.bool
     then { comp with conv_opt=None }
     else { compatible_with dt1_dest dt2 with conv_opt = Some conv }
-  | _ -> { bool=(List.mem dt2 (List.assoc dt1 inheritance)); conv_opt=None }
+  | _ -> { bool=(List.mem dt2 (try List.assoc dt1 inheritance with _ -> assert false)); conv_opt=None }
     
 let lcs_datatype dt1 dt2 =
   let inh1 = try List.assoc dt1 inheritance with _ -> assert false in

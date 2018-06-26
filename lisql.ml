@@ -399,10 +399,8 @@ let inverse_orientation = function
 let rec last_arg_of_sn : 'a elt_sn -> arg option = function
   | CNil _ -> None
   | CCons (_,arg,np,cp) -> Some arg
-  | CAnd (_,[]) -> None
-  | CAnd (_,lr) -> last_arg_of_sn (List.hd (List.rev lr))
-  | COr (_,[]) -> None
-  | COr (_,lr) -> last_arg_of_sn (List.hd (List.rev lr))
+  | CAnd (_,lr) -> (try last_arg_of_sn (List.hd (List.rev lr)) with _ -> None)
+  | COr (_,lr) -> (try last_arg_of_sn (List.hd (List.rev lr)) with _ -> None)
   | CNot (_,cp) -> last_arg_of_sn cp
   | CMaybe (_,cp) -> last_arg_of_sn cp
 	     

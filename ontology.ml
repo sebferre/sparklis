@@ -56,15 +56,18 @@ let sparql_relation
 	let ht_images : (Rdf.uri, Rdf.uri list ref) Hashtbl.t = Hashtbl.create 101 in
 	List.iter
 	  (fun results ->
-	    let i = List.assoc source results.Sparql_endpoint.vars in
-	    let j = List.assoc image results.Sparql_endpoint.vars in
-	    List.iter
-	      (fun binding ->
-		match binding.(i), binding.(j) with
+	   try
+	     let i = List.assoc source results.Sparql_endpoint.vars in
+	     let j_opt = try Some (List.assoc image results.Sparql_endpoint.vars) with _ -> None in
+	     (* some endpoints do not include ?image when no binding at all (in OPTIONAL) *)
+	     List.iter
+	       (fun binding ->
+		match binding.(i), (match j_opt with None -> None | Some j -> binding.(j)) with
 		| Some (Rdf.URI uri_source), Some (Rdf.URI uri_image) -> add_source_image ht_images uri_source uri_image
 		| Some (Rdf.URI uri_source), None -> Hashtbl.add ht_images uri_source (ref []) (* recording absence of parents *)
 		| _ -> ())
-	      results.Sparql_endpoint.bindings)
+	       results.Sparql_endpoint.bindings
+	   with _ -> Jsutils.firebug ("Missing variable(s) in SPARQL results: ?uri"))
 	  l_results;
 	let l_uri_info_opt =
 	  Hashtbl.fold

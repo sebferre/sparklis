@@ -119,7 +119,8 @@ let results_of_xml (doc_xml : Dom.element Dom.document t) =
 	    List.iter
 	      (fun elt_binding ->
 		let v = Xml.get_attribute elt_binding "name" in
-		let i = List.assoc v vars in
+		let i = try List.assoc v vars
+			with _ -> failwith "Unexpected variable name in XML Sparql results" in
 		let term_opt =
 		  match Xml.find elt_binding (prefix ^ "uri") with
 		  | Some elt_uri ->
