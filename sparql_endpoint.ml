@@ -400,7 +400,9 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
 		    end
 		| 4 ->
 		  if not tentative then
-		    pool#alert "The query was not understood by the SPARQL endpoint. The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		    pool#alert "The query was not understood by the SPARQL endpoint (see browser's console to see the SPARQL query). The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		  firebug "The following query was not understood";
+		  firebug sparql;
 		  k0 code
 		| 5 ->
 		  pool#alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
