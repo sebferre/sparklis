@@ -1170,88 +1170,88 @@ let apply_conv_ctx_expr conv_opt = function
   | ctx -> ctx
     
 let append_and_p1 ctx (elt_p1 : unit elt_p1) = function
-  | IsThere _ -> at_p1 elt_p1 ctx
-  | And (_,lr) -> at_p1 elt_p1 (AndX ((List.rev lr, []), ctx))
+  | IsThere _ -> Some (at_p1 elt_p1 ctx)
+  | And (_,lr) -> Some (at_p1 elt_p1 (AndX ((List.rev lr, []), ctx)))
   | f ->
      let f_ctx =
        match ctx with
        | AndX ((ll,rr), ctx2) -> AndX ((f::ll,rr), ctx2)
        | _ -> AndX (([f], []), ctx) in
-     at_p1 elt_p1 f_ctx
+     Some (at_p1 elt_p1 f_ctx)
 let append_or_p1 ctx (elt_p1 : unit elt_p1) = function
-  | IsThere _ -> at_p1 elt_p1 ctx
-  | Or (_,lr) -> at_p1 elt_p1 (OrX ((List.rev lr, []), ctx))
+  | IsThere _ -> Some (at_p1 elt_p1 ctx)
+  | Or (_,lr) -> Some (at_p1 elt_p1 (OrX ((List.rev lr, []), ctx)))
   | f ->
      let f_ctx =
        match ctx with
        | OrX ((ll,rr), ctx2) -> OrX ((f::ll,rr), ctx2)
        | _ -> OrX (([f], []), ctx) in
-     at_p1 elt_p1 f_ctx
+     Some (at_p1 elt_p1 f_ctx)
 
 let append_and_sn ctx (elt_sn : unit elt_sn) = function
-  | CAnd (_,lr) -> at_sn elt_sn (CAndX ((List.rev lr, []), ctx))
+  | CAnd (_,lr) -> Some (at_sn elt_sn (CAndX ((List.rev lr, []), ctx)))
   | cp ->
      if is_top_sn cp
-     then at_sn elt_sn ctx
+     then None (* no change *)
      else
        let cp_ctx =
 	 match ctx with
 	 | CAndX ((ll,rr), ctx2) -> CAndX ((cp::ll,rr), ctx2)
 	 | _ -> CAndX (([cp], []), ctx) in
-       at_sn elt_sn cp_ctx
+       Some (at_sn elt_sn cp_ctx)
 let append_or_sn ctx (elt_sn : unit elt_sn) = function
-  | COr (_,lr) -> at_sn elt_sn (COrX ((List.rev lr, []), ctx))
+  | COr (_,lr) -> Some (at_sn elt_sn (COrX ((List.rev lr, []), ctx)))
   | cp ->
      if is_top_sn cp
-     then at_sn elt_sn ctx
+     then None (* no change *)
      else
        let cp_ctx =
 	 match ctx with
 	 | COrX ((ll,rr), ctx2) -> COrX ((cp::ll,rr), ctx2)
 	 | _ -> COrX (([cp], []), ctx) in
-       at_sn elt_sn cp_ctx
+       Some (at_sn elt_sn cp_ctx)
 
 let append_and_s1 ctx (elt_s1 : unit elt_s1) = function
-  | NAnd (_,lr) -> at_s1 elt_s1 (NAndX ((List.rev lr, []), ctx))
+  | NAnd (_,lr) -> Some (at_s1 elt_s1 (NAndX ((List.rev lr, []), ctx)))
   | np ->
      if is_top_s1 np
-     then at_s1 elt_s1 ctx
+     then None
      else
        let np_ctx =
 	 match ctx with
 	 | NAndX ((ll,rr), ctx2) -> NAndX ((np::ll,rr), ctx2)
 	 | _ -> NAndX (([np], []), ctx) in
-       at_s1 elt_s1 np_ctx
+       Some (at_s1 elt_s1 np_ctx)
 let append_or_s1 ctx (elt_s1 : unit elt_s1) = function
-  | NOr (_,lr) -> at_s1 elt_s1 (NOrX ((List.rev lr, []), ctx))
+  | NOr (_,lr) -> Some (at_s1 elt_s1 (NOrX ((List.rev lr, []), ctx)))
   | np ->
      if is_top_s1 np
-     then at_s1 elt_s1 ctx
+     then None
      else
        let np_ctx =
 	 match ctx with
 	 | NOrX ((ll,rr), ctx2) -> NOrX ((np::ll,rr), ctx2)
 	 | _ -> NOrX (([np], []), ctx) in
-       at_s1 elt_s1 np_ctx
+       Some (at_s1 elt_s1 np_ctx)
 
 	     
 let append_choice ctx (elt_expr : unit elt_expr) = function
-  | Choice (_,lr) -> AtExpr (elt_expr, ChoiceX ((List.rev lr, []), ctx))
-  | e -> AtExpr (elt_expr, ChoiceX (([e], []), ctx))
+  | Choice (_,lr) -> Some (AtExpr (elt_expr, ChoiceX ((List.rev lr, []), ctx)))
+  | e -> Some (AtExpr (elt_expr, ChoiceX (([e], []), ctx)))
 
 let append_seq_s ctx (elt_s : unit elt_s) = function
-  | Seq (_,lr) -> AtS (elt_s, SeqX ((List.rev lr, []), ctx))
-  | s -> AtS (elt_s, SeqX (([s], []), ctx))
+  | Seq (_,lr) -> Some (AtS (elt_s, SeqX ((List.rev lr, []), ctx)))
+  | s -> Some (AtS (elt_s, SeqX (([s], []), ctx)))
 
 let insert_elt_p1_in_rel_opt ctx elt = function
   | None -> Some (AtP1 (elt, ctx))
-  | Some rel -> Some (append_and_p1 ctx elt rel)
+  | Some rel -> append_and_p1 ctx elt rel
     
 let rec insert_elt_p1 (elt : unit elt_p1) = function
   | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
      let elt_s1 = Det ((), factory#top_s2, Some elt) in
-     down_focus (append_and_s1 (HierX (id,p,ori,inv,ctx)) elt_s1 np)
-  | AtP1 (f, ctx) -> Some (append_and_p1 ctx elt f)
+     focus_opt_moves [down_focus] (append_and_s1 (HierX (id,p,ori,inv,ctx)) elt_s1 np)
+  | AtP1 (f, ctx) -> append_and_p1 ctx elt f
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
   | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
@@ -1437,40 +1437,40 @@ let insert_and = function
        match last_arg_of_sn f with
        | None -> factory#top_sn
        | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
-     Some (append_and_sn ctx cp f)
+     append_and_sn ctx cp f
   | AtS1 (f, ReturnX ctx) ->
      Some (AtS1 (factory#top_s1, ReturnX (SeqX (([Return ((),f)],[]), ctx))))
   | AtS1 (f, CConsX1 ((S|O as arg),cp,ctx)) -> (* because S|O miss a preposition to catch the Sn focus *)
-     Some (append_and_sn ctx (CCons ((), arg, factory#top_s1, CNil ())) (CCons ((),arg,f,cp)))
+     append_and_sn ctx (CCons ((), arg, factory#top_s1, CNil ())) (CCons ((),arg,f,cp))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
-     Some (append_and_s1 ctx factory#top_s1 f)
+     append_and_s1 ctx factory#top_s1 f
   | _ -> None
 
 let insert_duplicate = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
-  | AtSn (f, ctx) -> Some (append_and_sn ctx (copy_sn f) f)
+  | AtSn (f, ctx) -> append_and_sn ctx (copy_sn f) f
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (_, InGraphX _) -> None (* to avoid duplication of focus, and complex focus graphs *)
-  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (append_and_s1 ctx (copy_s1 f) f)
+  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> append_and_s1 ctx (copy_s1 f) f
   | AtAggreg ((TheAggreg _ as aggreg), SAggregX ((ll,rr),ctx)) -> Some (AtAggreg (copy_aggreg aggreg, SAggregX ((aggreg::ll,rr), ctx)))
   | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) -> Some (AtS (copy_s f, SeqX ((f::ll,rr),ctx)))
   | _ -> None
 
 let insert_or = function
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (append_or_p1 ctx (IsThere ()) f)
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> append_or_p1 ctx (IsThere ()) f
   | AtSn (f, ctx) when not (is_top_sn f) ->
      let cp =
        match last_arg_of_sn f with
        | None -> factory#top_sn
        | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
-     Some (append_and_sn ctx cp f)
+     append_and_sn ctx cp f
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (f, ctx) when not (is_top_s1 f) -> Some (append_or_s1 ctx factory#top_s1 f)
+  | AtS1 (f, ctx) when not (is_top_s1 f) -> append_or_s1 ctx factory#top_s1 f
   | _ -> None
 
 let insert_choice = function
   | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
-  | AtExpr (f, ctx) when not (is_top_expr f) -> Some (append_choice ctx factory#top_expr f)
+  | AtExpr (f, ctx) when not (is_top_expr f) -> append_choice ctx factory#top_expr f
   | _ -> None
 (*
 let insert_choice = function
@@ -1547,7 +1547,7 @@ let insert_in_which_there_is focus =
     
 let insert_seq = function
   | AtS (f, SeqX ((ll,rr),ctx2)) -> Some (AtS (factory#top_s, SeqX ((f::ll,rr),ctx2)))
-  | AtS (f, ctx) -> Some (append_seq_s ctx factory#top_s f)
+  | AtS (f, ctx) -> append_seq_s ctx factory#top_s f
   | _ -> None
 
 let out_of_unselect modif foc =
@@ -1608,10 +1608,11 @@ let insert_foreach = function
     | Some id2 ->
       let s = elt_s_of_focus focus in
       let aggregs = [ForEach ((), factory#new_id, factory#top_modif, None, id2)] in
-      let focus2 = append_seq_s Root
-	(SAggreg ((), aggregs))
-	s in
-      down_focus focus2 )
+      let focus2_opt =
+	append_seq_s Root
+		     (SAggreg ((), aggregs))
+		     s in
+      focus_opt_moves [down_focus] focus2_opt)
     
 let insert_aggreg_bis g = function
   | AtAggreg (TheAggreg (_,id,modif,g0,rel_opt,id2), ctx)
@@ -1628,8 +1629,8 @@ let insert_aggreg_bis g = function
 	 match focus with
 	 | AtS1 _ -> ForEachResult () :: aggregs
 	 | _ -> aggregs in*)
-       let focus2 = append_seq_s Root (SAggreg ((), aggregs)) s in
-       down_focus focus2 )
+       let focus2_opt = append_seq_s Root (SAggreg ((), aggregs)) s in
+       focus_opt_moves [down_focus] focus2_opt )
 
 let insert_foreach_result = function
   | AtS (SAggreg (_, aggregs), ctx) ->
@@ -1710,8 +1711,8 @@ let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
 	if is_pred
 	then SFilter ((), factory#new_id, expr)
 	else SExpr ((), "", factory#new_id, factory#top_modif, expr, None) in
-      let focus2 = append_seq_s Root s2 s in
-      move_seq down_focus next_undef_focus focus2 )
+      let focus2_opt = append_seq_s Root s2 s in
+      focus_opt_moves [move_seq down_focus next_undef_focus] focus2_opt )
 
 let insert_name new_name = function
   | AtS (SExpr (_,name,id,modif,expr,rel_opt), ctx) -> Some (AtS (SExpr ((), new_name, id, modif, expr, rel_opt), ctx))
