@@ -221,8 +221,8 @@ object (self)
     then [(key, string_of_bool current_on)]
     else []
   method set_permalink args =
-    let on = try bool_of_string (List.assoc key args) with _ -> true in
-    self#set_on on
+    try self#set_on (bool_of_string (List.assoc key args))
+    with _ -> ()
 
   method on : bool = current_on
   method value : 'relation = current_relation
