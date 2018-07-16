@@ -727,3 +727,199 @@ object
   method concept_concepts = "concepto", "conceptos"
   method modifier_modifiers = "modificador", "modificadores"
 end
+
+
+
+let dutch =
+object
+  inherit grammar
+
+  method adjective_before_noun = true
+
+  method thing = "object"
+  method relation = "relatie"
+  method value_ = "value"
+  method result = "resultaat"
+  method geolocation = "geolocatie"
+  method latitude = "breedtegraad"
+  method longitude = "lengtegraad"
+  method is = "is"
+  method has = "heeft"
+  method has_as_a ~following = "heeft als een"
+  method relative_that = "dat"
+  method relative_that_object = "dat"
+  method whose = "van wie"
+  method according_to = "volgens" (* "from" *)
+  method which = "welke"
+  method hierarchy_in ~inv ~in_ =
+    let s = if inv then "(omgekeerde hiërarchie)" else "(hiërarchie)" in
+    if in_ then s ^ " in" else s
+
+  method and_ = "en"
+  method or_ = "of"
+  method not_ = "niet"
+  method optionally = "optioneel"
+  method optional = "optioneel"
+
+  method of_ = "van"
+  method genetive_suffix = Some "'s"
+  method rel_to = "naar"
+  method rel_from = "van"
+  method at = "op"
+
+  method a_an ~following = "een"
+  method the = "de"
+  method every = "iedere"
+  method each = "ieder"
+  method all = "alle"
+  method no = "nee"
+  method any = "elke"
+  method quantif_one = "een"
+  method quantif_of = "van"
+  method something = "iets"
+  method anything = "iets"
+  method everything = "alles"
+  method nothing = "niets"
+  method for_ = "voor"
+  method choice = "keuze"
+  method between = "tussen"
+
+  method n_th n =
+    let suffix = "e" in
+    string_of_int n ^ suffix
+
+  method string = "string"
+  method integer = "integer"
+  method number = "nummer"
+  method date = "datum"
+  method time = "tijd"
+  method date_and_time = "datum en tijd"
+  method uri = "URI"
+
+  method aggreg_syntax = function
+  | Lisql.NumberOf -> `The, "nummer", None
+  | Lisql.ListOf -> `The, "lijst", None
+  | Lisql.Sample -> `A, "voorbeeld", None
+  | Lisql.Total _ -> `The, "som", Some "totaal"
+  | Lisql.Average _ -> `The, "gemiddelde", Some "gemiddelde"
+  | Lisql.Maximum _ -> `The, "maximum", Some "maximaal"
+  | Lisql.Minimum _ -> `The, "minimum", Some "minimaal"
+
+  method func_syntax = function
+  | `Str -> `Noun "string"
+  | `Lang -> `Noun "language"
+  | `Datatype -> `Noun "datatype"
+  | `IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
+  | `STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
+  | `STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
+  | `Strlen -> `Noun "length"
+  | `Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
+  | `Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
+  | `Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
+  | `Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
+  | `Concat -> `Infix " ++ "
+  | `UCase -> `Noun "uppercase"
+  | `LCase -> `Noun "lowercase"
+  | `Encode_for_URI -> `Noun "URI encoding"
+  | `Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
+  | `Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
+  | `Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
+  | `Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
+  | `Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
+  | `Add -> `Infix " + "
+  | `Sub -> `Infix " - "
+  | `Mul -> `Infix " * "
+  | `Div -> `Infix " / "
+  | `Neg -> `Prefix "- "
+  | `Abs -> `Brackets ("|","|")
+  | `Round -> `Noun "rounding"
+  | `Ceil -> `Noun "ceiling"
+  | `Floor -> `Noun "floor"
+  | `Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
+  | `Date -> `Noun "date"
+  | `Time -> `Noun "time"
+  | `Year -> `Noun "year"
+  | `Month -> `Noun "month"
+  | `Day -> `Noun "day"
+  | `Hours -> `Noun "hours"
+  | `Minutes -> `Noun "minutes"
+  | `Seconds -> `Noun "seconds"
+  | `TODAY -> `Pattern [`Func "today"]
+  | `NOW -> `Pattern [`Func "now"]
+  | `And -> `Infix " and "
+  | `Or -> `Infix " or "
+  | `Not -> `Prefix "it is not true that "
+  | `EQ -> `Infix " = "
+  | `NEQ -> `Infix " ≠ "
+  | `GT -> `Infix " > "
+  | `GEQ -> `Infix " ≥ "
+  | `LT -> `Infix " < "
+  | `LEQ -> `Infix " ≤ "
+  | `BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
+  | `IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
+  | `IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
+  | `IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
+  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
+  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
+  | `StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
+  | `StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
+  | `Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
+  | `REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
+  | `REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
+  | `LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
+ 
+  method order_highest = "hoogste-naar-laagste"
+  method order_lowest = "laagste-naar-hoogste"
+
+  method matches = "komt overeen"
+  method after = "na"
+  method before = "voor"
+  method interval_from = "van"
+  method interval_to = "tot"
+  method higher_or_equal_to = "hoger of gelijk aan"
+  method lower_or_equal_to = "lager of gelijk aan"
+  method interval_between = "tussen"
+  method interval_and = "en"
+  method language = "taal"
+  method datatype = "datatype"
+  method matching = "overeenkomstig"
+
+  method give_me = "geef mij"
+  method there_is = "er is "
+  method it_is_true_that = "het klopt dat"
+  method the_fact_that = "het feit dat"
+  method where = "waar"
+  method undefined = "onbepaald"
+
+  method selected_item_s = "geselecteerde items"
+
+  method tooltip_open_resource = "Open bron in een nieuw venster"
+  method tooltip_delete_current_focus = "Klik op dit rode kruis om de huidige focus te verwijderen"
+  method tooltip_remove_element_at_focus = "Verwijder dit query element bij de query focus"
+  method tooltip_focus_on_property = "Voegt een focus toe op de eigenschap om deze te verfijnen"
+  method tooltip_duplicate_focus = "Voeg een kopie van de huidige focus toe"
+  method tooltip_or = "Voeg een alternatief voor de huidige focus toe"
+  method tooltip_optionally = "Maak de huidige focus optioneel"
+  method tooltip_not = "Pas negatie toe op de huidige focus"
+  method tooltip_any = "Verberg de focus kolom in de tabel met resultaten"
+  method tooltip_sample = "Vervang de aggregatie door een voorbeeld om een andere aggregatie-operator te selecteten "
+  method tooltip_aggreg = "Aggregeer de focus kolom in de tabel met resultaten" (*, for each solution on other columns *)
+  method tooltip_func = "Pas de functie toe op de huidige focus"
+  method tooltip_input_name = "Voer een (nieuwe) naam in voor het resultaat van de expressie"
+  method tooltip_foreach = "Groepeer resultaten voor elke waarde van deze entiteit"
+  method tooltip_foreach_result = "Bereken de aggregatie voor elk resultaat van de verwante query"
+  method tooltip_foreach_id = "Bereken de aggregatie voor elke waarde van deze entiteit"
+  method tooltip_aggreg_id = "Voeg een nieuwe aggregatiekolom toe voor deze entiteit"
+  method tooltip_highest = "Sorteer de focus kolom in aflopende volgorde"
+  method tooltip_lowest = "Sorteer de focus kolom in oplopende volgorde"
+  method tooltip_header_hide_focus = "Klik op deze kolom header om de focus te verbergen"
+  method tooltip_header_set_focus = "Klik op deze kolom header om de focus daar op te zetten"
+  method tooltip_geolocation = "Haal geolocatie op om entiteiten op een kaart te tonen"
+  method tooltip_hierarchy = "Geef een hiërarchie weer van entiteiten volgende de eigenschap aan de linkerkant"
+
+  method msg_permalink = "De volgende URL verwijst naar het huidige endpoint en de query (CTRL+C, Enter om naar het klembord te kopiëren"
+  method result_results = "resultaat", "resultaten"
+  method entity_entities = "entiteit", "entiteiten"
+  method concept_concepts = "concept", "concepten"
+  method modifier_modifiers = "modifier", "modifiers"
+end

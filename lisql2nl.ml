@@ -24,6 +24,7 @@ object (self)
     match self#value with
     | "fr" -> Grammar.french
     | "es" -> Grammar.spanish
+    | "nl" -> Grammar.dutch
     | _ -> Grammar.english
 end
 
