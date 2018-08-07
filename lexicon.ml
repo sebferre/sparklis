@@ -285,9 +285,9 @@ object (self)
   method set_permalink args =
     let s = try List.assoc key_select args with _ -> "" in
     let s, p =
-      if s = other
-      then (try s, List.assoc key_property args with _ -> "", "")
-      else s, s in
+      if s = ""
+      then (try other, List.assoc key_property args with _ -> "", "")
+      else s, "" in
     let l = try List.assoc key_lang args with _ -> "" in
     self#set_select_property_lang s p l
 
