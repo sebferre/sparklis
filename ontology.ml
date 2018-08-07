@@ -175,11 +175,12 @@ class ['relation] config_relation ~(key : string)
   ~(input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
   ~(default_relation : 'relation) ~(custom_relation : froms:(Rdf.uri list) -> 'relation) () =
+  let default = false in
 object (self)
   inherit Config.input as super
-  val mutable init_on = false
+  val mutable init_on = default
   val mutable current_froms = []
-  val mutable current_on = false
+  val mutable current_on = default
   val mutable current_relation = default_relation
 
   method private get_on input =
@@ -217,12 +218,11 @@ object (self)
     self#define_relation
 
   method get_permalink =
-    if current_on <> init_on
+    if current_on <> default
     then [(key, string_of_bool current_on)]
     else []
   method set_permalink args =
-    try self#set_on (bool_of_string (List.assoc key args))
-    with _ -> ()
+    self#set_on (try bool_of_string (List.assoc key args) with _ -> default)
 
   method on : bool = current_on
   method value : 'relation = current_relation
