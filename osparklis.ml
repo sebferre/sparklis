@@ -305,6 +305,8 @@ object (self)
     l_incr <- [];
     self#refresh
 end
+
+let dummy_title = "???" (* to suggest defining a title *)
   
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
@@ -344,13 +346,16 @@ object (self)
     let title = jquery_get_innerHTML "#sparql-endpoint-title" in
     let args = config#get_permalink in
     let args =
-      ("title",title)
-      :: ("endpoint",endpoint)
+      ("endpoint",endpoint)
       :: (if self#is_home
 	  then args
 	  else ("sparklis-query", Permalink.of_query lis#query)
 	       :: ("sparklis-path", Permalink.of_path lis#path)
 	       :: args) in
+    let args =
+      if title = dummy_title
+      then args
+      else ("title",title) :: args in
     let permalink_url =
       let current_url =
 	match Url.Current.get () with
@@ -964,7 +969,7 @@ object (self)
     present#abort_all_ajax;
     present#save_ui_state;
     config#set_endpoint url;
-    jquery_set_innerHTML "#sparql-endpoint-title" "";
+    jquery_set_innerHTML "#sparql-endpoint-title" dummy_title;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
@@ -1102,10 +1107,8 @@ let _ =
 	    |  _ -> ())
        with _ -> ());
       (* setting title if any *)
-      (try
-	  let title = List.assoc "title" args in
-	  jquery_set_innerHTML "#sparql-endpoint-title" title
-	with _ -> ());
+      jquery_set_innerHTML "#sparql-endpoint-title"
+			   (try List.assoc "title" args with _ -> dummy_title);
       (* initializing configuration from HTML *)
       config#init !default_endpoint args in
     (* creating and initializing history *)
