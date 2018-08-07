@@ -256,6 +256,9 @@ and print_id id = print_int id
 
 let of_query (q : 'a elt_s) : string = print q
 
+let of_path (path : path) : string =
+  String.concat "" (List.map (function DOWN -> "D" | RIGHT -> "R") path)
+					     
 (* multi-version parsing: unit annotations are used *)
 
 open Genlex
@@ -465,3 +468,13 @@ and parse_var ~version = parser [< s = parse_string ~version >] -> s
 and parse_id ~version = parser [< i = parse_int ~version >] -> i
 
 let to_query (str : string) : unit elt_s = parse (lexer (Stream.of_string str))
+
+let to_path (str : string) : path =
+  let res = ref [] in
+  for i = String.length str - 1 downto 0 do
+    let c = str.[i] in
+    if c = 'D' then res := DOWN::!res
+    else if c = 'R' then res := RIGHT::!res
+    else assert false
+  done;
+  !res

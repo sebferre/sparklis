@@ -1959,6 +1959,4 @@ let delete_focus = function
 
 (* goto to query *)
 
-let focus_of_query (s : unit elt_s) = AtS (s, Root)
-
-let goto (s : unit elt_s) focus = Some (focus_of_query s)
+let focus_of_query_path (s : unit elt_s) (path : path) = focus_of_elt_s_path (s,path)
