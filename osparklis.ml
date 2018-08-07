@@ -26,6 +26,10 @@ let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.p
 let session_id : string = (* random session ID to disambiguate undefinite IPs *)
   Random.self_init (); string_of_int (Random.int 1000000000);;
 
+(* other configs *)
+
+let config_short_permalink = new Config.boolean_input ~key:"short-permalink" ~input_selector:"#input-short-permalink" ~default:true ()
+  
 (* LISQL constraints <--> user patterns *)
 
 let string_is_float =
@@ -234,7 +238,8 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
-      (config_logging :> Config.input); ] in
+      (config_logging :> Config.input);
+      (config_short_permalink :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
     Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
@@ -330,7 +335,11 @@ object (self)
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
   initializer html_state <- new Html.state lis#id_labelling
 
-  method show_permalink : unit Lwt.t =
+  method show_permalink : unit =
+    let show (url : string) : unit =
+      ignore (prompt
+		Lisql2nl.config_lang#grammar#msg_permalink
+		url) in
     let endpoint = lis#endpoint in
     let title = jquery_get_innerHTML "#sparql-endpoint-title" in
     let args = config#get_permalink in
@@ -341,35 +350,45 @@ object (self)
 	  then args
 	  else ("sparklis-query", Permalink.of_query lis#query)
 	       :: args) in
-    try
-      let permalink_url =
+    let permalink_url =
+      let current_url =
 	match Url.Current.get () with
-	  | None -> raise Not_found
-	  | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	  | Some (Url.Https url) -> Url.string_of_url (Url.Https { url with Url.hu_arguments = args })
-	  | Some (Url.File url) ->
-	     ( match Url.url_of_string
-		       "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html" with
-	       | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	       | _ -> assert false ) in
-      Lwt.bind
-	(XmlHttpRequest.perform_raw_url
-	   ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
-		      "format","txt";
-		      "longUrl", permalink_url]
-	   "https://api-ssl.bitly.com/v3/shorten")
-	(fun http_frame ->
-	  let permalink_url =
+	| None -> Url.(Http { hu_host = "localhost";
+			      hu_port = 8080;
+			      hu_path = [];
+			      hu_path_string = "";
+			      hu_arguments = [];
+			      hu_fragment = "" })
+	| Some url -> url in
+      match current_url with
+      | Url.Http url -> Url.Http { url with Url.hu_arguments = args }
+      | Url.Https url -> Url.Https { url with Url.hu_arguments = args }
+      | Url.File url -> Url.File { url with Url.fu_arguments = args } in
+    if config_short_permalink#value
+    then
+      let permalink_url = (* converting local URLs to http URLs *)
+	match permalink_url with
+	| Url.File url -> Url.(Http { hu_host = "www.irisa.fr";
+				      hu_port = 80;
+				      hu_path = ["LIS"; "ferre"; "sparklis"; "osparklis.html"];
+				      hu_path_string = "/LIS/ferre/sparklis/osparklis.html";
+				      hu_arguments = url.fu_arguments;
+				      hu_fragment = "" })
+	| _ -> permalink_url in
+      Lwt.ignore_result
+	(Lwt.bind
+	   (XmlHttpRequest.perform_raw_url
+	      ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
+			 "format","txt";
+			 "longUrl", Url.string_of_url permalink_url]
+	      "https://api-ssl.bitly.com/v3/shorten")
+	   (fun http_frame ->
 	    let open XmlHttpRequest in
 	    if http_frame.code = 200
-	    then http_frame.content
-	    else permalink_url in
-	  ignore
-	    (prompt
-	       Lisql2nl.config_lang#grammar#msg_permalink
-	       permalink_url);
-	  Lwt.return ())
-    with _ -> Lwt.return ()
+	    then show http_frame.content
+	    else show (Url.string_of_url permalink_url);
+	    Lwt.return ()))
+    else show (Url.string_of_url permalink_url)
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
