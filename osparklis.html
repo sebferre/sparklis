@@ -871,28 +871,32 @@
       <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
     </span>
   </div>
-  </div>
+</div>
 
 <div class="container-fluid">
   <div id="sparklis-view" class="panel-group">
     <div id="query" class="panel panel-default">
-    <!--
       <div class="panel-heading">
-	<span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
-	<span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
-	<span class="texte lang-es">Tu consulta y su <span class="highlighted">foque actual</span></span>
-	<span class="texte lang-nl">Uw query en zijn <span class="highlighted">huidige focus</span></span>
+	<h5 class="panel-title">
+	  <a data-toggle="collapse" data-target="#collapse-query">
+	    <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
+	    <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
+	    <span class="texte lang-es">Tu consulta y su <span class="highlighted">foque actual</span></span>
+	    <span class="texte lang-nl">Uw query en zijn <span class="highlighted">huidige focus</span></span>
+	  </a>
+	</h5>
       </div>
--->
-      <div class="panel-body">
-	<span class="tooltiped">
-	  <span class="tooltip lang-en">Click on a query element to change focus</span>
-	  <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
-	  <span class="tooltip lang-es">Haga clic en un elemento de consulta para cambiar el foco</span>
-	  <span class="tooltip lang-nl">Klik op een query-element om de focus te wijzigen</span>
-	  <div id="lisql">
-	  </div>
-	</span>
+      <div id="collapse-query" class="panel-collapse collapse in">
+	<div id="query-body" class="panel-body">
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Click on a query element to change focus</span>
+	    <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
+	    <span class="tooltip lang-es">Haga clic en un elemento de consulta para cambiar el foco</span>
+	    <span class="tooltip lang-nl">Klik op een query-element om de focus te wijzigen</span>
+	    <div id="lisql">
+	    </div>
+	  </span>
+	</div>
       </div>
     </div>
 
@@ -906,7 +910,7 @@
 	    <span class="texte lang-es">Sugerencias de Sparklis para refinar tu consulta</span>
 	    <span class="texte lang-nl">Sparklis suggesties om uw query te verfijnen</span>
 	  </a>
-	</h4>
+	</h5>
       </div>
       <div id="collapse-increments" class="panel-collapse collapse in">
        <div id="increments-body" class="panel-body">
