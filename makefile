@@ -16,6 +16,7 @@ install:
 	cp *.png /local/ferre/web/ferre/sparklis
 	cp *.jpg /local/ferre/web/ferre/sparklis
 	cp examples.html /local/ferre/web/ferre/sparklis
+	cp release_notes.html /local/ferre/web/ferre/sparklis
 
 install-dev:
 	cp yasgui.min.css /local/ferre/web/ferre/sparklis-dev
@@ -27,6 +28,7 @@ install-dev:
 	cp *.png /local/ferre/web/ferre/sparklis-dev
 	cp *.jpg /local/ferre/web/ferre/sparklis-dev
 	cp examples.html /local/ferre/web/ferre/sparklis-dev
+	cp release_notes.html /local/ferre/web/ferre/sparklis-dev
 
 clean:
 	rm -f *.cm[ioax]

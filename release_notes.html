@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Release Notes</title>
+<meta name="author" content="Sébastien Ferré"/>
+<meta name="description" content="Sparklis lets you explore a RDF dataset through a SPARQL endpoint without the need to read or write SPARQL queries. Queries are displayed in natural language syntax, and are incrementally built by clicking suggested query elements, and by inserting them at the current focus. Only relevant suggestions are made, so that empty results are avoided."/>
+<meta name="keywords" content="SPARQL, faceted search, semantic search, exploratory search, complex queries, natural language interface, logical information systems"/>
+<meta charset="UTF-8">
+<!-- jQuery library -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+<!-- Bootstrap -->
+<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+<!-- Sparklis -->
+<link rel="stylesheet" type="text/css" href="osparklis.css">
+</head>
+
+<body>
+  <div class="container">
+  <div class="page-header">
+    <h2>Release Notes</h2>
+  </div>
+
+  <p>
+    This page lists a number of queries over different endpoints
+    (mostly DBpedia) that can be built in <a target="_blank"
+					     href="osparklis.html">Sparklis</a>.
+  </p>
+
+  <ul>
+    <li><strong>August 2018</strong>
+      <ul>
+	<li>The query focus is now recorded in permalinks.</li>
+	<li>New configuration option to generate or not short URLs for permalinks.</li>
+      </ul>
+    </li>
+
+    <li><strong>July 2018</strong>
+      <ul>
+	<li>Dutch version of the interface (by Erwin Folmer, Kadaster NL).</li>
+      </ul>
+    </li>
+    <li><strong>May 2018</strong>
+      <ul>
+	<li>Support for Wikidata statements and qualifiers, based on the support for n-ary relationships. Look for <em>Wikidata</em> in the list of endpoints, and the configuration option in <em>Ontology</em>.</li>
+	<li>Support for n-ary relationships (e.g., in the Mondial dataset, countries have languages at some percentage), if the related <em>Ontology</em> option is activated. The relevant suggestions are displayed in the left column along with classes and properties, and are colored in <span class="naryURI">cyan</span>. The support assumes the reification of n-ary relationships by statements or events. Two Sparklis-specific schema properties can be used to let Sparklis know about n-ary relationships in a dataset: <code>nary:subjectObject</code> and <code>nary:eventObject</code> where the prefix <code>nary:</code> stands for the namespace <code>http://www.irisa.fr/LIS/ferre/vocab/nary#</code>. The former is used to relate the event-to-subject property to the event-to-object property; and the latter is used to relate the subject-to-event property to the event-to-object property. For example, in the Mondial dataset, we have added the triple <code>mondial:ofCountry nary:subjectObject mondial:onLanguage</code>. Qualifier properties, i.e. other properties that apply to the event, are detected automatically by Sparklis and suggested as prepositional phrases.</li>
+      </ul>
+    </li>
+
+    <li><strong>March 2018</strong>
+      <ul>
+	<li>The Sparklis-specific property <code>rdfs:inheritsThrough</code> enables to declare that the values of some property <em>P</em> are hierarchically organized by a property <em>H</em>. Each time property <em>P</em> is inserted into the query, a <code>(hierarchy) in</code> construct is automatically inserted based on property <em>H</em>. It has a similar effect to type inheritance through the class hierarchy. In fact, triple <code>(rdf:type, rdfs:inheritsThrough, rdfs:subClassOf)</code> has the same effect as RDFS type inheritance. Examples of use are triples <code>(ex:livesIn, rdfs:inheritsThrough, ex:subPlaceOf)</code> (geographical locations), and <code>(ex:hasTopic, rdfs:inheritsThrough, skos:broader)</code> (topics).
+	<li>Support for hierarchies of entities (e.g. taxonomies, locations, historical periods, genealogies). The modifiers <code>(hierarchy) in</code> and <code>(inverse hierarchy) in</code> allow to use the last selected property as a hierarchical relationship in order to display the values of that property as a tree. The latter modifier displays the tree upside-down. When a value is selected, it is equivalent to select all values under (above if inverse hierarchy) the selected value in the tree.</li>
+      </ul>
+    </li>
+
+    <li><strong>February 2018</strong>
+      <ul>
+	<li>Full-text search based on Jena's <code>text:query</code> or Virtuoso's <code>bif:contains</code>. See option in <em>Language and labels</em> configuration panel. Of course, this assumes appropriate text indices have been built on the endpoint (see instructions of the target triplestore).</li>
+	<li>Multiple selection of suggestions is now available. Use <code>Ctrl+Click</code> to define the multiple selection, then click one of the suggested buttons at the top of a suggestion list to choose a coordination of the selected suggestions (<code>... and ...</code> or <code>... or ...</code>).</li>
+      </ul>
+    </li>
+
+    <li><strong>January 2018</strong>
+      <ul>
+	<li>New result view: slideshow of images and videos appearing in the table of results. The contents of the corresponding table line is displayed under the image to provide context for the image/video.</li>
+      </ul>
+    </li>
+
+    <li><strong>November 2017</strong>
+      <ul>
+	<li>Buttons ▼/► at the bottom of suggestion lists to expand/collapse all concepts/entities.</li>
+      </ul>
+    </li>
+
+    <li><strong>September 2017</strong>
+      <ul>
+	<li>New user interface based on Bootstrap for a more modern look-and-feel, and a responsive design.</li>
+      </ul>
+    </li>
+
+    <li><strong>May 2017</strong>
+      <ul>
+	<li>Generation of short URLs for permalinks, based on <a target="_blank" href="https://bit.ly/">bit.ly</a>.</li>
+      </ul>
+    </li>
+
+    <li><strong>April 2017</strong>
+      <ul>
+	<li>Support for named graphs. Two new options allow to specify a named graph as the default, and the named graph that contains the dataset schema. For a more fine-grained control, new constructs <code>according to ...</code> and <code>according to which there is ...</code> can be inserted into the query (the counterpart of the <code>GRAPH</code> construct of SPARQL).</li>
+      </ul>
+    </li>
+
+    <li><strong>January 2017</strong>
+      <ul>
+	<li>New result view: map showing the geolocation of entities in the table of results. This requires the insertion of pseudo-property <code>has geolocation</code> on the entities to be displayed on the map. That pseudo-property is suggested when well-known properties are defined for both latitude and longitude (vocabularies: wgs84, vcard, schema.org).</li>
+      </ul>
+    </li>
+
+    <li><strong>October 2016</strong>
+      <ul>
+	<li>Classes and properties can now be organized into hierarchies (assumes materialized inference in the dataset). Check options on the <em>Ontology</em> configuration panel.</li>
+	<li>New modifier to duplicate the subquery under focus.</li>
+	<li>New modifier <code>a choice between ...</code> in expressions to allow for non-deterministic expressions (i.e. expressions that have several possible values). This was found useful to define custom aggregation dimensions.</li>
+	<li>New option to filter out the suggestions whose URI matches some regexp.</li>
+      </ul>
+    </li>
+
+    <li><strong>August 2016</strong>
+      <ul>
+	<li>Spanish version of the interface (by José Enrique Ortiz Vivar).</li>
+      </ul>
+    </li>
+
+    <li><strong>April 2016</strong>
+      <ul>
+	<li>Integration of <a target="_blank" href="http://yasgui.org/">YASGUI</a> as an editable view of the SPARQL translation of the Sparklis query.</li>
+      </ul>
+    </li>
+
+    <li><strong>March 2016</strong>
+      <ul>
+	<li>New option to send GET requests instead of POST requests. The latter is to be prefered (and the default) because it better supports long queries.</li>
+	<li>New option to send credentials in HTTP requests. Required for endpoints with access control.</li>
+	<li>Implicit conversions on RDF literals in computations for better robustness w.r.t. poorly datatyped datasets.</li>
+      </ul>
+    </li>
+
+    <li><strong>December 2015</strong>
+      <ul>
+	<li>Support for SPARQL computations: expressions, aggregations, GROUP BY, BIND. This appears in Sparklis as a lot of new modifiers for inserting functions, operators, aggregators, and for choosing grouping criteria. Literal values can be input in the list of suggested entities, with input fields according to the expected datatypes. Complex combinations and compositions of the SPARQL computations features are covered. See the <em>Examples</em> page.</li>
+      </ul>
+    </li>
+
+    <li><strong>December 2014</strong>
+      <ul>
+	<li>New option to specify a SPARQL endpoint to be used as a proxy to query a target SPARQL endpoint that is not CORS-enabled. A default endpoint at IRISA is provided.</li>
+	<li>French version of the interface.</li>
+      </ul>
+    </li>
+
+    <li><strong>November 2014</strong>
+      <ul>
+	<li>Configuration options put into permalinks.</li>
+	<li>Options in the <em>Language and labels</em> configuration panel to choose a property and language tag for the labels of classes, properties, and entities.</li>
+      </ul>
+    </li>
+
+    <li><strong>October 2014</strong>
+      <ul>
+	<li>Option to deactivate the collection of usage statistics.</li>
+	<li>Options to configure the maximum number of computed results, and the maximum number of suggested classes and properties.</li>
+	<li>Configuration panel to adapt to the endpoint, and customize the presentation of contents.</li>
+      </ul>
+    </li>
+
+    <li><strong>August 2014</strong>
+      <ul>
+	<li>Drop-down list of SPARQL endpoints.</li>
+	<li>Improved verbalization from URIs (uncamelizing, replacing underscores by spaces, etc).</li>
+
+      </ul>
+    </li>
+
+    <li><strong>July 2014</strong>
+      <ul>
+	<li>Support for blank nodes, avoiding to inject them into SPARQL queries.</li>
+      </ul>
+    </li>
+
+    <li><strong>May 2014</strong>
+      <ul>
+	<li>Pretty-printing of generated SPARQL queries: indentation, mnemonic variables, automated definition of namespace prefixes.</li>
+	<li>Small icons to open URIs (in query, suggestions, and results) in another browser tab.</li>
+	<li>Column headers in results are verbalized and can be clicked to change focus.</li>
+	<li>Co-references in suggestions and queries. Enables to build graph patterns with cycles.</li>
+	<li>New construct <code>has relation from/to...</code> to allow for crossing any property, and for moving the focus on the predicate position of a triple.</li>
+      </ul>
+    </li>
+
+    <li><strong>April 2014</strong>
+      <ul>
+	<li>Full-text search at initial step by using <code>bif:contains</code> (available in Virtuoso).</li>
+	<li>Coordinations of noun phrases (and, or, not, optionally), as a way to factorize queries and make them more natural and concise.</li>
+      </ul>
+    </li>
+
+    <li><strong>January 2014</strong>
+      <ul>
+	<li>In filters, different comparators for numbers and strings (including dates/times).</li>
+	<li>New filters for matching the language tag and the datatype.</li>
+	<li>Introduction of filters on suggestion lists, based on string matching and comparators.</li>
+	<li>Support for simple aggregations: one or several columns can be aggregated, grouping by the other columns. A column can be ignored in the results with the modifier <code>any</code>.</li>
+	<li>New constructs <code>highest-to-lowest</code>, <code>lowest-to-highest</code> can be applied to an entity in the query to sort its values in the table of results.</li>
+      </ul>
+    </li>
+
+    <li><strong>December 2013</strong>
+      <ul>
+	<li>Support for UNION, OPTIONAL, NOT EXISTS with the coordination of verb phrases (and, or, not, optional).</li>
+	<li>Support for ASK queries.</li>
+	<li>The SPARQL endpoint is shown, and can be changed dynamically.</li>
+	<li>Navigation history, and associated controls: back, forward, home.</li>
+	<li>Addition of tooltips for contextual help.</li>
+	<li>The focus can be moved by clicking different parts of the query, and its content can be removed from the query.</li>
+	<li>Display of media contents in the table of results.</li>
+	<li>Dynamic filtering of suggestion lists by keyword inputs.</li>
+	<li>Computation of suggestions right from the endpoint.</li>
+	<li>First version allowing to build simple queries, evaluate them at DBpedia, and display a table of results.</li>
+      </ul>
+    </li>
+    
+  </ul>
+  
+  <footer class="container">
+    <p>Created by <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/">Sébastien Ferré</a> © 2013-2018
+      <a target="_blank" href="http://www-semlis.irisa.fr/"><img src="lis.png" alt="SemLIS team" height="40"></a>
+      <a target="_blank" href="http://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="40"></a>
+      <a target="_blank" href="http://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
+    </p>
+    <p>Visit <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/">my homepage</a> for more information.</p>
+  </footer>
+</body>
+</html>
+
+  
