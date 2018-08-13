@@ -41,6 +41,8 @@ let owl_DatatypeProperty = "http://www.w3.org/2002/07/owl#DatatypeProperty"
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
 
+let schema_position = "http://schema.org/position"
+			 
 let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
 let wikibase_claim = "http://wikiba.se/ontology#claim"

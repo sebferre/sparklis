@@ -225,6 +225,7 @@ let config =
       (Ontology.config_class_hierarchy :> Config.input);
       (Ontology.config_property_hierarchy :> Config.input);
       (Ontology.config_hierarchy_inheritance :> Config.input);
+      (Ontology.config_sort_by_position :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
       (Lis.config_nary_relations :> Config.input);
       (Lis.config_regexp_hidden_URIs :> Config.input);

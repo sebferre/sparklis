@@ -1099,6 +1099,11 @@ and term_of_pred : pred -> Rdf.term option = function
   | SO _ -> None
   | EO _ -> None
 
+let uri_of_increment (incr : increment) : Rdf.uri option =
+  match term_of_increment incr with
+  | Some (Rdf.URI uri) -> Some uri
+  | _ -> None
+	      
 let latlong_of_increment (incr : increment) : latlong option =
   match incr with
   | IncrPred (S, EO (pe,po)) when pe = Rdf.p_P625 -> Some `Wikidata

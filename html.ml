@@ -249,9 +249,10 @@ let html_id (state : state) (id : int) : string =
 
 (* HTML of increment lists *)
 
-type compare_incr_data = int option * int * [`Words of string list | `Number of float] (* freq_opt, rank, data *)
+type compare_incr_data = (float * int) option * int * [`Words of string list | `Number of float]
+(* (position, freqency) opt, rank, data *)
 
-let compare_incr (f1_opt,r1,d1 : compare_incr_data) (f2_opt,r2,d2 : compare_incr_data) : int =
+let compare_incr (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_incr_data) : int =
   let compare3 () =
     match d1, d2 with
     | `Number f1, `Number f2 -> Pervasives.compare f1 f2
@@ -266,13 +267,13 @@ let compare_incr (f1_opt,r1,d1 : compare_incr_data) (f2_opt,r2,d2 : compare_incr
     else if r1 > r2 then 1
     else compare3 () in
   let compare1 () =
-    match f1_opt, f2_opt with
+    match pf1_opt, pf2_opt with
     | None, None -> compare2 ()
     | None, Some _ -> -1
     | Some _, None -> 1
-    | Some f1, Some f2 ->
-       if f1 < f2 then 1
-       else if f1 > f2 then -1
+    | Some pf1, Some pf2 ->
+       if pf1 < pf2 then -1
+       else if pf1 > pf2 then 1
        else compare2 () in
   compare1 ()
 	  
@@ -289,15 +290,22 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   let grammar = Lisql2nl.config_lang#grammar in
   let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
   let html = html_of_nl_xml state xml in
-  let f_opt, html_freq =
+  let position =
+    match Lisql.uri_of_increment incr with
+    | None -> max_float
+    | Some uri ->
+       match Ontology.config_sort_by_position#value#info uri with
+       | [] -> max_float
+       | x::xs -> List.fold_left max x xs in
+  let pf_opt, html_freq =
     match freq_opt with
     | None -> None, ""
-    | Some {Lis.value=1} -> Some 1, ""
+    | Some {Lis.value=1} -> Some (position, -1), ""
     | Some {Lis.value; max_value; partial; unit} ->
       let s = string_of_int value in
       let s = if partial then s ^ "+" else s in
       (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
-      Some value,
+      Some (position, -value),
       ( match unit with
       | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
       | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
@@ -359,7 +367,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     | IncrTriple _
     | IncrTriplify -> false
     | _ -> true in
-  let sort_data = (f_opt, rank, data) in
+  let sort_data = (pf_opt, rank, data) in
   let is_selection_incr, html =
     match incr with
     | IncrSelection _ ->
