@@ -287,7 +287,7 @@ object (self)
     let s, p =
       if s = ""
       then (try other, List.assoc key_property args with _ -> "", "")
-      else s, "" in
+      else s, s in
     let l = try List.assoc key_lang args with _ -> "" in
     self#set_select_property_lang s p l
 
