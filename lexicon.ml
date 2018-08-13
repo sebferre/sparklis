@@ -366,3 +366,30 @@ let config_arg_lexicon =
     ~default_lexicon:default_arg_lexicon
     ~custom_lexicon:sparql_arg_lexicon
     ()
+
+(* utilities for enqueuing and syncing *)
+
+let enqueue_entity uri = config_entity_lexicon#value#enqueue uri
+let enqueue_class uri = config_class_lexicon#value#enqueue uri
+let enqueue_property uri = config_property_lexicon#value#enqueue uri
+let enqueue_arg uri = config_arg_lexicon#value#enqueue uri
+
+let sync_entities k =
+  config_entity_lexicon#value#sync
+    (fun () ->
+     config_class_lexicon#value#sync k) (* 'class' for datatypes *)
+let sync_concepts k =
+  config_class_lexicon#value#sync
+    (fun () ->
+     config_property_lexicon#value#sync
+       (fun () ->
+	config_arg_lexicon#value#sync k))
+    
+let sync k =
+  config_entity_lexicon#value#sync
+    (fun () ->
+     config_class_lexicon#value#sync
+       (fun () ->
+	config_property_lexicon#value#sync
+	  (fun () ->
+	   config_arg_lexicon#value#sync k)))

@@ -293,3 +293,31 @@ let config_sort_by_position =
       ~default_relation:no_relation
       ~custom_relation:sparql_relations#position
       ()
+
+(* utilities for enqueuing and syncing *)
+
+let enqueue_entity uri =
+  config_sort_by_position#value#enqueue uri
+let enqueue_class uri =
+  config_class_hierarchy#value#enqueue uri;
+  config_hierarchy_inheritance#value#enqueue uri;
+  enqueue_entity uri
+let enqueue_property uri =
+  config_property_hierarchy#value#enqueue uri;
+  config_hierarchy_inheritance#value#enqueue uri;
+  enqueue_entity uri
+let enqueue_pred uri =
+  enqueue_entity uri
+let enqueue_arg uri =
+  enqueue_entity uri
+
+let sync_entities k =
+  config_sort_by_position#value#sync k
+let sync_concepts k =
+  config_class_hierarchy#value#sync
+    (fun () ->
+     config_property_hierarchy#value#sync
+       (fun () ->
+	config_hierarchy_inheritance#value#sync
+	  (fun () ->
+	   sync_entities k)))

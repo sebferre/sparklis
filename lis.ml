@@ -125,10 +125,10 @@ let filter_hidden_URIs (v : string) : string =
 
 let lexicon_enqueue_term = function
   | Rdf.URI uri ->
-     Ontology.config_sort_by_position#value#enqueue uri;
-     Lexicon.config_entity_lexicon#value#enqueue uri
+     Ontology.enqueue_entity uri;
+     Lexicon.enqueue_entity uri
   | Rdf.TypedLiteral (_,dt) ->
-     Lexicon.config_class_lexicon#value#enqueue dt
+     Lexicon.enqueue_class dt
   | _ -> ()
 
 let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : Sparql_endpoint.results -> unit) : unit =
@@ -151,9 +151,8 @@ let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.
       (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
       results.vars in
   let partial_bindings = List.rev (aux offset limit [] results.bindings) in
-  Lexicon.config_class_lexicon#value#sync (fun () ->
-    Lexicon.config_entity_lexicon#value#sync (fun () ->
-      k { results with vars = partial_vars; bindings = partial_bindings }))
+  Lexicon.sync_entities (* datatypes and entities *)
+    (fun () -> k { results with vars = partial_vars; bindings = partial_bindings })
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   let open Sparql_endpoint in
@@ -789,13 +788,11 @@ object (self)
       (* synchronizing hierarchies and lexicons and continuing *)
       term_hierarchy#sync
 	(fun () ->
-	 Lexicon.config_entity_lexicon#value#sync
+	 Lexicon.sync_entities (* datatypes and entities *)
 	   (fun () ->
-	    Lexicon.config_class_lexicon#value#sync
+	    Ontology.sync_entities
 	      (fun () ->
-	       Ontology.config_sort_by_position#value#sync
-		 (fun () ->
-		  k ~partial incr_index))))
+	       k ~partial incr_index)))
 
   method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_class results_prop results_pred =
@@ -814,10 +811,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI uri) ->
-		Ontology.config_class_hierarchy#value#enqueue uri;
-		Ontology.config_hierarchy_inheritance#value#enqueue uri;
-		Ontology.config_sort_by_position#value#enqueue uri;
-		Lexicon.config_class_lexicon#value#enqueue uri
+		Ontology.enqueue_class uri;
+		Lexicon.enqueue_class uri
 	     | _ -> ())
 	   lt;
 	 let freq = { value=count; max_value; partial=partial_class; unit } in
@@ -829,10 +824,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI uri) ->
-		Ontology.config_property_hierarchy#value#enqueue uri;
-		Ontology.config_hierarchy_inheritance#value#enqueue uri;
-		Ontology.config_sort_by_position#value#enqueue uri;
-		Lexicon.config_property_lexicon#value#enqueue uri
+		Ontology.enqueue_property uri;
+		Lexicon.enqueue_property uri
 	     | _ -> ())
 	   lt;
 	 let freq = { value=count; max_value; partial=partial_prop; unit } in
@@ -844,8 +837,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI p) ->
-		Ontology.config_sort_by_position#value#enqueue p;
-		Lexicon.config_property_lexicon#value#enqueue p
+		Ontology.enqueue_pred p;
+		Lexicon.enqueue_property p
 	     | _ -> ()) lt;
 	 let freq = { value=count; max_value; partial=partial_pred; unit } in
 	 Lisql2sparql.WhichPred.increments_of_terms ~init:true lt |>
@@ -854,13 +847,9 @@ object (self)
 	      incr_index#add (incr, Some freq);
 	      Lisql2sparql.WhichPred.increments_hidden_by_increment ~init:true incr |>
 		List.iter incr_index#remove));
-      Ontology.config_class_hierarchy#value#sync (fun () ->
-	Ontology.config_property_hierarchy#value#sync (fun () ->
-	  Ontology.config_hierarchy_inheritance#value#sync (fun () ->
-	    Ontology.config_sort_by_position#value#sync (fun () ->
-	      Lexicon.config_class_lexicon#value#sync (fun () ->
-	        Lexicon.config_property_lexicon#value#sync (fun () ->
-	          k ~partial incr_index))))))
+      Ontology.sync_concepts (fun () ->
+	Lexicon.sync_concepts (fun () ->
+	    k ~partial incr_index))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1001,10 +990,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI uri) ->
-		Ontology.config_class_hierarchy#value#enqueue uri;
-		Ontology.config_hierarchy_inheritance#value#enqueue uri;
-		Ontology.config_sort_by_position#value#enqueue uri;
-		Lexicon.config_class_lexicon#value#enqueue uri
+		Ontology.enqueue_class uri;
+		Lexicon.enqueue_class uri
 	     | _ -> ())
 	   lt;
 	  Lisql2sparql.WhichClass.increments_of_terms ~init:false lt |>
@@ -1016,10 +1003,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI uri) ->
-		Ontology.config_property_hierarchy#value#enqueue uri;
-		Ontology.config_hierarchy_inheritance#value#enqueue uri;
-		Ontology.config_sort_by_position#value#enqueue uri;
-		Lexicon.config_property_lexicon#value#enqueue uri
+		Ontology.enqueue_property uri;
+		Lexicon.enqueue_property uri
 	     | _ -> ())
 	   lt;
 	 let freq_opt = Some { value=count; max_value; partial=partial_prop; unit } in
@@ -1042,8 +1027,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI p) ->
-		Ontology.config_sort_by_position#value#enqueue p;
-		Lexicon.config_property_lexicon#value#enqueue p
+		Ontology.enqueue_pred p;
+		Lexicon.enqueue_property p
 	     | _ -> ()) lt;
 	 let freq_opt = Some { value=count; max_value; partial=partial_pred; unit } in
 	 Lisql2sparql.WhichPred.increments_of_terms ~init:false lt |>
@@ -1060,8 +1045,8 @@ object (self)
 	 List.iter
 	   (function
 	     | Some (Rdf.URI uri) ->
-		Ontology.config_sort_by_position#value#enqueue uri;
-		Lexicon.config_arg_lexicon#value#enqueue uri
+		Ontology.enqueue_arg uri;
+		Lexicon.enqueue_arg uri
 	     | _ -> ())
 	   lt;
 	 let freq_opt = Some { value=count; max_value; partial=partial_arg; unit } in
@@ -1078,14 +1063,9 @@ object (self)
 	   Lisql.IncrHierarchy (true,true)];
       if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
       if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
-      Ontology.config_class_hierarchy#value#sync (fun () ->
-	Ontology.config_property_hierarchy#value#sync (fun () ->
-	  Ontology.config_hierarchy_inheritance#value#sync (fun () ->
-	    Ontology.config_sort_by_position#value#sync (fun () ->
-	      Lexicon.config_class_lexicon#value#sync (fun () ->
-	        Lexicon.config_property_lexicon#value#sync (fun () ->
-		  Lexicon.config_arg_lexicon#value#sync (fun () ->
-	            k ~partial incr_index)))))))
+      Ontology.sync_concepts (fun () ->
+	Lexicon.sync_concepts (fun () ->
+	  k ~partial incr_index))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
