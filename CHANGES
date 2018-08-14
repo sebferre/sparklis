@@ -1,5 +1,16 @@
 # description of main changes
 
+2018-08-14
+
+- new configurations
+  - Ontology.config_sort_by_position: use schema:position to get position in suggestion lists
+  - Ontology.config_show_logo: use schema:logo to get icons to show on left of labels
+  - Ontology.config_logo_height: height in pixels for icons
+  - Osparklis.config_short_permalink: whether to shorten permalink URLs (with bit.ly)
+- permalinks
+  - more stable by ignoring values in HTML on load, rather using hard-coded default values to decide what goes into the permalink
+  - inclusion of focus path
+
 2018-05-29    N-ary relations, reified triples, support of wikidata
 
 - new configurations

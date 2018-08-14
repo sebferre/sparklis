@@ -226,6 +226,7 @@ let config =
       (Ontology.config_property_hierarchy :> Config.input);
       (Ontology.config_hierarchy_inheritance :> Config.input);
       (Ontology.config_sort_by_position :> Config.input);
+      (Ontology.config_show_logo :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
       (Lis.config_nary_relations :> Config.input);
       (Lis.config_regexp_hidden_URIs :> Config.input);
@@ -239,6 +240,7 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
+      (Html.config_logo_height :> Config.input);
       (config_logging :> Config.input);
       (config_short_permalink :> Config.input); ] in
 object (self)

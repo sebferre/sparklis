@@ -9,6 +9,10 @@ open Jsutils
 open Lisql
 open Lisql_annot
 
+(* configuration elements *)
+
+let config_logo_height = new Config.integer_input ~key:"logo_height" ~input_selector:"#input-logo-height" ~min:8 ~default:20 ()
+       
 (* generic dictionary with automatic generation of keys *)
 
 class ['a] dico (prefix : string) =
@@ -142,6 +146,21 @@ let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
 let html_function f = html_span ~classe:"function" (escapeHTML f)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
+let html_logos uri =
+  let logo_urls = Ontology.config_show_logo#value#info uri in
+  let logo_urls =
+    if Rdf.uri_is_image uri
+    then uri :: logo_urls
+    else logo_urls in
+  let height = config_logo_height#value in
+  String.concat
+    ""
+    (List.map
+       (fun logo_url ->
+	let name = Filename.basename logo_url in
+	html_img ~classe:"uri-logo" ~height ~alt:"" ~title:name logo_url)
+       logo_urls)
+				
 let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
@@ -151,10 +170,10 @@ let html_word = function
     then html_literal s ^ " (" ^ escapeHTML t ^ ")"
     else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
-  | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
-  | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
-  | `Nary (uri,s) -> html_uri ~classe:"naryURI" uri (escapeHTML s)
+  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
+  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" uri s
+  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" uri s
+  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" uri (escapeHTML s)
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
@@ -290,8 +309,9 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   let grammar = Lisql2nl.config_lang#grammar in
   let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
   let html = html_of_nl_xml state xml in
+  let uri_opt = Lisql.uri_of_increment incr in
   let position =
-    match Lisql.uri_of_increment incr with
+    match uri_opt with
     | None -> max_float
     | Some uri ->
        match Ontology.config_sort_by_position#value#info uri with

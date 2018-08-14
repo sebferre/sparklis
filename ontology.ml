@@ -183,6 +183,7 @@ let sparql_relations =
     method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
 
     method position ~froms = self#get_property_number ~froms ~property:Rdf.schema_position
+    method logo ~froms = self#get_property_uri ~froms ~property:Rdf.schema_logo ~inverse:false
   end
 							     
 (* configuration *)
@@ -287,17 +288,26 @@ let config_hierarchy_inheritance =
 
 let config_sort_by_position =
   new config_relation
-      ~key:"sort-by-position"
+      ~key:"sort_by_position"
       ~input_selector:"#input-sort-by-position"
       ~config_graphs:Sparql_endpoint.config_schema_graphs
       ~default_relation:no_relation
       ~custom_relation:sparql_relations#position
       ()
+let config_show_logo =
+  new config_relation
+      ~key:"show_logo"
+      ~input_selector:"#input-show-logo"
+      ~config_graphs:Sparql_endpoint.config_schema_graphs
+      ~default_relation:no_relation
+      ~custom_relation:sparql_relations#logo
+      ()
 
 (* utilities for enqueuing and syncing *)
 
 let enqueue_entity uri =
-  config_sort_by_position#value#enqueue uri
+  config_sort_by_position#value#enqueue uri;
+  config_show_logo#value#enqueue uri
 let enqueue_class uri =
   config_class_hierarchy#value#enqueue uri;
   config_hierarchy_inheritance#value#enqueue uri;
@@ -312,7 +322,9 @@ let enqueue_arg uri =
   enqueue_entity uri
 
 let sync_entities k =
-  config_sort_by_position#value#sync k
+  config_sort_by_position#value#sync
+    (fun () ->
+     config_show_logo#value#sync k)
 let sync_concepts k =
   config_class_hierarchy#value#sync
     (fun () ->

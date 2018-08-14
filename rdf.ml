@@ -10,7 +10,7 @@ let uri_has_ext uri exts =
   List.exists
     (fun ext -> Filename.check_suffix uri ext)
     exts
-let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"]
+let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"; "svg"; "SVG"]
 let uri_is_video uri = uri_has_ext uri ["mp4"; "MP4"; "mov"; "MOV"]
 let uri_is_audio uri = uri_has_ext uri ["mp3"; "MP3"]
 
@@ -42,7 +42,8 @@ let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
 
 let schema_position = "http://schema.org/position"
-			 
+let schema_logo = "http://schema.org/logo"
+
 let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
 let wikibase_claim = "http://wikiba.se/ontology#claim"
