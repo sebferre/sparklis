@@ -219,6 +219,14 @@
 		</a>
 	      </li>
 	      <li>
+		<a data-toggle="modal" data-target="#config-presentation-modal">
+		  <span class="texte lang-en">Presentation</span>
+		  <span class="texte lang-fr">Présentation</span>
+		  <span class="texte lang-es">Presentación</span>
+		  <span class="texte lang-nl">Presentatie</span>
+		</a>
+	      </li>
+	      <li>
 		<a data-toggle="modal" data-target="#config-privacy-modal">
 		  <span class="texte lang-en">Privacy</span>
 		  <span class="texte lang-fr">Vie privée</span>
@@ -522,15 +530,6 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-sort-by-position" class="config-param">
-	      <input id="input-sort-by-position" type="checkbox"> <!-- Edit to change default value -->
-	      <span class="texte lang-en">Sort concepts and entities according to their value of <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
-	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur valeur de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
-	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo con su valor de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
-	      <span class="texte lang-nl">Sorteer concepten en entiteiten op basis van hun waarde van <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
-	    </div>
-	  </li>
-	  <li class="list-group-item">
 	    <div id="config-wikidata-mode" class="config-param">
 	      <input id="input-wikidata-mode" type="checkbox"> <!-- Edit to change default value -->
 	      <span class="texte lang-en">Specific configuration for Wikidata model</span>
@@ -749,16 +748,6 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-show-logo" class="config-param">
-	      <input id="input-show-logo" type="checkbox"> <!-- Edit to change default value -->
-	      <span class="texte lang-en">Label concepts and entities with icons according to their value of <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Icon height </span>
-	      <span class="texte lang-fr">Étiqueter les concepts et les entités avec des icônes en fonction de leur valeur de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Hauteur des icônes </span>
-	      <span class="texte lang-es">Etiquetar conceptos y entidades con iconos de acuerdo con su valor de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Altura de los iconos </span>
-	      <span class="texte lang-nl">Label concepten en entiteiten met pictogrammen op basis van hun waarde van <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Pictogram hoogte </span>
-	      <input id="input-logo-height" type="number" value="20"> <!-- Edit to change default value -->
-	    </div>
-	  </li>
-	  <li class="list-group-item">
 	    <div id="config-fulltext-search" class="config-param">
 	      <span class="texte lang-en">For suggestion filtering, use </span>
 	      <span class="texte lang-fr">Pour le filtrage des suggestions, utiliser </span>
@@ -780,6 +769,67 @@
 	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
 	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan.</span>
 	  <button id="config-language-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cierre</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="config-presentation-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure presentation</span>
+	  <span class="texte lang-fr">Configurer la présentation</span>
+	  <span class="texte lang-es">Configurar la presentación</span>
+	  <span class="texte lang-nl">Configureer presentatie</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-sort-by-position" class="config-param">
+	      <input id="input-sort-by-position" type="checkbox"> <!-- Edit to change default value -->
+	      <span class="texte lang-en">Sort concepts and entities according to their value of <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur valeur de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo con su valor de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-nl">Sorteer concepten en entiteiten op basis van hun waarde van <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-sort-by-frequency" class="config-param">
+	      <input id="input-sort-by-frequency" type="checkbox" checked> <!-- Edit to change default value -->
+	      <span class="texte lang-en">Sort concepts and entities according to their frequency</span>
+	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur fréquence</span>
+	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo con su frecuencia</span>
+	      <span class="texte lang-nl">Sorteer concepten en entiteiten op basis van hun frequentie</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-show-logo" class="config-param">
+	      <input id="input-show-logo" type="checkbox"> <!-- Edit to change default value -->
+	      <span class="texte lang-en">Label concepts and entities with icons according to their value of <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Icon height </span>
+	      <span class="texte lang-fr">Étiqueter les concepts et les entités avec des icônes en fonction de leur valeur de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Hauteur des icônes </span>
+	      <span class="texte lang-es">Etiquetar conceptos y entidades con iconos de acuerdo con su valor de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Altura de los iconos </span>
+	      <span class="texte lang-nl">Label concepten en entiteiten met pictogrammen op basis van hun waarde van <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Pictogram hoogte </span>
+	      <input id="input-logo-height" type="number" value="20"> <!-- Edit to change default value -->
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan.</span>
+	  <button id="config-privacy-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
 	    <span class="texte lang-en">Close</span>
 	    <span class="texte lang-fr">Fermer</span>
 	    <span class="texte lang-es">Cierre</span>

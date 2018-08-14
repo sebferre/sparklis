@@ -11,6 +11,7 @@ open Lisql_annot
 
 (* configuration elements *)
 
+let config_sort_by_frequency = new Config.boolean_input ~key:"sort_by_frequency" ~input_selector:"#input-sort-by-frequency" ~default:true ()
 let config_logo_height = new Config.integer_input ~key:"logo_height" ~input_selector:"#input-logo-height" ~min:8 ~default:20 ()
        
 (* generic dictionary with automatic generation of keys *)
@@ -320,17 +321,21 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   let pf_opt, html_freq =
     match freq_opt with
     | None -> None, ""
-    | Some {Lis.value=1} -> Some (position, -1), ""
+    (*| Some {Lis.value=1} -> Some (position, -1), ""*)
     | Some {Lis.value; max_value; partial; unit} ->
-      let s = string_of_int value in
-      let s = if partial then s ^ "+" else s in
+       let sort_frequency =
+	 if config_sort_by_frequency#value
+	 then -value (* '-' opposite for decreasing frequency ordering *)
+	 else 0 in (* frequency is here ignored *)
+       let s = string_of_int value in
+       let s = if partial then s ^ "+" else s in
       (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
-      Some (position, -value),
-      ( match unit with
-      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
-      ) in
+       Some (position, sort_frequency),
+       ( match unit with
+	 | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+	 | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+	 | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+       ) in
   let data = 
     let text =
       String.lowercase

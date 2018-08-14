@@ -240,6 +240,7 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
+      (Html.config_sort_by_frequency :> Config.input);
       (Html.config_logo_height :> Config.input);
       (config_logging :> Config.input);
       (config_short_permalink :> Config.input); ] in
