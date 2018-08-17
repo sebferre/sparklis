@@ -311,31 +311,35 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
   let html = html_of_nl_xml state xml in
   let uri_opt = Lisql.uri_of_increment incr in
-  let position =
-    match uri_opt with
-    | None -> max_float
-    | Some uri ->
-       match Ontology.config_sort_by_position#value#info uri with
-       | [] -> max_float
-       | x::xs -> List.fold_left max x xs in
   let pf_opt, html_freq =
     match freq_opt with
     | None -> None, ""
     (*| Some {Lis.value=1} -> Some (position, -1), ""*)
     | Some {Lis.value; max_value; partial; unit} ->
+       let position =
+	 match uri_opt with
+	 | None -> max_float
+	 | Some uri ->
+	    match Ontology.config_sort_by_position#value#info uri with
+	    | [] -> max_float
+	    | x::xs -> List.fold_left max x xs in
        let sort_frequency =
 	 if config_sort_by_frequency#value
 	 then -value (* '-' opposite for decreasing frequency ordering *)
 	 else 0 in (* frequency is here ignored *)
-       let s = string_of_int value in
-       let s = if partial then s ^ "+" else s in
-      (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
-       Some (position, sort_frequency),
-       ( match unit with
-	 | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-	 | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-	 | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
-       ) in
+       let html_freq =
+	 if value = 1
+	 then ""
+	 else
+	   let s = string_of_int value in
+	   let s = if partial then s ^ "+" else s in
+	   ( match unit with
+	     | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+	     | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+	     | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+	   ) in
+	     (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
+       Some (position, sort_frequency), html_freq in
   let data = 
     let text =
       String.lowercase
