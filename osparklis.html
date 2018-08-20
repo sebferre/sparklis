@@ -803,15 +803,6 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-sort-by-frequency" class="config-param">
-	      <input id="input-sort-by-frequency" type="checkbox" checked> <!-- Edit to change default value -->
-	      <span class="texte lang-en">Sort concepts and entities according to their frequency</span>
-	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur fréquence</span>
-	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo con su frecuencia</span>
-	      <span class="texte lang-nl">Sorteer concepten en entiteiten op basis van hun frequentie</span>
-	    </div>
-	  </li>
-	  <li class="list-group-item">
 	    <div id="config-show-logo" class="config-param">
 	      <input id="input-show-logo" type="checkbox"> <!-- Edit to change default value -->
 	      <span class="texte lang-en">Label concepts and entities with icons according to their value of <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Icon height </span>
@@ -1033,16 +1024,28 @@
 		</div>
 	      </span>
 	      <div class="panel-footer">
-		<div class="btn-group">
-		  <button id="button-expand-properties" type="button" class="btn btn-default btn-xs" title="Expand all">▼</button>
-		  <button id="button-collapse-properties" type="button" class="btn btn-default btn-xs" title="Collapse all">►</button>
+		<div class="container-fluid">
+		  <div class="row">
+		    <div class="col-xs-2 btn-group">
+		      <button id="button-expand-properties" type="button" class="btn btn-default btn-xs" title="Expand all">▼</button>
+		      <button id="button-collapse-properties" type="button" class="btn btn-default btn-xs" title="Collapse all">►</button>
+		    </div>
+		    <div class="col-xs-4" style="white-space:nowrap">
+		      <span class="glyphicon glyphicon-sort-by-alphabet"></span>
+		      <label class="switch">
+			<input id="input-sort-by-frequency-properties" type="checkbox" checked> <!-- Edit to change default value -->
+			<span class="slider" title="Sort with frequency (or not)"></span>
+		      </label>
+		      <span class="glyphicon glyphicon-sort-by-order-alt"></span>
+		    </div>
+		    <div id="count-properties" class="col-xs-5 count-incrs pull-right">
+		      <span class="texte lang-en">No concept</span>
+		      <span class="texte lang-fr">Aucun concept</span>
+		      <span class="texte lang-es">Ningún concepto</span>
+		      <span class="texte lang-nl">Geen concept</span>
+		    </div>
+		  </div>
 		</div>
-		<span id="count-properties" class="count-incrs pull-right">
-		  <span class="texte lang-en">No concept</span>
-		  <span class="texte lang-fr">Aucun concept</span>
-		  <span class="texte lang-es">Ningún concepto</span>
-		  <span class="texte lang-nl">Geen concept</span>
-		</span>
 	      </div>
 	    </div>
 	  </div>
@@ -1096,16 +1099,28 @@
 		</div>
 	      </span>
 	      <div class="panel-footer">
-		<div class="btn-group">
-		  <button id="button-expand-terms" type="button" class="btn btn-default btn-xs" title="Expand all">▼</button>
-		  <button id="button-collapse-terms" type="button" class="btn btn-default btn-xs" title="Collapse all">►</button>
+		<div class="container-fluid">
+		  <div class="row">
+		    <div class="col-xs-2 btn-group">
+		      <button id="button-expand-terms" type="button" class="btn btn-default btn-xs" title="Expand all">▼</button>
+		      <button id="button-collapse-terms" type="button" class="btn btn-default btn-xs" title="Collapse all">►</button>
+		    </div>
+		    <div class="col-xs-4" style="white-space:nowrap">
+		      <span class="glyphicon glyphicon-sort-by-alphabet"></span>
+		      <label class="switch">
+			<input id="input-sort-by-frequency-terms" type="checkbox" checked> <!-- Edit to change default value -->
+			<span class="slider" title="Sort with frequency (or not)"></span>
+		      </label>
+		      <span class="glyphicon glyphicon-sort-by-order-alt"></span>
+		    </div>
+		    <div id="count-terms" class="col-xs-5 count-incrs pull-right">
+		      <span class="texte lang-en">No entity</span>
+		      <span class="texte lang-fr">Aucune entité</span>
+		      <span class="texte lang-es">Ninguna entidad</span>
+		      <span class="texte lang-nl">Geen entiteit</span>
+		    </div>
+		  </div>
 		</div>
-		<span id="count-terms" class="count-incrs pull-right">
-		  <span class="texte lang-en">No entity</span>
-		  <span class="texte lang-fr">Aucune entité</span>
-		  <span class="texte lang-es">Ninguna entidad</span>
-		  <span class="texte lang-nl">Geen entiteit</span>
-		</span>
 	      </div>
 	    </div>
 	  </div>

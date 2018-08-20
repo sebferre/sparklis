@@ -240,7 +240,8 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
-      (Html.config_sort_by_frequency :> Config.input);
+      (Html.config_sort_by_frequency_terms :> Config.input);
+      (Html.config_sort_by_frequency_properties :> Config.input);
       (Html.config_logo_height :> Config.input);
       (config_logging :> Config.input);
       (config_short_permalink :> Config.input); ] in
@@ -580,7 +581,7 @@ object (self)
 	jquery "#list-terms" (fun elt_list ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index in
+	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- term_scroll;
@@ -642,7 +643,7 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index in
+	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_properties#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- property_scroll;
@@ -694,7 +695,7 @@ object (self)
     jquery "#selection-modifiers-items" (fun elt_sel_items ->
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
-      let html_sel, html_list = html_index lis#focus html_state index in
+      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:false in
       elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
       elt_list##scrollTop <- modifier_scroll;
@@ -1205,6 +1206,15 @@ let _ =
        "#button-collapse-properties", "#list-properties", false;
        "#button-expand-terms", "#list-terms", true;
        "#button-collapse-terms", "#list-terms", false];
+    List.iter
+      (fun sel_input ->
+       jquery_input sel_input
+		    (onchange (fun input ev ->
+			       let place = history#present in
+			       place#save_ui_state;
+			       place#refresh)))
+      ["#input-sort-by-frequency-terms";
+       "#input-sort-by-frequency-properties"];
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));

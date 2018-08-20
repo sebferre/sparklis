@@ -11,7 +11,8 @@ open Lisql_annot
 
 (* configuration elements *)
 
-let config_sort_by_frequency = new Config.boolean_input ~key:"sort_by_frequency" ~input_selector:"#input-sort-by-frequency" ~default:true ()
+let config_sort_by_frequency_terms = new Config.boolean_input ~key:"sort_by_frequency_terms" ~input_selector:"#input-sort-by-frequency-terms" ~default:true ()
+let config_sort_by_frequency_properties = new Config.boolean_input ~key:"sort_by_frequency_properties" ~input_selector:"#input-sort-by-frequency-properties" ~default:true ()
 let config_logo_height = new Config.integer_input ~key:"logo_height" ~input_selector:"#input-logo-height" ~min:8 ~default:20 ()
        
 (* generic dictionary with automatic generation of keys *)
@@ -272,8 +273,8 @@ let html_id (state : state) (id : int) : string =
 type compare_incr_data = (float * int) option * int * [`Words of string list | `Number of float]
 (* (position, freqency) opt, rank, data *)
 
-let compare_incr (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_incr_data) : int =
-  let compare3 () =
+let compare_incr ~(use_freq : bool) (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_incr_data) : int =
+  let compare3 () = (* sort according to data *)
     match d1, d2 with
     | `Number f1, `Number f2 -> Pervasives.compare f1 f2
     | `Number _, `Words _ -> 1 (* words before numbers *)
@@ -282,7 +283,7 @@ let compare_incr (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_in
        if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
        else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
        else Pervasives.compare lw1 lw2 in
-  let compare2 () =
+  let compare2 () = (* sort by rank *)
     if r1 < r2 then -1
     else if r1 > r2 then 1
     else compare3 () in
@@ -292,9 +293,16 @@ let compare_incr (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_in
     | None, Some _ -> -1
     | Some _, None -> 1
     | Some pf1, Some pf2 ->
-       if pf1 < pf2 then -1
-       else if pf1 > pf2 then 1
-       else compare2 () in
+       if use_freq
+       then (* sort by position, then frequency *)
+	 if pf1 < pf2 then -1
+	 else if pf1 > pf2 then 1
+	 else compare2 ()
+       else (* sort by position *)
+	 let p1, p2 = fst pf1, fst pf2 in
+	 if p1 < p2 then -1
+	 else if p1 > p2 then 1
+	 else compare2 () in
   compare1 ()
 	  
 let html_count_unit freq (unit,units) =
@@ -323,10 +331,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	    match Ontology.config_sort_by_position#value#info uri with
 	    | [] -> max_float
 	    | x::xs -> List.fold_left max x xs in
-       let sort_frequency =
-	 if config_sort_by_frequency#value
-	 then -value (* '-' opposite for decreasing frequency ordering *)
-	 else 0 in (* frequency is here ignored *)
+       let sort_frequency = -value in (* '-' opposite for decreasing frequency ordering *)
        let html_freq =
 	 if value = 1
 	 then ""
@@ -409,10 +414,10 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   sort_data, key, is_selection_incr, html
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lis.incr_freq_index) : string * string =
+let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string =
   let sort_node_list nodes =
     List.sort
-      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr data1 data2)
+      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
       nodes in
   let rec aux buf_sel buf_tree nodes =
     let sorted_nodes = sort_node_list nodes in
