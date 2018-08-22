@@ -1026,17 +1026,18 @@ and annot_focus_aux (focus : focus) =
      ( match hierarchy_of_ctx_s1 ctx with
        | Some (id,_,_,_) ->
 	  fd#define_focus_term (`Id id)
-       | None ->
+       | None when not (is_s1_as_p1_ctx_s1 ctx) ->
 	  ( match np with
-	    | Det (_,det,rel_opt) when not (is_s1_as_p1_ctx_s1 ctx) ->
+	    | Det (_,det,rel_opt) ->
 	       fd#define_focus_term (term_id_s2 det :> focus_term);
 	       if is_unconstrained_det det rel_opt ctx then
 		 fd#set_unconstrained
-	    | AnAggreg (_,id,_,g,_,_) when not (is_s1_as_p1_ctx_s1 ctx) ->
+	    | AnAggreg (_,id,_,g,_,_) ->
 	       fd#define_focus_term (`Id id);
 	       fd#set_no_incr
 	    | _ ->
-	       fd#define_focus_term `Undefined ) );
+	       fd#define_focus_term `Undefined )
+       | _ -> () );
      let np_annot = annot_elt_s1 `At np ctx in
      annot_ctx_s1 fd np_annot np ctx
   | AtAggreg (aggreg,ctx) ->
