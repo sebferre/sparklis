@@ -935,7 +935,7 @@
 
 <div class="container-fluid">
   <div id="sparklis-view" class="panel-group">
-    <div id="query" class="panel panel-default">
+    <div id="query" class="panel panel-info">
       <div class="panel-heading">
 	<h5 class="panel-title">
 	  <a data-toggle="collapse" data-target="#collapse-query">
@@ -943,6 +943,11 @@
 	    <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
 	    <span class="texte lang-es">Tu consulta y su <span class="highlighted">foque actual</span></span>
 	    <span class="texte lang-nl">Uw query en zijn <span class="highlighted">huidige focus</span></span>
+
+	    <span class="texte lang-en"> (click on different parts of the query to change it)</span>
+	    <span class="texte lang-fr"> (cliquer sur différentes parties de la requêtes pour le changer)</span>
+	    <span class="texte lang-es"> (Haga clic sobre las diferentes partes de la consulta para cambiarlo)</span>
+	    <span class="texte lang-nl"> (Klik op verschillende delen van de query om deze te wijzingen)</span>
 	  </a>
 	</h5>
       </div>
@@ -960,7 +965,7 @@
       </div>
     </div>
 
-    <div id="increments" class="panel panel-default">
+    <div id="increments" class="panel panel-info">
       <div class="panel-heading">
 	<!--	<button id="show-hide-increments" class="btn btn-default btn-md"><span class="glyphicon glyphicon-collapse-up"></span></button> -->
 	<h5 class="panel-title">
@@ -973,32 +978,41 @@
 	</h5>
       </div>
       <div id="collapse-increments" class="panel-collapse collapse in">
-       <div id="increments-body" class="panel-body">
-	<div id="current-focus">
-	  <span class="texte lang-en">The current focus is </span>
-	  <span class="texte lang-fr">Le focus actuel est </span>
-	  <span class="texte lang-es">El foco actual es </span>
-	  <span class="texte lang-nl">De huidige focus is </span>
-	  <span id="increments-focus" class="highlighted">the thing</span>
-	  <span class="texte lang-en"> (click on different parts of the query to change it)</span>
-	  <span class="texte lang-fr"> (cliquer sur différentes parties de la requêtes pour le changer)</span>
-	  <span class="texte lang-es"> (Haga clic sobre las diferentes partes de la consulta para cambiarlo)</span>
-	  <span class="texte lang-nl"> (Klik op verschillende delen van de query om deze te wijzingen)</span>
-	</div>
+	<div id="increments-body" class="panel-body">
+	  <!--
+	  <div id="current-focus">
+	    <span class="texte lang-en">The current focus is </span>
+	    <span class="texte lang-fr">Le focus actuel est </span>
+	    <span class="texte lang-es">El foco actual es </span>
+	    <span class="texte lang-nl">De huidige focus is </span>
+	    <span class="increments-focus highlighted">the thing</span>
+	    <em>The following suggestions are relative to</em> ''<span class="focus-np">the thing</span>'' <em>(the focus entity) and the <span class="highlighted">highlighted subquery</span></em>
+	  </div>
+	  -->
 
 	<div class="row">
-	  
 	  <div class="incr-box col-sm-4">
-	    <div class="panel panel-success">
+	    <div class="panel panel-default">
 	      <div class="panel-heading">
+		<span class="texte lang-en">Types and Relations of</span>
+		<span class="texte lang-fr">Types et Relations de</span>
+		<span class="texte lang-es">Tipos y Relaciones de</span>
+		<span class="texte lang-nl">Typen en Relaties van</span>
+		<span class="focus-np">the thing</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic para insertar un concepto en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een concept om deze toe te voegen aan de focus van de query</span>
 		<div class="row">
-		  <div class="col-xs-5 no-padding">
+		  <div class="col-xs-4 no-padding">
 		    <select id="select-properties" class="select-incrs form-control selectpicker">
 		      <option value="matchesAll">matches all</option>
 		      <option value="matchesAny">matches any</option>
 		    </select>
 		  </div>
-		  <div class="tooltiped col-xs-7 no-padding">
+		  <div class="tooltiped col-xs-8 no-padding">
 		    <span class="tooltip lang-en">Input keywords to filter concepts</span>
 		    <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les concepts</span>
 		    <span class="tooltip lang-es">Introduzca palabras clave para filtrar los conceptos</span>
@@ -1006,12 +1020,7 @@
 		    <input id="pattern-properties" class="pattern-incrs form-control" type="text">
 		  </div>
 		</div>
-	      </div>
-	      <span class="tooltiped panel-body panel-body-incrs">
-		<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
-		<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
-		<span class="tooltip lang-es">Haga clic para insertar un concepto en el foco de la consulta</span>
-		<span class="tooltip lang-nl">Klik op een concept om deze toe te voegen aan de focus van de query</span>
+
 		<div id="selection-properties" class="selection-incrs" style="display:none">
 		  <span class="selection-count"></span> 
 		  <span class="texte lang-en">selected items</span>
@@ -1051,8 +1060,20 @@
 	  </div>
 	
 	  <div class="incr-box col-sm-4">
-	    <div class="panel panel-success">
+	    <div class="panel panel-default">
 	      <div class="panel-heading">
+		<span class="texte lang-en">Identities or Values of</span>
+		<span class="texte lang-fr">Identités ou Valeurs de</span>
+		<span class="texte lang-es">Identidades o Valores de</span>
+		<span class="texte lang-nl">Identiteiten of Waarden van</span>
+		<span class="focus-np">the thing</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click an entity to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic para insertar una entidad en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een entiteit om deze toe te voegen aan de focus van de query</span>
+
 		<div class="row">
 		  <div class="tooltiped col-xs-4 no-padding">
 		    <span class="tooltip lang-en">Select a filtering operator</span>
@@ -1071,7 +1092,7 @@
 		      <option value="hasLang">has language</option>
 		      <option value="hasDatatype">has datatype</option>
 		    </select></div>
-		  <div class="tooltiped col-xs-6 no-padding"><span class="tooltip lang-en">Input keywords to filter entities</span><span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span><span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span><span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span><input id="pattern-terms" class="pattern-incrs form-control" type="text"></div>
+		  <div class="tooltiped col-xs-7 no-padding"><span class="tooltip lang-en">Input keywords to filter entities</span><span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span><span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span><span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span><input id="pattern-terms" class="pattern-incrs form-control" type="text"></div>
 		  <div class="tooltiped col-xs-1 no-padding">
 		    <span class="tooltip lang-en">Click this button to insert this filter at the query focus</span>
 		    <span class="tooltip lang-fr">Cliquer ce bouton pour insérer ce filtre au focus de la requête</span>
@@ -1079,14 +1100,9 @@
 		    <span class="tooltip lang-nl">Klik op deze knop om dit filter toe te voegen aan de focus van de query</span>
 		    <button id="button-terms" class="btn btn-primary">
 		      <span class="glyphicon glyphicon-ok"></span>
-		  </button></div>
+		    </button>
+		  </div>
 		</div>
-	      </div>
-	      <span class="tooltiped panel-body panel-body-incrs">
-		<span class="tooltip lang-en">Click an entity to insert in the query at the focus</span>
-		<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
-		<span class="tooltip lang-es">Haga clic para insertar una entidad en el foco de la consulta</span>
-		<span class="tooltip lang-nl">Klik op een entiteit om deze toe te voegen aan de focus van de query</span>
 		<div id="selection-terms" class="selection-incrs" style="display:none">
 		  &nbsp;<span class="selection-count"></span> 
 		  <span class="texte lang-en">selected items</span>
@@ -1126,8 +1142,18 @@
 	  </div>
 	
 	  <div class="incr-box col-sm-4">
-	    <div class="panel panel-success">
+	    <div class="panel panel-default">
 	      <div class="panel-heading">
+		<span class="texte lang-en">Modifiers and operators</span>
+		<span class="texte lang-fr">Modifieurs et opérateurs</span>
+		<span class="texte lang-es">Modificadores y operadores</span>
+		<span class="texte lang-nl">Modifiers en operatoren</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click a modifier to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer un modifieur pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic para insertar un modificador en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een modifier om deze toe te voegen aan de focus van de query</span>
 		<div class="row">
 		  <div class="col-xs-5 no-padding">
 		    <select id="select-modifiers" class="select-incrs form-control selectpicker">
@@ -1142,13 +1168,7 @@
 		    <span class="tooltip lang-nl">Voer trefwoorden in om de modifiers te filteren</span>
 		    <input id="pattern-modifiers" class="pattern-incrs form-control" type="text">
 		  </div>
-		</div>
-	      </div>
-	      <span class="tooltiped panel-body panel-body-incrs">
-		<span class="tooltip lang-en">Click a modifier to insert in the query at the focus</span>
-		<span class="tooltip lang-fr">Cliquer un modifieur pour l'insérer au focus de la requête</span>
-		<span class="tooltip lang-es">Haga clic para insertar un modificador en el foco de la consulta</span>
-		<span class="tooltip lang-nl">Klik op een modifier om deze toe te voegen aan de focus van de query</span>
+		</div>		
 		<div id="selection-modifiers" class="selection-incrs" style="display:none">
 		  &nbsp;<span class="selection-count"></span> 
 		  <span class="texte lang-en">selected items</span>
@@ -1174,7 +1194,7 @@
       </div>
     </div>
 
-    <div id="results" class="panel panel-default">
+    <div id="results" class="panel panel-info">
       <div class="panel-heading">
 	<h5 class="panel-title">
 	  <a data-toggle="collapse" data-target="#collapse-results">
@@ -1288,7 +1308,7 @@
 </div>
 </div>
 
-<div id="yasgui-view" class="panel panel-default" style="display:none">
+<div id="yasgui-view" class="panel panel-info" style="display:none">
   <div class="panel-heading">
     <h5>
       <span class="texte lang-en">Your query in SPARQL + results (with YASGUI)</span>
@@ -1327,10 +1347,10 @@
       <br/>
     </span>
 
-    <span class="texte lang-en">Last modified August 7th, 2018. Visit </span>
-    <span class="texte lang-fr">Dernière modification le 7 août 2018. Visiter </span>
-    <span class="texte lang-es">Última modificación 7 de Agosto, 2018. Visite </span>
-    <span class="texte lang-nl">Voor het laatst gewijzigd op 7 augustus 2018. Bezoek </span>
+    <span class="texte lang-en">Last modified August 22nd, 2018. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 22 août 2018. Visiter </span>
+    <span class="texte lang-es">Última modificación 22 de Agosto, 2018. Visite </span>
+    <span class="texte lang-nl">Voor het laatst gewijzigd op 22 augustus 2018. Bezoek </span>
     <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/">
       <span class="texte lang-en">my homepage</span>
       <span class="texte lang-fr">ma page Web</span>

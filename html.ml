@@ -179,7 +179,8 @@ let html_word = function
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
-  | `DummyFocus -> html_span ~classe:"highlighted" "___"
+  | `FocusSpan -> html_span ~classe:"highlighted" "___"
+  | `FocusName -> html_span ~classe:"focus-ng" "thing"
 
 let html_input dt =
   let t, hint =
@@ -263,9 +264,13 @@ let html_query (state : state) (query : annot elt_s) : string =
 	     query)))
 
 
-let html_id (state : state) (id : int) : string =
+let html_id_np (state : state) (id : int) : string =
   html_of_nl_xml state
     (Lisql2nl.xml_np_id Lisql2nl.config_lang#grammar state#id_labelling
+       id)
+let html_id_ng (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_ng_id Lisql2nl.config_lang#grammar state#id_labelling
        id)
 
 (* HTML of increment lists *)
@@ -290,8 +295,8 @@ let compare_incr ~(use_freq : bool) (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt
   let compare1 () =
     match pf1_opt, pf2_opt with
     | None, None -> compare2 ()
-    | None, Some _ -> -1
-    | Some _, None -> 1
+    | None, Some _ -> compare2 ()
+    | Some _, None -> compare2 ()
     | Some pf1, Some pf2 ->
        if use_freq
        then (* sort by position, then frequency *)
@@ -368,11 +373,12 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	
       | IncrHierarchy _ -> 2, Some grammar#tooltip_hierarchy
       | IncrArg _ -> 2, None
-      | IncrTriple _ -> 3, None
-      | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
-      | IncrType _ -> 4, None
+      | IncrType _ -> 3, None
+      | IncrLatLong _ -> 4, Some grammar#tooltip_geolocation
       | IncrRel _ -> 5, None
       | IncrPred _ -> 6, None
+      | IncrTriple _ -> 7, None
+      | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
 	
       | IncrAnd -> 6, None
       | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus
@@ -381,7 +387,6 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrMaybe -> 8, Some grammar#tooltip_optionally
       | IncrNot -> 9, Some grammar#tooltip_not
       | IncrIn -> 10, None (* TODO: tooltip *)
-      | IncrInWhichThereIs -> 10, None (* TODO: tooltip *)
       | IncrTriplify -> 10, Some grammar#tooltip_focus_on_property
       | IncrThatIs -> 11, None
       | IncrSomethingThatIs -> 11, None

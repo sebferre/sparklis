@@ -14,7 +14,7 @@ type func_syntax =
 | `Pattern of [`Kwd of string | `Func of string | `Arg of int] list ]
 
 class virtual grammar =
-object
+object (self)
   method virtual adjective_before_noun : bool
 
   method virtual thing : string
@@ -127,9 +127,10 @@ object
 
   method virtual msg_permalink : string
   method virtual result_results : string * string
-  method virtual entity_entities : string * string
-  method virtual concept_concepts : string * string
-  method virtual modifier_modifiers : string * string
+  method virtual item_items : string * string
+  method entity_entities : string * string = self#item_items
+  method concept_concepts : string * string = self#item_items
+  method modifier_modifiers : string * string = self#item_items
 end
 
 let english =
@@ -330,9 +331,10 @@ object
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
   method result_results = "result", "results"
-  method entity_entities = "entity", "entities"
+  method item_items = "item", "items"
+  (*method entity_entities = "entity", "entities"
   method concept_concepts = "concept", "concepts"
-  method modifier_modifiers = "modifier", "modifiers"
+  method modifier_modifiers = "modifier", "modifiers"*)
 end
 
 let french =
@@ -526,9 +528,10 @@ object
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
   method result_results = "résultat", "résultats"
-  method entity_entities = "entité", "entités"
+  method item_items = "élément", "éléments"
+  (*method entity_entities = "entité", "entités"
   method concept_concepts = "concept", "concepts"
-  method modifier_modifiers = "modifieur", "modifieurs"
+  method modifier_modifiers = "modifieur", "modifieurs"*)
 end
 
 
@@ -723,9 +726,10 @@ object
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"
-  method entity_entities = "entidad", "entidades"
+  method item_items = "elemento", "elementos"
+  (*method entity_entities = "entidad", "entidades"
   method concept_concepts = "concepto", "conceptos"
-  method modifier_modifiers = "modificador", "modificadores"
+  method modifier_modifiers = "modificador", "modificadores"*)
 end
 
 
@@ -919,7 +923,8 @@ object
 
   method msg_permalink = "De volgende URL verwijst naar het huidige endpoint en de query (CTRL+C, Enter om naar het klembord te kopiëren"
   method result_results = "resultaat", "resultaten"
-  method entity_entities = "entiteit", "entiteiten"
+  method item_items = "item", "items"
+  (*method entity_entities = "entiteit", "entiteiten"
   method concept_concepts = "concept", "concepten"
-  method modifier_modifiers = "modifier", "modifiers"
+  method modifier_modifiers = "modifier", "modifiers"*)
 end

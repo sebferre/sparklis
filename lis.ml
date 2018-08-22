@@ -1061,8 +1061,14 @@ object (self)
 	   then incr_index#add (incr,None))
 	  [Lisql.IncrHierarchy (true,false);
 	   Lisql.IncrHierarchy (true,true)];
+      (* adding other increments *)
       if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
       if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
+      List.iter
+	(fun incr ->
+	 if Lisql.insert_increment incr focus <> None
+	 then incr_index#add (incr,None))
+	[Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
 	  k ~partial incr_index))
@@ -1194,9 +1200,10 @@ object (self)
 	let incrs = [] in
 	let incrs =
 	  IncrSelection (`Aggreg, []) ::
-	  IncrThatIs :: IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
+	    (*IncrThatIs ::*) (* unnecessary and confusing *)
+	    IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
-	    IncrIn :: IncrInWhichThereIs ::
+	    IncrIn ::
 	    IncrUnselect ::
 	    IncrHierarchy (false,false) :: IncrHierarchy (false,true) ::
 	    incrs in

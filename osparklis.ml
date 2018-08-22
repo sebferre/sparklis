@@ -415,18 +415,28 @@ object (self)
 	  Dom_html.stopPropagation ev;
 	  navigation#update_focus ~push_in_history:true Lisql.delete_focus)))
 
-  method private refresh_increments_focus =
-    let html_focus =
+  method private refresh_focus =
+    let html_focus_np, html_focus_ng =
       match lis#focus_term_opt with
 	| Some (Rdf.Var v) ->
 	  (try
-	    let id = lis#id_labelling#get_var_id v in
-	    Html.html_id html_state id
-	   with _ -> escapeHTML v (* should not happen *))
-	| Some t -> Html.html_term t
-	| None -> Lisql2nl.config_lang#grammar#undefined in
-    jquery "#increments-focus" (fun elt ->
-      elt##innerHTML <- string html_focus)
+	      let id = lis#id_labelling#get_var_id v in
+	      Html.html_id_np html_state id, Html.html_id_ng html_state id
+	    with _ -> (* should not happen *)
+		 let html = escapeHTML v in
+		 html, html)
+	| Some t ->
+	   let html = Html.html_term t in
+	   html, html
+	| None ->
+	   let html = Lisql2nl.config_lang#grammar#undefined in
+	   html, html in
+    jquery_all ".focus-np"
+	       (fun elt ->
+		elt##innerHTML <- string html_focus_np);
+    jquery_all ".focus-ng"
+	       (fun elt ->
+		elt##innerHTML <- string html_focus_ng)
 
   method private get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) =
     let op = to_string (select##value) in
@@ -721,7 +731,6 @@ object (self)
     jquery_input "#sparql-endpoint-input"
 		 (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
-    self#refresh_increments_focus;
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
@@ -744,13 +753,15 @@ object (self)
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
-	      self#refresh_term_increments
+	      self#refresh_term_increments;
+	      self#refresh_focus (* after increments, because they have `FocusName words *)
 	  | Some sparql ->
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
-	      self#refresh_term_increments)))
+	      self#refresh_term_increments;
+	      self#refresh_focus)))
 
   method private filter_increments ?on_modifiers elt_list constr =
     let matcher = compile_constr ?on_modifiers constr in
