@@ -148,6 +148,7 @@ and nl_vp =
   | `HasProp of word * np * pp list
   | `HasPropCP of word * cp
   | `Has of np * pp list
+  | `HasCP of cp
   | `VT of word * np * pp list
   | `VT_CP of word * cp
   | `Subject of np * vp (* np is the subject of vp *)
@@ -169,6 +170,7 @@ and pp =
   [ `Bare of np
   | `Prep of word * np
   | `AtNoun of word * np
+  | `At of np
   | `PrepBin of word * np * word * np ]
 
 let top_adj : adj = `Nil
@@ -1016,6 +1018,7 @@ and map_vp transf vp =
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
     | `HasPropCP (w,cp) -> `HasPropCP (w, map_cp transf cp)
     | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
+    | `HasCP cp -> `HasCP (map_cp transf cp)
     | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
     | `VT_CP (w,cp) -> `VT_CP (w, map_cp transf cp)
     | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
@@ -1039,6 +1042,7 @@ and map_pp transf pp =
     | `Bare np -> `Bare (map_np transf np)  
     | `Prep (w,np) -> `Prep (w, map_np transf np)
     | `AtNoun (w,np) -> `AtNoun (w, map_np transf np)
+    | `At np -> `At (map_np transf np)
     | `PrepBin (w1,np1,w2,np2) -> `PrepBin (w1, map_np transf np1, w2, map_np transf np2)
 
 
@@ -1099,9 +1103,14 @@ object (self)
 	-> `Has (A (a2, `Qu (qu, `Optional (a3#is_susp_focus, adj), A (a3, `That (p, rel)))), lpp) (* TODO: adj out of a3 *)
       | `HasPropCP (p, A (a2, `Nil))
 	-> `Has (A (a2, `Qu (`A, `Nil, X (`That (p, X `Nil)))), [])
-      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, `Nil))))
-	-> `Has (A (a2, `Qu (qu, adj, X (`That (p, rel)))), [])
+      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, cp))))
+	-> `HasCP (A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (p, rel))))), A (a4, cp))))
+      (*	 `Has (A (a3, `Qu (qu, adj, X (`That (p, rel)))), []) *)
       | nl -> nl)
+  method pp = function
+    | `AtNoun (prep, A (a2, `Qu (qu, adj, X (`That (`Thing, rel)))))
+      -> `At (A (a2, `Qu (qu, adj, X (`That (prep, rel)))))
+    | pp -> pp
 end
 
 (* tagged serialization - a la XML *)
@@ -1356,6 +1365,7 @@ and xml_vp grammar ~id_labelling = function
       | `HasProp (p,np,lpp) -> xml_has_as_a grammar [Word p] @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `HasPropCP (w,cp) -> xml_has_as_a grammar [Word w] @ xml_cp grammar ~id_labelling cp
       | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `HasCP cp -> Kwd grammar#has :: xml_cp grammar ~id_labelling cp
       | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
       | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
@@ -1392,6 +1402,7 @@ and xml_pp grammar ~id_labelling = function
   | `Bare np -> xml_np grammar ~id_labelling np
   | `Prep (w,np) -> Word w :: xml_np grammar ~id_labelling np
   | `AtNoun (w,np) -> Kwd grammar#at :: Word w :: xml_np grammar ~id_labelling np
+  | `At np -> Kwd grammar#at :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
   | `Word w -> [Word w]

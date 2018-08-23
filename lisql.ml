@@ -1838,6 +1838,41 @@ let delete_list = function
   | x::ll1, rr -> `List (x,ll1,rr)
   | [], x::rr1 -> `List (x,[],rr1)
 
+let rec delete_elt_sn_is_top cp =
+  let cp' = delete_elt_sn cp in
+  (cp = cp'), cp'
+and delete_elt_sn = function
+  | CNil () -> CNil ()
+  | CCons ((), Q _, _, cp) -> delete_elt_sn cp
+  | CCons ((), arg, np, cp) ->
+     let np = if is_top_s1 np then np else factory#top_s1 in
+     CCons ((), arg, np, delete_elt_sn cp)
+  | CAnd ((), l) ->
+     ( match delete_elt_sn_list l with
+       | [] -> CNil ()
+       | [cp] -> cp
+       | l -> CAnd ((),l) )
+  | COr ((), l) ->
+     ( match delete_elt_sn_list l with
+       | [] -> CNil ()
+       | [cp] -> cp
+       | l -> COr ((),l) )
+  | CMaybe ((), cp) ->
+     ( match delete_elt_sn cp with
+       | CNil () -> CNil ()
+       | cp -> CMaybe ((), cp) )
+  | CNot ((), cp) ->
+     ( match delete_elt_sn cp with
+       | CNil () -> CNil ()
+       | cp -> CNot ((), cp) )
+and delete_elt_sn_list = function
+  | [] -> []
+  | cp::l ->
+     let l' = delete_elt_sn_list l in
+     ( match delete_elt_sn cp with
+     | CNil () -> l'
+     | cp' -> cp'::l' )
+		   
 let rec delete_ctx_p1 = function
   | DetThatX (det,ctx) -> Some (AtS1 (Det ((),det,None), ctx))
   | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx))
@@ -1857,28 +1892,28 @@ let rec delete_ctx_p1 = function
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
   | InX (npg,ctx) -> delete_ctx_p1 ctx
-and delete_ctx_sn f_opt ctx =
-  match ctx with
-  | PredX (arg,pred,ctx2) ->
-     ( match f_opt with
-       | None -> delete_ctx_p1 ctx2
-       | Some f -> Some (AtSn (factory#top_sn, ctx)) )
-  | CConsX2 (arg,np,ctx2) ->
-     ( match f_opt with
-       | None -> delete_ctx_sn None ctx2
-       | Some f -> Some (AtSn (CCons ((),arg,np,CNil ()), ctx2)) )
-  | CAndX (ll_rr,ctx2) ->
-     ( match delete_list ll_rr with
-       | `Empty -> delete_ctx_sn None ctx2
-       | `Single elt -> Some (AtSn (elt, ctx2))
-       | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))) )
-  | COrX (ll_rr,ctx2) ->
-     ( match delete_list ll_rr with
-       | `Empty -> delete_ctx_sn None ctx2
-       | `Single elt -> Some (AtSn (elt, ctx2))
-       | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))) )
-  | CMaybeX ctx2 -> delete_ctx_sn f_opt ctx2
-  | CNotX ctx2 -> delete_ctx_sn f_opt ctx2
+and delete_ctx_sn (is_top,f) ctx =
+  if is_top
+  then
+    match ctx with
+    | PredX (arg,pred,ctx2) -> delete_ctx_p1 ctx2
+    | CConsX2 (arg,np,ctx2) ->
+       delete_ctx_sn
+	 (delete_elt_sn_is_top (CCons ((),arg,np,f)))
+	 ctx2
+    | CAndX (ll_rr,ctx2) ->
+       ( match delete_list ll_rr with
+	 | `Empty -> delete_ctx_sn (is_top,f) ctx2 (* should not happen *)
+	 | `Single elt -> Some (AtSn (elt, ctx2))
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))) )
+    | COrX (ll_rr,ctx2) ->
+       ( match delete_list ll_rr with
+	 | `Empty -> delete_ctx_sn (is_top,f) ctx2 (* should not happen *)
+	 | `Single elt -> Some (AtSn (elt, ctx2))
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))) )
+    | CMaybeX ctx2 -> Some (at_sn f ctx2)
+    | CNotX ctx2 -> Some (at_sn f ctx2)
+  else Some (at_sn f ctx)
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
@@ -1898,9 +1933,13 @@ and delete_ctx_s1 f_opt ctx =
 	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
     | CConsX1 (arg,cp,ctx2) ->
-       ( match f_opt with
-	 | None -> Some (at_sn cp ctx2)
-	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )
+       ( match arg, f_opt with
+	 | Q _, None -> Some (at_sn cp ctx2)
+	 | (S|P|O), None -> (* those args cannot be removed *)
+	    delete_ctx_sn
+	      (delete_elt_sn_is_top (CCons ((),arg,factory#top_s1,cp)))
+	      ctx2
+	 | _, Some f -> Some (AtS1 (factory#top_s1, ctx)) )
     | NAndX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
@@ -1953,14 +1992,19 @@ and delete_ctx_s f_opt ctx =
     | `Single elt -> Some (AtS (elt,ctx2))
     | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2))) )
 
-let delete_focus = function
-  | AtP1 (_, ctx) -> delete_ctx_p1 ctx
-  | AtSn (f, ctx) -> delete_ctx_sn (if is_top_sn f then None else Some f) ctx
-  | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
-  | AtAggreg (ForTerm (_,t,id2), ctx) -> Some (AtAggreg (factory#top_dim_foreach id2, ctx))
-  | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
-  | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
-  | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx
+let delete_focus focus =
+  let new_focus_opt =
+    match focus with
+    | AtP1 (_, ctx) -> delete_ctx_p1 ctx
+    | AtSn (f, ctx) -> delete_ctx_sn (delete_elt_sn_is_top f) ctx
+    | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
+    | AtAggreg (ForTerm (_,t,id2), ctx) -> Some (AtAggreg (factory#top_dim_foreach id2, ctx))
+    | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
+    | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
+    | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx in
+  match new_focus_opt with
+  | Some (AtSn (CNil (), _) as new_focus) -> up_focus new_focus
+  | _ -> new_focus_opt
 
 (* goto to query *)
 
