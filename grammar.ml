@@ -355,7 +355,7 @@ object
   method has_as_a ~following = "a pour"
   method relative_that = "qui"
   method relative_that_object = "que"
-  method whose = "dont l'"
+  method whose = "dont le·a"
   method according_to = "selon"
   method which = "lequel"
   method hierarchy_in ~inv ~in_ =
@@ -365,8 +365,8 @@ object
   method and_ = "et"
   method or_ = "ou"
   method not_ = "pas"
-  method optionally = "optionellement"
-  method optional = "optionel(le)"
+  method optionally = "optionnellement"
+  method optional = "optionnel·le"
 
   method of_ = "de"
   method genetive_suffix = None
@@ -374,14 +374,14 @@ object
   method rel_to = "à"
   method at = "au" (* à l'/le/la *)
 
-  method a_an ~following = "un(e)"
-  method the = "l'"
+  method a_an ~following = "un·e"
+  method the = "le·a"
   method every = "chaque"
   method each = "chaque"
-  method no = "aucun(e)"
-  method any = "n'importe quel(le)"
+  method no = "aucun·e"
+  method any = "n'importe quel·le"
   method all = "tous"
-  method quantif_one = "un(e)"
+  method quantif_one = "un·e"
   method quantif_of = "parmi"
   method something = "quelque chose"
   method anything = "n'importe quoi"
@@ -394,7 +394,7 @@ object
   method n_th n =
     let suffix =
       if n = 1 then "er"
-      else "ième" in
+      else "e" in
     string_of_int n ^ suffix
 
   method string = "chaine"
@@ -409,10 +409,10 @@ object
   | Lisql.NumberOf -> `The, "nombre", None
   | Lisql.ListOf -> `The, "liste", None
   | Lisql.Sample -> `A, "échantillon", None
-  | Lisql.Total _ -> `The, "somme", Some "total(e)"
-  | Lisql.Average _ -> `The, "moyenne", Some "moyen(ne)"
-  | Lisql.Maximum _ -> `The, "maximum", Some "maximal(e)"
-  | Lisql.Minimum _ -> `The, "minimum", Some "minimal(e)"
+  | Lisql.Total _ -> `The, "somme", Some "total·e"
+  | Lisql.Average _ -> `The, "moyenne", Some "moyen·ne"
+  | Lisql.Maximum _ -> `The, "maximum", Some "maximal·e"
+  | Lisql.Minimum _ -> `The, "minimum", Some "minimal·e"
 
   method func_syntax = function
   | `Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]
@@ -485,8 +485,8 @@ object
   method before = "avant"
   method interval_from = "de"
   method interval_to = "à"
-  method higher_or_equal_to = "supérieur(e) ou égal à"
-  method lower_or_equal_to = "inférieur(e) ou égal à"
+  method higher_or_equal_to = "supérieur·e ou égal·e à"
+  method lower_or_equal_to = "inférieur·e ou égal·e à"
   method interval_between = "entre"
   method interval_and = "et"
   method language = "langage"

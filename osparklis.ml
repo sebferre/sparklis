@@ -429,7 +429,7 @@ object (self)
 	   let html = Html.html_term t in
 	   html, html
 	| None ->
-	   let html = Lisql2nl.config_lang#grammar#undefined in
+	   let html = "(" ^ Lisql2nl.config_lang#grammar#undefined ^ ")" in
 	   html, html in
     jquery_all ".focus-np"
 	       (fun elt ->
