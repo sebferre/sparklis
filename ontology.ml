@@ -194,14 +194,15 @@ open Jsutils
 class ['relation] config_relation ~(key : string)
   ~(input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_relation : 'relation) ~(custom_relation : froms:(Rdf.uri list) -> 'relation) () =
-  let default = false in
+  ~(inactive_relation : 'relation)
+  ~(active_relation : froms:(Rdf.uri list) -> 'relation)
+  ~(default : bool) () =
 object (self)
   inherit Config.input as super
   val mutable init_on = default
   val mutable current_froms = []
   val mutable current_on = default
-  val mutable current_relation = default_relation
+  val mutable current_relation = inactive_relation
 
   method private get_on input =
     to_bool input##checked
@@ -218,10 +219,10 @@ object (self)
       if not current_on
       then begin
 	Jsutils.firebug "Using default relation";
-	default_relation end
+	inactive_relation end
       else begin
 	Jsutils.firebug "Using custom relation";
-	custom_relation ~froms:config_graphs#froms
+	active_relation ~froms:config_graphs#froms
       end
 
   method private change_relation input : unit =
@@ -266,24 +267,27 @@ let config_class_hierarchy =
     ~key:"class_hierarchy"
     ~input_selector:"#input-class-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_relation:no_relation
-    ~custom_relation:sparql_relations#subclassof
+    ~inactive_relation:no_relation
+    ~active_relation:sparql_relations#subclassof
+    ~default:true
     ()
 let config_property_hierarchy =
   new config_relation
     ~key:"property_hierarchy"
     ~input_selector:"#input-property-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_relation:no_relation
-    ~custom_relation:sparql_relations#subpropertyof
+    ~inactive_relation:no_relation
+    ~active_relation:sparql_relations#subpropertyof
+    ~default:true
     ()
 let config_hierarchy_inheritance =
   new config_relation
       ~key:"hierarchy_inheritance"
       ~input_selector:"#input-hierarchy-inheritance"
       ~config_graphs:Sparql_endpoint.config_schema_graphs
-      ~default_relation:no_relation
-      ~custom_relation:sparql_relations#inheritsthrough
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#inheritsthrough
+      ~default:false
       ()
 
 let config_sort_by_position =
@@ -291,16 +295,18 @@ let config_sort_by_position =
       ~key:"sort_by_position"
       ~input_selector:"#input-sort-by-position"
       ~config_graphs:Sparql_endpoint.config_schema_graphs
-      ~default_relation:no_relation
-      ~custom_relation:sparql_relations#position
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#position
+      ~default:false
       ()
 let config_show_logo =
   new config_relation
       ~key:"show_logo"
       ~input_selector:"#input-show-logo"
       ~config_graphs:Sparql_endpoint.config_schema_graphs
-      ~default_relation:no_relation
-      ~custom_relation:sparql_relations#logo
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#logo
+      ~default:false
       ()
 
 (* utilities for enqueuing and syncing *)
