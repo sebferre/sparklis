@@ -192,7 +192,7 @@ let html_input dt =
     | `Date -> "text", "yyyy-mm-dd"
     | `Time -> "text", "hh:mm:ss"
     | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
-  (*    | `Time -> "text", "hh:mm:ss" *)
+    | `Duration -> "text", "PxYxMxDTxHxMx.xS"
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 

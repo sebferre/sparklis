@@ -1031,7 +1031,7 @@ and copy_s (s : unit elt_s) : unit elt_s =
     
 (* increments *)
 
-type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime]
+type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime | `Duration ]
 (* a sub-type of Sparql.datatype *)
 
 type selection_op = [`And | `Or | `NAnd | `NOr | `Aggreg]
@@ -1081,6 +1081,7 @@ let datatype_of_input_type = function
   | `Date -> Rdf.xsd_date
   | `Time -> Rdf.xsd_time
   | `DateTime -> Rdf.xsd_dateTime
+  | `Duration -> Rdf.xsd_duration
 let term_of_input s = function
   | `IRI -> Rdf.URI s
   | typ -> Rdf.TypedLiteral (s, datatype_of_input_type typ)

@@ -1,4 +1,10 @@
-# description of main changes
+# description of main changes that impact interface with outside
+
+2018-08-31
+
+- support for xsd:duration datatype
+  - new grammar item 'duration'
+  - new Lisql.input_type `Duration, used in increments
 
 2018-08-22
 

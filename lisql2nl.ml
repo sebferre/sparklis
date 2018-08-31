@@ -248,7 +248,7 @@ let string_of_input_type grammar = function
   | `Date -> grammar#date
   | `Time -> grammar#time
   | `DateTime -> grammar#date_and_time
-(*  | `Time -> grammar#time *)
+  | `Duration -> grammar#duration
     
 let aggreg_syntax grammar g =
   let qu, noun, adj_opt = grammar#aggreg_syntax g in

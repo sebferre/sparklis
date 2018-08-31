@@ -738,7 +738,7 @@ object (self)
 	  (fun (dt : Lisql.input_type) ->
 	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints then
 	      incr_index#add (Lisql.IncrInput ("",dt), None))
-	  [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime];
+	  [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime; `Duration];
     (* adding ids *)
       ( match s_sparql.Lisql2sparql.focus_term_opt with
       | Some term ->

@@ -71,6 +71,7 @@ object (self)
   method virtual date : string
   method virtual time : string
   method virtual date_and_time : string
+  method virtual duration : string
   method virtual uri : string
 
   method virtual aggreg_syntax : Lisql.aggreg -> aggreg_syntax
@@ -206,6 +207,7 @@ object
   method date = "date"
   method time = "time"
   method date_and_time = "date and time"
+  method duration = "duration"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -403,6 +405,7 @@ object
   method date = "date"
   method time = "heure"
   method date_and_time = "date et heure"
+  method duration = "durée"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -601,6 +604,7 @@ object
   method date = "fecha"
   method time = "hora"
   method date_and_time = "fecha y hora"
+  method duration = "duración"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -798,6 +802,7 @@ object
   method date = "datum"
   method time = "tijd"
   method date_and_time = "datum en tijd"
+  method duration = "duur"
   method uri = "URI"
 
   method aggreg_syntax = function
