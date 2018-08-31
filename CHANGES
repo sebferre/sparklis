@@ -5,6 +5,8 @@
 - support for xsd:duration datatype
   - new grammar item 'duration'
   - new Lisql.input_type `Duration, used in increments
+- new configurations
+  - Lis.config_max_increment_samples: max size of focus terms to use for computing increments
 
 2018-08-22
 

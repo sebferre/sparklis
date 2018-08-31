@@ -232,6 +232,7 @@ let config =
       (Lis.config_nary_relations :> Config.input);
       (Lis.config_regexp_hidden_URIs :> Config.input);
       (Lis.config_max_results :> Config.input);
+      (Lis.config_max_increment_samples :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
@@ -598,7 +599,7 @@ object (self)
 	      elt_list##scrollTop <- term_scroll;
 	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
-		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      term_selection#reset;			   
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
