@@ -1086,12 +1086,10 @@ let _ =
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
     (* defining navigation history *)
-    let default_endpoint = ref "" in
+    let default_endpoint = ref "http://servolis.irisa.fr/dbpedia/sparql" in
+    let default_title = ref "Core English DBpedia" in
     let default_focus = ref Lisql.factory#home_focus in
-    jquery_input "#sparql-endpoint-input" (fun input ->
-      let url = to_string input##value in
-      default_endpoint := url); (* using default endpoint as given in HTML *)
-    let _ = (* changing endpoint and focus if permalink *)
+    let _ = (* changing endpoint, title, and focus if permalink *)
       let args = Url.Current.arguments in
       let args =
 	match args with
@@ -1110,6 +1108,7 @@ let _ =
 		   "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
 	    with _ -> url in
 	  default_endpoint := url;
+	  default_title := (try List.assoc "title" args with _ -> dummy_title);
 	  (try
 	      let query =
 		Permalink.to_query
@@ -1125,8 +1124,7 @@ let _ =
 	    |  _ -> ())
        with _ -> ());
       (* setting title if any *)
-      jquery_set_innerHTML "#sparql-endpoint-title"
-			   (try List.assoc "title" args with _ -> dummy_title);
+      jquery_set_innerHTML "#sparql-endpoint-title" !default_title;
       (* initializing configuration from HTML *)
       config#init !default_endpoint args in
     (* creating and initializing history *)

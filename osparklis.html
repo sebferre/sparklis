@@ -79,12 +79,12 @@
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=Wikidata&endpoint=https://query.wikidata.org/sparql&wikidata_mode=true&class_hierarchy=false&property_hierarchy=false&hierarchy_inheritance=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&entity_lexicon_lang=en&class_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en&arg_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&arg_lexicon_lang=en&lang=en">
+		<a href="osparklis.html?title=Wikidata&endpoint=https://query.wikidata.org/sparql&wikidata_mode=true&class_hierarchy=false&property_hierarchy=false&nary_relations=true&hierarchy_inheritance=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&entity_lexicon_lang=en&class_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en&arg_lexicon_select=http://www.w3.org/2000/01/rdf-schema%23label&arg_lexicon_lang=en&lang=en">
 		  Wikidata
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=Mondial&endpoint=http%3A//servolis.irisa.fr/mondial/sparql&class_hierarchy=false&property_hierarchy=false&entity_lexicon_property=http%3A//www.semwebtech.org/mondial/10/meta%23name&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en&arg_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&arg_lexicon_lang=en">
+		<a href="osparklis.html?title=Mondial&endpoint=http%3A//servolis.irisa.fr/mondial/sparql&class_hierarchy=false&property_hierarchy=false&nary_relations=true&entity_lexicon_property=http%3A//www.semwebtech.org/mondial/10/meta%23name&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=en&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=en&arg_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&arg_lexicon_lang=en">
 		  Mondial
 		</a>
 	      </li>
@@ -123,11 +123,11 @@
 		  European Television Heritage
 		</a>
 	      </li>
-	      <li>
+<!--	      <li>
 		<a href="osparklis.html?title=EU%20Open%20Data%20Portal&endpoint=http%3A//data.europa.eu/euodp/sparqlep&proxy=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&regexp_hidden_URIs=">
 		  EU Open Data Portal
 		</a>
-	      </li>
+	      </li> -->
 	      <li>
 		<a href="osparklis.html?title=Tourisme%20en%20Bretagne&endpoint=http%3A//servolis.irisa.fr/BretagneTourism/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=fr&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=fr&lang=fr">
 		  Tourisme en Bretagne
@@ -139,7 +139,7 @@
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=Nomisma&endpoint=http://nomisma.org/query&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2004/02/skos/core%23prefLabel&entity_lexicon_lang=en">
+		<a href="osparklis.html?title=Nomisma&endpoint=http://nomisma.org/query&sparklis-query=%5BVId%5DReturn%28Det%28An%281%2CModif%28Select%2CUnordered%29%2CClass%28%22http%3A//nomisma.org/ontology%23NumismaticObject%22%29%29%2CNone%29%29&sparklis-path=D&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2004/02/skos/core%23prefLabel&entity_lexicon_lang=en">
 		  Nomisma
 		</a>
 	      </li>
@@ -159,7 +159,7 @@
 		<span class="tooltip lang-es">Ingrese aquí la URL del SPARQL endpoint requerido</span>
 		<span class="tooltip lang-nl">Vul hier de URL van de gewenste SPARQL endpoint in</span>
 		<input id="sparql-endpoint-input" class="form-control no-padding" type="url"
-		       value="http://servolis.irisa.fr/dbpedia/sparql">  <!-- Edit to change default endpoint -->
+		       value="http://servolis.irisa.fr/dbpedia/sparql">  <!-- default endpoint -->
 	      </span>
 	      <span class="tooltiped">
 		<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
@@ -179,7 +179,7 @@
 		<span class="tooltip lang-nl">Klik hier om de titel van het endpoint te bewerken</span>
 		<span id="sparql-endpoint-title" class="navbar-text" contenteditable="true">
 		  Core English DBpedia
-		</span> <!-- Edit to change default title -->
+		</span> <!-- default title -->
 	    </span>
 	  </li>
 	</ul>
@@ -329,7 +329,7 @@
 	      <span class="texte lang-fr">Utiliser comme proxy le point d'accès suivant </span>	  
 	      <span class="texte lang-es">Utilizar como proxy el siguiente endpoint</span>
 		  <span class="texte lang-nl">Gebruik een proxy naar de volgende endpoint</span>
-	      <input id="input-proxy-url" type="text" value="http://servolis.irisa.fr/dbpedia/sparql"> <!-- Edit to change default value -->
+	      <input id="input-proxy-url" type="text" value="http://servolis.irisa.fr/dbpedia/sparql"> <!-- default value -->
 	      <span class="texte lang-en"> (useful to avoid cross-domain blocking by Web browsers)</span>
 	      <span class="texte lang-fr"> (utile pour éviter le blocage des requêtes cross-domain par les navigateurs)</span>
 	      <span class="texte lang-es"> (útil para evitar el bloqueo de peticiones entre dominios por los navegadores)</span>
@@ -338,7 +338,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-method-get" class="config-param">
-	      <input id="input-method-get" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-method-get" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">Use method GET instead of method POST to send requests to endpoint (less efficient)</span> 
 	      <span class="texte lang-fr">Utiliser la méthode GET au lieu de la méthode POST pour envoyer les requêtes au point d'accès (moins efficace)</span>
 	      <span class="texte lang-es">Utilizar el método GET en lugar del método POST para enviar las peticiones al endpoint (menos eficiente)</span>
@@ -347,7 +347,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-withCredentials" class="config-param">
-	      <input id="input-withCredentials" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-withCredentials" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">Send requests with credentials to the endpoint</span> 
 	      <span class="texte lang-fr">Envoyer les requêtes avec certificats (with credentials) au point d'accès</span>
 	      <span class="texte lang-es">Enviar peticiones con credenciales al endpoint</span>
@@ -356,7 +356,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-caching" class="config-param">
-	      <input id="input-caching" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-caching" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Caching SPARQL query results (uncheck for frequently changing data)</span>
 	      <span class="texte lang-fr">Mettre en cache les résultats des requêtes SPARQL (décocher pour des données changeant fréquemment)</span>
 	      <span class="texte lang-es">Almacenar en caché los resultados de las consultas SPARQL (deseleccionar para datos continuamente cambiantes)</span>
@@ -381,7 +381,7 @@
 	      <span class="texte lang-fr">URI du graphe par défaut</span>
 	      <span class="texte lang-es">URI del grafo por defecto</span>
 		  <span class="texte lang-nl">Standaard graph URI</span>
-	      <input id="input-default-graph" type="text"  value=""> <!-- Edit to change default value -->
+	      <input id="input-default-graph" type="text"  value=""> <!-- default value -->
 	    </div>
 	  </li>
 	  <li class="list-group-item">
@@ -390,7 +390,7 @@
 	      <span class="texte lang-fr">Calculer au plus </span>
 	      <span class="texte lang-es">Calcular máximo </span>
 	      <span class="texte lang-nl">Bereken hooguit </span>
-	      <input id="input-max-results" type="number" value="200"> <!-- Edit to change default value -->
+	      <input id="input-max-results" type="number" value="200"> <!-- default value -->
 	      <span class="texte lang-en"> query results</span>
 	      <span class="texte lang-fr"> résultats à la requête</span>
 	      <span class="texte lang-es"> resultados de la consulta</span>
@@ -403,7 +403,7 @@
 	      <span class="texte lang-fr">Utiliser au plus </span>
 	      <span class="texte lang-es">Utilizar máximo </span>
 	      <span class="texte lang-nl">Gebruik hooguit </span>
-	      <input id="input-max-increment-samples" type="number" value="200"> <!-- Edit to change default value -->
+	      <input id="input-max-increment-samples" type="number" value="200"> <!-- default value -->
 	      <span class="texte lang-en"> query results for computing suggestions</span>
 	      <span class="texte lang-fr"> résultats de la requête pour calculer les suggestions</span>
 	      <span class="texte lang-es"> resultados de la consulta para calcular las sugerencias</span>
@@ -416,7 +416,7 @@
 	      <span class="texte lang-fr">Suggérer au plus </span>
 	      <span class="texte lang-es">Sugerir máximo </span>
 	      <span class="texte lang-nl">Suggereer hoogstens </span>
-	      <input id="input-max-classes" type="number" value="200"> <!-- Edit to change default value -->
+	      <input id="input-max-classes" type="number" value="200"> <!-- default value -->
 	      <span class="texte lang-en"> <span class="classURI">classes</span></span>
 	      <span class="texte lang-fr"> <span class="classURI">classes</span></span>
 	      <span class="texte lang-es"> <span class="classURI">clases</span></span>
@@ -429,7 +429,7 @@
 	      <span class="texte lang-fr">Suggérer au plus </span>
 	      <span class="texte lang-es">Sugerir máximo </span>
 	      <span class="texte lang-nl">Suggereer hoogstens</span>
-	      <input id="input-max-properties" type="number" value="200"> <!-- Edit to change default value -->
+	      <input id="input-max-properties" type="number" value="200"> <!-- default value -->
 	      <span class="texte lang-en"> <span class="propURI">properties</span></span>
 	      <span class="texte lang-fr"> <span class="propURI">propriétés</span></span>
 	      <span class="texte lang-es"> <span class="propURI">propiedades</span></span>
@@ -438,7 +438,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-short-permalink" class="config-param">
-	      <input id="input-short-permalink" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-short-permalink" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Generate short URLs for permanent links</span> 
 	      <span class="texte lang-fr">Générer des URLs courtes pour les liens permanents</span>
 	      <span class="texte lang-es">Generar URL cortas para enlaces permanentes</span>
@@ -484,7 +484,7 @@
 	      <span class="texte lang-fr">URI du graphe contenant le schéma (si différent du graphe par défaut)</span>
 	      <span class="texte lang-es">URI del grafo que contiene el esquema (si diferente del grafo por defecto)</span>
 	      <span class="texte lang-nl">Schema graph URI (als deze afwijkt van de standaard graph)</span>
-	      <input id="input-schema-graph" type="text" value=""> <!-- Edit to change default value -->
+	      <input id="input-schema-graph" type="text" value=""> <!-- default value -->
 	    </div>
 	  </li>
 	  <li class="list-group-item">
@@ -502,12 +502,12 @@
 	    <span class="texte lang-es">Excluir sugerencias cuyo URI coincida con la expresión regular : </span>
 	    <span class="texte lang-nl">Sluit suggesties uit waar de URI matcht met regexp: </span>
 	    <div id="config-regexp-hidden-uris" class="config-param">
-	      <input id="input-regexp-hidden-uris" type="text" size="60" value="^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)"> <!-- Edit to change default value -->
+	      <input id="input-regexp-hidden-uris" type="text" size="60" value="^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)"> <!-- default value -->
 	    </div>
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-class-hierarchy" class="config-param">
-	      <input id="input-class-hierarchy" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-class-hierarchy" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Organize <span class="classURI">classes</span> into a hierarchy using <code>rdfs:subClassOf</code> </span>
 	      <span class="texte lang-fr">Organiser les <span class="classURI">classes</span> en une hiérarchie utilisant <code>rdfs:subClassOf</code></span>
 	      <span class="texte lang-es">Organizar las <span class="classURI">clases</span> en un jerarquía usando <code>rdfs:subClassOf</code></span>
@@ -516,7 +516,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-property-hierarchy" class="config-param">
-	      <input id="input-property-hierarchy" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-property-hierarchy" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Organize <span class="propURI">properties</span> into a hierarchy using <code>rdfs:subPropertyOf</code> </span>
 	      <span class="texte lang-fr">Organiser les <span class="propURI">propriétés</span> en une hiérarchie utilisant <code>rdfs:subPropertyOf</code></span>
 	      <span class="texte lang-es">Organizar las <span class="propURI">propriedades</span> en un jerarquía usando <code>rdfs:subPropertyOf</code></span>
@@ -525,7 +525,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-hierarchy-inheritance" class="config-param">
-	      <input id="input-hierarchy-inheritance" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-hierarchy-inheritance" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Organize property values into a hierarchy according to <code>rdfs:inheritsThrough</code> </span>
 	      <span class="texte lang-fr">Organiser les valeurs d'une propriété en une hiérarchie selon <code>rdfs:inheritsThrough</code></span>
 	      <span class="texte lang-es">Organizar los valores de una  propriedad en un jerarquía de acuerdo a <code>rdfs:inheritsThrough</code></span>
@@ -534,7 +534,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-nary-relations" class="config-param">
-	      <input id="input-nary-relations" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-nary-relations" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Suggest <span class="naryURI">n-ary relations (reified triples)</span> according to: </span>
 	      <span class="texte lang-fr">Suggérer des <span class="naryURI">relations n-aires (triplets réifiés)</span> selon : </span>
 	      <span class="texte lang-es">Sugerir <span class="naryURI">relaciones n-arias (triples reificados)</span> de acuerdo a : </span>
@@ -544,7 +544,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-wikidata-mode" class="config-param">
-	      <input id="input-wikidata-mode" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-wikidata-mode" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">Specific configuration for Wikidata model</span>
 	      <span class="texte lang-fr">Configuration spéciale pour le modèle Wikidata</span>
 	      <span class="texte lang-es">Configuración especial para el modelo Wikidata</span>
@@ -753,7 +753,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-show-datatypes" class="config-param">
-	      <input id="input-show-datatypes" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-show-datatypes" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">For <span class="Literal">literals</span>, show datatypes and language tags </span>
 	      <span class="texte lang-fr">Pour les <span class="Literal">littéraux</span>, montrer les types de données et les tags de langues </span>
 	      <span class="texte lang-es">Para los <span class="Literal">literales</span>, mostrar los tipos de datos y tags de idioma </span>
@@ -808,7 +808,7 @@
 	<ul class="list-group">
 	  <li class="list-group-item">
 	    <div id="config-sort-by-position" class="config-param">
-	      <input id="input-sort-by-position" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-sort-by-position" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">Sort concepts and entities according to their value of <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
 	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur valeur de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
 	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo con su valor de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
@@ -817,12 +817,12 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-show-logo" class="config-param">
-	      <input id="input-show-logo" type="checkbox"> <!-- Edit to change default value -->
+	      <input id="input-show-logo" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">Label concepts and entities with icons according to their value of <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Icon height </span>
 	      <span class="texte lang-fr">Étiqueter les concepts et les entités avec des icônes en fonction de leur valeur de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Hauteur des icônes </span>
 	      <span class="texte lang-es">Etiquetar conceptos y entidades con iconos de acuerdo con su valor de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Altura de los iconos </span>
 	      <span class="texte lang-nl">Label concepten en entiteiten met pictogrammen op basis van hun waarde van <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Pictogram hoogte </span>
-	      <input id="input-logo-height" type="number" value="20"> <!-- Edit to change default value -->
+	      <input id="input-logo-height" type="number" value="20"> <!-- default value -->
 	    </div>
 	  </li>
 	</ul>
@@ -860,7 +860,7 @@
 	<ul class="list-group">
 	  <li class="list-group-item">
 	    <div id="config-logging" class="config-param">
-	      <input id="input-logging" type="checkbox" checked> <!-- Edit to change default value -->
+	      <input id="input-logging" type="checkbox" checked> <!-- default value -->
 	      <span class="texte lang-en">Reporting query history for usability improvement (only client IP, session ID, and queries are reported, not query results)</span>
 	      <span class="texte lang-fr">Rapporter l'historique des requêtes à des fins d'amélioration de l'utilisabilité (seuls l'IP client, l'identifiant de session et les requêtes sont rapportées, pas les résultats des requêtes)</span>
 	      <span class="texte lang-es">Reportar el historial de consultas para el mejoramiento de la usabilidad (sólo se reportan la IP del cliente, ID de sesión y consultas, no los resultados de las consultas ) </span>
@@ -1055,7 +1055,7 @@
 		    <div class="col-xs-4" style="white-space:nowrap">
 		      <span class="glyphicon glyphicon-sort-by-alphabet"></span>
 		      <label class="switch">
-			<input id="input-sort-by-frequency-properties" type="checkbox" checked> <!-- Edit to change default value -->
+			<input id="input-sort-by-frequency-properties" type="checkbox" checked> <!-- default value -->
 			<span class="slider" title="Sort with frequency (or not)"></span>
 		      </label>
 		      <span class="glyphicon glyphicon-sort-by-order-alt"></span>
@@ -1137,7 +1137,7 @@
 		    <div class="col-xs-4" style="white-space:nowrap">
 		      <span class="glyphicon glyphicon-sort-by-alphabet"></span>
 		      <label class="switch">
-			<input id="input-sort-by-frequency-terms" type="checkbox" checked> <!-- Edit to change default value -->
+			<input id="input-sort-by-frequency-terms" type="checkbox" checked> <!-- default value -->
 			<span class="slider" title="Sort with frequency (or not)"></span>
 		      </label>
 		      <span class="glyphicon glyphicon-sort-by-order-alt"></span>

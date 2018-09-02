@@ -112,7 +112,7 @@ class incr_freq_tree_index th = [Lisql.increment, freq option] index ~parents:(i
 (* configuration *)
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
-let config_nary_relations = new Config.boolean_input ~key:"nary_relations" ~input_selector:"#input-nary-relations" ~default:true ()
+let config_nary_relations = new Config.boolean_input ~key:"nary_relations" ~input_selector:"#input-nary-relations" ~default:false ()
 let config_regexp_hidden_URIs = new Config.string_input ~key:"regexp_hidden_URIs" ~input_selector:"#input-regexp-hidden-uris" ~default:"^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)" ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
 let config_max_increment_samples = new Config.integer_input ~key:"max_increment_samples" ~input_selector:"#input-max-increment-samples" ~min:1 ~default:200 ()
