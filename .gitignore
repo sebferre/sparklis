@@ -7,3 +7,4 @@
 *.byte
 log/
 old/
+node_modules/
