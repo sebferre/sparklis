@@ -45,7 +45,8 @@ type word =
   | `Func of string
   | `Op of string
   | `Undefined
-  | `DummyFocus ]
+  | `FocusName
+  | `FocusSpan ]
 
 let word_text_content grammar : word -> string = function
   | `Thing -> grammar#thing
@@ -60,7 +61,8 @@ let word_text_content grammar : word -> string = function
   | `Func s -> s
   | `Op s -> s
   | `Undefined -> ""
-  | `DummyFocus -> ""
+  | `FocusSpan -> ""
+  | `FocusName -> ""
 
 type ng_label =
   [ `Word of word
@@ -146,6 +148,7 @@ and nl_vp =
   | `HasProp of word * np * pp list
   | `HasPropCP of word * cp
   | `Has of np * pp list
+  | `HasCP of cp
   | `VT of word * np * pp list
   | `VT_CP of word * cp
   | `Subject of np * vp (* np is the subject of vp *)
@@ -167,6 +170,7 @@ and pp =
   [ `Bare of np
   | `Prep of word * np
   | `AtNoun of word * np
+  | `At of np
   | `PrepBin of word * np * word * np ]
 
 let top_adj : adj = `Nil
@@ -175,9 +179,10 @@ let top_np : np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
 let top_expr : np = X (`PN (`Undefined, top_rel))
 let top_s : s = X (`Return top_np)
 
-let dummy_word : word = `DummyFocus
-let dummy_ng : ng = X (`That (`DummyFocus, top_rel))
-let dummy_np : np = X (`PN (`DummyFocus, top_rel))
+let focus_span : word = `FocusSpan
+let focus_span_np : np = X (`PN (`FocusSpan, top_rel))
+let focus_name : word = `FocusName
+let focus_name_ng : ng = X (`That (`FocusName, top_rel))
 let undefined_np : np = X (`PN (`Undefined, top_rel))
 
 let np_of_word w : np = X (`PN (w, top_rel))
@@ -243,7 +248,7 @@ let string_of_input_type grammar = function
   | `Date -> grammar#date
   | `Time -> grammar#time
   | `DateTime -> grammar#date_and_time
-(*  | `Time -> grammar#time *)
+  | `Duration -> grammar#duration
     
 let aggreg_syntax grammar g =
   let qu, noun, adj_opt = grammar#aggreg_syntax g in
@@ -1013,6 +1018,7 @@ and map_vp transf vp =
     | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
     | `HasPropCP (w,cp) -> `HasPropCP (w, map_cp transf cp)
     | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
+    | `HasCP cp -> `HasCP (map_cp transf cp)
     | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
     | `VT_CP (w,cp) -> `VT_CP (w, map_cp transf cp)
     | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
@@ -1036,6 +1042,7 @@ and map_pp transf pp =
     | `Bare np -> `Bare (map_np transf np)  
     | `Prep (w,np) -> `Prep (w, map_np transf np)
     | `AtNoun (w,np) -> `AtNoun (w, map_np transf np)
+    | `At np -> `At (map_np transf np)
     | `PrepBin (w1,np1,w2,np2) -> `PrepBin (w1, map_np transf np1, w2, map_np transf np2)
 
 
@@ -1096,9 +1103,14 @@ object (self)
 	-> `Has (A (a2, `Qu (qu, `Optional (a3#is_susp_focus, adj), A (a3, `That (p, rel)))), lpp) (* TODO: adj out of a3 *)
       | `HasPropCP (p, A (a2, `Nil))
 	-> `Has (A (a2, `Qu (`A, `Nil, X (`That (p, X `Nil)))), [])
-      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, `Nil))))
-	-> `Has (A (a2, `Qu (qu, adj, X (`That (p, rel)))), [])
+      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, cp))))
+	-> `HasCP (A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (p, rel))))), A (a4, cp))))
+      (*	 `Has (A (a3, `Qu (qu, adj, X (`That (p, rel)))), []) *)
       | nl -> nl)
+  method pp = function
+    | `AtNoun (prep, A (a2, `Qu (qu, adj, X (`That (`Thing, rel)))))
+      -> `At (A (a2, `Qu (qu, adj, X (`That (prep, rel)))))
+    | pp -> pp
 end
 
 (* tagged serialization - a la XML *)
@@ -1353,6 +1365,7 @@ and xml_vp grammar ~id_labelling = function
       | `HasProp (p,np,lpp) -> xml_has_as_a grammar [Word p] @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `HasPropCP (w,cp) -> xml_has_as_a grammar [Word w] @ xml_cp grammar ~id_labelling cp
       | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+      | `HasCP cp -> Kwd grammar#has :: xml_cp grammar ~id_labelling cp
       | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
       | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
@@ -1389,6 +1402,7 @@ and xml_pp grammar ~id_labelling = function
   | `Bare np -> xml_np grammar ~id_labelling np
   | `Prep (w,np) -> Word w :: xml_np grammar ~id_labelling np
   | `AtNoun (w,np) -> Kwd grammar#at :: Word w :: xml_np grammar ~id_labelling np
+  | `At np -> Kwd grammar#at :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
   | `Word w -> [Word w]
@@ -1426,12 +1440,12 @@ and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
 let xml_ng_id ?isolated grammar ~id_labelling id = xml_ng_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
 let xml_np_id ?isolated grammar ~id_labelling id = xml_np_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
 
-let xml_incr_coordinate grammar focus xml =
-  match focus with
+let xml_incr_coordinate grammar focus xml = xml
+(*  match focus with
   | AtSn _
   | AtS1 _
   | AtP1 (IsThere _, _) -> xml
-  | _ -> Kwd grammar#and_ :: xml
+  | _ -> Kwd grammar#and_ :: xml *)
 
 let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrSelection (selop,_) ->
@@ -1448,17 +1462,19 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
       | AtSn _ | AtS1 _ | AtExpr _ -> xml_t
       | AtAggreg (aggreg, _) when is_dim aggreg -> xml_t (* for ForTerm dimensions *)
       | AtP1 (Hier _, _) -> xml_t
-      | _ ->
-	xml_incr_coordinate grammar focus
-	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
+      | _ -> 
+	 xml_incr_coordinate
+	   grammar focus
+	   (Kwd grammar#relative_that :: Kwd grammar#is :: xml_t) )
   | IncrId (id,_) ->
     let xml = xml_np_id grammar ~id_labelling id in
     ( match focus with
       | AtSn _ | AtS1 _ | AtExpr _ -> xml
       | AtAggreg (aggreg, _) when is_dim aggreg -> xml (* for ForTerm dimensions *)
       | _ ->
-	xml_incr_coordinate grammar focus
-	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )
+	 xml_incr_coordinate
+	   grammar focus
+	   (Kwd grammar#relative_that :: Kwd grammar#is :: xml) )
   | IncrPred (arg,pred) ->
      let cp =
        match arg, pred with
@@ -1485,41 +1501,47 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
 	  match cp with
 	  | CCons (_, _, Det (_, An (_, _, Class c0), _), _) when c0 = c -> [DeleteIncr]
 	  | _ -> [] in
-	 xml_a_an grammar xml_c @ xml_delete_opt
-      | AtS1 (np,ctx) ->
-	let xml_qu =
-	  match ctx with
-	  | ReturnX _ -> xml_every
-	  | _ -> xml_a_an in
-	let xml_delete_opt =
-	  match np with
-	  | Det (_, An (_, _, Class c0), _) when c0 = c -> [DeleteIncr]
-	  | _ -> [] in
-	xml_qu grammar xml_c @ xml_delete_opt
+	 Kwd grammar#is :: xml_a_an grammar xml_c @ xml_delete_opt
+      | AtS1 (Det (_, An (_, _, head), _), ctx) ->
+	 let xml_delete_opt =
+	   if head = Class c
+	   then [DeleteIncr]
+	   else [] in
+	 let xml_qu =
+	   match ctx with
+	   | ReturnX _ when head = Thing || head = Class c -> xml_every
+	   | _ -> xml_a_an in
+	 let xml = xml_qu grammar xml_c @ xml_delete_opt in
+	 if head = Thing || head = Class c
+	 then xml
+	 else Kwd grammar#relative_that :: Kwd grammar#is :: xml
+      | AtS1 (np,ctx) -> xml_a_an grammar xml_c
       | _ ->
-	xml_incr_coordinate grammar focus
-	  (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar xml_c) )
+	 xml_incr_coordinate
+	   grammar focus
+	   (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar xml_c) )
   | IncrRel (p,Lisql.Fwd) ->
-    xml_incr_coordinate grammar focus
-      (Kwd grammar#relative_that ::
-       let word, synt = word_syntagm_of_property grammar p in
-       match synt with
-	 | `Noun -> Kwd grammar#has :: xml_a_an grammar [Word word]
-	 | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Word (`Op grammar#of_) :: xml_ellipsis
-	 | `TransVerb -> Word word :: xml_ellipsis
-	 | `TransAdj -> Kwd grammar#is :: Word word :: xml_ellipsis)
+     xml_incr_coordinate
+       grammar focus
+       (Kwd grammar#relative_that ::
+	  let word, synt = word_syntagm_of_property grammar p in
+	  (match synt with
+	   | `Noun -> Kwd grammar#has :: xml_a_an grammar [Word word]
+	   | `InvNoun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Word (`Op grammar#of_) :: xml_ellipsis
+	   | `TransVerb -> Word word :: xml_ellipsis
+	   | `TransAdj -> Kwd grammar#is :: Word word :: xml_ellipsis))
   | IncrRel (p,Lisql.Bwd) ->
-    xml_incr_coordinate grammar focus
+     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that ::
        let word, synt = word_syntagm_of_property grammar p in
-       match synt with
+       (match synt with
 	 | `Noun -> Kwd grammar#is :: Kwd grammar#the :: Word word :: Word (`Op grammar#of_) :: xml_ellipsis
 	 | `InvNoun -> Kwd grammar#has :: xml_a_an grammar [Word word]
 	 | `TransVerb -> xml_ellipsis @ Word word :: []
-	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: [])
+	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: []))
   | IncrLatLong _ll ->
-    xml_incr_coordinate grammar focus
-      (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])	 
+     xml_incr_coordinate grammar focus
+      (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])
   | IncrTriple (S | O as arg) ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ (if arg = S then Kwd grammar#rel_to :: xml_ellipsis else Kwd grammar#rel_from :: xml_ellipsis))
@@ -1530,23 +1552,23 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
   | IncrHierarchy (trans_rel,inv) ->
      if trans_rel
-     then Word (`Prop ("", "...")) :: xml_hierarchy grammar inv true @  Word dummy_word :: []
+     then Word (`Prop ("", "...")) :: xml_hierarchy grammar inv true @  Word focus_span :: []
      else xml_hierarchy grammar inv true
   | IncrAnything -> [Word (`Op grammar#anything)]
-  | IncrThatIs -> xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
-  | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word dummy_word :: []
-  | IncrAnd -> Kwd grammar#and_ :: xml_ellipsis
-  | IncrDuplicate -> Kwd grammar#and_ :: Word dummy_word :: []
-  | IncrOr -> Word (`Op grammar#or_) :: xml_ellipsis
-  | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word dummy_word; Kwd ", "; Word `Undefined]
-  | IncrMaybe -> xml_maybe grammar None [Word dummy_word]
-  | IncrNot -> xml_not grammar None [Word dummy_word]
-  | IncrIn -> [Suffix (Word (`Op grammar#according_to) :: xml_ellipsis, ","); Word dummy_word]
+  | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
+  | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []
+  | IncrAnd -> Word focus_span :: Kwd grammar#and_ :: xml_ellipsis
+  | IncrDuplicate -> Word focus_span :: Kwd grammar#and_ :: Word focus_span :: []
+  | IncrOr -> Word focus_span :: Word (`Op grammar#or_) :: xml_ellipsis
+  | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word focus_span; Kwd ", "; Word `Undefined]
+  | IncrMaybe -> xml_maybe grammar None [Word focus_span]
+  | IncrNot -> xml_not grammar None [Word focus_span]
+  | IncrIn -> [Suffix (Word (`Op grammar#according_to) :: xml_ellipsis, ","); Word focus_span]
   | IncrInWhichThereIs -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Kwd grammar#there_is :: xml_ellipsis
-  | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Unselect,Unordered))
-  | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None dummy_word top_rel (Select,order))
-  | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word dummy_word :: []
-  | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel dummy_ng)
+  | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Unselect,Unordered))
+  | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Select,order))
+  | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word focus_name :: []
+  | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel focus_name_ng)
   | IncrForeachResult ->
      let xml_delete_opt =
        let has_foreach_result =
@@ -1567,7 +1589,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
 	 top_adj
 	 func
 	 (List.map
-	    (fun i -> if i=pos then dummy_np else undefined_np)
+	    (fun i -> if i=pos then focus_span_np else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
-  | IncrName name -> [Input `String; Word (`Op "="); Word dummy_word]
+  | IncrName name -> [Input `String; Word (`Op "="); Word focus_span]

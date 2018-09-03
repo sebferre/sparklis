@@ -20,6 +20,7 @@ type datatype =
 | `Date
 | `Time
 | `DateTime
+| `Duration
 | `Boolean
 | `Conversion of datatype * Lisql.num_conv * datatype (* (A,conv,B) : conv converts A to B *)
 ]
@@ -41,12 +42,13 @@ let inheritance : (datatype * datatype list) list =
       | `Date -> aux `Literal
       | `Time -> aux `Literal
       | `DateTime -> aux `Date
+      | `Duration -> aux `Literal
       | `Boolean -> [] (* type `Boolean used for filtering conditions, use function `Indicator to manipulate Boolean values *)
       | `Conversion _ -> assert false
   in
   List.map (fun dt -> (dt, aux dt))
     [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String;
-     `Float; `Decimal; `Integer; `Date; `Time; `DateTime; `Boolean]
+     `Float; `Decimal; `Integer; `Date; `Time; `DateTime; `Duration; `Boolean]
 
 type compatible = { bool : bool; conv_opt : Lisql.num_conv option }
 (* conv_opt field only well-defined when bool=true *)
@@ -119,6 +121,7 @@ let rec of_term : Rdf.term -> datatype = function
     else if dt = Rdf.xsd_date then `Date
     else if dt = Rdf.xsd_time then `Time
     else if dt = Rdf.xsd_dateTime then `DateTime
+    else if dt = Rdf.xsd_duration then `Duration
     else if dt = Rdf.xsd_boolean then `Boolean
     else `Literal
   | Rdf.PlainLiteral (_,lang) ->
@@ -183,11 +186,27 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `Decimal -> [ [`Literal], `Decimal ]
   | `Double -> [ [`Literal], `Float ]
   | `Indicator -> [ [`Boolean], `Integer ]
-  | `Add
-  | `Sub
+  | `Add -> [ [`Integer; `Integer], `Integer;
+	      [`Decimal; `Decimal], `Decimal;
+	      [`Float; `Float], `Float;
+	      [`Duration; `Duration], `Duration;
+	      [`DateTime; `Duration], `DateTime;
+	      [`Date; `Duration], `Date;
+	      [`Time; `Duration], `Time ]
+  | `Sub -> [ [`Integer; `Integer], `Integer;
+	      [`Decimal; `Decimal], `Decimal;
+	      [`Float; `Float], `Float;
+	      [`Duration; `Duration], `Duration;
+	      [`DateTime; `Duration], `DateTime;
+	      [`Date; `Duration], `Date;
+	      [`Time; `Duration], `Time;
+	      [`DateTime; `DateTime], `Duration;
+	      [`Date; `Date], `Duration;
+	      [`Time; `Time], `Duration ]
   | `Mul -> [ [`Integer; `Integer], `Integer;
 	      [`Decimal; `Decimal], `Decimal;
-	      [`Float; `Float], `Float ]
+	      [`Float; `Float], `Float;
+	      [`Duration; `Float], `Duration ]
   | `Div -> [ [`Decimal; `Decimal], `Decimal;
 	      [`Float; `Float], `Float ]
   | `Neg
@@ -202,12 +221,15 @@ let func_signatures : func -> (datatype list * datatype) list = function
   | `Time -> [ [`DateTime], `Time ]
   | `Year
   | `Month
-  | `Day -> [ [`Date], `Integer ]
+  | `Day -> [ [`Date], `Integer;
+	      [`Duration], `Integer ]
   | `Hours
-  | `Minutes -> [ [`DateTime], `Integer ]
-  | `Seconds -> [ [`DateTime], `Float ]
-  | `TODAY -> [ [], `Date]
-  | `NOW -> [ [], `DateTime]
+  | `Minutes -> [ [`DateTime], `Integer;
+		  [`Duration], `Integer ]
+  | `Seconds -> [ [`DateTime], `Float;
+		  [`Duration], `Float ]
+  | `TODAY -> [ [], `Date ]
+  | `NOW -> [ [], `DateTime ]
   | `And
   | `Or -> [ [`Boolean; `Boolean], `Boolean ]
   | `Not -> [ [`Boolean], `Boolean ]

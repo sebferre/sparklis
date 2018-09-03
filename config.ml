@@ -41,12 +41,11 @@ object (self)
   method value : bool = current_v
 
   method get_permalink =
-    if current_v <> init_v
+    if current_v <> default
     then [(key, string_of_bool current_v)]
     else []
   method set_permalink args =
-    try self#set_value (bool_of_string (List.assoc key args))
-    with _ -> ()
+    self#set_value (try bool_of_string (List.assoc key args) with _ -> default)
 
   method init =
     jquery_input input_selector (fun input ->
@@ -79,12 +78,11 @@ object (self)
   method value : int = current_v
 
   method get_permalink =
-    if current_v <> init_v
+    if current_v <> default
     then [(key, string_of_int current_v)]
     else []
   method set_permalink args =
-    try self#set_input (int_of_string (List.assoc key args))
-    with _ -> ()
+    self#set_input (try int_of_string (List.assoc key args) with _ -> default)
 
   method init =
     jquery_input input_selector (fun input ->
@@ -128,12 +126,11 @@ object (self)
   method value : string = current_v
 
   method get_permalink =
-    if current_v <> init_v
+    if current_v <> default
     then [(key, current_v)]
     else []
   method set_permalink args =
-    try self#set_input (List.assoc key args)
-    with _ -> ()
+    self#set_input (try List.assoc key args with _ -> default)
 
   method init =
     jquery_input input_selector (fun input ->
@@ -166,12 +163,11 @@ object (self)
   method value : string = current_v
 
   method get_permalink =
-    if current_v <> init_v
+    if current_v <> default
     then [(key, current_v)]
     else []
   method set_permalink args =
-    try self#set_select (List.assoc key args)
-    with _ -> ()
+    self#set_select (try List.assoc key args with _ -> default)
 
   method init =
     jquery_select select_selector (fun select ->
@@ -187,5 +183,3 @@ object (self)
 	select)
   method reset = self#set_select init_v
 end
-
-

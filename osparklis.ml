@@ -26,6 +26,10 @@ let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.p
 let session_id : string = (* random session ID to disambiguate undefinite IPs *)
   Random.self_init (); string_of_int (Random.int 1000000000);;
 
+(* other configs *)
+
+let config_short_permalink = new Config.boolean_input ~key:"short-permalink" ~input_selector:"#input-short-permalink" ~default:true ()
+  
 (* LISQL constraints <--> user patterns *)
 
 let string_is_float =
@@ -204,6 +208,7 @@ let check_input s = function
   | `Date -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}$") s 0 <> None
   | `Time -> Regexp.string_match (Regexp.regexp "\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
   | `DateTime -> Regexp.string_match (Regexp.regexp "[-+]?\\d+-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[-+]\\d{2}(:\\d{2})?)?$") s 0 <> None
+  | `Duration -> s <> "P" && s <> "PT" && Regexp.string_match (Regexp.regexp "P(\\d+Y)?(\\d+M)?(\\d+D)?(T(\\d+H)?(\\d+M)?(\\d+([.]\\d+)?S)?)?$") s 0 <> None
     
 (* configuration *)
 
@@ -221,10 +226,13 @@ let config =
       (Ontology.config_class_hierarchy :> Config.input);
       (Ontology.config_property_hierarchy :> Config.input);
       (Ontology.config_hierarchy_inheritance :> Config.input);
+      (Ontology.config_sort_by_position :> Config.input);
+      (Ontology.config_show_logo :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
       (Lis.config_nary_relations :> Config.input);
       (Lis.config_regexp_hidden_URIs :> Config.input);
       (Lis.config_max_results :> Config.input);
+      (Lis.config_max_increment_samples :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
@@ -234,7 +242,11 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
-      (config_logging :> Config.input); ] in
+      (Html.config_sort_by_frequency_terms :> Config.input);
+      (Html.config_sort_by_frequency_properties :> Config.input);
+      (Html.config_logo_height :> Config.input);
+      (config_logging :> Config.input);
+      (config_short_permalink :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
     Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
@@ -300,6 +312,8 @@ object (self)
     l_incr <- [];
     self#refresh
 end
+
+let dummy_title = "???" (* to suggest defining a title *)
   
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
@@ -330,46 +344,64 @@ object (self)
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
   initializer html_state <- new Html.state lis#id_labelling
 
-  method show_permalink : unit Lwt.t =
+  method show_permalink : unit =
+    let show (url : string) : unit =
+      ignore (prompt
+		Lisql2nl.config_lang#grammar#msg_permalink
+		url) in
     let endpoint = lis#endpoint in
     let title = jquery_get_innerHTML "#sparql-endpoint-title" in
     let args = config#get_permalink in
     let args =
-      ("title",title)
-      :: ("endpoint",endpoint)
+      ("endpoint",endpoint)
       :: (if self#is_home
 	  then args
 	  else ("sparklis-query", Permalink.of_query lis#query)
+	       :: ("sparklis-path", Permalink.of_path lis#path)
 	       :: args) in
-    try
-      let permalink_url =
+    let args =
+      if title = dummy_title
+      then args
+      else ("title",title) :: args in
+    let permalink_url =
+      let current_url =
 	match Url.Current.get () with
-	  | None -> raise Not_found
-	  | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	  | Some (Url.Https url) -> Url.string_of_url (Url.Https { url with Url.hu_arguments = args })
-	  | Some (Url.File url) ->
-	     ( match Url.url_of_string
-		       "http://www.irisa.fr/LIS/ferre/sparklis/osparklis.html" with
-	       | Some (Url.Http url) -> Url.string_of_url (Url.Http { url with Url.hu_arguments = args })
-	       | _ -> assert false ) in
-      Lwt.bind
-	(XmlHttpRequest.perform_raw_url
-	   ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
-		      "format","txt";
-		      "longUrl", permalink_url]
-	   "https://api-ssl.bitly.com/v3/shorten")
-	(fun http_frame ->
-	  let permalink_url =
+	| None -> Url.(Http { hu_host = "localhost";
+			      hu_port = 8080;
+			      hu_path = [];
+			      hu_path_string = "";
+			      hu_arguments = [];
+			      hu_fragment = "" })
+	| Some url -> url in
+      match current_url with
+      | Url.Http url -> Url.Http { url with Url.hu_arguments = args }
+      | Url.Https url -> Url.Https { url with Url.hu_arguments = args }
+      | Url.File url -> Url.File { url with Url.fu_arguments = args } in
+    if config_short_permalink#value
+    then
+      let permalink_url = (* converting local URLs to http URLs *)
+	match permalink_url with
+	| Url.File url -> Url.(Http { hu_host = "www.irisa.fr";
+				      hu_port = 80;
+				      hu_path = ["LIS"; "ferre"; "sparklis"; "osparklis.html"];
+				      hu_path_string = "/LIS/ferre/sparklis/osparklis.html";
+				      hu_arguments = url.fu_arguments;
+				      hu_fragment = "" })
+	| _ -> permalink_url in
+      Lwt.ignore_result
+	(Lwt.bind
+	   (XmlHttpRequest.perform_raw_url
+	      ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
+			 "format","txt";
+			 "longUrl", Url.string_of_url permalink_url]
+	      "https://api-ssl.bitly.com/v3/shorten")
+	   (fun http_frame ->
 	    let open XmlHttpRequest in
 	    if http_frame.code = 200
-	    then http_frame.content
-	    else permalink_url in
-	  ignore
-	    (prompt
-	       Lisql2nl.config_lang#grammar#msg_permalink
-	       permalink_url);
-	  Lwt.return ())
-    with _ -> Lwt.return ()
+	    then show http_frame.content
+	    else show (Url.string_of_url permalink_url);
+	    Lwt.return ()))
+    else show (Url.string_of_url permalink_url)
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
@@ -385,18 +417,28 @@ object (self)
 	  Dom_html.stopPropagation ev;
 	  navigation#update_focus ~push_in_history:true Lisql.delete_focus)))
 
-  method private refresh_increments_focus =
-    let html_focus =
+  method private refresh_focus =
+    let html_focus_np, html_focus_ng =
       match lis#focus_term_opt with
 	| Some (Rdf.Var v) ->
 	  (try
-	    let id = lis#id_labelling#get_var_id v in
-	    Html.html_id html_state id
-	   with _ -> escapeHTML v (* should not happen *))
-	| Some t -> Html.html_term t
-	| None -> Lisql2nl.config_lang#grammar#undefined in
-    jquery "#increments-focus" (fun elt ->
-      elt##innerHTML <- string html_focus)
+	      let id = lis#id_labelling#get_var_id v in
+	      Html.html_id_np html_state id, Html.html_id_ng html_state id
+	    with _ -> (* should not happen *)
+		 let html = escapeHTML v in
+		 html, html)
+	| Some t ->
+	   let html = Html.html_term t in
+	   html, html
+	| None ->
+	   let html = "(" ^ Lisql2nl.config_lang#grammar#undefined ^ ")" in
+	   html, html in
+    jquery_all ".focus-np"
+	       (fun elt ->
+		elt##innerHTML <- string html_focus_np);
+    jquery_all ".focus-ng"
+	       (fun elt ->
+		elt##innerHTML <- string html_focus_ng)
 
   method private get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) =
     let op = to_string (select##value) in
@@ -551,13 +593,13 @@ object (self)
 	jquery "#list-terms" (fun elt_list ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index in
+	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- term_scroll;
 	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
-		(html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      term_selection#reset;			   
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
@@ -613,7 +655,7 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index in
+	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_properties#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- property_scroll;
@@ -665,7 +707,7 @@ object (self)
     jquery "#selection-modifiers-items" (fun elt_sel_items ->
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
-      let html_sel, html_list = html_index lis#focus html_state index in
+      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:false in
       elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
       elt_list##scrollTop <- modifier_scroll;
@@ -691,7 +733,6 @@ object (self)
     jquery_input "#sparql-endpoint-input"
 		 (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
-    self#refresh_increments_focus;
     self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
@@ -714,13 +755,15 @@ object (self)
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
-	      self#refresh_term_increments
+	      self#refresh_term_increments;
+	      self#refresh_focus (* after increments, because they have `FocusName words *)
 	  | Some sparql ->
 	      self#refresh_extension;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
-	      self#refresh_term_increments)))
+	      self#refresh_term_increments;
+	      self#refresh_focus)))
 
   method private filter_increments ?on_modifiers elt_list constr =
     let matcher = compile_constr ?on_modifiers constr in
@@ -944,7 +987,7 @@ object (self)
     present#abort_all_ajax;
     present#save_ui_state;
     config#set_endpoint url;
-    jquery_set_innerHTML "#sparql-endpoint-title" "";
+    jquery_set_innerHTML "#sparql-endpoint-title" dummy_title;
     let focus = Lisql.factory#reset; Lisql.factory#home_focus in
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
@@ -1043,12 +1086,10 @@ let _ =
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
     (* defining navigation history *)
-    let default_endpoint = ref "" in
+    let default_endpoint = ref "http://servolis.irisa.fr/dbpedia/sparql" in
+    let default_title = ref "Core English DBpedia" in
     let default_focus = ref Lisql.factory#home_focus in
-    jquery_input "#sparql-endpoint-input" (fun input ->
-      let url = to_string input##value in
-      default_endpoint := url); (* using default endpoint as given in HTML *)
-    let _ = (* changing endpoint and focus if permalink *)
+    let _ = (* changing endpoint, title, and focus if permalink *)
       let args = Url.Current.arguments in
       let args =
 	match args with
@@ -1067,22 +1108,23 @@ let _ =
 		   "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
 	    with _ -> url in
 	  default_endpoint := url;
+	  default_title := (try List.assoc "title" args with _ -> dummy_title);
 	  (try
 	      let query =
 		Permalink.to_query
 		  (try List.assoc "sparklis-query" args
 		   with _ -> List.assoc "query" args) in (* for backward compatibility of permalinks *)
-	      default_focus := Lisql.focus_of_query query
+	      let path =
+		try Permalink.to_path (List.assoc "sparklis-path" args)
+		with _ -> [] in
+	      default_focus := Lisql.focus_of_query_path query path
 	    with
 	    | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
 	    | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
 	    |  _ -> ())
        with _ -> ());
       (* setting title if any *)
-      (try
-	  let title = List.assoc "title" args in
-	  jquery_set_innerHTML "#sparql-endpoint-title" title
-	with _ -> ());
+      jquery_set_innerHTML "#sparql-endpoint-title" !default_title;
       (* initializing configuration from HTML *)
       config#init !default_endpoint args in
     (* creating and initializing history *)
@@ -1175,6 +1217,15 @@ let _ =
        "#button-collapse-properties", "#list-properties", false;
        "#button-expand-terms", "#list-terms", true;
        "#button-collapse-terms", "#list-terms", false];
+    List.iter
+      (fun sel_input ->
+       jquery_input sel_input
+		    (onchange (fun input ev ->
+			       let place = history#present in
+			       place#save_ui_state;
+			       place#refresh)))
+      ["#input-sort-by-frequency-terms";
+       "#input-sort-by-frequency-properties"];
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));

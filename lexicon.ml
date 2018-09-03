@@ -275,7 +275,7 @@ object (self)
     self#define_lexicon
 
   method get_permalink =
-    if current_property <> init_property || current_lang <> init_lang
+    if current_property <> "" || current_lang <> ""
     then
       let args = if current_lang = "" then [] else [(key_lang, current_lang)] in
       if current_select = other
@@ -283,12 +283,13 @@ object (self)
       else (key_select, current_select) :: args
     else []
   method set_permalink args =
-    try
-      let s = try List.assoc key_select args with _ -> other in
-      let p = if s = other then List.assoc key_property args else s in
-      let l = try List.assoc key_lang args with _ -> "" in
-      self#set_select_property_lang s p l
-    with _ -> ()
+    let s = try List.assoc key_select args with _ -> "" in
+    let s, p =
+      if s = ""
+      then (try other, List.assoc key_property args with _ -> "", "")
+      else s, s in
+    let l = try List.assoc key_lang args with _ -> "" in
+    self#set_select_property_lang s p l
 
   method property_lang : string * string = current_property, current_lang
   method value : 'lexicon = current_lexicon
@@ -365,3 +366,30 @@ let config_arg_lexicon =
     ~default_lexicon:default_arg_lexicon
     ~custom_lexicon:sparql_arg_lexicon
     ()
+
+(* utilities for enqueuing and syncing *)
+
+let enqueue_entity uri = config_entity_lexicon#value#enqueue uri
+let enqueue_class uri = config_class_lexicon#value#enqueue uri
+let enqueue_property uri = config_property_lexicon#value#enqueue uri
+let enqueue_arg uri = config_arg_lexicon#value#enqueue uri
+
+let sync_entities k =
+  config_entity_lexicon#value#sync
+    (fun () ->
+     config_class_lexicon#value#sync k) (* 'class' for datatypes *)
+let sync_concepts k =
+  config_class_lexicon#value#sync
+    (fun () ->
+     config_property_lexicon#value#sync
+       (fun () ->
+	config_arg_lexicon#value#sync k))
+    
+let sync k =
+  config_entity_lexicon#value#sync
+    (fun () ->
+     config_class_lexicon#value#sync
+       (fun () ->
+	config_property_lexicon#value#sync
+	  (fun () ->
+	   config_arg_lexicon#value#sync k)))

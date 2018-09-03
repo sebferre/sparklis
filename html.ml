@@ -9,6 +9,12 @@ open Jsutils
 open Lisql
 open Lisql_annot
 
+(* configuration elements *)
+
+let config_sort_by_frequency_terms = new Config.boolean_input ~key:"sort_by_frequency_terms" ~input_selector:"#input-sort-by-frequency-terms" ~default:true ()
+let config_sort_by_frequency_properties = new Config.boolean_input ~key:"sort_by_frequency_properties" ~input_selector:"#input-sort-by-frequency-properties" ~default:true ()
+let config_logo_height = new Config.integer_input ~key:"logo_height" ~input_selector:"#input-logo-height" ~min:8 ~default:20 ()
+       
 (* generic dictionary with automatic generation of keys *)
 
 class ['a] dico (prefix : string) =
@@ -142,6 +148,21 @@ let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
 let html_function f = html_span ~classe:"function" (escapeHTML f)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
+let html_logos uri =
+  let logo_urls = Ontology.config_show_logo#value#info uri in
+  let logo_urls =
+    if Rdf.uri_is_image uri
+    then uri :: logo_urls
+    else logo_urls in
+  let height = config_logo_height#value in
+  String.concat
+    ""
+    (List.map
+       (fun logo_url ->
+	let name = Filename.basename logo_url in
+	html_img ~classe:"uri-logo" ~height ~alt:"" ~title:name logo_url)
+       logo_urls)
+				
 let html_word = function
   | `Thing -> Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
@@ -151,14 +172,15 @@ let html_word = function
     then html_literal s ^ " (" ^ escapeHTML t ^ ")"
     else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Entity (uri,s) -> html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
-  | `Class (uri,s) -> html_uri ~classe:"classURI" uri s
-  | `Prop (uri,s) -> html_uri ~classe:"propURI" uri s
-  | `Nary (uri,s) -> html_uri ~classe:"naryURI" uri (escapeHTML s)
+  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
+  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" uri s
+  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" uri s
+  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" uri (escapeHTML s)
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
-  | `DummyFocus -> html_span ~classe:"highlighted" "___"
+  | `FocusSpan -> html_span ~classe:"highlighted" "___"
+  | `FocusName -> html_span ~classe:"focus-ng" "thing"
 
 let html_input dt =
   let t, hint =
@@ -170,7 +192,7 @@ let html_input dt =
     | `Date -> "text", "yyyy-mm-dd"
     | `Time -> "text", "hh:mm:ss"
     | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
-  (*    | `Time -> "text", "hh:mm:ss" *)
+    | `Duration -> "text", "PxYxMxDTxHxMx.xS"
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
@@ -242,17 +264,22 @@ let html_query (state : state) (query : annot elt_s) : string =
 	     query)))
 
 
-let html_id (state : state) (id : int) : string =
+let html_id_np (state : state) (id : int) : string =
   html_of_nl_xml state
     (Lisql2nl.xml_np_id Lisql2nl.config_lang#grammar state#id_labelling
+       id)
+let html_id_ng (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_ng_id Lisql2nl.config_lang#grammar state#id_labelling
        id)
 
 (* HTML of increment lists *)
 
-type compare_incr_data = int option * int * [`Words of string list | `Number of float] (* freq_opt, rank, data *)
+type compare_incr_data = (float * int) option * int * [`Words of string list | `Number of float]
+(* (position, freqency) opt, rank, data *)
 
-let compare_incr (f1_opt,r1,d1 : compare_incr_data) (f2_opt,r2,d2 : compare_incr_data) : int =
-  let compare3 () =
+let compare_incr ~(use_freq : bool) (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_incr_data) : int =
+  let compare3 () = (* sort according to data *)
     match d1, d2 with
     | `Number f1, `Number f2 -> Pervasives.compare f1 f2
     | `Number _, `Words _ -> 1 (* words before numbers *)
@@ -261,19 +288,26 @@ let compare_incr (f1_opt,r1,d1 : compare_incr_data) (f2_opt,r2,d2 : compare_incr
        if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
        else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
        else Pervasives.compare lw1 lw2 in
-  let compare2 () =
+  let compare2 () = (* sort by rank *)
     if r1 < r2 then -1
     else if r1 > r2 then 1
     else compare3 () in
   let compare1 () =
-    match f1_opt, f2_opt with
+    match pf1_opt, pf2_opt with
     | None, None -> compare2 ()
-    | None, Some _ -> -1
-    | Some _, None -> 1
-    | Some f1, Some f2 ->
-       if f1 < f2 then 1
-       else if f1 > f2 then -1
-       else compare2 () in
+    | None, Some _ -> compare2 ()
+    | Some _, None -> compare2 ()
+    | Some pf1, Some pf2 ->
+       if use_freq
+       then (* sort by position, then frequency *)
+	 if pf1 < pf2 then -1
+	 else if pf1 > pf2 then 1
+	 else compare2 ()
+       else (* sort by position *)
+	 let p1, p2 = fst pf1, fst pf2 in
+	 if p1 < p2 then -1
+	 else if p1 > p2 then 1
+	 else compare2 () in
   compare1 ()
 	  
 let html_count_unit freq (unit,units) =
@@ -289,20 +323,33 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   let grammar = Lisql2nl.config_lang#grammar in
   let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
   let html = html_of_nl_xml state xml in
-  let f_opt, html_freq =
+  let uri_opt = Lisql.uri_of_increment incr in
+  let pf_opt, html_freq =
     match freq_opt with
     | None -> None, ""
-    | Some {Lis.value=1} -> Some 1, ""
+    (*| Some {Lis.value=1} -> Some (position, -1), ""*)
     | Some {Lis.value; max_value; partial; unit} ->
-      let s = string_of_int value in
-      let s = if partial then s ^ "+" else s in
-      (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
-      Some value,
-      ( match unit with
-      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
-      ) in
+       let position =
+	 match uri_opt with
+	 | None -> max_float
+	 | Some uri ->
+	    match Ontology.config_sort_by_position#value#info uri with
+	    | [] -> max_float
+	    | x::xs -> List.fold_left max x xs in
+       let sort_frequency = -value in (* '-' opposite for decreasing frequency ordering *)
+       let html_freq =
+	 if value = 1
+	 then ""
+	 else
+	   let s = string_of_int value in
+	   let s = if partial then s ^ "+" else s in
+	   ( match unit with
+	     | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+	     | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+	     | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+	   ) in
+	     (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
+       Some (position, sort_frequency), html_freq in
   let data = 
     let text =
       String.lowercase
@@ -326,11 +373,12 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	
       | IncrHierarchy _ -> 2, Some grammar#tooltip_hierarchy
       | IncrArg _ -> 2, None
-      | IncrTriple _ -> 3, None
-      | IncrLatLong _ -> 3, Some grammar#tooltip_geolocation
-      | IncrType _ -> 4, None
+      | IncrType _ -> 3, None
+      | IncrLatLong _ -> 4, Some grammar#tooltip_geolocation
       | IncrRel _ -> 5, None
       | IncrPred _ -> 6, None
+      | IncrTriple _ -> 7, None
+      | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
 	
       | IncrAnd -> 6, None
       | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus
@@ -339,7 +387,6 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrMaybe -> 8, Some grammar#tooltip_optionally
       | IncrNot -> 9, Some grammar#tooltip_not
       | IncrIn -> 10, None (* TODO: tooltip *)
-      | IncrInWhichThereIs -> 10, None (* TODO: tooltip *)
       | IncrTriplify -> 10, Some grammar#tooltip_focus_on_property
       | IncrThatIs -> 11, None
       | IncrSomethingThatIs -> 11, None
@@ -359,7 +406,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     | IncrTriple _
     | IncrTriplify -> false
     | _ -> true in
-  let sort_data = (f_opt, rank, data) in
+  let sort_data = (pf_opt, rank, data) in
   let is_selection_incr, html =
     match incr with
     | IncrSelection _ ->
@@ -372,10 +419,10 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   sort_data, key, is_selection_incr, html
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lis.incr_freq_index) : string * string =
+let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string =
   let sort_node_list nodes =
     List.sort
-      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr data1 data2)
+      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
       nodes in
   let rec aux buf_sel buf_tree nodes =
     let sorted_nodes = sort_node_list nodes in

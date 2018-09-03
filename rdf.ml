@@ -10,7 +10,7 @@ let uri_has_ext uri exts =
   List.exists
     (fun ext -> Filename.check_suffix uri ext)
     exts
-let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"]
+let uri_is_image uri = uri_has_ext uri ["jpg"; "JPG"; "jpeg"; "JPEG"; "png"; "PNG"; "gif"; "GIF"; "bmp"; "BMP"; "svg"; "SVG"]
 let uri_is_video uri = uri_has_ext uri ["mp4"; "MP4"; "mov"; "MOV"]
 let uri_is_audio uri = uri_has_ext uri ["mp3"; "MP3"]
 
@@ -21,6 +21,7 @@ let xsd_double = "http://www.w3.org/2001/XMLSchema#double"
 let xsd_date = "http://www.w3.org/2001/XMLSchema#date"
 let xsd_dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 let xsd_time = "http://www.w3.org/2001/XMLSchema#time"
+let xsd_duration = "http://www.w3.org/2001/XMLSchema#duration"
 let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
 let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
@@ -40,6 +41,9 @@ let owl_DatatypeProperty = "http://www.w3.org/2002/07/owl#DatatypeProperty"
 
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
+
+let schema_position = "http://schema.org/position"
+let schema_logo = "http://schema.org/logo"
 
 let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"

@@ -1,4 +1,33 @@
-# description of main changes
+# description of main changes that impact interface with outside
+
+2018-08-31
+
+- support for xsd:duration datatype
+  - new grammar item 'duration'
+  - new Lisql.input_type `Duration, used in increments
+- new configurations
+  - Lis.config_max_increment_samples: max size of focus terms to use for computing increments
+
+2018-08-22
+
+- new configurations
+  - Ontology.config_sort_by_position: use schema:position to get position in suggestion lists
+  - Ontology.config_show_logo: use schema:logo to get icons to show on left of labels
+  - Html.config_logo_height: height in pixels for icons
+  - Html.config_sort_by_frequency_terms: was the default, if inactive, lexicographic ordering
+  - Html.config_sort_by_frequency_properties: was the default, if inactive, lexicographic ordering
+  - Osparklis.config_short_permalink: whether to shorten permalink URLs (with bit.ly)
+- permalinks
+  - more stable by ignoring values in HTML on load, rather using hard-coded default values to decide what goes into the permalink
+  - inclusion of focus path
+- grammar
+  - concept/concepts, entity/entities, modifier/modifiers replaced by item/items
+    - the nature of items has been moved to the panel headers as static HTML
+- pseudo xml
+  - DummyFocus split into FocusSpan and FocusName
+    - FocusSpan: the green highlighted subquery
+    - FocusName: the description of the focus id (highlighted header)
+      - this element has to be filled with (Html.html_id_ng state current_id_of_focus)
 
 2018-05-29    N-ary relations, reified triples, support of wikidata
 

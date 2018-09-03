@@ -5,9 +5,9 @@
 *)
 
 (* ontological relations *)
-class virtual relation = [Rdf.uri,Rdf.uri list] Cache.cache
-class pure_relation get_images = [Rdf.uri,Rdf.uri list] Cache.pure_cache ~get:get_images
-class tabled_relation default_images bind_images = [Rdf.uri,Rdf.uri list] Cache.tabled_cache ~default:default_images ~bind:bind_images
+class virtual ['a] relation = [Rdf.uri, 'a list] Cache.cache
+class ['a] pure_relation get_images = [Rdf.uri, 'a list] Cache.pure_cache ~get:get_images
+class ['a] tabled_relation default_images bind_images = [Rdf.uri, 'a list] Cache.tabled_cache ~default:default_images ~bind:bind_images
 
 (* default void hierarchy *)
 let no_relation = new pure_relation (fun uri -> [])
@@ -19,7 +19,8 @@ let sparql_relation
       ~(endpoint : string)
       ~(froms : Rdf.uri list)
       ~(make_pattern : Sparql.var -> Sparql.var -> Sparql.pattern)
-    : relation =
+      ~(image_opt_of_term : Rdf.term -> 'a option)
+    : 'a relation =
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_images l_uri k =
     Jsutils.firebug ("Retrieving image URIs in " ^ name ^ ", for " ^ string_of_int (List.length l_uri) ^ " URIs");
@@ -40,20 +41,20 @@ let sparql_relation
 		 optional
 		   (make_pattern v_source v_image) ]))
 	l_l_uri in
-    let add_source_image ht_images uri_source uri_image =
+    let add_source_image ht_images uri_source image =
       let images_ref =
 	try Hashtbl.find ht_images uri_source
 	with Not_found ->
 	  let imgs_ref = ref [] in
 	  Hashtbl.add ht_images uri_source imgs_ref;
 	  imgs_ref in
-      if not (List.mem uri_image !images_ref)
-      then images_ref := uri_image :: !images_ref
+      if not (List.mem image !images_ref)
+      then images_ref := image :: !images_ref
       else ()
     in
     Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
       (fun l_results ->
-	let ht_images : (Rdf.uri, Rdf.uri list ref) Hashtbl.t = Hashtbl.create 101 in
+	let ht_images : (Rdf.uri, 'a list ref) Hashtbl.t = Hashtbl.create 101 in
 	List.iter
 	  (fun results ->
 	   try
@@ -62,8 +63,9 @@ let sparql_relation
 	     (* some endpoints do not include ?image when no binding at all (in OPTIONAL) *)
 	     List.iter
 	       (fun binding ->
-		match binding.(i), (match j_opt with None -> None | Some j -> binding.(j)) with
-		| Some (Rdf.URI uri_source), Some (Rdf.URI uri_image) -> add_source_image ht_images uri_source uri_image
+		match binding.(i), (match j_opt with None -> None | Some j -> match binding.(j) with None -> None | Some t -> image_opt_of_term t) with
+		(*		| Some (Rdf.URI uri_source), Some (Rdf.URI uri_image) -> add_source_image ht_images uri_source uri_image*)
+		| Some (Rdf.URI uri_source), Some image -> add_source_image ht_images uri_source image
 		| Some (Rdf.URI uri_source), None -> Hashtbl.add ht_images uri_source (ref []) (* recording absence of parents *)
 		| _ -> ())
 	       results.Sparql_endpoint.bindings
@@ -81,7 +83,7 @@ let sparql_relation
   new tabled_relation (fun uri -> []) bind_images
 
 (* SPARQL-based relation, retrieving data from endpoint *)
-let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : relation =
+let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) ~(image_opt_of_term : Rdf.term -> 'a option) : 'a relation =
   let make_pattern v_source v_image : Sparql.pattern =
     let open Sparql in
     let uri_property = (uri property :> pred) in
@@ -94,9 +96,10 @@ let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : 
     ~endpoint
     ~froms
     ~make_pattern
+    ~image_opt_of_term
 
 (* SPARQL-based hierarchy, retrieving hierarchical relation from endpoint *)    
-let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : relation =
+let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
   let make_pattern v_child v_parent : Sparql.pattern =
     let open Sparql in
     let has_parent s o =
@@ -123,14 +126,10 @@ let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse :
     ~endpoint
     ~froms
     ~make_pattern
-
+    ~image_opt_of_term:(function Rdf.URI uri -> Some uri | _ -> None)
     
 (* pool of hierarchies for an endpoint as a configuration *)
 
-type relation_spec =
-  | Property of Rdf.uri * bool (* inverse *)
-  | Hierarchy of Rdf.uri * bool (* inverse *)
-    
 let sparql_relations =
   object (self)
     inherit Config.input as super
@@ -138,32 +137,53 @@ let sparql_relations =
     method get_permalink = []
     method set_permalink _ = ()
 
-    val spec_relation : (relation_spec, relation) Hashtbl.t = Hashtbl.create 7
+    val ht_property_number : (Rdf.uri, float relation) Hashtbl.t = Hashtbl.create 7
+    val ht_property_uri : (Rdf.uri * bool (* inverse *), Rdf.uri relation) Hashtbl.t = Hashtbl.create 7
+    val ht_hierarchy : (Rdf.uri * bool (* inverse *), Rdf.uri relation) Hashtbl.t = Hashtbl.create 7
 											     
     method init = ()
       
     method set_endpoint url =
       super#set_endpoint url;
-      Hashtbl.clear spec_relation
+      Hashtbl.clear ht_property_number;
+      Hashtbl.clear ht_property_uri;
+      Hashtbl.clear ht_hierarchy
 
     method reset = ()
 
-    method get ~(froms : Rdf.uri list) (rel_spec : relation_spec) : relation =
-      try Hashtbl.find spec_relation rel_spec
+    method get_property_number ~(froms : Rdf.uri list) ~(property : Rdf.uri) : float relation =
+      try Hashtbl.find ht_property_number property
       with Not_found ->
-	let rel =
-	  match rel_spec with
-	  | Property (property,inverse) -> sparql_relation_property ~endpoint ~froms ~property ~inverse
-	  | Hierarchy (property,inverse) -> sparql_relation_hierarchy ~endpoint ~froms ~property ~inverse in
-	Hashtbl.add spec_relation rel_spec rel;
+	let rel = sparql_relation_property
+		    ~endpoint ~froms ~property ~inverse:false
+		    ~image_opt_of_term:(function Rdf.Number (f,_,_) -> Some f | _ -> None) in
+	Hashtbl.add ht_property_number property rel;
 	rel
 
-    method subclassof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subClassOf, false))
-    method subpropertyof ~froms = self#get ~froms (Hierarchy (Rdf.rdfs_subPropertyOf, false))
-    method domain ~froms = self#get ~froms (Property (Rdf.rdfs_domain, false))
-    method range ~froms = self#get ~froms (Property (Rdf.rdfs_range, false))
-    method inheritsthrough ~froms = self#get ~froms (Property (Rdf.rdfs_inheritsThrough, false))
-													 
+    method get_property_uri ~(froms : Rdf.uri list) ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
+      try Hashtbl.find ht_property_uri (property,inverse)
+      with Not_found ->
+	let rel = sparql_relation_property
+		    ~endpoint ~froms ~property ~inverse
+		    ~image_opt_of_term:(function Rdf.URI uri -> Some uri | _ -> None) in
+	Hashtbl.add ht_property_uri (property,inverse) rel;
+	rel
+
+    method get_hierarchy ~(froms : Rdf.uri list) ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
+      try Hashtbl.find ht_hierarchy (property,inverse)
+      with Not_found ->
+	let rel = sparql_relation_hierarchy ~endpoint ~froms ~property ~inverse in
+	Hashtbl.add ht_hierarchy (property,inverse) rel;
+	rel
+	  
+    method subclassof ~froms = self#get_hierarchy ~froms ~property:Rdf.rdfs_subClassOf ~inverse:false
+    method subpropertyof ~froms = self#get_hierarchy ~froms ~property:Rdf.rdfs_subPropertyOf ~inverse:false
+    method domain ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_domain ~inverse:false
+    method range ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_range ~inverse:false
+    method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
+
+    method position ~froms = self#get_property_number ~froms ~property:Rdf.schema_position
+    method logo ~froms = self#get_property_uri ~froms ~property:Rdf.schema_logo ~inverse:false
   end
 							     
 (* configuration *)
@@ -174,13 +194,15 @@ open Jsutils
 class ['relation] config_relation ~(key : string)
   ~(input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_relation : 'relation) ~(custom_relation : froms:(Rdf.uri list) -> 'relation) () =
+  ~(inactive_relation : 'relation)
+  ~(active_relation : froms:(Rdf.uri list) -> 'relation)
+  ~(default : bool) () =
 object (self)
   inherit Config.input as super
-  val mutable init_on = false
+  val mutable init_on = default
   val mutable current_froms = []
-  val mutable current_on = false
-  val mutable current_relation = default_relation
+  val mutable current_on = default
+  val mutable current_relation = inactive_relation
 
   method private get_on input =
     to_bool input##checked
@@ -197,10 +219,10 @@ object (self)
       if not current_on
       then begin
 	Jsutils.firebug "Using default relation";
-	default_relation end
+	inactive_relation end
       else begin
 	Jsutils.firebug "Using custom relation";
-	custom_relation ~froms:config_graphs#froms
+	active_relation ~froms:config_graphs#froms
       end
 
   method private change_relation input : unit =
@@ -217,12 +239,11 @@ object (self)
     self#define_relation
 
   method get_permalink =
-    if current_on <> init_on
+    if current_on <> default
     then [(key, string_of_bool current_on)]
     else []
   method set_permalink args =
-    try self#set_on (bool_of_string (List.assoc key args))
-    with _ -> ()
+    self#set_on (try bool_of_string (List.assoc key args) with _ -> default)
 
   method on : bool = current_on
   method value : 'relation = current_relation
@@ -246,22 +267,75 @@ let config_class_hierarchy =
     ~key:"class_hierarchy"
     ~input_selector:"#input-class-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_relation:no_relation
-    ~custom_relation:sparql_relations#subclassof
+    ~inactive_relation:no_relation
+    ~active_relation:sparql_relations#subclassof
+    ~default:true
     ()
 let config_property_hierarchy =
   new config_relation
     ~key:"property_hierarchy"
     ~input_selector:"#input-property-hierarchy"
     ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_relation:no_relation
-    ~custom_relation:sparql_relations#subpropertyof
+    ~inactive_relation:no_relation
+    ~active_relation:sparql_relations#subpropertyof
+    ~default:true
     ()
 let config_hierarchy_inheritance =
   new config_relation
       ~key:"hierarchy_inheritance"
       ~input_selector:"#input-hierarchy-inheritance"
       ~config_graphs:Sparql_endpoint.config_schema_graphs
-      ~default_relation:no_relation
-      ~custom_relation:sparql_relations#inheritsthrough
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#inheritsthrough
+      ~default:false
       ()
+
+let config_sort_by_position =
+  new config_relation
+      ~key:"sort_by_position"
+      ~input_selector:"#input-sort-by-position"
+      ~config_graphs:Sparql_endpoint.config_schema_graphs
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#position
+      ~default:false
+      ()
+let config_show_logo =
+  new config_relation
+      ~key:"show_logo"
+      ~input_selector:"#input-show-logo"
+      ~config_graphs:Sparql_endpoint.config_schema_graphs
+      ~inactive_relation:no_relation
+      ~active_relation:sparql_relations#logo
+      ~default:false
+      ()
+
+(* utilities for enqueuing and syncing *)
+
+let enqueue_entity uri =
+  config_sort_by_position#value#enqueue uri;
+  config_show_logo#value#enqueue uri
+let enqueue_class uri =
+  config_class_hierarchy#value#enqueue uri;
+  config_hierarchy_inheritance#value#enqueue uri;
+  enqueue_entity uri
+let enqueue_property uri =
+  config_property_hierarchy#value#enqueue uri;
+  config_hierarchy_inheritance#value#enqueue uri;
+  enqueue_entity uri
+let enqueue_pred uri =
+  enqueue_entity uri
+let enqueue_arg uri =
+  enqueue_entity uri
+
+let sync_entities k =
+  config_sort_by_position#value#sync
+    (fun () ->
+     config_show_logo#value#sync k)
+let sync_concepts k =
+  config_class_hierarchy#value#sync
+    (fun () ->
+     config_property_hierarchy#value#sync
+       (fun () ->
+	config_hierarchy_inheritance#value#sync
+	  (fun () ->
+	   sync_entities k)))

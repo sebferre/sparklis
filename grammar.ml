@@ -14,7 +14,7 @@ type func_syntax =
 | `Pattern of [`Kwd of string | `Func of string | `Arg of int] list ]
 
 class virtual grammar =
-object
+object (self)
   method virtual adjective_before_noun : bool
 
   method virtual thing : string
@@ -71,6 +71,7 @@ object
   method virtual date : string
   method virtual time : string
   method virtual date_and_time : string
+  method virtual duration : string
   method virtual uri : string
 
   method virtual aggreg_syntax : Lisql.aggreg -> aggreg_syntax
@@ -127,9 +128,10 @@ object
 
   method virtual msg_permalink : string
   method virtual result_results : string * string
-  method virtual entity_entities : string * string
-  method virtual concept_concepts : string * string
-  method virtual modifier_modifiers : string * string
+  method virtual item_items : string * string
+  method entity_entities : string * string = self#item_items
+  method concept_concepts : string * string = self#item_items
+  method modifier_modifiers : string * string = self#item_items
 end
 
 let english =
@@ -205,6 +207,7 @@ object
   method date = "date"
   method time = "time"
   method date_and_time = "date and time"
+  method duration = "duration"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -330,9 +333,10 @@ object
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
   method result_results = "result", "results"
-  method entity_entities = "entity", "entities"
+  method item_items = "item", "items"
+  (*method entity_entities = "entity", "entities"
   method concept_concepts = "concept", "concepts"
-  method modifier_modifiers = "modifier", "modifiers"
+  method modifier_modifiers = "modifier", "modifiers"*)
 end
 
 let french =
@@ -353,7 +357,7 @@ object
   method has_as_a ~following = "a pour"
   method relative_that = "qui"
   method relative_that_object = "que"
-  method whose = "dont l'"
+  method whose = "dont le·a"
   method according_to = "selon"
   method which = "lequel"
   method hierarchy_in ~inv ~in_ =
@@ -363,8 +367,8 @@ object
   method and_ = "et"
   method or_ = "ou"
   method not_ = "pas"
-  method optionally = "optionellement"
-  method optional = "optionel(le)"
+  method optionally = "optionnellement"
+  method optional = "optionnel·le"
 
   method of_ = "de"
   method genetive_suffix = None
@@ -372,14 +376,14 @@ object
   method rel_to = "à"
   method at = "au" (* à l'/le/la *)
 
-  method a_an ~following = "un(e)"
-  method the = "l'"
+  method a_an ~following = "un·e"
+  method the = "le·a"
   method every = "chaque"
   method each = "chaque"
-  method no = "aucun(e)"
-  method any = "n'importe quel(le)"
+  method no = "aucun·e"
+  method any = "n'importe quel·le"
   method all = "tous"
-  method quantif_one = "un(e)"
+  method quantif_one = "un·e"
   method quantif_of = "parmi"
   method something = "quelque chose"
   method anything = "n'importe quoi"
@@ -392,7 +396,7 @@ object
   method n_th n =
     let suffix =
       if n = 1 then "er"
-      else "ième" in
+      else "e" in
     string_of_int n ^ suffix
 
   method string = "chaine"
@@ -401,16 +405,17 @@ object
   method date = "date"
   method time = "heure"
   method date_and_time = "date et heure"
+  method duration = "durée"
   method uri = "URI"
 
   method aggreg_syntax = function
   | Lisql.NumberOf -> `The, "nombre", None
   | Lisql.ListOf -> `The, "liste", None
   | Lisql.Sample -> `A, "échantillon", None
-  | Lisql.Total _ -> `The, "somme", Some "total(e)"
-  | Lisql.Average _ -> `The, "moyenne", Some "moyen(ne)"
-  | Lisql.Maximum _ -> `The, "maximum", Some "maximal(e)"
-  | Lisql.Minimum _ -> `The, "minimum", Some "minimal(e)"
+  | Lisql.Total _ -> `The, "somme", Some "total·e"
+  | Lisql.Average _ -> `The, "moyenne", Some "moyen·ne"
+  | Lisql.Maximum _ -> `The, "maximum", Some "maximal·e"
+  | Lisql.Minimum _ -> `The, "minimum", Some "minimal·e"
 
   method func_syntax = function
   | `Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]
@@ -483,8 +488,8 @@ object
   method before = "avant"
   method interval_from = "de"
   method interval_to = "à"
-  method higher_or_equal_to = "supérieur(e) ou égal à"
-  method lower_or_equal_to = "inférieur(e) ou égal à"
+  method higher_or_equal_to = "supérieur·e ou égal·e à"
+  method lower_or_equal_to = "inférieur·e ou égal·e à"
   method interval_between = "entre"
   method interval_and = "et"
   method language = "langage"
@@ -526,9 +531,10 @@ object
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
   method result_results = "résultat", "résultats"
-  method entity_entities = "entité", "entités"
+  method item_items = "élément", "éléments"
+  (*method entity_entities = "entité", "entités"
   method concept_concepts = "concept", "concepts"
-  method modifier_modifiers = "modifieur", "modifieurs"
+  method modifier_modifiers = "modifieur", "modifieurs"*)
 end
 
 
@@ -598,6 +604,7 @@ object
   method date = "fecha"
   method time = "hora"
   method date_and_time = "fecha y hora"
+  method duration = "duración"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -723,9 +730,10 @@ object
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"
-  method entity_entities = "entidad", "entidades"
+  method item_items = "elemento", "elementos"
+  (*method entity_entities = "entidad", "entidades"
   method concept_concepts = "concepto", "conceptos"
-  method modifier_modifiers = "modificador", "modificadores"
+  method modifier_modifiers = "modificador", "modificadores"*)
 end
 
 
@@ -794,6 +802,7 @@ object
   method date = "datum"
   method time = "tijd"
   method date_and_time = "datum en tijd"
+  method duration = "duur"
   method uri = "URI"
 
   method aggreg_syntax = function
@@ -919,7 +928,8 @@ object
 
   method msg_permalink = "De volgende URL verwijst naar het huidige endpoint en de query (CTRL+C, Enter om naar het klembord te kopiëren"
   method result_results = "resultaat", "resultaten"
-  method entity_entities = "entiteit", "entiteiten"
+  method item_items = "item", "items"
+  (*method entity_entities = "entiteit", "entiteiten"
   method concept_concepts = "concept", "concepten"
-  method modifier_modifiers = "modifier", "modifiers"
+  method modifier_modifiers = "modifier", "modifiers"*)
 end
