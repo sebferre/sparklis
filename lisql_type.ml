@@ -371,8 +371,8 @@ let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_cons
     
 
 let of_focus env : focus -> focus_type_constraints = function
-  | AtExpr (expr,ctx) -> { input_constr = constr_of_elt_expr env expr;
-			   output_constr = constr_of_ctx_expr env ctx }
+  | AtExpr (expr,ctx) -> { input_constr = (try constr_of_elt_expr env expr with TypeError -> None);
+			   output_constr = (try constr_of_ctx_expr env ctx with TypeError -> None) }
   | focus ->
     match id_of_focus focus with
     | None -> { input_constr = None; output_constr = None }
