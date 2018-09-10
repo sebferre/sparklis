@@ -1077,6 +1077,8 @@ let translate () =
 
 let _ =
   Firebug.console##log(string "Starting Sparklis");
+  if not Sparql_endpoint.valid_domain then
+    Dom_html.window##location##replace(string "http://www.irisa.fr/LIS/ferre/sparklis/");
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
