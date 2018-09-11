@@ -177,7 +177,9 @@ let expr_func (f : string) (l_expr : _ any_expr list) : expr = f ^< "(" ^< conca
 let expr_infix (op : string) (l_expr : _ any_expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
 let expr_regex (expr : _ any_expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
 let expr_comp (relop : string) (expr1 : _ any_expr) (expr2 : _ any_expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
-let expr_not_in (t : _ any_term) (le : _ any_expr list) : expr = t ^^ " NOT IN (" ^< concat ", " le ^> ")"
+let expr_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " IN (" ^< concat ", " le ^> ")"
+let expr_not_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " NOT IN (" ^< concat ", " le ^> ")"
+let expr_coalesce (le : _ any_expr list) : expr = "COALESCE(" ^< concat ", " le ^> ")"
 
 let conv_numeric (e : _ any_expr) : expr = expr_func "xsd:double" [e]
 

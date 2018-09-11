@@ -106,12 +106,26 @@ let wikidata_entity_of_predicate uri =
   
 (* from label property and optional language *)
 let sparql_lexicon
+    ~(kind : string)
     ~(default_label : Rdf.uri -> 'a)
-    ~(endpoint : string) ~(froms: Rdf.uri list) ~(property : string) ?(language : string option)
+    ~(endpoint : string) ~(froms: Rdf.uri list)
+    ?(pref_properties : string list = [Rdf.rdfs_label])
+    ?(pref_languages : string list = [])
     (map : string -> 'a) : 'a lexicon =
+  (* avoiding empty lists for well-foundness *)
+  let pref_properties = if pref_properties = [] then [Rdf.rdfs_label] else pref_properties in
+  (* defining preference hash tables *)
+  let make_ht_prefs (prefs : string list) : (string,int) Hashtbl.t =
+    let ht = Hashtbl.create 10 in
+    let prio = ref (List.length prefs) in
+    prefs |> List.iter (fun x -> Hashtbl.add ht x !prio; decr prio);
+    ht in
+  let ht_pref_properties = make_ht_prefs pref_properties in
+  let ht_pref_languages = make_ht_prefs pref_languages in
+  (* *)
   let ajax_pool = new Sparql_endpoint.ajax_pool in
   let bind_labels l_uri k =
-    Jsutils.firebug ("Retrieving labels for " ^ string_of_int (List.length l_uri) ^ " URIs");
+    Jsutils.firebug ("Retrieving " ^ kind ^ " labels for " ^ string_of_int (List.length l_uri) ^ " URIs");
     let l_uri =
       if Rdf.config_wikidata_mode#value
       then List.map wikidata_entity_of_predicate l_uri (* converting Wikidata predicates to entities *)
@@ -120,22 +134,31 @@ let sparql_lexicon
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then Common.bin_list 20 l_uri (* creating bins of 20 uris max *)
       else [l_uri] in
-    let u, l = "u", "l" in
+    let u, l, p = "u", "l", "p" in
     let l_sparql =
       let open Sparql in
-      let v_u, v_l = Sparql.var u, Sparql.var l in
+      let v_u, v_l, v_p = Sparql.var u, Sparql.var l, Sparql.var p in
       List.map
 	(fun l_uri ->
-	  select ~projections:[(`Bare,u); (`Bare,l)] ~froms
+	  select ~projections:[(`Bare,u); (`Bare,l); (`Bare,p)] ~froms
 	    (join
 	       [ values v_u
 		   (List.map (fun x_uri -> (uri x_uri :> term)) l_uri);
 		 optional
 		   (join
-		      ( triple (v_u :> term) (uri property :> pred) (v_l :> term)
-			:: ( match language with
-			| None -> []
-			| Some lang -> [filter (expr_comp "=" (expr_func "lang" [(v_l :> expr)]) (string lang :> expr))] ))) ]))
+		      ( union
+			  (List.map
+			     (fun property ->
+			      join [ triple (v_u :> term) (uri property :> pred) (v_l :> term);
+				     bind (uri property :> expr) v_p ])
+			     pref_properties);
+			:: (if pref_languages = []
+			    then [] (* no language constraint *)
+			    else [filter
+				    (expr_in (expr_coalesce [expr_func "lang" [(v_l :> expr)]; (string "" :> expr)])
+					     (List.map
+						(fun language -> (string language :> expr))
+						pref_languages))] )) ) ]))
 	l_l_uri in
     let add_uri_label uri label_opt lui =
       if Common.has_prefix uri "http://www.wikidata.org/entity/P"
@@ -172,39 +195,66 @@ let sparql_lexicon
 	(uri,info_opt)::lui
     in
     Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
-      (fun l_results ->
+       (fun l_results ->
+	let ht_labels : (Rdf.uri, ((int * int) * string) option) Hashtbl.t = Hashtbl.create 31 in
+	List.iter
+	  (fun results ->
+	   try
+	     let i_u = List.assoc u results.Sparql_endpoint.vars in
+	     let i_l = List.assoc l results.Sparql_endpoint.vars in
+	     let i_p = List.assoc p results.Sparql_endpoint.vars in
+	     List.iter
+	       (fun binding ->
+		match binding.(i_u), binding.(i_l), binding.(i_p) with
+		| Some (Rdf.URI uri),
+		  Some (Rdf.PlainLiteral _ | Rdf.TypedLiteral _ as label_term),
+		  Some (Rdf.URI prop) ->
+		   let label, lang =
+		     match label_term with
+		     | Rdf.PlainLiteral (label, lang) -> label, lang
+		     | Rdf.TypedLiteral (label, _) -> label, ""
+		     | _ -> assert false in
+		   let prio =
+		     (try Hashtbl.find ht_pref_properties prop with _ -> 0),
+		     (try Hashtbl.find ht_pref_languages lang with _ -> 0) in
+		   let is_better_label =
+		     try
+		       match Hashtbl.find ht_labels uri with
+		       | Some (current_prio, _) -> prio > current_prio
+		       | None -> true
+		     with _ -> true in
+		   if is_better_label then
+		     Hashtbl.replace ht_labels uri (Some (prio,label))
+		| Some (Rdf.URI uri), None, _ ->
+		   if not (Hashtbl.mem ht_labels uri) then
+		     Hashtbl.add ht_labels uri None
+		| _ -> ())
+	       results.Sparql_endpoint.bindings
+	   with _ -> ())
+	  l_results;
 	let l_uri_info_opt =
-	  List.fold_left
-	    (fun lui results ->
-	     try
-	       let i = List.assoc u results.Sparql_endpoint.vars in
-	       let j = List.assoc l results.Sparql_endpoint.vars in
-	       List.fold_left
-		 (fun lui binding ->
-		  match binding.(i), binding.(j) with
-		  | Some (Rdf.URI uri), Some (Rdf.PlainLiteral (label,_) | Rdf.TypedLiteral (label,_)) -> add_uri_label uri (Some label) lui
-		  | Some (Rdf.URI uri), None -> add_uri_label uri None lui
-		  | _ -> lui)
-		 lui results.Sparql_endpoint.bindings
-	     with _ -> lui)
-	    [] l_results in
+	  Hashtbl.fold
+	    (fun uri prio_label_opt lui ->
+	     match prio_label_opt with
+	     | Some (prio,label) -> add_uri_label uri (Some label) lui
+	     | None -> add_uri_label uri None lui)
+	    ht_labels [] in
 	k l_uri_info_opt)
-      (fun code ->
-	ajax_pool#alert ("The labels could not be retrieved for property <"
-			 ^ property ^ (match language with None -> ">." | Some lang -> "> and for language tag @" ^ lang ^ ".")
-			 ^ " This may be because the endpoint does not support the VALUES operator.");
+       (fun code ->
+	ajax_pool#alert ("The " ^ kind ^ " labels could not be retrieved."
+			 ^ " This may be because the endpoint does not support the VALUES or BIND operators.");
 	k [])
   in
   new tabled_lexicon default_label bind_labels
 
-let sparql_entity_lexicon ~endpoint ~froms ~property ?language () =
-  sparql_lexicon ~default_label:name_of_uri_entity ~endpoint ~froms ~property ?language (fun l -> l)
-let sparql_class_lexicon ~endpoint ~froms ~property ?language () =
-  sparql_lexicon ~default_label:name_of_uri_concept ~endpoint ~froms ~property ?language (fun l -> l)
-let sparql_property_lexicon ~endpoint ~froms ~property ?language () =
-  sparql_lexicon ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ~property ?language syntagm_of_property_name
-let sparql_arg_lexicon ~endpoint ~froms ~property ?language () =
-  sparql_lexicon ~default_label:syntagm_name_of_uri_arg ~endpoint ~froms ~property ?language syntagm_of_arg_name
+let sparql_entity_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"entity" ~default_label:name_of_uri_entity ~endpoint ~froms ?pref_properties ?pref_languages (fun l -> l)
+let sparql_class_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"class" ~default_label:name_of_uri_concept ~endpoint ~froms ?pref_properties ?pref_languages (fun l -> l)
+let sparql_property_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"property" ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_property_name
+let sparql_arg_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"argument" ~default_label:syntagm_name_of_uri_arg ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_arg_name
 
 
 (* configuration *)
@@ -212,10 +262,12 @@ let sparql_arg_lexicon ~endpoint ~froms ~property ?language () =
 open Js
 open Jsutils
 
+let regexp_sep = Regexp.regexp "[,;][ ]*"
+       
 class ['lexicon] config_input ~(key : string)
   ~(select_selector : string) ~(input_selector : string) ~(lang_input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_lexicon : 'lexicon) ~(custom_lexicon : endpoint:string -> froms:(Rdf.uri list) -> property:Rdf.uri -> ?language:string -> unit -> 'lexicon) () =
+  ~(default_lexicon : 'lexicon) ~(custom_lexicon : endpoint:string -> froms:(Rdf.uri list) -> ?pref_properties:(Rdf.uri list) -> ?pref_languages:(string list) -> unit -> 'lexicon) () =
   let other = "other" in
   let key_select = key ^ "_select" in
   let key_property = key ^ "_property" in
@@ -250,13 +302,22 @@ object (self)
     end
 
   method private define_lexicon : unit =
+    let pref_properties =
+      let l = Regexp.split regexp_sep current_property in
+      List.filter ((<>) "") l in
     current_lexicon <-
-      if current_property = ""
+      if pref_properties = []
       then default_lexicon
-      else custom_lexicon ~endpoint
-	~froms:config_graphs#froms
-	~property:current_property
-	?language:(if current_lang = "" then None else Some current_lang) ()
+      else
+	let pref_languages =
+	  if current_lang = ""
+	  then []
+	  else Regexp.split regexp_sep current_lang in
+	custom_lexicon ~endpoint
+		       ~froms:config_graphs#froms
+		       ~pref_properties
+		       ~pref_languages
+		       ()
 
   method private change_lexicon select input lang_input : unit =
     let fr = config_graphs#froms in

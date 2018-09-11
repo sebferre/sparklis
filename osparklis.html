@@ -94,7 +94,7 @@
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=INSEE&endpoint=http%3A//rdf.insee.fr/sparql">
+		<a href="osparklis.html?title=INSEE&endpoint=http%3A//rdf.insee.fr/sparql&entity_lexicon_property=http%3A//www.w3.org/2000/01/rdf-schema%23label%2C%20http%3A//www.w3.org/2004/02/skos/core%23prefLabel%2C%20http%3A//rdf.insee.fr/def/geo%23nom&entity_lexicon_lang=fr&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_lang=fr%2Cen%2C&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_lang=fr%2Cen%2C&lang=fr">
 		  INSEE
 		</a>
 	      </li>
@@ -139,7 +139,7 @@
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=Nomisma&endpoint=http://nomisma.org/query&sparklis-query=%5BVId%5DReturn%28Det%28An%281%2CModif%28Select%2CUnordered%29%2CClass%28%22http%3A//nomisma.org/ontology%23NumismaticObject%22%29%29%2CNone%29%29&sparklis-path=D&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_select=http://www.w3.org/2004/02/skos/core%23prefLabel&entity_lexicon_lang=en">
+		<a href="osparklis.html?title=Nomisma&endpoint=http://nomisma.org/query&sparklis-query=%5BVId%5DReturn%28Det%28An%281%2CModif%28Select%2CUnordered%29%2CClass%28%22http%3A//nomisma.org/ontology%23NumismaticObject%22%29%29%2CNone%29%29&sparklis-path=D&proxy=false&method_get=true&class_hierarchy=false&property_hierarchy=false&intentional_init_concepts=false&entity_lexicon_property=http%3A//www.w3.org/2000/01/rdf-schema%23label%2C%20http%3A//www.w3.org/2004/02/skos/core%23prefLabel%2C%20http%3A//purl.org/dc/terms/title%2C%20http%3A//xmlns.com/foaf/0.1/name&entity_lexicon_lang=en%2C">
 		  Nomisma
 		</a>
 	      </li>
@@ -610,31 +610,30 @@
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 		<option value="http://purl.org/dc/terms/title">dct:title</option>
-		<option value="other">...</option>
+		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URI of the desired property</span>
-		<span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
-		<span class="tooltip lang-es">Ingrese aquí la URI de la propiedad requerida</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschap</span>
-		<input id="config-label-entity-input" type="url">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-label-entity-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
-	      <span class="texte lang-en"> and only with language (optional) </span>
-	      <span class="texte lang-fr"> et seulement avec la langue (optionnel) </span>
-	      <span class="texte lang-es"> y sólo con el idioma (opcional) </span>
-	      <span class="texte lang-nl"> alleen met taal (optioneel) </span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the desired language tag</span>
-		<span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
-		<span class="tooltip lang-es">Ingrese aquí el tag del idioma requerido</span>
-		<span class="tooltip lang-nl">Voer hier de gewenste taaltag in</span>
-		
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-entity-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
-	      <input id="config-label-entity-input-lang" type="text" size="3">
-	      <span class="texte lang-en"> (e.g., 'en' for English, 'fr' for French) </span>
-	      <span class="texte lang-fr"> (ex., 'en' pour l'anglais, 'fr' pour le français) </span>
-	      <span class="texte lang-es"> (ej., 'en' para Inglés, 'fr' para Francés) </span>
-	      <span class="texte lang-nl"> (bijv., 'en' voor Engels, 'fr' voor Frans) </span>
+	      <span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+	      <span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+	      <span class="texte lang-es"> (ej., 'en,fr' para Inglés o Francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
 	  <li class="list-group-item">
@@ -649,30 +648,30 @@
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 		<option value="http://purl.org/dc/terms/title">dct:title</option>
-		<option value="other">...</option>
+		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URI of the desired property</span>
-		<span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
-		<span class="tooltip lang-es">Ingrese aquí la URI de la propiedad requerida</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschap</span>
-		<input id="config-label-class-input" type="url">
+		<span class="tooltip lang-en">Enter here the URI of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-label-class-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
-	      <span class="texte lang-en">and only with language (optional)</span>
-	      <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
-	      <span class="texte lang-es">y sólo con el idioma (opcional) </span>
-	      <span class="texte lang-nl">en alleen met taal (optioneel)</span>
+	      <span class="texte lang-en"> with languages (optional)</span>
+	      <span class="texte lang-fr"> avec les langues (optionnel)</span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel)</span>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the desired language tag</span>
-		<span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
-		<span class="tooltip lang-es">Ingrese aquí el tag del idioma requerido</span>
-		<span class="tooltip lang-nl">Voer hier de gewenste taaltag in</span>
-		<input id="config-label-class-input-lang" type="text" size="3">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-class-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
-	      <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
-	      <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
-	      <span class="texte lang-es">(ej., 'en' para Inglés, 'fr' para Francés) </span>
-	      <span class="texte lang-nl"> (bijv., 'en' voor Engels, 'fr' voor Frans) </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para Inglés o Francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
 	  <li class="list-group-item">
@@ -687,30 +686,30 @@
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 		<option value="http://purl.org/dc/terms/title">dct:title</option>
-		<option value="other">...</option>
+		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URI of the desired property</span>
-		<span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
-		<span class="tooltip lang-es">Ingrese aquí la URI de la propiedad requerida</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschap</span>
-		<input id="config-label-property-input" type="url">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-label-property-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
-	      <span class="texte lang-en">and only with language (optional)</span>
-	      <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
-	      <span class="texte lang-es">y sólo con el idioma (opcional) </span>
-	      <span class="texte lang-nl">en alleen met taal (optioneel)</span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel)</span>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the desired language tag</span>
-		<span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
-		<span class="tooltip lang-es">Ingrese aquí el tag del idioma requerido</span>
-		<span class="tooltip lang-nl">Voer hier de gewenste taaltag in</span>
-		<input id="config-label-property-input-lang" type="text" size="3">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-property-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
-	      <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
-	      <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
-	      <span class="texte lang-es">(ej., 'en' para Inglés, 'fr' para Francés) </span>
-	      <span class="texte lang-nl"> (bijv., 'en' voor Engels, 'fr' voor Frans) </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para Inglés o Francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
 	  <li class="list-group-item">
@@ -725,30 +724,30 @@
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
 		<option value="http://purl.org/dc/terms/title">dct:title</option>
-		<option value="other">...</option>
+		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URI of the desired property</span>
-		<span class="tooltip lang-fr">Entrer ici l'URI de la propriété souhaitée</span>
-		<span class="tooltip lang-es">Ingrese aquí la URI de la propiedad requerida</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschap</span>
-		<input id="config-label-arg-input" type="url">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschappen</span>
+		<input id="config-label-arg-input" type="text" size="50" placeholder="url1, url2, ...">
 	      </span>
-	      <span class="texte lang-en">and only with language (optional)</span>
-	      <span class="texte lang-fr">et seulement avec la langue (optionnel)</span>
-	      <span class="texte lang-es">y sólo con el idioma (opcional) </span>
-	      <span class="texte lang-nl">en alleen met taal (optioneel)</span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the desired language tag</span>
-		<span class="tooltip lang-fr">Entrer ici le tag de langue souhaité</span>
-		<span class="tooltip lang-es">Ingrese aquí el tag del idioma requerido</span>
-		<span class="tooltip lang-nl">Voer hier de gewenste taaltag in</span>
-		<input id="config-label-arg-input-lang" type="text" size="3">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Ingrese aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-arg-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
-	      <span class="texte lang-en">(e.g., 'en' for English, 'fr' for French)</span>
-	      <span class="texte lang-fr">(ex., 'en' pour l'anglais, 'fr' pour le français)</span>
-	      <span class="texte lang-es">(ej., 'en' para Inglés, 'fr' para Francés) </span>
-	      <span class="texte lang-nl"> (bijv., 'en' voor Engels, 'fr' voor Frans) </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para Inglés o Francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
 	  <li class="list-group-item">

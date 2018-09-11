@@ -33,6 +33,7 @@ let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
 let rdfs_domain = "http://www.w3.org/2000/01/rdf-schema#domain"
 let rdfs_range = "http://www.w3.org/2000/01/rdf-schema#range"
 let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough"
+let rdfs_label = "http://www.w3.org/2000/01/rdf-schema#label"
 
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
 let owl_Class = "http://www.w3.org/2002/07/owl#Class"
