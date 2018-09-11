@@ -1093,12 +1093,12 @@ let _ =
     let default_focus = ref Lisql.factory#home_focus in
     let _ = (* changing endpoint, title, and focus if permalink *)
       let args = Url.Current.arguments in
-      let args =
+      (*let args =
 	match args with
 	  | [] -> []
 	  | (k,v)::l ->
-	    let k = try String.sub k 1 (String.length k - 1) with _ -> firebug "osparklis.ml: removing '?' failed"; k in  (* bug: '?' remains in first key *)
-	    (k, v)::l in
+	     let k = try String.sub k 1 (String.length k - 1) with _ -> firebug "osparklis.ml: removing '?' failed"; k in  (* bug: '?' remains in first key ==> bug fixed in js_of_ocaml 2.7 *)
+	     (k, v)::l in*)
       Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
       (try
 	  let url = List.assoc "endpoint" args in
