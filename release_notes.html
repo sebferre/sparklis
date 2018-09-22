@@ -28,8 +28,38 @@
   </p>
 
   <ul>
+    <li><strong>September 2018</strong>
+      <ul>
+	<li>In the <em>Language and labels</em> configuration panel
+	several properties and several language tags can be given in
+	each field, in preference order. Separate them with commas,
+	and use the empty string for labels with no language tag.</li>
+      </ul>
+    </li>
+    
     <li><strong>August 2018</strong>
       <ul>
+	<li>New configuration option to distinguish two limits: for
+	the number of query results, and for the number of results to
+	use as a sample for computing the class and property
+	suggestions. This allows to increase the number of displayed
+	results without increasing the response time for class and
+	  property suggestions.</li>
+	<li>Support for date-time and duration arithmetics
+	(subtracting two dates, adding a duration to a date,
+	etc.). BEWARE: not supported by all triplestores (Jena/fuseki
+	  does support it).</li>
+	<li>New switches at the bottom of suggestion lists to choose
+	their ordering between decreasing frequency ordering (default)
+	  and logical/lexicographic ordering.</li>
+	<li>The property <code>schema:logo</code> can be used to add a
+	small icon to the labelling of entities, classes and
+	properties. Activate this feature in the <em>Presentation</em>
+	  configuration panel, and set the icon height.</li>
+	<li>The property <code>schema:position</code> can be used to
+	control the ordering of entities, classes, and properties in
+	suggestion lists. Activate this feature in
+	the <em>Presentation</em> configuration panel.</li>
 	<li>The query focus is now recorded in permalinks.</li>
 	<li>New configuration option to generate or not short URLs for permalinks.</li>
       </ul>
