@@ -207,7 +207,11 @@ let log_or (le : _ any_expr list) : expr =
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
 let path_seq (p1 : _ any_pred) (p2 : _ any_pred) : pred = p1 ^^ "/" ^< p2
-let path_alt (p1 : _ any_pred) (p2 : _ any_pred) : pred = "(" ^< p1 ^^ "|" ^< p2 ^> ")"
+let path_alt (lp : _ any_pred list) : pred =
+  match lp with
+  | [] -> assert false
+  | [p] -> p
+  | _ -> "(" ^< concat "|" lp ^> ")"
 let path_transitive (p : _ any_pred) : pred = "(" ^< p ^> ")*"
 								   
 let empty : pattern = sparql ""

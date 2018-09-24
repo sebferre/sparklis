@@ -281,6 +281,8 @@ object (self)
   val mutable current_select = ""
   val mutable current_property = ""
   val mutable current_lang = ""
+  val mutable current_pref_properties = []
+  val mutable current_pref_languages = []
   val mutable current_lexicon = default_lexicon
 
   method private get_select_property_lang select input lang_input =
@@ -301,23 +303,29 @@ object (self)
       self#changed
     end
 
+  method private define_pref_lists : unit =
+    current_pref_properties <-
+      begin
+	let l = Regexp.split regexp_sep current_property in
+	List.filter ((<>) "") l
+      end;
+    current_pref_languages <-
+      begin
+	if current_lang = ""
+	then []
+	else Regexp.split regexp_sep current_lang
+      end
+							 
   method private define_lexicon : unit =
-    let pref_properties =
-      let l = Regexp.split regexp_sep current_property in
-      List.filter ((<>) "") l in
+    self#define_pref_lists;
     current_lexicon <-
-      if pref_properties = []
+      if current_pref_properties = []
       then default_lexicon
-      else
-	let pref_languages =
-	  if current_lang = ""
-	  then []
-	  else Regexp.split regexp_sep current_lang in
-	custom_lexicon ~endpoint
-		       ~froms:config_graphs#froms
-		       ~pref_properties
-		       ~pref_languages
-		       ()
+      else custom_lexicon ~endpoint
+			  ~froms:config_graphs#froms
+			  ~pref_properties:current_pref_properties
+			  ~pref_languages:current_pref_languages
+			  ()
 
   method private change_lexicon select input lang_input : unit =
     let fr = config_graphs#froms in
@@ -352,7 +360,7 @@ object (self)
     let l = try List.assoc key_lang args with _ -> "" in
     self#set_select_property_lang s p l
 
-  method property_lang : string * string = current_property, current_lang
+  method properties_langs : string list * string list = current_pref_properties, current_pref_languages
   method value : 'lexicon = current_lexicon
 
   method init =
