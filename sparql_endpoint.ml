@@ -16,7 +16,8 @@ let valid_domain =
   let s = to_string dom in
   let n = String.length s in
   n = 0 (* localhost *)
-  || n >= 8 && s.[n-1]='r' && s.[n-2]='f' && s.[n-3]='.' && s.[n-4]='a' && s.[n-5]='s' && s.[n-6]='i' && s.[n-7]='r' && s.[n-8]='i' (* irisa.fr, obfuscated  *)
+  || n >= 9 && s.[n-1]='r' && s.[n-2]='f' && s.[n-3]='.' && s.[n-4]='a' && s.[n-5]='s' && s.[n-6]='i' && s.[n-7]='r' && s.[n-8]='i' && s.[n-9]='.' (* *.irisa.fr, obfuscated  *)
+  || n >= 12 && s.[n-1]='m' && s.[n-2]='o' && s.[n-3]='c' && s.[n-4]='.' && s.[n-5]='s' && s.[n-6]='y' && s.[n-7]='l' && s.[n-8]='e' && s.[n-9]='k' && s.[n-10]='s' && s.[n-11]='a' && s.[n-12]='.' (* *.askelys.com, obfuscated *)
 
 (* endpoint-specific aspects *)
 
