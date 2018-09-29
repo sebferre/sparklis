@@ -360,18 +360,9 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
     with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
   let rank, title_opt =
     match incr with
-      | IncrAnything -> 0, None
-      | IncrId _ -> 1, None
-      | IncrForeachResult -> 1, Some grammar#tooltip_foreach_result
-      | IncrForeachId _ -> 1, Some grammar#tooltip_foreach_id
-      | IncrAggregId _ -> 2, Some grammar#tooltip_aggreg_id
-
-      | IncrSelection _ -> 1, None
-      | IncrInput _ -> 2, None
-      | IncrName _ -> 2, Some grammar#tooltip_input_name
-      | IncrTerm _ -> 2, None
-	
-      | IncrHierarchy _ -> 2, Some grammar#tooltip_hierarchy
+      | IncrSelection _ -> 0, None
+      (* concept increments *)
+      | IncrHierarchy _ -> 1, Some grammar#tooltip_hierarchy
       | IncrArg _ -> 2, None
       | IncrType _ -> 3, None
       | IncrLatLong _ -> 4, Some grammar#tooltip_geolocation
@@ -379,25 +370,38 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrPred _ -> 6, None
       | IncrTriple _ -> 7, None
       | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
-	
-      | IncrAnd -> 6, None
-      | IncrDuplicate -> 6, Some grammar#tooltip_duplicate_focus
-      | IncrOr -> 7, Some grammar#tooltip_or
-      | IncrChoice -> 7, Some grammar#tooltip_or
-      | IncrMaybe -> 8, Some grammar#tooltip_optionally
-      | IncrNot -> 9, Some grammar#tooltip_not
-      | IncrIn -> 10, None (* TODO: tooltip *)
-      | IncrTriplify -> 10, Some grammar#tooltip_focus_on_property
-      | IncrThatIs -> 11, None
-      | IncrSomethingThatIs -> 11, None
-      | IncrOrder (Highest _) -> 12, Some grammar#tooltip_highest
-      | IncrOrder (Lowest _) -> 13, Some grammar#tooltip_lowest
-      | IncrOrder _ -> 12, None
-      | IncrUnselect -> 14, Some grammar#tooltip_any
-      | IncrForeach -> 14, Some grammar#tooltip_foreach
-      | IncrAggreg Sample -> 15, Some grammar#tooltip_sample
-      | IncrAggreg _ -> 16, Some grammar#tooltip_aggreg
-      | IncrFuncArg _ -> 17, Some grammar#tooltip_func in
+      (* term increments *)
+      | IncrAnything -> 1, None
+      | IncrId _ -> 2, None
+      | IncrInput _ -> 3, None
+      | IncrTerm _ -> 4, None
+      (* modifier increments *)
+      | IncrName _ -> 1, Some grammar#tooltip_input_name
+      | IncrOrder (Highest _) -> 2, Some grammar#tooltip_highest
+      | IncrOrder (Lowest _) -> 3, Some grammar#tooltip_lowest
+      | IncrOrder _ -> 4, None
+      | IncrUnselect -> 5, Some grammar#tooltip_any
+      | IncrForeachResult -> 6, Some grammar#tooltip_foreach_result
+      | IncrForeachId _ -> 7, Some grammar#tooltip_foreach_id
+      | IncrAggregId (Sample,_) -> 9, Some grammar#tooltip_aggreg_id
+      | IncrAggregId _ -> 8, Some grammar#tooltip_aggreg_id
+
+      | IncrAnd -> 10, None
+      | IncrDuplicate -> 11, Some grammar#tooltip_duplicate_focus
+      | IncrOr -> 12, Some grammar#tooltip_or
+      | IncrChoice -> 13, Some grammar#tooltip_or
+      | IncrMaybe -> 14, Some grammar#tooltip_optionally
+      | IncrNot -> 15, Some grammar#tooltip_not
+      | IncrThatIs -> 16, None
+      | IncrSomethingThatIs -> 17, None
+
+      | IncrForeach -> 18, Some grammar#tooltip_foreach
+      | IncrAggreg Sample -> 20, Some grammar#tooltip_aggreg
+      | IncrAggreg _ -> 19, Some grammar#tooltip_aggreg
+      | IncrFuncArg _ -> 21, Some grammar#tooltip_func
+
+      | IncrTriplify -> 22, Some grammar#tooltip_focus_on_property
+      | IncrIn -> 23, None (* TODO: tooltip *) in
   let filterable =
     match incr with
     | IncrAnything
