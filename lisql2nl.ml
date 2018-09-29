@@ -1567,8 +1567,8 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrInWhichThereIs -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Kwd grammar#there_is :: xml_ellipsis
   | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Unselect,Unordered))
   | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Select,order))
-  | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word focus_name :: []
-  | IncrAggreg g -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel focus_name_ng)
+  | IncrForeach -> Kwd grammar#for_ :: Kwd grammar#each :: Word focus_name :: Kwd grammar#give_me :: xml_ellipsis
+  | IncrAggreg g -> Kwd grammar#give_me :: xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel focus_name_ng)
   | IncrForeachResult ->
      let xml_delete_opt =
        let has_foreach_result =
@@ -1582,7 +1582,7 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
        else [] in
      Kwd grammar#for_ :: Kwd grammar#each :: Word (`Op grammar#result) :: xml_delete_opt
   | IncrForeachId id -> Kwd grammar#for_ :: Kwd grammar#each :: xml_ng_id grammar ~id_labelling id
-  | IncrAggregId (g,id) -> Kwd grammar#give_me :: xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
+  | IncrAggregId (g,id) -> xml_np grammar ~id_labelling (np_of_aggreg grammar None `The Lisql.factory#top_modif g top_rel (ng_of_id ~id_labelling id))
   | IncrFuncArg (is_pred,func,arity,pos,_,_) ->
     xml_np grammar ~id_labelling
       (np_of_apply grammar None

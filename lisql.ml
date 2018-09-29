@@ -392,6 +392,10 @@ let id_of_focus = function
   | AtS (s,_) -> id_of_s s
   | _ -> None
 
+let aggregated_id_opt = function
+  | AtAggreg (TheAggreg (_,id,_,_,_,id2),_) -> Some id2
+  | _ -> None
+
 let inverse_orientation = function
   | Fwd -> Bwd
   | Bwd -> Fwd
@@ -1590,21 +1594,6 @@ let rec insert_modif_transf f = function
     else Some (AtS (SExpr ((), name, id, modif2, expr, rel_opt), ctx))
   | _ -> None
 
-(* deprecated *)
-(*
-let insert_aggreg g = function
-  | AtS1 (np, AnAggregX (id,modif,g0,_,ctx)) when g0 <> g ->
-    Some (AtS1 (AnAggreg ((), id, factory#top_modif, g, None, np), ctx))
-  | AtS1 (Det (_, An _, _) as np, ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
-    Some (AtS1 (AnAggreg ((), factory#new_id, factory#top_modif, g, None, np), ctx))
-  | AtS1 ((AnAggreg (_, id, modif, g0, rel_opt, np) as npg), ctx) ->
-    if g0 = g then Some (AtS1 (np, ctx))
-    else Some (AtS1 (AnAggreg ((), factory#new_id, factory#top_modif, g, None, npg), ctx))
-  | AtS1 (np, AnAggregX (_,_,g0,_,ctx)) when g0 = g ->
-    Some (AtS1 (np,ctx))
-  | _ -> None
-*)
-
 let insert_foreach = function
   | focus ->
     ( match id_of_focus focus with
@@ -1618,24 +1607,15 @@ let insert_foreach = function
 		     s in
       focus_opt_moves [down_focus] focus2_opt)
     
-let insert_aggreg_bis g = function
-  | AtAggreg (TheAggreg (_,id,modif,g0,rel_opt,id2), ctx)
-       when g=Sample || g0=Sample ->
-    if g=g0 then None
-    else Some (AtAggreg (TheAggreg ((),id,modif,g,None,id2), ctx))
-  | focus ->
-    ( match id_of_focus focus with
-    | None -> None
-    | Some id2 ->
-       let s = elt_s_of_focus focus in
-       let aggregs = [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)] in
-       (*let aggregs =
-	 match focus with
-	 | AtS1 _ -> ForEachResult () :: aggregs
-	 | _ -> aggregs in*)
-       let focus2_opt = append_seq_s Root (SAggreg ((), aggregs)) s in
-       focus_opt_moves [down_focus] focus2_opt )
-
+let insert_aggreg g focus =
+  match id_of_focus focus with
+  | None -> None
+  | Some id2 ->
+     let s = elt_s_of_focus focus in
+     let aggregs = [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)] in
+     let focus2_opt = append_seq_s Root (SAggreg ((), aggregs)) s in
+     focus_opt_moves [down_focus] focus2_opt
+  
 let insert_foreach_result = function
   | AtS (SAggreg (_, aggregs), ctx) ->
      if List.exists is_ForEachResult aggregs
@@ -1674,12 +1654,33 @@ let insert_foreach_id id2 focus =
   | _ -> None
 
 let insert_aggreg_id g id2 focus =
-  let new_aggreg = TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2) in
   match focus with
   | AtS (SAggreg (_,aggregs), ctx) ->
-    Some (AtAggreg (new_aggreg, SAggregX ((List.rev aggregs, []), ctx)))
+     let new_aggreg = TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2) in
+     Some (AtAggreg (new_aggreg, SAggregX ((List.rev aggregs, []), ctx)))
+  | AtAggreg (TheAggreg (_,id0,modif0,g0,rel0_opt,id20), ctx) when id20=id2 ->
+     (* assuming type-compatibility of g over g0's values *)
+     let can_be_replaced, with_same_id =
+       match g0, g with
+       | Sample, _ -> true, false
+       | NumberOf, Sample -> true, false
+       | ListOf, (Sample | NumberOf) -> true, false
+       | (Total _ | Average _), (Sample | ListOf) -> true, false
+       | (Total _ | Average _), (NumberOf | Total _ | Average _ | Maximum _ | Minimum _) -> true, true
+       | (Maximum _ | Minimum _), (Sample | ListOf) -> true, false
+       | (Maximum _ | Minimum _), (NumberOf | Maximum _ | Minimum _) -> true, true
+       | _ -> false, false in
+     if can_be_replaced && g <> g0
+     then
+       let id, modif =
+	 if with_same_id
+	 then id0, modif0
+	 else factory#new_id, factory#top_modif in
+       Some (AtAggreg (TheAggreg ((),id,modif,g,None,id2), ctx))
+     else None
   | AtAggreg (aggreg, SAggregX ((ll,rr), ctx)) ->
-    Some (AtAggreg (new_aggreg, SAggregX ((aggreg::ll,rr), ctx)))
+     let new_aggreg = TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2) in
+     Some (AtAggreg (new_aggreg, SAggregX ((aggreg::ll,rr), ctx)))
   | _ -> None
 
 let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
@@ -1824,7 +1825,7 @@ let insert_increment incr focus =
 	  else proj, order)
 	focus
     | IncrForeach -> insert_foreach focus
-    | IncrAggreg g -> insert_aggreg_bis g focus
+    | IncrAggreg g -> insert_aggreg g focus
     | IncrForeachResult -> insert_foreach_result focus
     | IncrForeachId id -> insert_foreach_id id focus
     | IncrAggregId (g,id) -> insert_aggreg_id g id focus

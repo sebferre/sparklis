@@ -1238,11 +1238,17 @@ object (self)
 	      (fun id incrs -> IncrForeachId id :: IncrAggregId (Sample,id) :: incrs)
 	      ids incrs in
 	let incrs =
+	  let aggreg_id_opt = Lisql.aggregated_id_opt focus in
 	  IncrForeach ::
 	  List.fold_left
 	    (fun incrs aggreg ->
 	      match Lisql_type.find_insertable_aggreg aggreg focus_type_constraints with
-	      | Some aggreg_conv -> IncrAggreg aggreg_conv :: incrs
+	      | Some aggreg_conv ->
+		 let incrs =
+		   match aggreg_id_opt with
+		   | Some id2 -> IncrAggregId (aggreg_conv,id2) :: incrs
+		   | None -> incrs in
+		 IncrAggreg aggreg_conv :: incrs
 	      | None -> incrs)
 	    incrs
 	    [ Lisql.NumberOf;
