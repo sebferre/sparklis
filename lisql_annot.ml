@@ -1052,7 +1052,10 @@ and annot_focus_aux (focus : focus) =
     let (a, a_expr as expr_annot) = annot_elt_expr `At expr ctx in
     annot_ctx_expr a#defined fd expr_annot expr ctx
   | AtS (s,ctx) ->
-    fd#define_focus_term `Undefined;
+    ( match s with
+    | SExpr (_,_,id,_,_,_) -> fd#define_focus_term (`Id id)
+      (* consistency with Lisql.id_of_s *)
+    | _ -> fd#define_focus_term `Undefined );
     let s_annot = annot_elt_s `At s ctx in
     annot_ctx_s fd s_annot s ctx
 
