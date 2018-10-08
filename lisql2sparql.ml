@@ -998,7 +998,7 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
 	      ~having:(Sparql.log_and havings_aggregs)
 	      ?limit
 	      form in
-	  if view = Sparql.empty_view && lv = []
+	  if Sparql.is_empty_view view && lv = []
 	  then sq_aggreg (* isolated aggregation *)
 	  else
 	    Sparql.make_subquery
