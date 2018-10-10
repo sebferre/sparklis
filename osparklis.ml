@@ -593,13 +593,15 @@ object (self)
 	jquery "#list-terms" (fun elt_list ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
+	      let html_sel, html_list, count =
+		html_index lis#focus html_state index
+			   ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- term_scroll;
 	      self#restore_expanded_terms;
 	      jquery_set_innerHTML "#count-terms"
-				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+				   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 	      term_selection#reset;			   
 	      stop_propagation_from elt_list "a, .term-input";
 	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
@@ -655,13 +657,15 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
-	      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:Html.config_sort_by_frequency_properties#value in
+	      let html_sel, html_list, count =
+		html_index lis#focus html_state index
+			   ~sort_by_frequency:Html.config_sort_by_frequency_properties#value in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- property_scroll;
 	      self#restore_expanded_properties;
 	      jquery_set_innerHTML "#count-properties"
-				   (html_count_unit { Lis.value=index#length; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+				   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 	      property_selection#reset;
 	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 		 apply_incr elt));
@@ -707,12 +711,14 @@ object (self)
     jquery "#selection-modifiers-items" (fun elt_sel_items ->
     jquery "#list-modifiers" (fun elt_list ->
       let index = lis#index_modifiers in
-      let html_sel, html_list = html_index lis#focus html_state index ~sort_by_frequency:false in
+      let html_sel, html_list, count =
+	html_index lis#focus html_state index
+		   ~sort_by_frequency:false in
       elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
       elt_list##scrollTop <- modifier_scroll;
       jquery_set_innerHTML "#count-modifiers"
-			   (html_count_unit { Lis.value=index#length; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+			   (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
       modifier_selection#reset;
       stop_propagation_from elt_list ".term-input";
       jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->

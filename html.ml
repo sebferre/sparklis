@@ -423,12 +423,12 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
   sort_data, key, is_selection_incr, html
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string =
+let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string * int =
   let sort_node_list nodes =
     List.sort
       (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
       nodes in
-  let rec aux buf_sel buf_tree nodes =
+  let rec aux buf_sel buf_tree ref_count nodes =
     let sorted_nodes = sort_node_list nodes in
     Buffer.add_string buf_tree "<ul>";
     List.iter
@@ -448,17 +448,19 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_fre
 	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
 	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
 	     Buffer.add_string buf_tree html;
-	     aux buf_sel buf_tree children
+	     aux buf_sel buf_tree ref_count children
 	   end;
-	 Buffer.add_string buf_tree "</li>" end)
+	 Buffer.add_string buf_tree "</li>";
+	 incr ref_count end)
       sorted_nodes;
     Buffer.add_string buf_tree "</ul>"
   in
   let enriched_index_tree = index#map_tree (freq_text_html_increment_frequency focus state) in
   let buf_sel = Buffer.create 100 in
   let buf_tree = Buffer.create 1000 in
-  aux buf_sel buf_tree enriched_index_tree;
-  Buffer.contents buf_sel, Buffer.contents buf_tree
+  let ref_count = ref 0 in
+  aux buf_sel buf_tree ref_count enriched_index_tree;
+  Buffer.contents buf_sel, Buffer.contents buf_tree, !ref_count
 
 (* HTML of results *)
 
