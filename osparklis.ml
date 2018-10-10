@@ -283,6 +283,39 @@ object (self)
     jquery "#button-clear-cache" (onclick (fun elt ev -> Sparql_endpoint.cache#clear))
 end
 
+let dummy_title = "???" (* to suggest defining a title *)
+  
+let permalink_of_place (lis : Lis.place) : string =
+  let endpoint = lis#endpoint in
+  let title = jquery_get_innerHTML "#sparql-endpoint-title" in
+  let args = config#get_permalink in
+  let args =
+    ("endpoint",endpoint)
+    :: (if Lisql.is_home_focus lis#focus
+	then args
+	else ("sparklis-query", Permalink.of_query lis#query)
+	     :: ("sparklis-path", Permalink.of_path lis#path)
+	     :: args) in
+  let args =
+    if title = dummy_title
+    then args
+    else ("title",title) :: args in
+  let permalink_url =
+    let current_url =
+      match Url.Current.get () with
+      | None -> Url.(Http { hu_host = "localhost";
+			    hu_port = 8080;
+			    hu_path = [];
+			    hu_path_string = "";
+			    hu_arguments = [];
+			    hu_fragment = "" })
+      | Some url -> url in
+    match current_url with
+    | Url.Http url -> Url.Http { url with Url.hu_arguments = args }
+    | Url.Https url -> Url.Https { url with Url.hu_arguments = args }
+    | Url.File url -> Url.File { url with Url.fu_arguments = args } in
+  Url.string_of_url permalink_url
+  
 (* navigation place and history *)
 
 class navigation =
@@ -313,8 +346,6 @@ object (self)
     self#refresh
 end
 
-let dummy_title = "???" (* to suggest defining a title *)
-  
 class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable lis = new Lis.place endpoint foc
@@ -344,64 +375,41 @@ object (self)
   val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
   initializer html_state <- new Html.state lis#id_labelling
 
+  val mutable permalink = ""
+  initializer permalink <- permalink_of_place lis
+				
   method show_permalink : unit =
     let show (url : string) : unit =
       ignore (prompt
 		Lisql2nl.config_lang#grammar#msg_permalink
 		url) in
-    let endpoint = lis#endpoint in
-    let title = jquery_get_innerHTML "#sparql-endpoint-title" in
-    let args = config#get_permalink in
-    let args =
-      ("endpoint",endpoint)
-      :: (if self#is_home
-	  then args
-	  else ("sparklis-query", Permalink.of_query lis#query)
-	       :: ("sparklis-path", Permalink.of_path lis#path)
-	       :: args) in
-    let args =
-      if title = dummy_title
-      then args
-      else ("title",title) :: args in
-    let permalink_url =
-      let current_url =
-	match Url.Current.get () with
-	| None -> Url.(Http { hu_host = "localhost";
-			      hu_port = 8080;
-			      hu_path = [];
-			      hu_path_string = "";
-			      hu_arguments = [];
-			      hu_fragment = "" })
-	| Some url -> url in
-      match current_url with
-      | Url.Http url -> Url.Http { url with Url.hu_arguments = args }
-      | Url.Https url -> Url.Https { url with Url.hu_arguments = args }
-      | Url.File url -> Url.File { url with Url.fu_arguments = args } in
     if config_short_permalink#value
     then
-      let permalink_url = (* converting local URLs to http URLs *)
-	match permalink_url with
-	| Url.File url -> Url.(Http { hu_host = "www.irisa.fr";
-				      hu_port = 80;
-				      hu_path = ["LIS"; "ferre"; "sparklis"; "osparklis.html"];
-				      hu_path_string = "/LIS/ferre/sparklis/osparklis.html";
-				      hu_arguments = url.fu_arguments;
-				      hu_fragment = "" })
-	| _ -> permalink_url in
+      let permalink = (* converting local URLs to http URLs *)
+	match Url.url_of_string permalink with
+	| Some (Url.File url) ->
+	   Url.string_of_url
+	     (Url.(Http { hu_host = "www.irisa.fr";
+			  hu_port = 80;
+			  hu_path = ["LIS"; "ferre"; "sparklis"; "osparklis.html"];
+			  hu_path_string = "/LIS/ferre/sparklis/osparklis.html";
+			  hu_arguments = url.fu_arguments;
+			  hu_fragment = "" }))
+	| _ -> permalink in
       Lwt.ignore_result
 	(Lwt.bind
 	   (XmlHttpRequest.perform_raw_url
 	      ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
 			 "format","txt";
-			 "longUrl", Url.string_of_url permalink_url]
+			 "longUrl", permalink]
 	      "https://api-ssl.bitly.com/v3/shorten")
 	   (fun http_frame ->
 	    let open XmlHttpRequest in
 	    if http_frame.code = 200
 	    then show http_frame.content
-	    else show (Url.string_of_url permalink_url);
+	    else show permalink;
 	    Lwt.return ()))
-    else show (Url.string_of_url permalink_url)
+    else show permalink
 
   method private refresh_lisql =
     jquery "#lisql" (fun elt ->
@@ -734,6 +742,7 @@ object (self)
 	    apply_incr incr_elt))))))
 
   method refresh =
+    Dom_html.window##history##replaceState(Js.null, string "", Js.some (string permalink));
     Dom_html.document##body##scrollTop <- document_scroll;
     Dom_html.document##documentElement##scrollTop <- document_scroll;
     jquery_input "#sparql-endpoint-input"
@@ -947,13 +956,14 @@ object (self)
 
   method reinit =
     lis <- new Lis.place lis#endpoint lis#focus;
-    html_state <- new Html.state lis#id_labelling
-    
+    html_state <- new Html.state lis#id_labelling;
+    permalink <- permalink_of_place lis
       
   method new_place endpoint focus =
-    let lis = new Lis.place endpoint focus in 
+    let lis = new Lis.place endpoint focus in
     {< lis = lis;
        html_state = new Html.state lis#id_labelling;
+       permalink = permalink_of_place lis;
        offset = 0;
        term_constr = Lisql.MatchesAll [];
        property_constr = Lisql.MatchesAll [];
