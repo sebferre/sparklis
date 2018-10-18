@@ -599,6 +599,7 @@ object (self)
 
   (* SPARQL query and results *)
 
+  val mutable max_results = config_max_results#value
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
   val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
@@ -686,13 +687,34 @@ object (self)
 	    k_results (Some sparql))
 	  (fun code -> k_results (Some sparql))
 
-  method partial_results = (results.Sparql_endpoint.length = config_max_results#value)
+  method partial_results = (results.Sparql_endpoint.length = max_results)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
   method results_page offset limit k = page_of_results offset limit s_sparql.Lisql2sparql.state#geolocs results k
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.state#geolocs results k
   method results_slides k = slides_of_results results k
 
+  method ajax_get_more_results term_constr elts
+			       ~(k_sparql : string option -> unit)
+			       ~(k_results : string option -> unit) =
+    if self#partial_results then
+      begin
+	max_results <- max_results + config_max_results#value;
+	match s_sparql.Lisql2sparql.query_opt with
+	| None -> ()
+	| Some query ->
+	   let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
+	   let froms = Sparql_endpoint.config_default_graphs#froms in
+	   let limit = max_results in
+	   let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit in
+	   k_sparql (Some sparql);
+	   Sparql_endpoint.ajax_in
+	     ~send_results_to_yasgui:true
+	     elts ajax_pool endpoint sparql
+	     (fun res -> results <- res; k_results (Some sparql))
+	     (fun code -> ())
+      end
+	  
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
   method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index -> unit) =

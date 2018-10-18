@@ -1,5 +1,12 @@
 # description of main changes that impact interface with outside
 
+2018-10-18
+
+- in Lis.place: new method 'ajax_get_more_results' with same signature as 'ajax_sparql_results'
+  - computes 'max_results' more results if partial results
+  - does NOT re-compute increments
+  - in [osparklis.ml], used when asking for next page of results on the last page
+
 2018-08-31
 
 - support for xsd:duration datatype

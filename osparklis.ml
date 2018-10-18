@@ -490,17 +490,18 @@ object (self)
 	jquery "#count-results" (fun elt ->
 	  elt##innerHTML <- string
 	    (let nb = lis#results_nb in
+	     let partial = lis#partial_results in		       
 	     let grammar = Lisql2nl.config_lang#grammar in
 	     let s_result, s_results = grammar#result_results in
 	     if nb = 0
-	     then grammar#no ^ " " ^ s_result
+	     then grammar#no ^ " " ^ s_results
 	     else
 	       let a, b = offset+1, min nb (offset+limit) in
-	       if a = 1 && b = nb && nb < Lis.config_max_results#value then
+	       if a = 1 && b = nb && not partial then
 		 string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
 	       else
 		 s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if nb < Lis.config_max_results#value then "" else "+")));
+		   " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
 	stop_links_propagation_from elt_results;
 	lis#results_slides
 	  (function
@@ -741,6 +742,14 @@ object (self)
 	    let incr_elt = Dom_html.element dom_elt in
 	    apply_incr incr_elt))))))
 
+  method private refresh_sparql =
+    function
+    | None ->
+       Jsutils.yasgui#set_query "SELECT * WHERE { }"
+    | Some sparql ->
+       let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
+       Jsutils.yasgui#set_query sparql_with_prefixes
+	   
   method refresh =
     Dom_html.window##history##replaceState(Js.null, string "", Js.some (string permalink));
     Dom_html.document##body##scrollTop <- document_scroll;
@@ -752,13 +761,7 @@ object (self)
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
-	  ~k_sparql:
-	  (function
-	  | None ->
-	    Jsutils.yasgui#set_query "SELECT * WHERE { }"
-	  | Some sparql ->
-	    let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
-	    Jsutils.yasgui#set_query sparql_with_prefixes)
+	  ~k_sparql:self#refresh_sparql
 	  ~k_results:
 	  (function
 	  | None ->
@@ -780,6 +783,14 @@ object (self)
 	      self#refresh_term_increments;
 	      self#refresh_focus)))
 
+  method private get_more_results (k : unit -> unit) =
+    jquery "#list-results"
+	   (fun elt_res ->
+	    lis#ajax_get_more_results
+	      (norm_constr term_constr) [elt_res]
+	      ~k_sparql:self#refresh_sparql
+	      ~k_results:(fun _ -> k ()))
+	   
   method private filter_increments ?on_modifiers elt_list constr =
     let matcher = compile_constr ?on_modifiers constr in
     let there_is_match = ref false in
@@ -884,11 +895,17 @@ object (self)
 
   method page_down =
     let offset' = offset + limit in
+    let process () =
+      if offset' < lis#results_nb
+      then begin
+	  offset <- offset';
+	  self#refresh_extension
+	end
+    in
     if offset' < lis#results_nb
-    then begin
-      offset <- offset';
-      self#refresh_extension
-    end
+    then process ()
+    else self#get_more_results
+	   (fun () -> process ())
 
   method page_up =
     let offset' = offset - limit in
