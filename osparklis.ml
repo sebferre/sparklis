@@ -382,25 +382,22 @@ object (self)
 
   method private refresh_constrs =
     List.iter
-      (fun (sel_select, sel_input, constr) ->
+      (fun (sel_select, sel_input, constr, get_list_constraints) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
-	    if sel_select = "#select-terms" then
-	      begin
-		let l_constr = lis#list_term_constraints constr in
-		let html_select_options =
-	          html_list_constr html_state l_constr in
-		select##innerHTML <- string html_select_options
-	      end;
+	    let l_constr = get_list_constraints constr in
+	    let html_select_options =
+	      html_list_constr html_state l_constr in
+	    select##innerHTML <- string html_select_options;
 	    let op = Html.option_of_constr constr in
 	    let pat = Html.pattern_of_constr constr in
 	    (*selectpicker_set_value select option;*)
 	    select##value <- string op;
 	    if select##selectedIndex < 0 then select##selectedIndex <- 0;
 	    input##value <- string pat)))
-      [("#select-terms", "#pattern-terms", term_constr);
-       ("#select-properties", "#pattern-properties", property_constr);
-       ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [])]
+      [("#select-terms", "#pattern-terms", term_constr, lis#list_term_constraints);
+       ("#select-properties", "#pattern-properties", property_constr, lis#list_property_constraints);
+       ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [], lis#list_modifier_constraints)]
 
   method private refresh_extension =
     let open Sparql_endpoint in

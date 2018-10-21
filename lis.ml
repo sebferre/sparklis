@@ -1234,26 +1234,6 @@ object (self)
       else ajax_extent ()
       end
 
-  method list_term_constraints constr : Lisql.constr list =
-    let open Lisql in
-    let l_constr =
-      List.filter
-	(fun constr ->
-	 Lisql_type.is_insertable_constr constr focus_type_constraints)
-	[ MatchesAll ["..."];
-	  MatchesAny ["..."];
-	  After "...";
-	  Before "...";
-	  FromTo ("...","...");
-	  HigherThan "...";
-	  LowerThan "...";
-	  Between ("...","...");
-	  HasLang "...";
-	  HasDatatype "..." ] in
-    if l_constr = []
-    then [Lisql.reset_constr constr]
-    else l_constr
-	   
   method index_modifiers : incr_freq_index =
     let open Lisql in
     let incrs =
@@ -1395,4 +1375,34 @@ object (self)
     List.iter (fun incr -> incr_index#add (incr,None)) valid_incrs;
     incr_index
 	  
+  method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
+    let open Lisql in
+    let l_constr =
+      List.filter
+	(fun constr ->
+	 Lisql_type.is_insertable_constr constr focus_type_constraints)
+	[ MatchesAll ["..."];
+	  MatchesAny ["..."];
+	  After "...";
+	  Before "...";
+	  FromTo ("...","...");
+	  HigherThan "...";
+	  LowerThan "...";
+	  Between ("...","...");
+	  HasLang "...";
+	  HasDatatype "..." ] in
+    if l_constr = []
+    then [Lisql.reset_constr constr]
+    else l_constr
+
+  method list_property_constraints (constr : Lisql.constr) : Lisql.constr list =
+    let open Lisql in
+    [ MatchesAll ["..."];
+      MatchesAny ["..."] ]
+
+  method list_modifier_constraints (constr : Lisql.constr) : Lisql.constr list =
+    let open Lisql in
+    [ MatchesAll ["..."];
+      MatchesAny ["..."] ]
+      
 end
