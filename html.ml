@@ -84,6 +84,85 @@ object
   method dico_results = dico_results
 end
 
+(* LISQL constraints <--> user patterns *)
+
+let string_is_float =
+  let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
+  (fun s -> Regexp.string_match re s 0 <> None)
+
+let make_constr op pat =
+  (* BEWARE: call [norm_constr] on result for any semantic use *)
+  let open Lisql in
+  let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
+  match op, lpat with
+  | "true", _ -> True
+  | "matchesAll", _ -> MatchesAll lpat
+  | "matchesAny", _ -> MatchesAny lpat
+  | "after", [] -> After ""
+  | "after", pat::_ -> After pat
+  | "before", [] -> Before ""
+  | "before", pat::_ -> Before pat
+  | "fromTo", [] -> FromTo ("","")
+  | "fromTo", pat1::[] -> FromTo (pat1, "")
+  | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
+  | "higherThan", [] -> HigherThan ""
+  | "higherThan", pat::_ ->
+     if string_is_float pat 
+     then HigherThan pat
+     else invalid_arg "a numeric value is expected"
+  | "lowerThan", [] -> LowerThan ""
+  | "lowerThan", pat::_ ->
+     if string_is_float pat
+     then LowerThan pat
+     else invalid_arg "a numeric value is expected"
+  | "between", [] -> Between ("","")
+  | "between", pat::[] ->
+     if string_is_float pat
+     then Between (pat, "") (* HigherThan pat *)
+     else invalid_arg "a numeric value is expected"
+  | "between", pat1::pat2::_ ->
+     if string_is_float pat1 && string_is_float pat2
+     then Between (pat1, pat2)
+     else invalid_arg "two numeric values are expected"
+  | "hasLang", [] -> HasLang ""
+  | "hasLang", pat::_ -> HasLang pat
+  | "hasDatatype", [] -> HasDatatype ""
+  | "hasDatatype", pat::_ -> HasDatatype pat
+  | _ -> True (* in case of undefined option *)
+    
+let option_of_constr =
+  let open Lisql in
+  function
+  | True -> "true"
+  | MatchesAll _ -> "matchesAll"
+  | MatchesAny _ -> "matchesAny"
+  | After _ -> "after"
+  | Before _ -> "before"
+  | FromTo _ -> "fromTo"
+  | HigherThan _ -> "higherThan"
+  | LowerThan _ -> "lowerThan"
+  | Between _ -> "between"
+  | HasLang _ -> "hasLang"
+  | HasDatatype _ -> "hasDatatype"
+
+let pattern_of_constr =
+  let open Lisql in
+  function
+  | True -> ""
+  | MatchesAll lpat -> String.concat " " lpat
+  | MatchesAny lpat -> String.concat " " lpat
+  | After pat -> pat
+  | Before pat -> pat
+  | FromTo (pat1,"") -> pat1
+  | FromTo (pat1,pat2) -> pat1 ^ " " ^ pat2
+  | HigherThan pat -> pat
+  | LowerThan pat -> pat
+  | Between (pat1,"") -> pat1
+  | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
+  | HasLang pat -> pat
+  | HasDatatype pat -> pat
+			 
+  
 (* pretty-printing of terms, NL in HTML *)
 
 let html_pre text =
@@ -255,22 +334,23 @@ let html_term (t : Rdf.term) : string =
   html_word (Lisql2nl.word_of_term t)
 
 let html_query (state : state) (query : annot elt_s) : string =
-  let grammar = Lisql2nl.config_lang#grammar in
-  let id_labelling = state#id_labelling in
   html_of_nl_xml state
-    (Lisql2nl.xml_s grammar ~id_labelling
-       (Lisql2nl.map_s Lisql2nl.main_transf
-	  (Lisql2nl.s_of_elt_s grammar ~id_labelling
-	     query)))
-
+    (Lisql2nl.xml_of_elt_s
+       Lisql2nl.config_lang#grammar
+       ~id_labelling:state#id_labelling
+       query)
 
 let html_id_np (state : state) (id : int) : string =
   html_of_nl_xml state
-    (Lisql2nl.xml_np_id Lisql2nl.config_lang#grammar state#id_labelling
+    (Lisql2nl.xml_np_id
+       Lisql2nl.config_lang#grammar
+       ~id_labelling:state#id_labelling
        id)
 let html_id_ng (state : state) (id : int) : string =
   html_of_nl_xml state
-    (Lisql2nl.xml_ng_id Lisql2nl.config_lang#grammar state#id_labelling
+    (Lisql2nl.xml_ng_id
+       Lisql2nl.config_lang#grammar
+       ~id_labelling:state#id_labelling
        id)
 
 (* HTML of increment lists *)
@@ -321,7 +401,7 @@ let html_count_unit freq (unit,units) =
 let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : compare_incr_data * string * bool * string =
   let key = state#dico_incrs#add incr in
   let grammar = Lisql2nl.config_lang#grammar in
-  let xml = Lisql2nl.xml_incr grammar state#id_labelling focus incr in
+  let xml = Lisql2nl.xml_of_incr grammar ~id_labelling:state#id_labelling focus incr in
   let html = html_of_nl_xml state xml in
   let uri_opt = Lisql.uri_of_increment incr in
   let pf_opt, html_freq =
@@ -462,6 +542,20 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_fre
   aux buf_sel buf_tree ref_count enriched_index_tree;
   Buffer.contents buf_sel, Buffer.contents buf_tree, !ref_count
 
+let html_list_constr (state : state) (lc : Lisql.constr list) : string =
+  let grammar = Lisql2nl.config_lang#grammar in
+  let id_labelling = state#id_labelling in
+  String.concat
+    ""
+    (List.map
+       (fun c ->
+	let value = option_of_constr c in
+	let label =
+	  html_of_nl_xml state
+	    (Lisql2nl.xml_of_constr grammar ~id_labelling c) in
+	"<option value=\"" ^ value ^ "\">" ^ label ^ "</option>")
+       lc)
+    
 (* HTML of results *)
 
 let html_cell_img ?height url =

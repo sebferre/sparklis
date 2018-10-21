@@ -30,51 +30,21 @@ let session_id : string = (* random session ID to disambiguate undefinite IPs *)
 
 let config_short_permalink = new Config.boolean_input ~key:"short-permalink" ~input_selector:"#input-short-permalink" ~default:true ()
   
-(* LISQL constraints <--> user patterns *)
+(* constraint compilation *)
 
-let string_is_float =
-  let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
-  (fun s -> Regexp.string_match re s 0 <> None)
+let get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) (k : Lisql.constr -> unit) : unit =
+  let op = to_string (select##value) in
+  let pat = to_string (input##value) in
+  try
+    let constr = Html.make_constr op pat in
+    k constr
+  with Invalid_argument msg ->
+    Jsutils.alert ("Invalid filter: " ^ msg)
 
-let make_constr op pat =
-  (* BEWARE: call [norm_constr] on result for any semantic use *)
-  let open Lisql in
-  let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-  match op, lpat with
-  | "matchesAll", _ -> MatchesAll lpat
-  | "matchesAny", _ -> MatchesAny lpat
-  | "after", [] -> After ""
-  | "after", pat::_ -> After pat
-  | "before", [] -> Before ""
-  | "before", pat::_ -> Before pat
-  | "fromTo", [] -> FromTo ("","")
-  | "fromTo", pat1::[] -> FromTo (pat1, "")
-  | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
-  | "higherThan", [] -> HigherThan ""
-  | "higherThan", pat::_ ->
-    if string_is_float pat 
-    then HigherThan pat
-    else invalid_arg "a numeric value is expected"
-  | "lowerThan", [] -> LowerThan ""
-  | "lowerThan", pat::_ ->
-    if string_is_float pat
-    then LowerThan pat
-    else invalid_arg "a numeric value is expected"
-  | "between", [] -> Between ("","")
-  | "between", pat::[] ->
-    if string_is_float pat
-    then Between (pat, "") (* HigherThan pat *)
-    else invalid_arg "a numeric value is expected"
-  | "between", pat1::pat2::_ ->
-    if string_is_float pat1 && string_is_float pat2
-    then Between (pat1, pat2)
-    else invalid_arg "two numeric values are expected"
-  | "hasLang", [] -> HasLang ""
-  | "hasLang", pat::_ -> HasLang pat
-  | "hasDatatype", [] -> HasDatatype ""
-  | "hasDatatype", pat::_ -> HasDatatype pat
-  | _ -> assert false
-    
+let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
+let matches s re = Regexp.search re s 0 <> None
+let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
+
 let norm_constr = (* normalizing for empty patterns "" *)
   (* MUST be called for any semantic use of constraints *)
   let open Lisql in
@@ -94,44 +64,6 @@ let norm_constr = (* normalizing for empty patterns "" *)
   | HasLang "" -> True
   | HasDatatype "" -> True
   | c -> c
-
-let operator_of_constr =
-  let open Lisql in
-  function
-  | True -> "matchesAll"
-  | MatchesAll _ -> "matchesAll"
-  | MatchesAny _ -> "matchesAny"
-  | After _ -> "after"
-  | Before _ -> "before"
-  | FromTo _ -> "fromTo"
-  | HigherThan _ -> "higherThan"
-  | LowerThan _ -> "lowerThan"
-  | Between _ -> "between"
-  | HasLang _ -> "hasLang"
-  | HasDatatype _ -> "hasDatatype"
-
-let pattern_of_constr =
-  let open Lisql in
-  function
-  | True -> ""
-  | MatchesAll lpat -> String.concat " " lpat
-  | MatchesAny lpat -> String.concat " " lpat
-  | After pat -> pat
-  | Before pat -> pat
-  | FromTo (pat1,"") -> pat1
-  | FromTo (pat1,pat2) -> pat1 ^ " " ^ pat2
-  | HigherThan pat -> pat
-  | LowerThan pat -> pat
-  | Between (pat1,"") -> pat1
-  | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
-  | HasLang pat -> pat
-  | HasDatatype pat -> pat
-
-(* constraint compilation *)
-
-let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
-let matches s re = Regexp.search re s 0 <> None
-let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
 
 let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   let open Lisql in
@@ -354,7 +286,7 @@ object (self)
   val mutable offset = 0
   val mutable limit = 10
 
-  val mutable term_constr = Lisql.MatchesAll []
+  val mutable term_constr = Lisql.True (*Lisql.MatchesAll []*)
   val mutable property_constr = Lisql.MatchesAll []
 
   val term_selection = new increment_selection "#selection-terms"
@@ -448,18 +380,24 @@ object (self)
 	       (fun elt ->
 		elt##innerHTML <- string html_focus_ng)
 
-  method private get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) =
-    let op = to_string (select##value) in
-    let pat = to_string (input##value) in
-    make_constr op pat
-
   method private refresh_constrs =
     List.iter
       (fun (sel_select, sel_input, constr) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
-	    selectpicker_set_value select (operator_of_constr constr);
-	    input##value <- string (pattern_of_constr constr))))
+	    if sel_select = "#select-terms" then
+	      begin
+		let l_constr = lis#list_term_constraints constr in
+		let html_select_options =
+	          html_list_constr html_state l_constr in
+		select##innerHTML <- string html_select_options
+	      end;
+	    let op = Html.option_of_constr constr in
+	    let pat = Html.pattern_of_constr constr in
+	    (*selectpicker_set_value select option;*)
+	    select##value <- string op;
+	    if select##selectedIndex < 0 then select##selectedIndex <- 0;
+	    input##value <- string pat)))
       [("#select-terms", "#pattern-terms", term_constr);
        ("#select-properties", "#pattern-properties", property_constr);
        ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [])]
@@ -601,7 +539,7 @@ object (self)
         jquery "#selection-terms-items" (fun elt_sel_items ->
 	jquery "#list-terms" (fun elt_list ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
-	     (fun ~partial index ->
+	    (fun ~partial index ->
 	      let html_sel, html_list, count =
 		html_index lis#focus html_state index
 			   ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
@@ -625,9 +563,10 @@ object (self)
 		    let incr_elt = Dom_html.element dom_elt in
 		    apply_incr incr_elt))));
 	      refreshing_terms <- false;
-	      let new_constr = self#get_constr select input in
-	      self#filter_increments elt_list new_constr;
-	      self#set_term_constr new_constr)))))
+	      get_constr select input
+		(fun new_constr ->
+		 self#filter_increments elt_list new_constr;
+		 self#set_term_constr new_constr))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
@@ -683,9 +622,10 @@ object (self)
 		 then toggle_incr elt
 		 else apply_incr elt));
 	      refreshing_properties <- false;
-	      let new_constr = self#get_constr select input in
-	      self#filter_increments elt_list new_constr;
-	      self#set_property_constr new_constr)))))
+	      get_constr select input
+		(fun new_constr ->
+		 self#filter_increments elt_list new_constr;
+		 self#set_property_constr new_constr))))))
 
   method private refresh_modifier_increments =
     let get_incr_opt elt =
@@ -757,7 +697,6 @@ object (self)
     jquery_input "#sparql-endpoint-input"
 		 (fun input -> input##value <- string lis#endpoint);
     self#refresh_lisql;
-    self#refresh_constrs;
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
@@ -768,6 +707,7 @@ object (self)
 	      (*Jsutils.yasgui#set_response "";
 	      elt_res##style##display <- string "none";*)
 	      self#refresh_extension;
+	      self#refresh_constrs;
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
@@ -777,6 +717,7 @@ object (self)
 	      self#refresh_focus (* after increments, because they have `FocusName words *)
 	  | Some sparql ->
 	      self#refresh_extension;
+	      self#refresh_constrs;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      self#refresh_modifier_increments;
 	      self#refresh_property_increments;
@@ -869,17 +810,10 @@ object (self)
     ~(elt_list : Dom_html.element t)
     (k : Lisql.constr -> unit)
     =
-    let new_constr = self#get_constr select input in
-    self#filter_increments ?on_modifiers elt_list new_constr;
-    k new_constr
-(*	
-      let n = String.length pat in
-      if (not !there_is_match && (pat = "" || pat.[n - 1] = ' ')) || (n >= 2 && pat.[n-1] = ' ' && pat.[n-2] = ' ')
-      then begin
-	(*Firebug.console##log(string "pattern: no match, call continuation");*)
-	k constr
-      end
-*)
+    get_constr select input
+      (fun new_constr ->
+       self#filter_increments ?on_modifiers elt_list new_constr;
+       k new_constr)
 
   method set_limit n =
     limit <- n;
@@ -982,7 +916,7 @@ object (self)
        html_state = new Html.state lis#id_labelling;
        permalink = permalink_of_place lis;
        offset = 0;
-       term_constr = Lisql.MatchesAll [];
+       term_constr = Lisql.True (*Lisql.MatchesAll []*);
        property_constr = Lisql.MatchesAll [];
        (* keeping same document scroll *)
        property_scroll = 0;
@@ -1211,18 +1145,16 @@ let _ =
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
-	  let op = to_string (select##value) in
-	  let pat = to_string (input##value) in
-	  try
-	    let constr = norm_constr (make_constr op pat) in
-	    if constr = Lisql.True
-	    then
-	      Dom_html.window##alert(string "Empty filter")
-	    else
-	      history#update_focus ~push_in_history:true
-		(Lisql.insert_constr constr)
-	  with Invalid_argument msg ->
-	    Dom_html.window##alert(string ("Invalid filter: " ^ msg))))));
+	   get_constr select input
+	     (fun constr ->
+	      let constr = norm_constr constr in
+	      if constr = Lisql.True
+	      then
+		Jsutils.alert "Empty filter"
+	      else
+		history#update_focus ~push_in_history:true
+				     (Lisql.insert_constr constr))))));
+
     jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter

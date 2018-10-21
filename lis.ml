@@ -609,11 +609,11 @@ object (self)
   val mutable some_focus_term_is_blank : bool = false
 
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
-    let v = id_labelling#get_id_var id in
     try
+      let v = id_labelling#get_id_var id in
       let i = List.assoc v results.Sparql_endpoint.vars in
       results_typing.(i)
-    with Not_found ->
+    with Not_found -> (* no results *)
       Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
       []
     
@@ -643,6 +643,10 @@ object (self)
     match s_sparql.Lisql2sparql.query_opt with
     | None ->
         k_sparql None;
+	focus_type_constraints <-
+	  Lisql_type.of_focus
+	    (fun id -> Some [`IRI])
+	    focus focus_descr;
 	( match s_sparql.Lisql2sparql.focus_term_opt with
 	  | None -> ()
 	  | Some vt -> focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt None results );
@@ -662,7 +666,7 @@ object (self)
 	    results_typing <- Lisql_type.of_sparql_results res;
 	    focus_type_constraints <- Lisql_type.of_focus
 	      (fun id -> Some (self#id_typing id))
-	      focus;
+	      focus focus_descr;
 	    (* defining focus_term_index and focus_graph_index *)
 	    ( match
 		(if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
@@ -1230,6 +1234,26 @@ object (self)
       else ajax_extent ()
       end
 
+  method list_term_constraints constr : Lisql.constr list =
+    let open Lisql in
+    let l_constr =
+      List.filter
+	(fun constr ->
+	 Lisql_type.is_insertable_constr constr focus_type_constraints)
+	[ MatchesAll ["..."];
+	  MatchesAny ["..."];
+	  After "...";
+	  Before "...";
+	  FromTo ("...","...");
+	  HigherThan "...";
+	  LowerThan "...";
+	  Between ("...","...");
+	  HasLang "...";
+	  HasDatatype "..." ] in
+    if l_constr = []
+    then [Lisql.reset_constr constr]
+    else l_constr
+	   
   method index_modifiers : incr_freq_index =
     let open Lisql in
     let incrs =

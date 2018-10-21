@@ -1,5 +1,17 @@
 # description of main changes that impact interface with outside
 
+2018-10-21
+
+- dynamic filtering operators (type Lisql.constr)
+  - new method Lis.place#list_term_constraints
+    - to retrieve the relevant term filtering operators (like for modifier increments, no ajax call)
+    - always returns current filtering operator
+- new functions in Lisql2nl to ease verbalization
+  - avoiding exposition of types nl_*
+  - xml_of_elt_s: query -> xml
+  - xml_of_incr: increment -> xml
+  - xml_of_constr : constr -> xml
+
 2018-10-18
 
 - in Lis.place: new method 'ajax_get_more_results' with same signature as 'ajax_sparql_results'

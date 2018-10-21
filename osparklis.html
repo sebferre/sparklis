@@ -25,9 +25,12 @@
 <!-- Bootstrap -->
 <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
 <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.7.3/css/bootstrap-select.min.css" />
 <!-- Select-picker -->
+<!--
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/css/bootstrap-select.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/js/bootstrap-select.min.js"></script>
+-->
 <!-- Sparklis -->
 <link href="osparklis.css?v=2" rel="stylesheet" type="text/css"/>
 <script src="osparklis.js"></script>
@@ -1093,6 +1096,7 @@
 		    <span class="tooltip lang-es">Seleccionar un operador de filtrado</span>
 		    <span class="tooltip lang-nl">Selecteer een filter operator</span>
 		    <select id="select-terms" class="select-incrs form-control selectpicker">
+		      <!-- dynamically generated
 		      <option value="matchesAll">matches all</option>
 		      <option value="matchesAny">matches any</option>
 		      <option value="after">after</option>
@@ -1103,6 +1107,7 @@
 		      <option value="between">between</option>
 		      <option value="hasLang">has language</option>
 		      <option value="hasDatatype">has datatype</option>
+		      -->
 		    </select></div>
 		  <div class="tooltiped col-xs-7 no-padding"><span class="tooltip lang-en">Input keywords to filter entities</span><span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span><span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span><span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span><input id="pattern-terms" class="pattern-incrs form-control" type="text"></div>
 		  <div class="tooltiped col-xs-1 no-padding">

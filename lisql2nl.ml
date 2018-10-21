@@ -1437,6 +1437,17 @@ and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
   | `Nth (k, `Expr expr) -> xml_np_label grammar ~id_labelling (`Expr expr) (* equal exprs are equal! *)
   | _ -> Word (`Op grammar#the) :: xml_ng_label grammar ~id_labelling ng
 
+let xml_of_elt_s grammar ~id_labelling (s : annot elt_s) : xml =
+  let nl_s = s_of_elt_s grammar ~id_labelling s in
+  let nl_s = map_s main_transf nl_s in
+  xml_s grammar ~id_labelling nl_s
+
+let xml_of_constr grammar ~id_labelling (c : Lisql.constr) : xml =
+  let nl = vp_of_constr grammar Lisql_annot.dummy_annot c in
+  let nl = map_vp main_transf nl in
+  let xml = xml_vp grammar ~id_labelling nl in
+  xml_label_prune ~quoted:false xml
+	
 let xml_ng_id ?isolated grammar ~id_labelling id = xml_ng_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
 let xml_np_id ?isolated grammar ~id_labelling id = xml_np_label ?isolated grammar ~id_labelling (id_labelling#get_id_label id)
 
@@ -1447,7 +1458,7 @@ let xml_incr_coordinate grammar focus xml = xml
   | AtP1 (IsThere _, _) -> xml
   | _ -> Kwd grammar#and_ :: xml *)
 
-let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
+let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
   | IncrSelection (selop,_) ->
      [Selection (xml_selection_op grammar selop)]
   | IncrInput (_,typ) ->
@@ -1593,3 +1604,9 @@ let xml_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
 	    (Common.from_to 1 arity))
       	 top_rel)
   | IncrName name -> [Input `String; Word (`Op "="); Word focus_span]
+
+		       
+(* main verbalization functions *)
+
+
+

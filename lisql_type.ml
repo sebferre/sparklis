@@ -130,6 +130,15 @@ let rec of_term : Rdf.term -> datatype = function
   | Rdf.Bnode _ -> `Blank
   | Rdf.Var _ -> `Term
 
+let of_term_list (lt : Rdf.term list) : datatype list =
+  List.fold_left
+    (fun ldt t ->
+     let dt = of_term t in
+     if not (List.mem dt ldt)
+     then dt::ldt
+     else ldt)
+    [] lt
+		  
 let of_sparql_results (results : Sparql_endpoint.results) : datatype list array =
   let typing = Array.make results.Sparql_endpoint.dim [] in
   List.iter
@@ -165,6 +174,21 @@ let aggreg_signatures : aggreg -> (datatype * datatype) list = function
 		   `Literal, `Literal ]
 *)
 
+let constr_domains : constr -> datatype list = function
+  (* constraints assimilated to one-argument functions with Bool results *)
+  | True -> [`Term]
+  | MatchesAll _
+  | MatchesAny _ -> [`IRI; `StringLiteral; `Date; `Time; `Duration]
+  | After _
+  | Before _
+  | FromTo _ -> [`IRI; `StringLiteral; `Date; `Time; `Duration]
+  | HigherThan _
+  | LowerThan _
+  | Between _ -> [`Float]
+  | HasLang _ -> [`StringLiteral]
+  | HasDatatype _ -> [`Literal]
+
+       
 let func_signatures : func -> (datatype list * datatype) list = function
   | `Str -> [ [`IRI_Literal], `String ]
   | `Lang -> [ [`StringLiteral], `String ]
@@ -368,16 +392,25 @@ let rec constr_of_ctx_expr (env : id -> type_constraint) : ctx_expr -> type_cons
     let input_constr_list = List.map (constr_of_elt_expr env) le in
     union_constraints input_constr_list
     
-    
 
-let of_focus env : focus -> focus_type_constraints = function
-  | AtExpr (expr,ctx) -> { input_constr = (try constr_of_elt_expr env expr with TypeError -> None);
-			   output_constr = (try constr_of_ctx_expr env ctx with TypeError -> None) }
-  | focus ->
+let of_focus (env : Lisql.id -> type_constraint) (focus : focus) (focus_descr : Lisql_annot.focus_descr) : focus_type_constraints =
+  match focus with
+  | AtExpr (expr,ctx) ->
+     { input_constr = (try constr_of_elt_expr env expr
+		       with TypeError -> None);
+       output_constr = (try constr_of_ctx_expr env ctx
+			with TypeError -> None) }
+  | _ ->
+     match focus_descr#term with
+     | `Undefined -> { input_constr = Some []; output_constr = None }
+     | `Term t -> { input_constr = Some [of_term t]; output_constr = None }
+     | `Id id -> { input_constr = env id; output_constr = None }
+(*     
     match id_of_focus focus with
-    | None -> { input_constr = None; output_constr = None }
+    | None -> { input_constr = Some []; output_constr = None }
     | Some id -> { input_constr = env id; output_constr = None }
-
+ *)
+		   
 (* insertability of elements based on constraints *)
 
 let compatibles_insertion (dt_arg_opt, dt_res) focus_constr : compatible * compatible =
@@ -398,6 +431,13 @@ let is_insertable_input input_dt focus_type_constraints =
     (None, input_dt)
     focus_type_constraints
 
+let is_insertable_constr constr focus_type_constraints =
+  List.exists
+    (fun domain_dt ->
+     let comp = compatible_input_constraint focus_type_constraints.input_constr domain_dt in
+     comp.bool)
+    (constr_domains constr)
+    
 let compatibles_insertion_list ldt_arg_opt_res focus_type_constraints : compatible * compatible =
   List.fold_left
     (fun (comp_arg, comp_res) dt_arg_opt_res ->

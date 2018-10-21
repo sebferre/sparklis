@@ -22,6 +22,18 @@ type constr =
   | HasLang of string
   | HasDatatype of string
 
+let reset_constr : constr -> constr = function
+  | True -> True
+  | MatchesAll _ -> MatchesAll ["..."]
+  | MatchesAny _ -> MatchesAny ["..."]
+  | After _ -> After "..."
+  | Before _ -> Before "..."
+  | FromTo _ -> FromTo ("...","...")
+  | HigherThan _ -> HigherThan "..."
+  | LowerThan _ -> LowerThan "..."
+  | Between _ -> Between ("...","...")
+  | HasLang _ -> HasLang "..."
+  | HasDatatype _ -> HasDatatype "..."
 
 (* LISQL modifiers *)
 
