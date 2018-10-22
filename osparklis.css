@@ -9,6 +9,15 @@ head, body, input, textarea, select {
     font-size: 16px;
 }
 
+select {
+    background-color: white;
+    border-width: 1px;
+    border-style: solid;
+    border-color: lightgrey;
+    border-radius: 3px;
+    padding: 4px;
+}
+
 .no-padding {
     padding-left: 0;
     padding-right: 0;

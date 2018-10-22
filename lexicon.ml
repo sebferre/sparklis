@@ -293,7 +293,7 @@ object (self)
 
   method private set_select_property_lang s p l =
     if current_property <> p || current_lang <> l then begin
-      jquery_select select_selector (fun select -> Jsutils.selectpicker_set_value select s);
+      jquery_select select_selector (fun select -> select##value <- string s);
       jquery_input input_selector (fun input -> input##value <- string (if s = other then p else ""));
       jquery_input lang_input_selector (fun input -> input##value <- string l);
       current_select <- s;

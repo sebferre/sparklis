@@ -391,7 +391,6 @@ object (self)
 	    select##innerHTML <- string html_select_options;
 	    let op = Html.option_of_constr constr in
 	    let pat = Html.pattern_of_constr constr in
-	    (*selectpicker_set_value select option;*)
 	    select##value <- string op;
 	    if select##selectedIndex < 0 then select##selectedIndex <- 0;
 	    input##value <- string pat)))

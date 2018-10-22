@@ -147,32 +147,6 @@ struct
   let obj ar = Unsafe.obj ar
 end
 
-(* bootstrap-select / selectpicker bindings *)
-
-(* elt_select##selectpicker(string "val", string v) SHOULD be enough but not working *)
-let selectpicker_set_value (elt_select : #Dom_html.element Js.t) (v : string) : unit =
-  jquery_from
-    elt_select
-    ("option[value=\"" ^ v ^ "\"]")
-    (fun elt_option ->
-     Opt.iter
-       (Dom_html.CoerceTo.option elt_option)
-       (fun elt_option ->
-	let index = string_of_int elt_option##index in
-	Opt.iter
-	  (elt_select##previousSibling)
-	  (fun node_dropdown ->
-	   Opt.iter
-	     (Dom_html.CoerceTo.element node_dropdown)
-	     (fun elt_dropdown ->
-	      let active_elt_opt = (Unsafe.coerce Dom_html.document)##activeElement in
-	      jquery_click_from
-		elt_dropdown
-		("li[data-original-index=\"" ^ index ^ "\"] a");
-	      Opt.iter active_elt_opt
-		       (fun elt -> (Unsafe.coerce elt)##focus())
-	     ))))
-
   
 (* YASGUI bindings *)
 

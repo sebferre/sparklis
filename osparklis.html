@@ -1,5 +1,5 @@
 <!--
-  Copyright 2013-2017 Sébastien Ferré, IRISA, Université de Rennes 1
+  Copyright 2013-2018 Sébastien Ferré, IRISA, Université de Rennes 1
 
   This file is part of Sparklis.
   -->
@@ -25,12 +25,6 @@
 <!-- Bootstrap -->
 <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
 <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
-<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.7.3/css/bootstrap-select.min.css" />
-<!-- Select-picker -->
-<!--
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/css/bootstrap-select.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.4/js/bootstrap-select.min.js"></script>
--->
 <!-- Sparklis -->
 <link href="osparklis.css?v=2" rel="stylesheet" type="text/css"/>
 <script src="osparklis.js"></script>
@@ -593,7 +587,7 @@
 	      <span class="texte lang-fr">Définir la langue de la page et des requêtes : </span>
 	      <span class="texte lang-es">Cambiar el idioma de la página y las consultas a : </span>
 	      <span class="texte lang-nl"> Stel de pagina en query taal in als</span>
-	      <select id="lang-select" class="selectpicker">
+	      <select id="lang-select">
 		<option value="en">English</option>
 		<option value="fr">français</option>
 		<option value="es">Español</option>
@@ -607,7 +601,7 @@
 	      <span class="texte lang-fr">Pour les étiquettes d'<span class="URI">entités</span>, utiliser la propriété </span>
 	      <span class="texte lang-es">Para las etiquetas de las <span class="URI">entidades</span>, utilizar la propiedad </span>
 	      <span class="texte lang-nl"> Voor <span class="URI">entity</span> labels, gebruik eigenschap </span>
-	      <select id="config-label-entity-select" class="selectpicker">
+	      <select id="config-label-entity-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -645,7 +639,7 @@
 	      <span class="texte lang-fr">Pour les étiquettes de <span class="classURI">classes</span>, utiliser la propriété</span>
 	      <span class="texte lang-es">Para las etiquetas de las <span class="classURI">clases</span>, utilizar la propiedad</span>
 	      <span class="texte lang-nl">Voor labels van <span class="classURI">klassen</span>, gebruik de eigenschap</span>
-	      <select id="config-label-class-select" class="selectpicker">
+	      <select id="config-label-class-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -683,7 +677,7 @@
 	      <span class="texte lang-fr">Pour les étiquettes de <span class="propURI">propriétés</span>, utiliser la propriété </span>
 	      <span class="texte lang-es">Para las etiquetas de las <span class="propURI">propiedades</span>, utilizar la propiedad </span>
 	      <span class="texte lang-nl">Voor labels van <span class="propURI">eigenschappen</span>, gebruik de eigenschap</span>
-	      <select id="config-label-property-select" class="selectpicker">
+	      <select id="config-label-property-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -721,7 +715,7 @@
 	      <span class="texte lang-fr">Pour les étiquettes des <span class="naryURI">qualifieurs</span>, utiliser la propriété </span>
 	      <span class="texte lang-es">Para las etiquetas de los <span class="naryURI">calificadores</span>, utilizar la propiedad </span>
 	      <span class="texte lang-nl">voor labels van <span class="naryURI">qualifiers</span>, gebruik de eigenschap </span>
-	      <select id="config-label-arg-select" class="selectpicker">
+	      <select id="config-label-arg-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -768,7 +762,7 @@
 	      <span class="texte lang-fr">Pour le filtrage des suggestions, utiliser </span>
 	      <span class="texte lang-es">Para filtrar los sugerencias, use </span>
 	      <span class="texte lang-nl">Voor het filteren van suggesties, gebruik </span>
-	      <select id="input-fulltext-search-select" class="selectpicker"> <!-- Move 'selected' to change default value -->
+	      <select id="input-fulltext-search-select"> <!-- Move 'selected' to change default value -->
 		<option value="regex" selected>SPARQL's REGEX</option>
 		<option value="text:query">Jena's <code>text:query</code></option>
 		<option value="bif:contains">Virtuoso's <code>bif:contains</code></option>
@@ -1022,7 +1016,7 @@
 		<span class="tooltip lang-nl">Klik op een concept om deze toe te voegen aan de focus van de query</span>
 		<div class="row">
 		  <div class="col-xs-4 no-padding">
-		    <select id="select-properties" class="select-incrs form-control selectpicker">
+		    <select id="select-properties" class="select-incrs form-control">
 		      <option value="matchesAll">matches all</option>
 		      <option value="matchesAny">matches any</option>
 		    </select>
@@ -1095,7 +1089,7 @@
 		    <span class="tooltip lang-fr">Sélectionner un opérateur de filtrage</span>
 		    <span class="tooltip lang-es">Seleccionar un operador de filtrado</span>
 		    <span class="tooltip lang-nl">Selecteer een filter operator</span>
-		    <select id="select-terms" class="select-incrs form-control selectpicker">
+		    <select id="select-terms" class="select-incrs form-control">
 		      <!-- dynamically generated
 		      <option value="matchesAll">matches all</option>
 		      <option value="matchesAny">matches any</option>
@@ -1173,7 +1167,7 @@
 		<span class="tooltip lang-nl">Klik op een modifier om deze toe te voegen aan de focus van de query</span>
 		<div class="row">
 		  <div class="col-xs-5 no-padding">
-		    <select id="select-modifiers" class="select-incrs form-control selectpicker">
+		    <select id="select-modifiers" class="select-incrs form-control">
 		      <option value="matchesAll">matches all</option>
 		      <option value="matchesAny">matches any</option>
 		    </select>
@@ -1272,7 +1266,7 @@
 		<span class="texte lang-fr">Montrer</span>
 		<span class="texte lang-es">Mostrar</span>
 		<span class="texte lang-nl">Toon</span>
-		<select id="limit-results" class="selectpicker" data-width="fit"> <!-- NOT WORKING!!! -->
+		<select id="limit-results" data-width="fit"> <!-- NOT WORKING!!! -->
 		  <option value="10">10</option>
 		  <option value="20">20</option>
 		  <option value="50">50</option>
@@ -1364,10 +1358,10 @@
       <br/>
     </span>
 
-    <span class="texte lang-en">Last modified September 11th, 2018. Visit </span>
-    <span class="texte lang-fr">Dernière modification le 11 septembre 2018. Visiter </span>
-    <span class="texte lang-es">Última modificación 11 de Septiembre, 2018. Visite </span>
-    <span class="texte lang-nl">Voor het laatst gewijzigd op 11 september 2018. Bezoek </span>
+    <span class="texte lang-en">Last modified October 22nd, 2018. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 22 octobre 2018. Visiter </span>
+    <span class="texte lang-es">Última modificación 22 de Octubre, 2018. Visite </span>
+    <span class="texte lang-nl">Voor het laatst gewijzigd op 22 oktober 2018. Bezoek </span>
     <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/">
       <span class="texte lang-en">my homepage</span>
       <span class="texte lang-fr">ma page Web</span>

@@ -155,7 +155,8 @@ object (self)
 
   method private set_select (v : string) : unit =
     if v <> current_v then begin
-      jquery_select select_selector (fun select -> selectpicker_set_value select v);
+      jquery_select select_selector
+		    (fun select -> select##value <- string v);
       current_v <- v;
       self#changed
     end
