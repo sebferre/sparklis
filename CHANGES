@@ -1,7 +1,9 @@
 # description of main changes that impact interface with outside
 
-2018-10-21
+2018-10-24
 
+- Permalink.to_query: now takes a continuation 'k' instead of directly returning the LISQL query
+  - because need to retrieve labels of URIs in permalink query
 - dynamic filtering operators (type Lisql.constr)
   - new method Lis.place#list_term_constraints
     - to retrieve the relevant term filtering operators (like for modifier increments, no ajax call)

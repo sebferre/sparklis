@@ -335,13 +335,13 @@ and parse_apply_arg ~version = parser
 and parse_p1 ~version = parser
   | [< np = parse_un ~version "Is" parse_s1 >] -> Is ((),np)
   | [< arg, pred, cp = parse_ter ~version "Pred" parse_arg parse_pred parse_sn >] -> Pred ((),arg,pred,cp)
-  | [< c = parse_un ~version "Type" parse_uri >] -> Type ((),c)
-  | [< p, m, np = parse_ter ~version "Rel" parse_uri parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
-  | [< p, np = parse_bin ~version "Has" parse_uri parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
-  | [< p, np = parse_bin ~version "IsOf" parse_uri parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
-  | [< id, p, ori, inv, np = parse_quin ~version "Hier" parse_id parse_uri parse_modif_p2 parse_bool parse_s1 >] -> Hier ((),id,p,ori,inv,np)
+  | [< c = parse_un ~version "Type" parse_class >] -> Type ((),c)
+  | [< p, m, np = parse_ter ~version "Rel" parse_property parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
+  | [< p, np = parse_bin ~version "Has" parse_property parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
+  | [< p, np = parse_bin ~version "IsOf" parse_property parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
+  | [< id, p, ori, inv, np = parse_quin ~version "Hier" parse_id parse_property parse_modif_p2 parse_bool parse_s1 >] -> Hier ((),id,p,ori,inv,np)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
-  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_uri parse_uri parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
+  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_property parse_property parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
   | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
   | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c)
@@ -355,12 +355,12 @@ and parse_p1 ~version = parser
   | [< () = parse_atom ~version "IsThere" >] -> IsThere ()
   | [<>] -> syntax_error "invalid p1"
 and parse_pred ~version = parser
-  | [< c = parse_un ~version "Class" parse_uri >] -> Class c
-  | [< p = parse_un ~version "Prop" parse_uri >] -> Prop p
-  | [< ps, po = parse_bin ~version "SO" parse_uri parse_uri >] -> SO (ps,po)
-  | [< pe, po = parse_bin ~version "EO" parse_uri parse_uri >] -> EO (pe,po)
+  | [< c = parse_un ~version "Class" parse_class >] -> Class c
+  | [< p = parse_un ~version "Prop" parse_property >] -> Prop p
+  | [< ps, po = parse_bin ~version "SO" parse_property parse_property >] -> SO (ps,po)
+  | [< pe, po = parse_bin ~version "EO" parse_property parse_property >] -> EO (pe,po)
 and parse_latlong ~version = parser
-  | [< plat, plong = parse_bin ~version "Custom" parse_uri parse_uri >] -> `Custom (plat,plong)
+  | [< plat, plong = parse_bin ~version "Custom" parse_property parse_property >] -> `Custom (plat,plong)
   | [< () = parse_atom ~version "Wikidata" >] -> `Wikidata
 and parse_modif_p2 ~version = parser
   | [< ori, () = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> ori  (* for backward compatibility *)
@@ -400,13 +400,13 @@ and parse_s2_an ~version =
     | VId -> (parser [< id, modif, head = parse_ter ~version "An" parse_id parse_modif parse_head >] -> An (id, modif, head))
 and parse_head ~version  = parser
   | [< () = parse_atom ~version "Thing" >] -> Thing
-  | [< c = parse_un ~version "Class" parse_uri >] -> Class c
+  | [< c = parse_un ~version "Class" parse_class >] -> Class c
   | [<>] -> syntax_error "invalid head"
 and parse_arg ~version = parser
   | [< () = parse_atom ~version "S" >] -> S
   | [< () = parse_atom ~version "P" >] -> P
   | [< () = parse_atom ~version "O" >] -> O
-  | [< q = parse_un ~version "Q" parse_uri >] -> Q q
+  | [< q = parse_un ~version "Q" parse_arg_property >] -> Q q
   | [<>] -> syntax_error "invalid arg"
 and parse_modif ~version = parser
   | [< p, o = parse_bin ~version "Modif" parse_project parse_order >] -> (p,o)
@@ -456,18 +456,30 @@ and parse_constr ~version = parser
   | [< s = parse_un ~version "HasDatatype" parse_string >] -> HasDatatype s
   | [<>] -> syntax_error "invalid constr"
 and parse_term ~version = parser
-  | [< uri = parse_un ~version "URI" parse_uri >] -> URI uri
+  | [< uri = parse_un ~version "URI" parse_entity >] -> URI uri
   | [< f, s, dt = parse_ter ~version "Number" parse_float parse_string parse_string >] -> Number (f,s,dt)
-  | [< s, dt = parse_bin ~version "TypedLiteral" parse_string parse_uri >] -> TypedLiteral (s,dt)
+  | [< s, dt = parse_bin ~version "TypedLiteral" parse_string parse_class >] -> TypedLiteral (s,dt)
   | [< s, lang = parse_bin ~version "PlainLiteral" parse_string parse_string >] -> PlainLiteral (s,lang)
   | [< id = parse_un ~version "Bnode" parse_string >] -> Bnode id
   | [< v = parse_un ~version "Var" parse_var >] -> Var v
   | [<>] -> syntax_error "invalid term"
-and parse_uri ~version = parser [< s = parse_string ~version >] -> s
+and parse_entity ~version = parser [< uri = parse_string ~version >] -> Lexicon.enqueue_entity uri; uri
+and parse_class ~version = parser [< uri = parse_string ~version >] -> Lexicon.enqueue_class uri; uri
+and parse_property ~version = parser [< uri = parse_string ~version >] -> Lexicon.enqueue_property uri; uri
+and parse_arg_property ~version = parser [< uri = parse_string ~version >] -> Lexicon.enqueue_arg uri; uri
 and parse_var ~version = parser [< s = parse_string ~version >] -> s
 and parse_id ~version = parser [< i = parse_int ~version >] -> i
 
-let to_query (str : string) : unit elt_s = parse (lexer (Stream.of_string str))
+let to_query (str : string) (k : unit elt_s option -> unit) : unit =
+  let q_opt =
+    if str=""
+    then None
+    else
+      try Some (parse (lexer (Stream.of_string str)))
+      with
+      | Stream.Failure -> Jsutils.firebug "Permalink syntax error"; None
+      | Stream.Error msg -> Jsutils.firebug ("Permalink syntax error: " ^ msg); None in
+  Lexicon.sync (fun () -> k q_opt)
 
 let to_path (str : string) : path =
   let res = ref [] in

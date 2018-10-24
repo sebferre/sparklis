@@ -1038,71 +1038,17 @@ let translate () =
 	  option##innerHTML <- string new_text)
       done))
 
-let _ =
-  Firebug.console##log(string "Starting Sparklis");
-  if not Sparql_endpoint.valid_domain then
-    Dom_html.window##location##replace(string "http://www.irisa.fr/LIS/ferre/sparklis/");
-  if logging_on () then
-    Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
-  Dom_html.window##onload <- Dom.handler (fun ev ->
-   Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
-    firebug "Loaded document and google charts";
-    (* initializing YASGUI and other libs *)
-    Jsutils.yasgui#init;
-    (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
-    (* defining navigation history *)
-    let default_endpoint = ref "http://servolis.irisa.fr/dbpedia/sparql" in
-    let default_title = ref "Core English DBpedia" in
-    let default_focus = ref Lisql.factory#home_focus in
-    let _ = (* changing endpoint, title, and focus if permalink *)
-      let args = Url.Current.arguments in
-      (*let args =
-	match args with
-	  | [] -> []
-	  | (k,v)::l ->
-	     let k = try String.sub k 1 (String.length k - 1) with _ -> firebug "osparklis.ml: removing '?' failed"; k in  (* bug: '?' remains in first key ==> bug fixed in js_of_ocaml 2.7 *)
-	     (k, v)::l in*)
-      Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));
-      (try
-	  let url = List.assoc "endpoint" args in
-	  let url = (* switching from lisfs2008 to servolis *)
-	    try List.assoc
-		  url
-		  ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr:3030/dbpedia/sparql";
-		   "http://lisfs2008.irisa.fr/defiEGC2016/sparql", "http://servolis.irisa.fr:3131/defiEGC2016/sparql";
-		   "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr:3232/mondial/sparql"]
-	    with _ -> url in
-	  default_endpoint := url;
-	  default_title := (try List.assoc "title" args with _ -> dummy_title);
-	  (try
-	      let query =
-		Permalink.to_query
-		  (try List.assoc "sparklis-query" args
-		   with _ -> List.assoc "query" args) in (* for backward compatibility of permalinks *)
-	      let path =
-		try Permalink.to_path (List.assoc "sparklis-path" args)
-		with _ -> [] in
-	      default_focus := Lisql.focus_of_query_path query path
-	    with
-	    | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
-	    | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
-	    |  _ -> ())
-       with _ -> ());
-      (* setting title if any *)
-      jquery_set_innerHTML "#sparql-endpoint-title" !default_title;
-      (* initializing configuration from HTML *)
-      config#init !default_endpoint args in
-    (* creating and initializing history *)
-    let history = new history !default_endpoint !default_focus in
-
-    (* setting event callbacks *)
-    jquery "#button-home" (onclick (fun elt ev -> history#home));
-    jquery "#button-back" (onclick (fun elt ev -> history#back));
-    jquery "#button-forward" (onclick (fun elt ev -> history#forward));
-    jquery "#button-refresh" (onclick (fun elt ev -> history#refresh));
-    jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
-      jquery_input "#sparql-endpoint-input" (fun input ->
-	let url = to_string (input##value) in
+let initialize endpoint focus =
+  let history = new history endpoint focus in
+  
+  (* setting event callbacks *)
+  jquery "#button-home" (onclick (fun elt ev -> history#home));
+  jquery "#button-back" (onclick (fun elt ev -> history#back));
+  jquery "#button-forward" (onclick (fun elt ev -> history#forward));
+  jquery "#button-refresh" (onclick (fun elt ev -> history#refresh));
+  jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
+     jquery_input "#sparql-endpoint-input" (fun input ->
+        let url = to_string (input##value) in
 	history#change_endpoint url)));
     jquery_input "#sparql-endpoint-input" (onenter (fun input ev ->
       jquery_click "#sparql-endpoint-button"));
@@ -1213,5 +1159,98 @@ let _ =
     
     (* generating and displaying contents *)
     translate ();
-    history#present#refresh;
+    history#present#refresh
+
+(* main *)
+let _ =
+  Firebug.console##log(string "Starting Sparklis");
+  if not Sparql_endpoint.valid_domain then
+    Dom_html.window##location##replace(string "http://www.irisa.fr/LIS/ferre/sparklis/");
+  if logging_on () then
+    Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
+  Dom_html.window##onload <- Dom.handler (fun ev ->
+   Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
+    firebug "Loaded document and google charts";
+    (* initializing YASGUI and other libs *)
+    Jsutils.yasgui#init;
+    (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
+    (* defining endpoint, title *)
+    let args = Url.Current.arguments in
+    let endpoint, title =
+      try List.assoc "endpoint" args,
+	  List.assoc "title" args
+      with Not_found ->
+	"http://servolis.irisa.fr/dbpedia/sparql",
+	"Core English DBpedia" in
+    let endpoint = (* switching from lisfs2008 to servolis *)
+      try List.assoc
+	    endpoint
+	    ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr/dbpedia/sparql";
+	     "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr/mondial/sparql"]
+      with _ -> endpoint in
+    config#init endpoint args;
+    jquery_set_innerHTML "#sparql-endpoint-title" title;
+    (* defining focus and navigation history *)
+    let arg_query =
+      try List.assoc "sparklis-query" args
+      with Not_found ->
+	   try List.assoc "query" args (* for backward compatibility of permalinks *)
+	   with Not_found -> "" in
+    Permalink.to_query
+      arg_query
+      (fun query_opt ->
+       let focus =
+	 match query_opt with
+	 | Some query ->
+	    let path =
+	      try Permalink.to_path (List.assoc "sparklis-path" args)
+	      with Not_found -> [] in
+	    Lisql.focus_of_query_path query path
+	 | None -> Lisql.factory#home_focus in
+       initialize endpoint focus);
     bool true))
+
+(*    
+    let default_endpoint = ref "http://servolis.irisa.fr/dbpedia/sparql" in
+    let default_title = ref "Core English DBpedia" in
+    let default_focus = ref Lisql.factory#home_focus in
+    let _ = (* changing endpoint, title, and focus if permalink *)
+      let args = Url.Current.arguments in
+      (*let args =
+	match args with
+	  | [] -> []
+	  | (k,v)::l ->
+	     let k = try String.sub k 1 (String.length k - 1) with _ -> firebug "osparklis.ml: removing '?' failed"; k in  (* bug: '?' remains in first key ==> bug fixed in js_of_ocaml 2.7 *)
+	     (k, v)::l in*)
+      (*Firebug.console##log(string (String.concat " & " (List.map (fun (k,v) -> k ^ " = " ^ v) args)));*)
+      (try
+	  let url = List.assoc "endpoint" args in
+	  let url = (* switching from lisfs2008 to servolis *)
+	    try List.assoc
+		  url
+		  ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr/dbpedia/sparql";
+		   "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr/mondial/sparql"]
+	    with _ -> url in
+	  default_endpoint := url;
+	  default_title := (try List.assoc "title" args with _ -> dummy_title);
+	  (try
+	      Permalink.to_query
+		(try List.assoc "sparklis-query" args
+		 with _ -> List.assoc "query" args) (* for backward compatibility of permalinks *)
+		(fun query ->
+		 let path =
+		   try Permalink.to_path (List.assoc "sparklis-path" args)
+		   with _ -> [] in
+		 default_focus := Lisql.focus_of_query_path query path)
+	    with
+	    | Stream.Failure -> Firebug.console##log(string "Permalink syntax error")
+	    | Stream.Error msg -> Firebug.console##log(string ("Permalink syntax error: " ^ msg))
+	    |  _ -> ())
+       with _ -> ());
+      (* setting title if any *)
+      jquery_set_innerHTML "#sparql-endpoint-title" !default_title;
+      (* initializing configuration from HTML *)
+      config#init !default_endpoint args in
+    (* creating and initializing history *)
+    let history = new history !default_endpoint !default_focus in
+ *)
