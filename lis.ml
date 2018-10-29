@@ -131,7 +131,7 @@ let filter_hidden_URIs (v : string) : string =
     
 (* extraction of the extension and indexes *)
 
-let lexicon_enqueue_term = function
+let enqueue_term = function
   | Rdf.URI uri ->
      Ontology.enqueue_entity uri;
      Lexicon.enqueue_entity uri
@@ -139,6 +139,14 @@ let lexicon_enqueue_term = function
      Lexicon.enqueue_class dt
   | _ -> ()
 
+let sync_terms k =
+  Lexicon.sync_entities
+    (fun () ->
+     Lexicon.sync_concepts
+       (fun () ->
+	Ontology.sync_entities
+	  (fun () -> k ())))
+	   
 let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : Sparql_endpoint.results -> unit) : unit =
   let open Sparql_endpoint in
   let rec aux offset limit acc = function
@@ -148,7 +156,7 @@ let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.
       else if limit > 0 then begin
 	Array.iter
 	  (function
-	    | Some t -> lexicon_enqueue_term t
+	    | Some t -> enqueue_term t
 	    | None -> ())
 	  binding;
 	aux offset (limit-1) (binding :: acc) l end
@@ -159,7 +167,7 @@ let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.
       (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
       results.vars in
   let partial_bindings = List.rev (aux offset limit [] results.bindings) in
-  Lexicon.sync_entities (* datatypes and entities *)
+  sync_terms (* datatypes and entities *)
     (fun () -> k { results with vars = partial_vars; bindings = partial_bindings })
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
@@ -729,9 +737,17 @@ object (self)
       let unit = `Results in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       List.iter
-	(fun t -> incr_index#add (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }))
+	(fun t ->
+	 enqueue_term t;
+	 (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
+	 incr_index#add (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }))
 	list_term;
-      k ~partial incr_index
+      (* synchronizing hierarchies and lexicons and continuing *)
+      sync_terms (* datatypes and entities *)
+	(fun () ->
+	 term_hierarchy#sync
+	   (fun () ->
+	    k ~partial incr_index))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
@@ -749,7 +765,7 @@ object (self)
       k ~partial:false (new incr_freq_index)
     else if focus_descr#unconstrained then
       self#ajax_index_terms_init constr elt k
-    else
+    else begin
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
       let unit = `Results in
@@ -763,8 +779,8 @@ object (self)
     (* adding term increments *)
       focus_term_index#iter (*rev_map*)
 	(fun (t, (freq,_)) ->
+	  enqueue_term t;
 	  (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
-	  lexicon_enqueue_term t;
 	  incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
     (* adding input increments *)
       if Lisql.is_undef_expr_focus focus then
@@ -820,13 +836,12 @@ object (self)
 	  end
       | _ -> () );
       (* synchronizing hierarchies and lexicons and continuing *)
-      term_hierarchy#sync
+      sync_terms (* datatypes and entities *)
 	(fun () ->
-	 Lexicon.sync_entities (* datatypes and entities *)
+	 term_hierarchy#sync
 	   (fun () ->
-	    Ontology.sync_entities
-	      (fun () ->
-	       k ~partial incr_index)))
+	    k ~partial incr_index))
+      end
 
   method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
     let process results_class results_prop results_pred =
