@@ -24,8 +24,8 @@ type constr =
 
 let reset_constr : constr -> constr = function
   | True -> True
-  | MatchesAll _ -> MatchesAll ["..."]
-  | MatchesAny _ -> MatchesAny ["..."]
+  | MatchesAll _ -> MatchesAll ["..."; "..."]
+  | MatchesAny _ -> MatchesAny ["..."; "..."]
   | After _ -> After "..."
   | Before _ -> Before "..."
   | FromTo _ -> FromTo ("...","...")

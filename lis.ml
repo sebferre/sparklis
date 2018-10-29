@@ -1396,8 +1396,8 @@ object (self)
       List.filter
 	(fun constr ->
 	 Lisql_type.is_insertable_constr constr focus_type_constraints)
-	[ MatchesAll ["..."];
-	  MatchesAny ["..."];
+	[ MatchesAll ["..."; "..."];
+	  MatchesAny ["..."; "..."];
 	  After "...";
 	  Before "...";
 	  FromTo ("...","...");

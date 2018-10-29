@@ -752,6 +752,8 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
   | InWhichThereIs (annot,np) -> A (annot, `IsInWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
 and vp_of_constr grammar annot = function
   | True -> A (annot, `Ellipsis)
+  | MatchesAll [pat]
+  | MatchesAny [pat] -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal pat, X `Nil)), []))
   | MatchesAll lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), []))
   | MatchesAny lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)), []))
   | After pat -> A (annot, `IsPP (`Prep (`Op grammar#after, np_of_literal pat)))
