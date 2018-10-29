@@ -447,21 +447,23 @@ module WhichPred =
       let pat_SO =
 	Sparql.(join
 		  [ pattern_SO "ps" "po";
-		    union
-		      [ bnode_triples_as_pattern (* relation: ps, po *)
-			  [ var "ps", term t;
-			    var "po", bnode "" ];
-			(*join (* qualifier: ps, po, pq *)
-			  [ bnode_triples_as_pattern
-			      [ var "ps", bnode "";
-				var "po", bnode "";
-				var "pq", term t ];
-			    filter
-			      (log_and
-				 [ expr_infix "!=" [var "pq"; var "ps"];
-				   expr_infix "!=" [var "pq"; var "po"] ])
-			  ]*)
-		      ]
+		    filter
+		      (exists (
+			   union
+			     [ bnode_triples_as_pattern (* relation: ps, po *)
+				 [ var "ps", term t;
+				   var "po", bnode "" ];
+			       (*join (* qualifier: ps, po, pq *)
+				 [ bnode_triples_as_pattern
+				     [ var "ps", bnode "";
+				       var "po", bnode "";
+				       var "pq", term t ];
+				   filter
+				     (log_and
+					[ expr_infix "!=" [var "pq"; var "ps"];
+					  expr_infix "!=" [var "pq"; var "po"] ])
+				 ]*)
+			     ]))
 		  ]) in
       let pat_EO_wikidata =
 	let pat_schema pe po =
@@ -471,19 +473,24 @@ module WhichPred =
 	Sparql.(union
 		  [ join
 		      [ pat_schema "pe" "po";
+			filter (exists (
 			triple (* forward: pe, po *)
 			  (term t)
 			  (var "pe")
 			  (bnode_triples
-			     [ var "po", bnode "" ]) ];
-		    if init then empty
+			     [ var "po", bnode "" ]))) ];
+		    if init
+		    then empty
 		    else join (* backward: pe, ps, po *)
 			   [ pat_schema "pe" "ps";
-			     triple
-			       (bnode "")
-			       (var "pe")
-			       (bnode_triples
-				  [ var "ps", term t ]) ]; (* binding 'ps' to distinguish orientation *)
+			     filter
+			       (exists (
+				    triple
+				      (bnode "")
+				      (var "pe")
+				      (bnode_triples
+					 [ var "ps", term t ]))) (* binding 'ps' to distinguish orientation *)
+			   ];
 		    (*join (* qualifier: pe, po, pq *)
 		      [ triple
 			  (bnode "")
@@ -501,6 +508,7 @@ module WhichPred =
 	    
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       (* ~init: for initial focus, remind to generate increments in all relevant directions S/P/O *)
+      assert (List.length lt = List.length pattern_vars);
       match lt with
       | [None; Some (Rdf.URI ps); Some (Rdf.URI po); None] ->
 	 [Lisql.IncrPred (S, SO (ps,po))]

@@ -246,6 +246,7 @@ let union (lp : _ any_pattern list) : pattern =
 let optional (p : _ any_pattern) : pattern =
   if p = empty then invalid_arg "Sparql.optional: empty pattern";
   "OPTIONAL { " ^< indent 11 p ^> " }"
+let exists (p : _ any_pattern) : expr = "EXISTS { " ^< indent 9 p ^> " }"
 let not_exists (p : _ any_pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
 let graph (g : _ any_term) (p : _ any_pattern) : pattern = "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
 
