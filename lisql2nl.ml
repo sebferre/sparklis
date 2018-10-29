@@ -1340,7 +1340,7 @@ and xml_rel grammar ~id_labelling = function
       | `ThatS s -> Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
       | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
       | `PrepWhich (w,s) -> Word w :: Kwd grammar#which :: xml_s grammar ~id_labelling s
-      | `AtWhichNoun (w,s) -> Kwd grammar#at :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
+      | `AtWhichNoun (w,s) -> Kwd grammar#with_ :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
       | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
@@ -1401,8 +1401,8 @@ and xml_pp_list grammar ~id_labelling lpp =
 and xml_pp grammar ~id_labelling = function
   | `Bare np -> xml_np grammar ~id_labelling np
   | `Prep (w,np) -> Word w :: xml_np grammar ~id_labelling np
-  | `AtNoun (w,np) -> Kwd grammar#at :: Word w :: xml_np grammar ~id_labelling np
-  | `At np -> Kwd grammar#at :: xml_np grammar ~id_labelling np
+  | `AtNoun (w,np) -> Kwd grammar#with_ :: Word w :: xml_np grammar ~id_labelling np
+  | `At np -> Kwd grammar#with_ :: xml_np grammar ~id_labelling np
   | `PrepBin (prep1,np1,prep2,np2) -> Word prep1 :: xml_np grammar ~id_labelling np1 @ Word prep2 :: xml_np grammar ~id_labelling np2
 and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
   | `Word w -> [Word w]
@@ -1502,7 +1502,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = funct
   | IncrArg q ->
      let w, synt = word_syntagm_of_arg_uri grammar q in
      ( match synt with
-       | `Noun -> Kwd grammar#at :: Word w :: xml_ellipsis
+       | `Noun -> Kwd grammar#with_ :: Word w :: xml_ellipsis
        | `TransAdj -> Word w :: xml_ellipsis )
   | IncrType c ->
     let xml_c = [Word (word_of_class c)] in

@@ -46,7 +46,7 @@ object (self)
   method virtual genetive_suffix : string option
   method virtual rel_to : string
   method virtual rel_from : string
-  method virtual at : string
+  method virtual with_ : string
 
   method virtual a_an : following:string -> string
   method virtual the : string
@@ -174,7 +174,7 @@ object
   method genetive_suffix = Some "'s"
   method rel_to = "to"
   method rel_from = "from"
-  method at = "at"
+  method with_ = "with"
 
   method a_an ~following = if starts_with_vowel following then "an" else "a"
   method the = "the"
@@ -374,7 +374,7 @@ object
   method genetive_suffix = None
   method rel_from = "de"
   method rel_to = "à"
-  method at = "au" (* à l'/le/la *)
+  method with_ = "avec"
 
   method a_an ~following = "un·e"
   method the = "le·a"
@@ -573,7 +573,7 @@ object
   method genetive_suffix = None
   method rel_from = "de"
   method rel_to = "a"
-  method at = "a"
+  method with_ = "con"
 
   method a_an ~following = "un(a)"
   method the = "la"
@@ -773,7 +773,7 @@ object
   method genetive_suffix = Some "'s"
   method rel_to = "naar"
   method rel_from = "van"
-  method at = "op"
+  method with_ = "met"
 
   method a_an ~following = "een"
   method the = "de"
