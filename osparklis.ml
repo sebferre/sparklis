@@ -286,7 +286,7 @@ object (self)
   val mutable offset = 0
   val mutable limit = 10
 
-  val mutable term_constr = Lisql.True (*Lisql.MatchesAll []*)
+  val mutable term_constr = Lisql.True
   val mutable property_constr = Lisql.MatchesAll []
 
   val term_selection = new increment_selection "#selection-terms"
@@ -776,10 +776,10 @@ object (self)
       if equivalent_constr constr term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
       else begin self#abort_all_ajax; true end in	
+    term_constr <- constr;
     if to_refresh (* not refreshing_terms && constr <> term_constr *)
     then begin
       refreshing_terms <- true;
-      term_constr <- constr;
       self#save_ui_state;
       (*if self#is_home
       then self#refresh_term_increments
@@ -791,10 +791,10 @@ object (self)
       if equivalent_constr constr property_constr then false
       else if subsumed_constr constr property_constr then not refreshing_properties
       else begin self#abort_all_ajax; true end in	
+    property_constr <- constr;
     if to_refresh (* not refreshing_properties && constr <> property_constr *)
     then begin
       refreshing_properties <- true;
-      property_constr <- constr;
       self#save_ui_state;
       self#refresh_property_increments
     end
