@@ -1134,24 +1134,29 @@ let latlong_of_increment (incr : increment) : latlong option =
 
 					 
 
-let hierarchy_of_uri (uri : Rdf.uri) : unit elt_p1 option =
+let hierarchy_p1_opt_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   let lhp = Ontology.config_hierarchy_inheritance#value#info uri in
   match lhp with
   | [] -> None
   | hp::_ -> (* TODO: what about other properties ? *)
      Some (Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1))
 
+let hierarchy_s1_of_uri (uri : Rdf.uri) : unit elt_s1 =
+ let fh_opt = hierarchy_p1_opt_of_uri uri in
+ Det ((), factory#top_s2, fh_opt)
+	  
 let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
   match pred with
   | Class _ ->
      ( match arg with
        | S -> Pred ((), arg, pred, CNil ())
        | _ -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ())) )
-  | Prop _
-  | SO _
-  | EO _ ->
+  | Prop p
+  | SO (_,p)
+  | EO (_,p) ->
      ( match arg with
-       | S -> Pred ((), S, pred, CCons ((), O, factory#top_s1, CNil ()))
+       | S -> let np = hierarchy_s1_of_uri p in
+	      Pred ((), S, pred, CCons ((), O, np, CNil ()))
        | O -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))
        | _ ->
 	  Pred ((), arg, pred,
@@ -1159,14 +1164,11 @@ let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
 		       CCons ((), O, factory#top_s1, CNil ()))) )
 	  
 let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
-  let default = Rel ((), p, m, factory#top_s1) in
-  match m with
-  | Fwd -> (* only for hierarchy display, according to declared rdfs:inheritsThrough *)
-     let det = factory#top_s2 in
-     ( match hierarchy_of_uri p with
-       | None -> Rel ((), p, m, Det ((), det, None))
-       | Some fh -> Rel ((), p, m, Det ((), det, Some fh)) )
-  | Bwd -> default
+  let np =
+    match m with
+    | Fwd -> hierarchy_s1_of_uri p
+    | Bwd -> factory#top_s1 in
+  Rel ((), p, m, np)
   
 let elt_p1_of_increment : increment -> unit elt_p1 option = function
   | IncrPred (arg,pred) -> Some (elt_p1_of_arg_pred arg pred)
@@ -1361,7 +1363,7 @@ let rec insert_type c = function
 	   match rel_opt with
 	   | Some _ -> [], rel_opt
 	   | None ->
-	      ( match hierarchy_of_uri c with
+	      ( match hierarchy_p1_opt_of_uri c with
 		| Some fh -> [down_focus; down_focus], Some fh
 		| None -> [], None ) in
 	 focus_opt_moves
@@ -1378,14 +1380,19 @@ let insert_pred arg pred focus =
   let foc_opt = insert_elt_p1 (elt_p1_of_arg_pred arg pred) focus in
   focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
 
-let insert_arg arg = function
-  | AtP1 (Pred (_,arg0,pred,cp), ctx) ->
-     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, PredX (arg0, pred, ctx))))
-  | AtSn (cp,ctx) ->
-     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, ctx)))
-  | AtS1 (np, CConsX1 (arg0, cp, ctx)) ->
-     Some (AtS1 (factory#top_s1, CConsX1 (arg, cp, CConsX2 (arg0, np, ctx))))
-  | _ -> None
+let insert_arg (q : Rdf.uri) focus =
+  let arg = Q q in
+  let np_arg = hierarchy_s1_of_uri q in
+  let foc_opt =
+    match focus with
+    | AtP1 (Pred (_,arg0,pred,cp), ctx) ->
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, PredX (arg0, pred, ctx))))
+    | AtSn (cp,ctx) ->
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, ctx)))
+    | AtS1 (np, CConsX1 (arg0, cp, ctx)) ->
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, CConsX2 (arg0, np, ctx))))
+    | _ -> None in
+  focus_opt_moves [down_focus; down_focus] foc_opt 
 		  
 let insert_rel p m focus =
   let foc_opt = insert_elt_p1 (elt_p1_of_rel p m) focus in
@@ -1805,7 +1812,7 @@ let insert_increment incr focus =
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus
     | IncrPred (arg,pred) -> insert_pred arg pred focus
-    | IncrArg q -> insert_arg (Q q) focus
+    | IncrArg q -> insert_arg q focus
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
     | IncrLatLong ll -> insert_latlong ll focus
