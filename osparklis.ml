@@ -1176,12 +1176,12 @@ let _ =
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
     (* defining endpoint, title *)
     let args = Url.Current.arguments in
-    let endpoint, title =
-      try List.assoc "endpoint" args,
-	  List.assoc "title" args
-      with Not_found ->
-	"http://servolis.irisa.fr/dbpedia/sparql",
-	"Core English DBpedia" in
+    let endpoint =
+      try List.assoc "endpoint" args
+      with Not_found ->  "http://servolis.irisa.fr/dbpedia/sparql" in
+    let title =
+      try List.assoc "title" args
+      with Not_found -> "Core English DBpedia" in
     let endpoint = (* switching from lisfs2008 to servolis *)
       try List.assoc
 	    endpoint
