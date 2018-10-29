@@ -4301,8 +4301,8 @@ b=[0,xc(a[1],a[2])],c=1;break;case
 2:var
 b=[0,a[1]],c=1;break;case
 4:var
-d=a[2];if(1<d[0])var
-b=0,c=1;else
+d=a[2];if(2===d[0])var
+b=[0,[0,d[2]]],c=1;else
 var
 b=[0,[0,d[1]]],c=1;break;case
 5:case

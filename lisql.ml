@@ -1113,8 +1113,8 @@ let rec term_of_increment : increment -> Rdf.term option = function
 and term_of_pred : pred -> Rdf.term option = function
   | Class c -> Some (Rdf.URI c)
   | Prop p -> Some (Rdf.URI p)
-  | SO _ -> None
-  | EO _ -> None
+  | SO (ps,po) -> Some (Rdf.URI po)
+  | EO (pe,po) -> Some (Rdf.URI pe)
 
 let uri_of_increment (incr : increment) : Rdf.uri option =
   match term_of_increment incr with
