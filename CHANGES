@@ -1,5 +1,8 @@
 # description of main changes that impact interface with outside
 
+2018-10-31
+- grammar: renamed 'at' into 'with'
+
 2018-10-24
 
 - Permalink.to_query: now takes a continuation 'k' instead of directly returning the LISQL query
