@@ -426,13 +426,14 @@ module WhichPred =
 		(var pe)
 		(uri Rdf.nary_eventObject)
 		(var po))
-    let pattern_wikidata pe po =
+    let filter_wikidata pe po =
       Sparql.(join
 		[ filter (expr_func "strstarts" [expr_func "str" [var pe]; (string "http://www.wikidata.org/prop/P" :> expr)]);
 		  filter (expr_func "strstarts" [expr_func "str" [var po]; (string "http://www.wikidata.org/prop/statement/P" :> expr)]) ])
-      (*Sparql.(bnode_triples_as_pattern
+    let pattern_wikidata pe po =
+      Sparql.(bnode_triples_as_pattern
 		[ (uri Rdf.wikibase_claim :> pred), var pe;
-		  (uri Rdf.wikibase_statementProperty :> pred), var po ])*)
+		  (uri Rdf.wikibase_statementProperty :> pred), var po ])
 	    
     let intent_pattern () : Sparql.pattern =
       if Rdf.config_wikidata_mode#value
@@ -465,14 +466,10 @@ module WhichPred =
 				 ]*)
 			     ]))
 		  ]) in
-      let pat_EO_wikidata =
-	let pat_schema pe po =
-	  if Rdf.config_wikidata_mode#value
-	  then pattern_wikidata pe po
-	  else pattern_EO pe po in
+      let pat_EO =
 	Sparql.(union
 		  [ join
-		      [ pat_schema "pe" "po";
+		      [ pattern_EO "pe" "po";
 			filter (exists (
 			triple (* forward: pe, po *)
 			  (term t)
@@ -482,7 +479,7 @@ module WhichPred =
 		    if init
 		    then empty
 		    else join (* backward: pe, ps, po *)
-			   [ pat_schema "pe" "ps";
+			   [ pattern_EO "pe" "ps";
 			     filter
 			       (exists (
 				    triple
@@ -502,9 +499,45 @@ module WhichPred =
 			  (expr_infix "!=" [var "pq"; var "po"])
 		      ]*)
 		  ]) in
+      let pat_wikidata =
+	Sparql.(union
+		  [ join
+		      [ (*triple (term t) (var "pe") (bnode "");
+			pattern_wikidata "pe" "po";*)
+			(* filter (exists ( *)
+			triple (* forward: pe, po *)
+			  (term t)
+			  (var "pe")
+			  (bnode_triples
+			     [ var "po", bnode "" ]);
+			filter_wikidata "pe" "po" ];
+		    if init
+		    then empty
+		    else join (* backward: pe, ps, po *)
+			   [ (* triple (bnode "") (var "ps") (term t);
+			     pattern_wikidata "pe" "ps" *)
+			     (* filter
+			       (exists ( *)
+				    triple
+				      (bnode "")
+				      (var "pe")
+				      (bnode_triples
+					 [ var "ps", term t ]); (* binding 'ps' to distinguish orientation *)
+			     filter_wikidata "pe" "ps" ];
+		    (*join (* qualifier: pe, po, pq *)
+		      [ triple
+			  (bnode "")
+			  (var "pe")
+			  (bnode_triples
+			     [ var "po", bnode "";
+			       var "pq", term t ]);
+			filter
+			  (expr_infix "!=" [var "pq"; var "po"])
+		      ]*)
+		  ]) in
       if Rdf.config_wikidata_mode#value
-      then pat_EO_wikidata
-      else Sparql.(union [pat_SO; pat_EO_wikidata])
+      then pat_wikidata
+      else Sparql.(union [pat_SO; pat_EO])
 	    
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       (* ~init: for initial focus, remind to generate increments in all relevant directions S/P/O *)
