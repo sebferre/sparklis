@@ -143,10 +143,18 @@ let bnode (name : string) : term = sparql (if name="" then "[]" else "_:" ^ name
     
 let var (v : Rdf.var) : var = sparql ("?" ^ v)
 
-let string (s : string) : term =
-  (*if String.contains s '\n' || String.contains s '\r'
-  then sparql ("\"\"\"" ^ s ^ "\"\"\"")
-  else*) sparql ("\"" ^ String.escaped s ^ "\"")
+let string : string -> term =
+  let re_backslash = Regexp.regexp_string "\\" in
+  let re_doublequote = Regexp.regexp_string "\"" in
+  let re_linefeed = Regexp.regexp_string "\n" in
+  let re_carriagereturn = Regexp.regexp_string "\r" in
+  let escape s =
+    let s = Regexp.global_replace re_backslash s "\\\\" in
+    let s = Regexp.global_replace re_doublequote s "\\\"" in
+    let s = Regexp.global_replace re_linefeed s "\\n" in
+    let s = Regexp.global_replace re_carriagereturn s "\\r" in
+    s in
+  fun s -> sparql ("\"" ^ escape s ^ "\"")
 
 let rec term : Rdf.term -> term = function
   | Rdf.URI u -> uri u
@@ -175,7 +183,7 @@ let term_aggreg (g : aggreg) (term : _ any_term) : term = (* assuming aggregates
 
 let expr_func (f : string) (l_expr : _ any_expr list) : expr = f ^< "(" ^< concat "," l_expr ^> ")"
 let expr_infix (op : string) (l_expr : _ any_expr list) : expr = "(" ^< concat (" " ^ op ^ " ") l_expr ^> ")"
-let expr_regex (expr : _ any_expr) (pat : string) : expr = "REGEX(" ^< expr ^> ", \"" ^ pat ^ "\", 'i')"
+let expr_regex (expr : _ any_expr) (pat : string) : expr = "REGEX(" ^< expr ^^ ", " ^< string pat ^> ", 'i')"
 let expr_comp (relop : string) (expr1 : _ any_expr) (expr2 : _ any_expr) : expr = expr1 ^^ (" " ^ relop ^ " ") ^< expr2
 let expr_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " IN (" ^< concat ", " le ^> ")"
 let expr_not_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " NOT IN (" ^< concat ", " le ^> ")"
