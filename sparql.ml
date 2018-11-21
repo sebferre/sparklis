@@ -144,9 +144,9 @@ let bnode (name : string) : term = sparql (if name="" then "[]" else "_:" ^ name
 let var (v : Rdf.var) : var = sparql ("?" ^ v)
 
 let string (s : string) : term =
-  if String.contains s '\n' || String.contains s '"'
+  (*if String.contains s '\n' || String.contains s '\r'
   then sparql ("\"\"\"" ^ s ^ "\"\"\"")
-  else sparql ("\"" ^ s ^ "\"")
+  else*) sparql ("\"" ^ String.escaped s ^ "\"")
 
 let rec term : Rdf.term -> term = function
   | Rdf.URI u -> uri u
