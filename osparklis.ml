@@ -1015,28 +1015,10 @@ let translate () =
   jquery_all ".tooltiped" (fun elt ->
     jquery_from elt tooltip_lang_selector (fun elt2 ->
       elt##title <- elt2##innerHTML));
-  (* translating some select options *)
-  jquery_all ".select-incrs" (fun elt ->
-    Opt.iter (Dom_html.CoerceTo.select elt) (fun select ->
-      let options = select##options in
-      for i = 0 to options##length - 1 do
-	Opt.iter options##item(i) (fun option ->
-	  let new_text =
-	    let grammar = Lisql2nl.config_lang#grammar in
-	    match to_string option##value with
-	      | "matchesAll" -> String.concat " " [grammar#matches; grammar#all; grammar#quantif_of]
-	      | "matchesAny" -> String.concat " " [grammar#matches; grammar#quantif_one; grammar#quantif_of]
-	      | "after" -> grammar#after
-	      | "before" -> grammar#before
-	      | "fromTo" -> String.concat " " [grammar#interval_from; grammar#interval_to]
-	      | "higherThan" -> grammar#higher_or_equal_to
-	      | "lowerThan" -> grammar#lower_or_equal_to
-	      | "between" -> grammar#interval_between
-	      | "hasLang" -> String.concat " " [grammar#has_as_a ~following:grammar#language; grammar#language]
-	      | "hasDatatype" -> String.concat " " [grammar#has_as_a ~following:grammar#datatype; grammar#datatype]
-	      | _ -> to_string option##innerHTML in
-	  option##innerHTML <- string new_text)
-      done))
+(* translating sorting options *)
+  let options = Html.html_list_sorting () in
+  jquery_set_innerHTML "#select-sorting-terms" options;
+  jquery_set_innerHTML "#select-sorting-properties" options
 
 let initialize endpoint focus =
   let history = new history endpoint focus in

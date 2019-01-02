@@ -192,6 +192,8 @@ let html_img ?id ?classe ?height ~alt ~title url =
     (match height with None -> "" | Some h -> " height=\"" ^ string_of_int h ^ "\"") ^
     " alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
 
+let html_option ~value label =
+  "<option value=\"" ^ value ^ "\">" ^ escapeHTML label ^ "</option>"						
 let html_video url =
   let mime =
     if Rdf.uri_has_ext url ["mp4"; "MP4"] then "video/mp4"
@@ -551,8 +553,20 @@ let html_list_constr (state : state) (lc : Lisql.constr list) : string =
 	let label =
 	  html_of_nl_xml state
 	    (Lisql2nl.xml_of_constr grammar ~id_labelling c) in
-	"<option value=\"" ^ value ^ "\">" ^ label ^ "</option>")
+	html_option ~value label)
        lc)
+
+let html_list_sorting () : string =
+  let grammar = Lisql2nl.config_lang#grammar in
+  let ls = (* so far, static list of sorting options *)
+    ["frequency", grammar#sorting_frequency;
+     "alphanum", grammar#sorting_alphanum] in
+  String.concat
+    ""
+    (List.map
+       (fun (value,label) ->
+	html_option ~value label)
+       ls)
     
 (* HTML of results *)
 

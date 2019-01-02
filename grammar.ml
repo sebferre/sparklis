@@ -132,6 +132,8 @@ object (self)
   method entity_entities : string * string = self#item_items
   method concept_concepts : string * string = self#item_items
   method modifier_modifiers : string * string = self#item_items
+  method virtual sorting_frequency : string
+  method virtual sorting_alphanum : string
 end
 
 let english =
@@ -337,6 +339,8 @@ object
   (*method entity_entities = "entity", "entities"
   method concept_concepts = "concept", "concepts"
   method modifier_modifiers = "modifier", "modifiers"*)
+  method sorting_frequency = "decreasing frequency"
+  method sorting_alphanum = "alphanumeric order"
 end
 
 let french =
@@ -535,6 +539,8 @@ object
   (*method entity_entities = "entité", "entités"
   method concept_concepts = "concept", "concepts"
   method modifier_modifiers = "modifieur", "modifieurs"*)
+  method sorting_frequency = "fréquence décroissante"
+  method sorting_alphanum = "ordre alphanumérique"
 end
 
 
@@ -734,6 +740,8 @@ object
   (*method entity_entities = "entidad", "entidades"
   method concept_concepts = "concepto", "conceptos"
   method modifier_modifiers = "modificador", "modificadores"*)
+  method sorting_frequency = "frecuencia decreciente"
+  method sorting_alphanum = "orden alfanumérico"
 end
 
 
@@ -932,4 +940,6 @@ object
   (*method entity_entities = "entiteit", "entiteiten"
   method concept_concepts = "concept", "concepten"
   method modifier_modifiers = "modifier", "modifiers"*)
+  method sorting_frequency = "afnemende frequentie"
+  method sorting_alphanum = "alfanumerieke volgorde"
 end
