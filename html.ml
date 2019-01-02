@@ -193,7 +193,7 @@ let html_img ?id ?classe ?height ~alt ~title url =
     " alt=\"" ^ alt ^ "\" title=\"" ^ title ^ "\">"
 
 let html_option ~value label =
-  "<option value=\"" ^ value ^ "\">" ^ escapeHTML label ^ "</option>"						
+  "<option value=\"" ^ value ^ "\">" ^ label ^ "</option>"						
 let html_video url =
   let mime =
     if Rdf.uri_has_ext url ["mp4"; "MP4"] then "video/mp4"
