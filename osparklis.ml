@@ -411,30 +411,43 @@ object (self)
 	  jquery_set_innerHTML "#carousel-slides" "No media"
 	(*elt_results##style##display <- string "none"*) end
       else begin
+	(* table of results *)
 	lis#results_page offset limit (fun results_page ->
-	(*elt_results##style##display <- string "block";*)
 	  jquery_enable_all "#nav-results-table";
 	  jquery_set_innerHTML "#list-results"
 	    (html_table_of_results html_state
 	       ~first_rank:(offset+1)
 	       ~focus_var:(match lis#focus_term_opt with Some (Rdf.Var v) -> Some v | _ -> None)
-	       results_page));
-	jquery "#count-results" (fun elt ->
-	  elt##innerHTML <- string
-	    (let nb = lis#results_nb in
-	     let partial = lis#partial_results in		       
-	     let grammar = Lisql2nl.config_lang#grammar in
-	     let s_result, s_results = grammar#result_results in
-	     if nb = 0
-	     then grammar#no ^ " " ^ s_results
-	     else
-	       let a, b = offset+1, min nb (offset+limit) in
-	       if a = 1 && b = nb && not partial then
-		 string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
+	       results_page);
+	  jquery "#count-results" (fun elt ->
+	    elt##innerHTML <- string
+	      (let nb = lis#results_nb in
+	       let partial = lis#partial_results in		       
+	       let grammar = Lisql2nl.config_lang#grammar in
+	       let s_result, s_results = grammar#result_results in
+	       if nb = 0
+	       then grammar#no ^ " " ^ s_results
 	       else
-		 s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		   " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
-	stop_links_propagation_from elt_results;
+		 let a, b = offset+1, min nb (offset+limit) in
+		 if a = 1 && b = nb && not partial then
+		   string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
+		 else
+		   s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		     " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
+	  stop_links_propagation_from elt_results;
+	  jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
+	    navigation#update_focus ~push_in_history:false (fun _ ->
+	      try
+		let key = to_string (elt_foc##id) in
+		Some (html_state#get_focus key)
+	      with _ -> None)));
+	  jquery_all ".cell" (onclick (fun elt ev ->
+	    navigation#update_focus ~push_in_history:true (fun current_focus ->
+	      let key = to_string (elt##id) in
+	      let _view, _rank, id, term = html_state#dico_results#get key in
+	      let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
+	      Lisql.insert_term term id_focus ))));
+	(* slideshow of results *)
 	lis#results_slides
 	  (function
 	    | [] ->
@@ -445,18 +458,7 @@ object (self)
 	       jquery_set_innerHTML
 		 "#carousel-slides"
 		 (Html.html_slides html_state slides));
-	jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
-	  navigation#update_focus ~push_in_history:false (fun _ ->
-	    try
-	      let key = to_string (elt_foc##id) in
-	      Some (html_state#get_focus key)
-	    with _ -> None)));
-	jquery_all ".cell" (onclick (fun elt ev ->
-	  navigation#update_focus ~push_in_history:true (fun current_focus ->
-	    let key = to_string (elt##id) in
-	    let _view, _rank, id, term = html_state#dico_results#get key in
-	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
-	    Lisql.insert_term term id_focus )));
+	(* map of results *)
 	lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
