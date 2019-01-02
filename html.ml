@@ -444,8 +444,8 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
       | IncrArg _ -> 2, None
       | IncrType _ -> 3, None
       | IncrLatLong _ -> 4, Some grammar#tooltip_geolocation
-      | IncrRel _ -> 5, None
-      | IncrPred _ -> 6, None
+      | IncrRel _ -> 4, None
+      | IncrPred _ -> 4, None
       | IncrTriple _ -> 7, None
       | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
       (* term increments *)
