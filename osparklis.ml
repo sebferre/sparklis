@@ -174,8 +174,6 @@ let config =
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);
-      (Html.config_sort_by_frequency_terms :> Config.input);
-      (Html.config_sort_by_frequency_properties :> Config.input);
       (Html.config_logo_height :> Config.input);
       (config_logging :> Config.input);
       (config_short_permalink :> Config.input); ] in
@@ -531,14 +529,15 @@ object (self)
     in
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
-      jquery_input "#pattern-terms" (fun input ->
-        jquery "#selection-terms-items" (fun elt_sel_items ->
-	jquery "#list-terms" (fun elt_list ->
+     jquery_input "#pattern-terms" (fun input ->
+      jquery "#selection-terms-items" (fun elt_sel_items ->
+       jquery "#list-terms" (fun elt_list ->
+	jquery_select "#select-sorting-terms" (fun sel_sorting ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	    (fun ~partial index ->
 	      let html_sel, html_list, count =
-		html_index lis#focus html_state index
-			   ~sort_by_frequency:Html.config_sort_by_frequency_terms#value in
+		let sort_by_frequency = to_string sel_sorting##value = "frequency" in 
+		html_index lis#focus html_state index ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- term_scroll;
@@ -562,7 +561,7 @@ object (self)
 	      get_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
-		 self#set_term_constr new_constr))))))
+		 self#set_term_constr new_constr)))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
@@ -599,11 +598,12 @@ object (self)
       jquery_input "#pattern-properties" (fun input ->
        jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
+	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
 	      let html_sel, html_list, count =
-		html_index lis#focus html_state index
-			   ~sort_by_frequency:Html.config_sort_by_frequency_properties#value in
+		let sort_by_frequency = to_string sel_sorting##value = "frequency" in
+		html_index lis#focus html_state index ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- property_scroll;
@@ -621,7 +621,7 @@ object (self)
 	      get_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
-		 self#set_property_constr new_constr))))))
+		 self#set_property_constr new_constr)))))))
 
   method private refresh_modifier_increments =
     let get_incr_opt elt =
@@ -1127,14 +1127,14 @@ let initialize endpoint focus =
        "#button-expand-terms", "#list-terms", true;
        "#button-collapse-terms", "#list-terms", false];
     List.iter
-      (fun sel_input ->
-       jquery_input sel_input
-		    (onchange (fun input ev ->
-			       let place = history#present in
-			       place#save_ui_state;
-			       place#refresh)))
-      ["#input-sort-by-frequency-terms";
-       "#input-sort-by-frequency-properties"];
+      (fun sel_select ->
+       jquery_select sel_select
+		     (onchange (fun select ev ->
+				let place = history#present in
+				place#save_ui_state;
+				place#refresh)))
+      ["#select-sorting-terms";
+       "#select-sorting-properties"];
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));

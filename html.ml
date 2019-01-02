@@ -11,8 +11,6 @@ open Lisql_annot
 
 (* configuration elements *)
 
-let config_sort_by_frequency_terms = new Config.boolean_input ~key:"sort_by_frequency_terms" ~input_selector:"#input-sort-by-frequency-terms" ~default:true ()
-let config_sort_by_frequency_properties = new Config.boolean_input ~key:"sort_by_frequency_properties" ~input_selector:"#input-sort-by-frequency-properties" ~default:true ()
 let config_logo_height = new Config.integer_input ~key:"logo_height" ~input_selector:"#input-logo-height" ~min:8 ~default:20 ()
        
 (* generic dictionary with automatic generation of keys *)
