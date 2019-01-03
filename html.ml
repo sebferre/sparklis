@@ -275,6 +275,18 @@ let html_input dt =
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
+let html_freq ~unit ~partial value =
+  if value = 1
+  then ""
+  else
+    let s = string_of_int value in
+    let s = if partial then s ^ "+" else s in
+    ( match unit with
+      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
+      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
+      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+    )
+
 let append_node_to_xml node xml =
   List.rev (node :: List.rev xml)
 let append_node_to_xml_list node lxml =
@@ -417,17 +429,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	    | [] -> max_float
 	    | x::xs -> List.fold_left max x xs in
        let sort_frequency = -value in (* '-' opposite for decreasing frequency ordering *)
-       let html_freq =
-	 if value = 1
-	 then ""
-	 else
-	   let s = string_of_int value in
-	   let s = if partial then s ^ "+" else s in
-	   ( match unit with
-	     | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-	     | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-	     | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
-	   ) in
+       let html_freq = html_freq ~unit ~partial value in
 	     (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
        Some (position, sort_frequency), html_freq in
   let data = 
@@ -594,14 +596,18 @@ let html_cell state ~(view : results_view) ~(rank : int) ~(column : Lisql.id) t 
   let key = state#dico_results#add (view,rank,column,t) in
   html_span ~id:key ~classe:"cell" contents
 
-let html_table_of_results (state : state) ~first_rank ~focus_var results =
+let html_table_of_results (state : state) ~partial ~first_rank ~focus_var results counts =
   let open Sparql_endpoint in
+  assert (List.length results.vars = List.length counts);
   let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
-  let id_i_list = List.map (fun (var,i) -> (state#id_labelling#get_var_id var, i)) results.vars in
+  let id_i_n_list =
+    List.map2
+      (fun (var,i) count -> (state#id_labelling#get_var_id var, i, count))
+      results.vars counts in
   let buf = Buffer.create 1000 in
   Buffer.add_string buf ("<div class=\"table-responsive\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_hide_focus ^ "\"></th>");
   List.iter
-    (fun (id,i) ->
+    (fun (id,i,n) ->
       Buffer.add_string buf
 	(if id = focus_id
 	 then "<th class=\"header highlighted\">"
@@ -612,8 +618,9 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
 	      Lisql2nl.config_lang#grammar
 	      ~id_labelling:(state#id_labelling)
 	      id));
+      Buffer.add_string buf (html_freq ~unit:`Entities ~partial n);
       Buffer.add_string buf "</th>")
-    id_i_list;
+    id_i_n_list;
   Buffer.add_string buf "</tr>";
   let rank = ref first_rank in
   List.iter
@@ -623,13 +630,13 @@ let html_table_of_results (state : state) ~first_rank ~focus_var results =
       Buffer.add_string buf (string_of_int !rank);
       Buffer.add_string buf "</td>";
       List.iter
-	(fun (id,i) ->
+	(fun (id,i,n) ->
 	  Buffer.add_string buf "<td>";
 	  ( match binding.(i) with
 	    | None -> ()
 	    | Some t -> Buffer.add_string buf (html_cell state ~view:Table ~rank:(!rank) ~column:id t) );
 	  Buffer.add_string buf "</td>")
-	id_i_list;
+	id_i_n_list;
       Buffer.add_string buf "</tr>";
       incr rank)
     results.bindings;

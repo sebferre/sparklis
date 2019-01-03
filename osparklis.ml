@@ -412,17 +412,18 @@ object (self)
 	(*elt_results##style##display <- string "none"*) end
       else begin
 	(* table of results *)
-	lis#results_page offset limit (fun results_page ->
+	lis#results_page offset limit (fun results_page counts ->
 	  jquery_enable_all "#nav-results-table";
+	  let partial = lis#partial_results in		       
 	  jquery_set_innerHTML "#list-results"
 	    (html_table_of_results html_state
+	       ~partial
 	       ~first_rank:(offset+1)
 	       ~focus_var:(match lis#focus_term_opt with Some (Rdf.Var v) -> Some v | _ -> None)
-	       results_page);
+	       results_page counts);
 	  jquery "#count-results" (fun elt ->
 	    elt##innerHTML <- string
 	      (let nb = lis#results_nb in
-	       let partial = lis#partial_results in		       
 	       let grammar = Lisql2nl.config_lang#grammar in
 	       let s_result, s_results = grammar#result_results in
 	       if nb = 0

@@ -129,189 +129,6 @@ let formula_hidden_URIs (v : string) : Sparql.formula =
 let filter_hidden_URIs (v : string) : string =
   (Sparql.pattern_of_formula (formula_hidden_URIs v) :> string)
     
-(* extraction of the extension and indexes *)
-
-let enqueue_term = function
-  | Rdf.URI uri ->
-     Ontology.enqueue_entity uri;
-     Lexicon.enqueue_entity uri
-  | Rdf.TypedLiteral (_,dt) ->
-     Lexicon.enqueue_class dt
-  | _ -> ()
-
-let sync_terms k =
-  Lexicon.sync_entities
-    (fun () ->
-     Lexicon.sync_concepts
-       (fun () ->
-	Ontology.sync_entities
-	  (fun () -> k ())))
-	   
-let page_of_results (offset : int) (limit : int) (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : Sparql_endpoint.results -> unit) : unit =
-  let open Sparql_endpoint in
-  let rec aux offset limit acc = function
-    | [] -> acc
-    | binding::l ->
-      if offset > 0 then aux (offset-1) limit acc l
-      else if limit > 0 then begin
-	Array.iter
-	  (function
-	    | Some t -> enqueue_term t
-	    | None -> ())
-	  binding;
-	aux offset (limit-1) (binding :: acc) l end
-      else acc
-  in
-  let partial_vars =
-    List.filter
-      (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
-      results.vars in
-  let partial_bindings = List.rev (aux offset limit [] results.bindings) in
-  sync_terms (* datatypes and entities *)
-    (fun () -> k { results with vars = partial_vars; bindings = partial_bindings })
-
-let list_of_results_column (var : Rdf.var) results : Rdf.term list =
-  let open Sparql_endpoint in
-  try
-    let i = List.assoc var results.vars in
-    List.fold_left
-      (fun res binding ->
-	match binding.(i) with
-	  | None -> res
-	  | Some t -> t::res)
-      [] results.bindings
-  with Not_found ->
-    Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
-    []
-
-(* deprecated
-      
-let fill_index_of_results_column index ?(filter : Rdf.term -> bool = fun _ -> true) (var : Rdf.var) results : unit =
-  let open Sparql_endpoint in
-  try
-    let i = List.assoc var results.vars in
-    let ht = Hashtbl.create 1000 in
-    List.iter
-      (fun binding ->
-	match binding.(i) with
-	| None -> ()
-	| Some term ->
-	  let cpt =
-	    try Hashtbl.find ht term
-	    with Not_found ->
-	      let cpt = ref 0 in
-	      Hashtbl.add ht term cpt;
-	      cpt in
-	  incr cpt)
-      results.bindings;
-    Hashtbl.iter
-      (fun term cpt ->
-	if filter term then index#add (term,!cpt))
-      ht
-  with Not_found ->
-    Firebug.console##log(string ("index_of_results_column: missing variable " ^ var))
-let index_of_results_column ?filter var results : Rdf.term int_index =
-  let index = new int_index in
-  fill_index_of_results_column index ?filter var results;
-  index
-
-      
-let fill_index_of_results_column_list index ?(filter : Rdf.term list -> bool = fun _ -> true) (var_list : Rdf.var list) results : unit =
-  let open Sparql_endpoint in
-  try
-    let i_list = List.map (fun var -> List.assoc var results.vars) var_list in
-    let ht = Hashtbl.create 1000 in
-    List.iter
-      (fun binding ->
-       let term_list_opt =
-	 List.fold_right
-	   (fun i res ->
-	    match binding.(i), res with
-	    | Some term, Some tl -> Some (term :: tl)
-	    | _ -> None)
-	   i_list (Some []) in
-	match term_list_opt with
-	| None -> ()
-	| Some term_list ->
-	  let cpt =
-	    try Hashtbl.find ht term_list
-	    with Not_found ->
-	      let cpt = ref 0 in
-	      Hashtbl.add ht term_list cpt;
-	      cpt in
-	  incr cpt)
-      results.bindings;
-    Hashtbl.iter
-      (fun term_list cpt ->
-	if filter term_list then index#add (term_list,!cpt))
-      ht
-  with Not_found ->
-    Firebug.console##log(string ("index_of_results_column_list: missing variable among " ^ String.concat ", " var_list))
-let index_of_results_column_list ?filter var_list results : Rdf.term list int_index =
-  let index = new int_index in
-  fill_index_of_results_column_list index ?filter var_list results;
-  index
-
-let fill_nested_index_of_results_columns index
-    ?(filter1 : Rdf.term -> bool = fun _ -> true)
-    ?(filter2 : Rdf.term -> bool = fun _ -> true)
-    (var1 : Rdf.var) (nested_spec : Rdf.term option) results =
-  let open Sparql_endpoint in
-  try
-    let i1 = List.assoc var1 results.vars in
-    let get2 =
-      match nested_spec with
-      | None -> (fun binding -> None)
-      | Some (Rdf.Var var2) ->
-	let i2 = List.assoc var2 results.vars in
-	(fun binding -> binding.(i2))
-      | Some term2 -> (fun binding -> Some term2)
-    in
-    let ht = Hashtbl.create 1000 in
-    List.iter
-      (fun binding ->
-	match binding.(i1) with
-	  | None -> ()
-	  | Some term1 ->
-	    let cpt1, nested_ht =
-	      try Hashtbl.find ht term1
-	      with Not_found ->
-		let data = ref 0, Hashtbl.create 3 in
-		Hashtbl.add ht term1 data;
-		data in
-	    incr cpt1;
-	    ( match get2 binding with
-	    | None -> ()
-	    | Some term2 ->
-	      let cpt2 =
-		try Hashtbl.find nested_ht term2
-		with Not_found ->
-		  let cpt2 = ref 0 in
-		  Hashtbl.add nested_ht term2 cpt2;
-		  cpt2 in
-	      incr cpt2 ))
-      results.bindings;
-    Hashtbl.iter
-      (fun term1 (cpt1,nested_ht) ->
-	if filter1 term1
-	then begin
-	  let nested_index = new int_index in
-	  Hashtbl.iter
-	    (fun term2 cpt2 ->
-	      if filter2 term2 then nested_index#add (term2, !cpt2))
-	    nested_ht;
-	  index#add (term1, (!cpt1, nested_index))
-	end)
-      ht
-  with Not_found ->
-    Firebug.console##log(string ("index_of_results_column_nested: missing variable " ^ var1 ^ " or nested variable"))
-let nested_index_of_results_columns ?filter1 ?filter2 var1 nested_spec results : (Rdf.term, Rdf.term) nested_int_index =
-  let index = new nested_int_index in
-  fill_nested_index_of_results_columns index ?filter1 ?filter2 var1 nested_spec results;
-  index
-
- *)
-      
 (* private intermediate functions, used to produce index *)
 let nested_hashtbl_of_results_varterm_list
       (keys_vt : Rdf.term list) (nested_vt_opt : Rdf.term option)
@@ -332,15 +149,6 @@ let nested_hashtbl_of_results_varterm_list
      List.map
        (fun vt -> get vt binding)
        keys_vt) in
-(*    let keys_get = List.map get keys_vt in
-    (fun binding ->
-     List.fold_right
-       (fun get keys_opt ->
-	match get binding, keys_opt with
-	| _, None -> None
-	| None, _ -> None
-	| Some key, Some keys -> Some (key::keys))
-       keys_get (Some [])) in *)
   let get_nested =
     match nested_vt_opt with
     | None -> (fun binding -> None)
@@ -349,26 +157,22 @@ let nested_hashtbl_of_results_varterm_list
   let ht = Hashtbl.create 1000 in
   List.iter
     (fun binding ->
-     match get_keys binding with
-     | (*None -> ()
-     | Some*) keys ->
-	let cpt1, nested_ht =
-	  try Hashtbl.find ht keys
-	  with Not_found ->
-	    let data = ref 0, Hashtbl.create 3 in
-	    Hashtbl.add ht keys data;
-	    data in
-	incr cpt1;
-	( match get_nested binding with
-	  | (*None -> ()
-	  | Some*) nested ->
-	     let cpt2 =
-	       try Hashtbl.find nested_ht nested
-	       with Not_found ->
-		 let cpt2 = ref 0 in
-		 Hashtbl.add nested_ht nested cpt2;
-		 cpt2 in
-	     incr cpt2 ))
+     let keys = get_keys binding in
+     let cpt1, nested_ht =
+       try Hashtbl.find ht keys
+       with Not_found ->
+	 let data = ref 0, Hashtbl.create 3 in
+	 Hashtbl.add ht keys data;
+	 data in
+     incr cpt1;
+     let nested = get_nested binding in
+     let cpt2 =
+       try Hashtbl.find nested_ht nested
+       with Not_found ->
+	 let cpt2 = ref 0 in
+	 Hashtbl.add nested_ht nested cpt2;
+	 cpt2 in
+     incr cpt2)
     results.bindings;
   ht
 
@@ -409,7 +213,15 @@ let index_of_results_varterm ?(filter = fun (_ : Rdf.term) -> true) vt results :
        ~mapfilter:(function [Some key] when filter key -> Some key | _ -> None)
        ht
   | t -> singleton_index (t,1)
-    
+
+(* distinct count of values for some results column *)
+let count_of_results_varterm vt results : int =
+  match vt with
+  | Rdf.Var _ ->
+     let ht = nested_hashtbl_of_results_varterm_list [vt] None results in
+     Hashtbl.length ht
+  | t -> 1
+			 
 let index_of_results_varterm_list ?(filter = fun (_ : Rdf.term) -> true) keys_vt results : Rdf.term option list int_index =
   if List.exists Rdf.term_is_var keys_vt
   then
@@ -477,6 +289,70 @@ let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : 
   with Not_found ->
     Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
     index
+
+(* extraction of the extension and indexes *)
+
+let enqueue_term = function
+  | Rdf.URI uri ->
+     Ontology.enqueue_entity uri;
+     Lexicon.enqueue_entity uri
+  | Rdf.TypedLiteral (_,dt) ->
+     Lexicon.enqueue_class dt
+  | _ -> ()
+
+let sync_terms k =
+  Lexicon.sync_entities
+    (fun () ->
+     Lexicon.sync_concepts
+       (fun () ->
+	Ontology.sync_entities
+	  (fun () -> k ())))
+	   
+let page_of_results
+      (offset : int) (limit : int)
+      (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
+      (results : Sparql_endpoint.results)
+      (k : Sparql_endpoint.results (* subset of results *) -> int list (* counts of unique values for results' vars *) -> unit) : unit =
+  let open Sparql_endpoint in
+  let rec aux offset limit acc = function
+    | [] -> acc
+    | binding::l ->
+      if offset > 0 then aux (offset-1) limit acc l
+      else if limit > 0 then begin
+	Array.iter
+	  (function
+	    | Some t -> enqueue_term t
+	    | None -> ())
+	  binding;
+	aux offset (limit-1) (binding :: acc) l end
+      else acc
+  in
+  let partial_vars =
+    List.filter
+      (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
+      results.vars in
+  let counts =
+    List.map
+      (fun (v,_) -> count_of_results_varterm (Rdf.Var v) results)
+      partial_vars in
+  let partial_bindings = List.rev (aux offset limit [] results.bindings) in
+  let partial_results = { results with vars = partial_vars; bindings = partial_bindings } in
+  sync_terms (* datatypes and entities *)
+    (fun () -> k partial_results counts)
+
+let list_of_results_column (var : Rdf.var) results : Rdf.term list =
+  let open Sparql_endpoint in
+  try
+    let i = List.assoc var results.vars in
+    List.fold_left
+      (fun res binding ->
+	match binding.(i) with
+	  | None -> res
+	  | Some t -> t::res)
+      [] results.bindings
+  with Not_found ->
+    Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
+    []
 
 
 type slide_data = { media_uri : Rdf.uri;
