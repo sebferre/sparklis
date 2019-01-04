@@ -38,6 +38,13 @@ type results =
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
 let unit_results = { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
 
+let float_of_results (res: results) : float option =
+(* useful for simple aggregations returning a single number cell *)
+  match res.bindings with
+  | [ [| Some (Rdf.Number (f,_,_)) |] ] -> Some f
+  | _ -> None
+
+		     
 module Xml = (* CAUTION: some specifics to SPARQL results *)
 struct
   let lookup_prefix (elt : Dom.element t) (ns : string) : string =

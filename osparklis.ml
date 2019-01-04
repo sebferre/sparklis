@@ -412,7 +412,11 @@ object (self)
 	(*elt_results##style##display <- string "none"*) end
       else begin
 	(* table of results *)
-	lis#results_page offset limit (fun results_page counts ->
+	lis#results_page offset limit (fun results_page ->
+	  let counts =
+	    List.map
+	      (fun (v,i) -> lis#estimate_count_var v)
+	      results_page.Sparql_endpoint.vars in
 	  jquery_enable_all "#nav-results-table";
 	  let partial = lis#partial_results in		       
 	  jquery_set_innerHTML "#list-results"
@@ -442,13 +446,15 @@ object (self)
 		let key = to_string (elt_foc##id) in
 		Some (html_state#get_focus key)
 	      with _ -> None)));
-	  jquery_all_from elt_results ".header-count" (onclick (fun elt ev ->
+	  jquery_all_from elt_results ".partial-count" (onclick (fun elt ev ->
 	    Dom_html.stopPropagation ev;
 	    let key = to_string elt##id in
 	    let id = html_state#dico_counts#get key in
 	    lis#ajax_count_id id [elt]
 	      ~k_count:(function
-			 | Some n -> elt##innerHTML <- string (string_of_int n)
+			 | Some n ->
+			    elt##innerHTML <- string (string_of_int n);
+			    elt##className <- string "frequency-entities"
 			 | None -> ())));
 	  jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true (fun current_focus ->

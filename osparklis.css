@@ -180,7 +180,12 @@ select {
     color:grey;
     font-size:12px;
 }
-			 
+
+.partial-count:hover {
+    background-color: grey;
+    color: white;
+}
+
 .count-incrs {
     text-align:right;
 }

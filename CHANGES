@@ -1,5 +1,14 @@
 # description of main changes that impact interface with outside
 
+2019-01-04
+- distinct counts of values for each table column
+  - new methods in Lis.place
+    - method 'estimate_count_var' that estimates count for some variable
+      - either by retrieving previous SPARQL result
+      - or by estimating from results (may be partial)
+    - method 'ajax_count_id' that evaluates exact count for some id
+      - triggers AJAX call with SPARQL COUNT query
+
 2018-10-31
 - grammar: renamed 'at' into 'with'
 

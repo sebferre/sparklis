@@ -278,7 +278,7 @@ let html_input dt =
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
-let html_freq ?id ?classe ~unit ~partial value =
+let html_freq ?id ?classe ?title ~unit ~partial value =
   if value = 1
   then ""
   else
@@ -286,8 +286,8 @@ let html_freq ?id ?classe ~unit ~partial value =
     let s = string_of_int value in
     let s = if partial then s ^ "+" else s in
     ( match unit with
-      | `Results -> html_span ?id ~classe:(classe_prefix ^ "frequency-results") ~title:"number of results matching this" s
-      | `Entities -> html_span ?id ~classe:(classe_prefix ^ "frequency-entities") ~title:"number of entities matching this" s
+      | `Results -> html_span ?id ~classe:(classe_prefix ^ "frequency-results") ?title s
+      | `Entities -> html_span ?id ~classe:(classe_prefix ^ "frequency-entities") ?title s
       | `Concepts | `Modifiers -> " (" ^ s ^ ")" (* should not happen *)
     )
 
@@ -433,7 +433,7 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	    | [] -> max_float
 	    | x::xs -> List.fold_left max x xs in
        let sort_frequency = -value in (* '-' opposite for decreasing frequency ordering *)
-       let html_freq = html_freq ~unit ~partial value in
+       let html_freq = html_freq ~title:"number of results matching this" ~unit ~partial value in
 	     (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
        Some (position, sort_frequency), html_freq in
   let data = 
@@ -603,34 +603,39 @@ let html_cell state ~(view : results_view) ~(rank : int) ~(column : Lisql.id) t 
 let html_table_of_results (state : state) ~partial ~first_rank ~focus_var results counts =
   let open Sparql_endpoint in
   assert (List.length results.vars = List.length counts);
+  let grammar = Lisql2nl.config_lang#grammar in
   let focus_id = match focus_var with None -> -1 | Some v -> state#id_labelling#get_var_id v in
-  let id_i_n_list =
-    List.map2
-      (fun (var,i) count -> (state#id_labelling#get_var_id var, i, count))
-      results.vars counts in
+  let id_i_list =
+    List.map
+      (fun (var,i) -> (state#id_labelling#get_var_id var, i))
+      results.vars in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf ("<div class=\"table-responsive\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_hide_focus ^ "\"></th>");
-  List.iter
-    (fun (id,i,n) ->
+  Buffer.add_string buf ("<div class=\"table-responsive\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ grammar#tooltip_header_hide_focus ^ "\"></th>");
+  List.iter2
+    (fun (id,i) count ->
       Buffer.add_string buf
 	(if id = focus_id
 	 then "<th class=\"header highlighted\">"
-	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ Lisql2nl.config_lang#grammar#tooltip_header_set_focus ^ "\">");
+	 else "<th id=\"" ^ focus_key_of_id id ^ "\" class=\"header\" title=\"" ^ grammar#tooltip_header_set_focus ^ "\">");
       Buffer.add_string buf
 	(html_of_nl_xml state
 	   (Lisql2nl.xml_ng_id ~isolated:true
-	      Lisql2nl.config_lang#grammar
+	      grammar
 	      ~id_labelling:(state#id_labelling)
 	      id));
-      Buffer.add_string buf
-	(let key = state#dico_counts#add id in
-	 html_freq ~id:key
-		   ?classe:(if partial then Some "header-count" else None)
-		   ~unit:`Entities
-		   ~partial
-		   n);
+      ( match count with
+	| None -> ()
+	| Some (n, partial) ->
+	   Buffer.add_string buf
+	     (let key = state#dico_counts#add id in
+	      html_freq ~id:key
+			?classe:(if partial then Some "partial-count" else None)
+			?title:(if partial then Some grammar#tooltip_header_exact_count else None)
+			~unit:`Entities
+			~partial
+			n) );
       Buffer.add_string buf "</th>")
-    id_i_n_list;
+    id_i_list counts;
   Buffer.add_string buf "</tr>";
   let rank = ref first_rank in
   List.iter
@@ -640,13 +645,13 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
       Buffer.add_string buf (string_of_int !rank);
       Buffer.add_string buf "</td>";
       List.iter
-	(fun (id,i,n) ->
+	(fun (id,i) ->
 	  Buffer.add_string buf "<td>";
 	  ( match binding.(i) with
 	    | None -> ()
 	    | Some t -> Buffer.add_string buf (html_cell state ~view:Table ~rank:(!rank) ~column:id t) );
 	  Buffer.add_string buf "</td>")
-	id_i_n_list;
+	id_i_list;
       Buffer.add_string buf "</tr>";
       incr rank)
     results.bindings;

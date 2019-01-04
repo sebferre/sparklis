@@ -123,6 +123,7 @@ object (self)
   method virtual tooltip_lowest : string
   method virtual tooltip_header_hide_focus : string
   method virtual tooltip_header_set_focus : string
+  method virtual tooltip_header_exact_count : string
   method virtual tooltip_geolocation : string
   method virtual tooltip_hierarchy : string
 
@@ -330,6 +331,7 @@ object
   method tooltip_lowest = "Sort the focus column in increasing order"
   method tooltip_header_hide_focus = "Click on this column header to hide the focus"
   method tooltip_header_set_focus = "Click on this column header to set the focus on it"
+  method tooltip_header_exact_count = "Click to get exact count"
   method tooltip_geolocation = "Retrieve geolocations to show entities on a map"
   method tooltip_hierarchy = "Show a hierarchy of entities according to the property at the left"
 
@@ -530,6 +532,7 @@ object
   method tooltip_lowest = "Trier la colonne du focus actuel en ordre croissant"
   method tooltip_header_hide_focus = "Cliquer sur cet entête de colonne pour cacher le focus"
   method tooltip_header_set_focus = "Cliquer sur cet entête de colonne pour mettre le focus dessus"
+  method tooltip_header_exact_count = "Cliquer pour obtenir le nombre exact"
   method tooltip_geolocation = "Récupérer les géolocalisations pour montrer les entités sur une carte"
   method tooltip_hierarchy = "Montrer une hiérarchie d'entités selon la propriété à gauche"
 
@@ -731,6 +734,7 @@ object
   method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
   method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
+  method tooltip_header_exact_count = "Haga clic para obtener el número exacto"
   method tooltip_geolocation = "Recuperar geolocaciones para mostrar entidades en un mapa"
   method tooltip_hierarchy = "Mostrar una jerarquía de entidades de acuerdo con la propiedad a la izquierda"
 
@@ -931,6 +935,7 @@ object
   method tooltip_lowest = "Sorteer de focus kolom in oplopende volgorde"
   method tooltip_header_hide_focus = "Klik op deze kolom header om de focus te verbergen"
   method tooltip_header_set_focus = "Klik op deze kolom header om de focus daar op te zetten"
+  method tooltip_header_exact_count = "Klik om de exacte telling te krijgen"
   method tooltip_geolocation = "Haal geolocatie op om entiteiten op een kaart te tonen"
   method tooltip_hierarchy = "Geef een hiërarchie weer van entiteiten volgende de eigenschap aan de linkerkant"
 

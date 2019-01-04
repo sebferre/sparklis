@@ -312,7 +312,7 @@ let page_of_results
       (offset : int) (limit : int)
       (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
       (results : Sparql_endpoint.results)
-      (k : Sparql_endpoint.results (* subset of results *) -> int list (* counts of unique values for results' vars *) -> unit) : unit =
+      (k : Sparql_endpoint.results (* subset of results *) -> unit) : unit =
   let open Sparql_endpoint in
   let rec aux offset limit acc = function
     | [] -> acc
@@ -331,14 +331,10 @@ let page_of_results
     List.filter
       (fun (v,i) -> not (List.exists (fun (_,(vlat,vlong)) -> v=vlat || v=vlong) geolocs))
       results.vars in
-  let counts =
-    List.map
-      (fun (v,_) -> count_of_results_varterm (Rdf.Var v) results)
-      partial_vars in
   let partial_bindings = List.rev (aux offset limit [] results.bindings) in
   let partial_results = { results with vars = partial_vars; bindings = partial_bindings } in
   sync_terms (* datatypes and entities *)
-    (fun () -> k partial_results counts)
+    (fun () -> k partial_results)
 
 let list_of_results_column (var : Rdf.var) results : Rdf.term list =
   let open Sparql_endpoint in
@@ -605,7 +601,27 @@ object (self)
       end
 
   (* counts: must be called after [ajax_sparql_results] has terminated *)
-
+  method estimate_count_var (var : Rdf.var) : (int * bool (* partial *)) option =
+    let partial = self#partial_results in
+    let count_from_results () =
+      (* compute from results, without AJAX call *)
+      let count = count_of_results_varterm (Rdf.Var var) results in
+      Some (count, partial) in
+    if self#partial_results
+    then (* try and get result of previous SPARQL evaluation *)
+      match s_sparql.Lisql2sparql.query_count_opt with
+      | None -> None (* should not happen *)
+      | Some query_count ->
+	 let froms = Sparql_endpoint.config_default_graphs#froms in
+	 let sparql = query_count var ~froms () in
+	 ( match Sparql_endpoint.cache_eval endpoint sparql with
+	   | Some res -> (* reuse previous result, not partial *)
+	      ( match Sparql_endpoint.float_of_results res with
+		| Some f -> Some (int_of_float f, false)
+		| None -> count_from_results () (* should not happen *) )
+	   | None -> count_from_results () )
+    else count_from_results ()
+    
   method ajax_count_id (id : Lisql.id) elts
 		       ~(k_count : int option -> unit) =
     match s_sparql.Lisql2sparql.query_count_opt with
@@ -618,9 +634,9 @@ object (self)
        Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
 	 (fun res ->
 	  let count_opt =
-	    match res.Sparql_endpoint.bindings with
-	    | [ [| Some (Rdf.Number (f,_,_)) |] ] -> Some (int_of_float f)
-	    | _ -> None in
+	    match Sparql_endpoint.float_of_results res with
+	    | Some f -> Some (int_of_float f)
+	    | None -> None in
 	  k_count count_opt)
 	 (fun code -> k_count None)
 	
