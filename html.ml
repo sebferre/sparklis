@@ -80,6 +80,9 @@ object
 
   val dico_results : (results_view * int * Lisql.id * Rdf.term) dico = new dico "cell"
   method dico_results = dico_results
+
+  val dico_counts : Lisql.id dico = new dico "count"
+  method dico_counts = dico_counts
 end
 
 (* LISQL constraints <--> user patterns *)
@@ -275,16 +278,17 @@ let html_input dt =
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
-let html_freq ~unit ~partial value =
+let html_freq ?id ?classe ~unit ~partial value =
   if value = 1
   then ""
   else
+    let classe_prefix = match classe with None -> "" | Some c -> c ^ " " in 
     let s = string_of_int value in
     let s = if partial then s ^ "+" else s in
     ( match unit with
-      | `Results -> html_span ~classe:"frequency-results" ~title:"number of results matching this" s
-      | `Entities -> html_span ~classe:"frequency-entities" ~title:"number of entities matching this" s
-      | `Concepts | `Modifiers -> " <" ^ s ^ ">" (* should not happen *)
+      | `Results -> html_span ?id ~classe:(classe_prefix ^ "frequency-results") ~title:"number of results matching this" s
+      | `Entities -> html_span ?id ~classe:(classe_prefix ^ "frequency-entities") ~title:"number of entities matching this" s
+      | `Concepts | `Modifiers -> " (" ^ s ^ ")" (* should not happen *)
     )
 
 let append_node_to_xml node xml =
@@ -618,7 +622,13 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
 	      Lisql2nl.config_lang#grammar
 	      ~id_labelling:(state#id_labelling)
 	      id));
-      Buffer.add_string buf (html_freq ~unit:`Entities ~partial n);
+      Buffer.add_string buf
+	(let key = state#dico_counts#add id in
+	 html_freq ~id:key
+		   ?classe:(if partial then Some "header-count" else None)
+		   ~unit:`Entities
+		   ~partial
+		   n);
       Buffer.add_string buf "</th>")
     id_i_n_list;
   Buffer.add_string buf "</tr>";

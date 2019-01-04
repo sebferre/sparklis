@@ -1051,11 +1051,12 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
   | Join (_,lv1)::lv -> form_view_list state lr view (lv1@lv)
 
     
-type template = ?hook:(Sparql.term -> Sparql.formula) -> froms:(Rdf.uri list) -> limit:int -> string
+type template = ?hook:(Sparql.term -> Sparql.formula) -> froms:(Rdf.uri list) -> ?limit:int -> unit -> string
 
-let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : template =
-  (fun ?hook ~froms ~limit ->
-    let sq_view = view ~limit () in
+(* auxiliary function factorizing [make_query] and [make_query_count] *)
+let make_query_formula (focus_term_opt : Rdf.term option) (view : Sparql.view) =
+  (fun ?hook ?limit () ->
+    let sq_view = view ?limit () in
     let sq_view = (* when sq_view makes no proper computation *)
       if sq_view.Sparql.having = Sparql.log_true &&
 	List.for_all (function (`Bare,_) -> true | _ -> false) sq_view.Sparql.projections (* implies there are no relevant group-by *)
@@ -1064,15 +1065,20 @@ let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : t
 	| Sparql.Subquery sq -> sq (* use that subquery instead *)
 	| _ -> sq_view
       else sq_view in
-    let visible_projections =
-      List.filter
-	(fun (_,v) -> state#project v = Select || focus_term_opt = Some (Rdf.Var v))
-	sq_view.Sparql.projections in
     let form_hook =
       match focus_term_opt, hook with
       | Some (Rdf.Var v), Some f_hook ->
 	Sparql.formula_and sq_view.Sparql.formula (f_hook (Sparql.var v :> Sparql.term))
       | _ -> sq_view.Sparql.formula in
+    sq_view, form_hook)
+
+let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : template =
+  (fun ?hook ~froms ?limit () ->
+   let sq_view, form_hook = make_query_formula focus_term_opt view ?hook ?limit () in
+    let visible_projections =
+      List.filter
+	(fun (_,v) -> state#project v = Select || focus_term_opt = Some (Rdf.Var v))
+	sq_view.Sparql.projections in
     let orderings =
       List.fold_right
 	(fun (_,v) orderings ->
@@ -1086,17 +1092,44 @@ let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : t
       ~froms
       ~groupings:(List.map Sparql.var sq_view.Sparql.groupings)
       ~having:sq_view.Sparql.having
-      ~limit
+      ?limit
       ~orderings
       (Sparql.pattern_of_formula form_hook) in
     (query :> string))
 
+let make_query_count state (focus_term_opt : Rdf.term option) (view : Sparql.view) : Rdf.var -> template =
+  (fun v_count ?hook ~froms ?limit () ->
+   let sq_view, form_hook = make_query_formula focus_term_opt view ?hook ?limit () in
+    let visible_projections =
+      List.filter
+	(fun (_,v) -> v = v_count && (state#project v = Select || focus_term_opt = Some (Rdf.Var v)))
+	sq_view.Sparql.projections in
+    let v, pattern =
+      match visible_projections with
+      | [`Bare, v] ->
+	 v, Sparql.pattern_of_formula form_hook
+      | [(`Aggreg _|`Expr _), v] ->
+	 v, Sparql.pattern_of_subquery
+	      (Sparql.make_subquery
+		 ~projections:visible_projections
+		 ~groupings:sq_view.Sparql.groupings
+		 ~having:sq_view.Sparql.having
+		 form_hook)
+      | _ -> assert false in
+    let query =
+      Sparql.select
+	~projections:[`Aggreg (Sparql.DistinctCOUNT, (Sparql.var v :> Sparql.term)), "count"]
+	~froms
+	pattern in
+    (query :> string))
+    
 type s_sparql =
   { state : state;
     focus_term_opt : Rdf.term option;
     focus_graph_opt : Rdf.term option;
     focus_pred_args_opt : (pred * (arg * Rdf.term) list) option;
     query_opt : template option;
+    query_count_opt : (Rdf.var -> template) option;
     query_class_opt : template option;
     query_prop_opt : template option;
     query_pred_opt : template option;
@@ -1123,26 +1156,27 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     | `PredArgs (pred,args) ->
        let rdf_args = List.map (fun (arg,ti) -> (arg, rdf_term_of_term_id ti)) args in
        Some (pred,rdf_args) in
-  let query_opt =
+  let query_opt, query_count_opt =
     if Sparql.is_empty_view view
-    then None
-    else Some (make_query state focus_term_opt view) in
+    then None, None
+    else Some (make_query state focus_term_opt view),
+	 Some (make_query_count state focus_term_opt view) in
   let query_incr_opt (lx : Rdf.var list) (make_pattern : Rdf.term -> Sparql.pattern) =
     let _ = assert (lx <> []) in
     let x = List.hd lx in
     match focus_term_opt with
     | Some t when fd#incr -> (* no increments for this focus term (expressions, aggregations) *)
       let tx = (Sparql.var x :> Sparql.term) in
-      Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ~limit ->
+      Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ?limit () ->
 	let form_x = Sparql.Pattern (make_pattern t) in
 	let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph (Sparql.term tg) form_x in
 	let form_x =
 	  match focus_term_opt with
-	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ~limit view) form_x
+	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ?limit view) form_x
 	  | _ -> form_x in
 	let form_x = Sparql.formula_and form_x (hook tx) in
 	let projections = List.map (fun x -> (`Bare,x)) lx in
-	(Sparql.select ~projections ~froms ~limit
+	(Sparql.select ~projections ~froms ?limit
 	   (Sparql.pattern_of_formula form_x) :> string))
     | _ -> None in
   let query_class_opt =
@@ -1170,6 +1204,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     focus_graph_opt;
     focus_pred_args_opt;
     query_opt;
+    query_count_opt;
     query_class_opt;
     query_prop_opt;
     query_pred_opt;

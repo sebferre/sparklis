@@ -442,7 +442,15 @@ object (self)
 		let key = to_string (elt_foc##id) in
 		Some (html_state#get_focus key)
 	      with _ -> None)));
-	  jquery_all ".cell" (onclick (fun elt ev ->
+	  jquery_all_from elt_results ".header-count" (onclick (fun elt ev ->
+	    Dom_html.stopPropagation ev;
+	    let key = to_string elt##id in
+	    let id = html_state#dico_counts#get key in
+	    lis#ajax_count_id id [elt]
+	      ~k_count:(function
+			 | Some n -> elt##innerHTML <- string (string_of_int n)
+			 | None -> ())));
+	  jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
 	    navigation#update_focus ~push_in_history:true (fun current_focus ->
 	      let key = to_string (elt##id) in
 	      let _view, _rank, id, term = html_state#dico_results#get key in

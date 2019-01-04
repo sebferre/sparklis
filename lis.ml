@@ -440,6 +440,7 @@ object (self)
       focus_graph_opt = None;
       focus_pred_args_opt = None;
       query_opt = None;
+      query_count_opt = None;
       query_class_opt = None;
       query_prop_opt = None;
       query_pred_opt = None;
@@ -542,7 +543,7 @@ object (self)
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
 	let froms = Sparql_endpoint.config_default_graphs#froms in
 	let limit = config_max_results#value in
-	let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit in
+	let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
 	k_sparql (Some sparql);
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
@@ -594,7 +595,7 @@ object (self)
 	   let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
 	   let froms = Sparql_endpoint.config_default_graphs#froms in
 	   let limit = max_results in
-	   let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit in
+	   let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
 	   k_sparql (Some sparql);
 	   Sparql_endpoint.ajax_in
 	     ~send_results_to_yasgui:true
@@ -602,7 +603,27 @@ object (self)
 	     (fun res -> results <- res; k_results (Some sparql))
 	     (fun code -> ())
       end
-	  
+
+  (* counts: must be called after [ajax_sparql_results] has terminated *)
+
+  method ajax_count_id (id : Lisql.id) elts
+		       ~(k_count : int option -> unit) =
+    match s_sparql.Lisql2sparql.query_count_opt with
+    | None ->
+       k_count None
+    | Some query_count ->
+       let var = id_labelling#get_id_var id in
+       let froms = Sparql_endpoint.config_default_graphs#froms in
+       let sparql : string = query_count var ~froms () in
+       Sparql_endpoint.ajax_in elts ajax_pool endpoint sparql
+	 (fun res ->
+	  let count_opt =
+	    match res.Sparql_endpoint.bindings with
+	    | [ [| Some (Rdf.Number (f,_,_)) |] ] -> Some (int_of_float f)
+	    | _ -> None in
+	  k_count count_opt)
+	 (fun code -> k_count None)
+	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
   method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
@@ -1010,7 +1031,7 @@ object (self)
 	| Some query ->
 	   query
 	     ~hook:(fun tx -> Sparql.formula_and (filter_constr sparql_genvar tx constr) (formula_hidden_URIs_term tx))
-	     ~froms ~limit:config_max#value in
+	     ~froms ~limit:config_max#value () in
       let sparql_class = make_sparql
 		       s_sparql.Lisql2sparql.query_class_opt
 		       Lisql2sparql.filter_constr_class

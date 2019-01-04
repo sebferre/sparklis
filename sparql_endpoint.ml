@@ -301,7 +301,24 @@ object
     else None
   method clear = Hashtbl.clear ht
 end
-  
+
+let resolve_endpoint_sparql endpoint sparql =
+  let real_endpoint, real_sparql = (* use of proxy, if defined *)
+    if config_proxy#value
+    then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
+    else endpoint, sparql in
+  (*firebug real_sparql;*)
+  let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
+  real_endpoint, prologue_sparql
+
+(* tentative query evaluation through cache *)
+let cache_eval (endpoint : string) (sparql : string) : results option =
+  let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
+  match cache#lookup real_endpoint prologue_sparql with
+  | Some (_, results) -> Some results
+  | None -> None
+
+(* query evaluation, by AJAX call if required *)
 let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
@@ -309,12 +326,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
      || sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
  then k1 empty_results
  else
-  let real_endpoint, real_sparql = (* use of proxy, if defined *)
-    if config_proxy#value
-    then config_proxy_url#value, "SELECT * WHERE { SERVICE <" ^ endpoint ^ "> { " ^ sparql ^ " }}"
-    else endpoint, sparql in
-  (*firebug real_sparql;*)
-  let prologue_sparql = Sparql.prologue#add_declarations_to_query real_sparql in
+  let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
   match cache#lookup real_endpoint prologue_sparql with
     | Some (response_text, results) ->
       if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
