@@ -1223,15 +1223,17 @@ let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =
-  let pos = annot#focus_pos in
-  let focus = annot#focus in
-  let xml =
-    match pos with
-    | `At -> [Highlight (xml @ [DeleteCurrentFocus])]
-    | `Below -> [Highlight xml]
-    | `Aside true -> [Suspended xml]
-    | _ -> xml in
-  [Focus (focus, xml)]
+  match annot#focus with
+  | None -> xml
+  | Some focus ->
+     let pos = annot#focus_pos in
+     let xml =
+       match pos with
+       | `At -> [Highlight (xml @ [DeleteCurrentFocus])]
+       | `Below -> [Highlight xml]
+       | `Aside true -> [Suspended xml]
+       | _ -> xml in
+     [Focus (focus, xml)]
 
 let xml_annotated x_annot f =
   match x_annot with

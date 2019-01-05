@@ -397,6 +397,7 @@ let id_of_s = function
   | _ -> None
 let id_of_focus = function
   | AtP1 (Hier (_,id,_,_,_,_),_) -> Some id
+  | AtSn (cp,ctx) -> id_of_sn cp
   | AtS1 (np,ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
   | AtAggreg (aggreg,_) -> id_of_aggreg aggreg
   | AtExpr (_, SExprX (_,id,_,_,_)) -> Some id

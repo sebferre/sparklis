@@ -164,14 +164,14 @@ type view =
 type seq_view = sid * view
 
 class annot
-  ~focus_pos ~focus
+  ~focus_pos ?focus
   ?(ids : annot_ids = empty_ids)
   ?(seq_view : seq_view option) ?(defined : bool = false) () =
 object (self)
   val focus_pos : focus_pos = focus_pos
-  val focus : focus = focus
-  method focus = focus
+  val focus : focus option = focus
   method focus_pos = focus_pos
+  method focus = focus
 
   method ids = ids
     
@@ -189,7 +189,7 @@ object (self)
     else self
 end
 
-let dummy_annot = new annot ~focus_pos:(`Aside false) ~focus:factory#home_focus ()
+let dummy_annot = new annot ~focus_pos:(`Aside false) ()
 let dummy_s1 = Det (dummy_annot, An (0, (Select, Unordered), Thing), None)
 
 (* cleaning sequences based on dependencies *)

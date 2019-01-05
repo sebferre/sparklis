@@ -36,7 +36,7 @@ object
   method get (key : string) : 'a =
     try Hashtbl.find ht key
     with _ ->
-      Firebug.console##log(string ("Missing element in dico: " ^ key));
+      Jsutils.firebug ("Missing element in dico: " ^ key);
       failwith "Osparqlis.dico#get"
 
   method get_key (x : 'a) : string option =
