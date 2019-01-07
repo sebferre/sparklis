@@ -311,7 +311,7 @@ object
   method selected_item_s = "selected items"
 
   method tooltip_open_resource = "Open resource in new window"
-  method tooltip_delete_current_focus = "Click on this red cross to delete the current focus"
+  method tooltip_delete_current_focus = "Click on this cross to delete the current focus"
   method tooltip_remove_element_at_focus = "Remove this query element at the query focus"
   method tooltip_focus_on_property = "Adds a focus on the property to refine it"
   method tooltip_duplicate_focus = "Insert a copy of the current focus"
@@ -512,7 +512,7 @@ object
   method selected_item_s = "éléments sélectionnés"
 
   method tooltip_open_resource = "Ouvrir la ressource dans une nouvelle fenêtre"
-  method tooltip_delete_current_focus = "Cliquer sur la croix rouge pour supprimer le focus actuel"
+  method tooltip_delete_current_focus = "Cliquer sur la croix pour supprimer le focus actuel"
   method tooltip_remove_element_at_focus = "Supprimer cet élément de requête au focus actuel"
   method tooltip_focus_on_property = "Insérer un focus sur la propriété pour la raffiner"
   method tooltip_or = "Insérer une alternative au focus actuel"
@@ -714,7 +714,7 @@ object
   method selected_item_s = "artículos seleccionados"
 
   method tooltip_open_resource = "Abrir el recurso en una nueva ventana"
-  method tooltip_delete_current_focus = "Haga clic en la X roja para eliminar el foco actual"
+  method tooltip_delete_current_focus = "Haga clic en la X para eliminar el foco actual"
   method tooltip_remove_element_at_focus = "Eliminar el elemento en el foco actual de consulta"
   method tooltip_focus_on_property = "Insertar un foco sobre la propiedad para refinarla"
   method tooltip_duplicate_focus = "Insertar una copia de el foco actual"
@@ -915,7 +915,7 @@ object
   method selected_item_s = "geselecteerde items"
 
   method tooltip_open_resource = "Open bron in een nieuw venster"
-  method tooltip_delete_current_focus = "Klik op dit rode kruis om de huidige focus te verwijderen"
+  method tooltip_delete_current_focus = "Klik op dit kruis om de huidige focus te verwijderen"
   method tooltip_remove_element_at_focus = "Verwijder dit query element bij de query focus"
   method tooltip_focus_on_property = "Voegt een focus toe op de eigenschap om deze te verfijnen"
   method tooltip_duplicate_focus = "Voeg een kopie van de huidige focus toe"

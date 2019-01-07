@@ -45,26 +45,36 @@ object (self)
     fun f init -> Hashtbl.fold (fun k (v,_) res -> f res (k,v)) h init
   method iter : ('a * 'b -> unit) -> unit =
     fun f -> Hashtbl.iter (fun k (v,_) -> f (k,v)) h
-  method map_list : 'c. ('a * 'b -> 'c) -> 'c list =
-    fun f -> Hashtbl.fold (fun k (v,_) res -> (f (k,v))::res) h []
-  method map_tree : 'c. ('a * 'b -> 'c) -> ([`Node of 'c * 'd list] as 'd) list =
+  method filter_map_list : 'c. ('a * 'b -> 'c option) -> 'c list =
+    fun f ->
+    Hashtbl.fold
+      (fun k (v,_) res ->
+       match f (k,v) with
+       | Some x -> x::res
+       | None -> res)
+      h []
+  method filter_map_tree : 'c. ('a * 'b -> 'c option) -> ([`Node of 'c * 'd list] as 'd) list =
     fun f ->
       self#organize;
       if organized then
 	let rec aux (keys : 'a list) =
-	  let elts =
-	    List.map
-	      (fun k -> try k, Hashtbl.find h k with Not_found -> assert false)
-	      keys in
-	  List.map
-	    (fun (k,(v,ref_children)) ->
-	      `Node (f (k,v), aux !ref_children))
-	    elts
+	  Common.mapfilter
+	    (fun k ->
+	     let k, (v, ref_children) =
+	       try k, Hashtbl.find h k
+	       with Not_found -> assert false in
+	     match f (k,v) with
+	     | Some x -> Some (`Node (x, aux !ref_children))
+	     | None -> None)
+	    keys
 	in
 	aux roots
       else (* no tree organization *)
 	Hashtbl.fold
-	  (fun k (v,_) res -> `Node (f (k,v), []) :: res)
+	  (fun k (v,_) res ->
+	   match f (k,v) with
+	   | Some x -> `Node (x, []) :: res
+	   | None -> res)
 	  h []
   method sample_list (max : int) : int * ('a * 'b) list =
     let _, n, res =
@@ -819,7 +829,7 @@ object (self)
       let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
 	| None -> gp
-	| Some _ ->  Sparql.union (focus_graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
+	| Some _ ->  Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
       in
       let make_sparql lv (pat : Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
@@ -897,7 +907,7 @@ object (self)
       let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
 	| None -> gp
-	| Some _ ->  Sparql.union (focus_graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
+	| Some _ ->  Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
       in      
       let sparql_class = (* use (List.hd Lisql2sparql.WhichClass.pattern_vars = "c") as result variable *)
 	"SELECT DISTINCT ?c " ^ sparql_froms ^ "WHERE { " ^
@@ -1082,7 +1092,7 @@ object (self)
       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
 	| None -> gp
-	| Some _ ->  Sparql.union (graph_index#map_list (fun (tg,_) -> Sparql.graph (Sparql.term tg) gp))
+	| Some _ ->  Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
       in
       let nb_samples_term, samples_term =
 	focus_term_index#sample_list config_max_increment_samples#value in

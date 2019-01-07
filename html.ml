@@ -178,8 +178,9 @@ let html_span ?id ?classe ?title text =
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</span>"
 
-let html_div ?classe ?title text =
+let html_div ?id ?classe ?title text =
   "<div" ^
+    (match id with None -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
     (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
     (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</div>"
@@ -221,9 +222,6 @@ let html_glyphicon name = "<span class=\"glyphicon glyphicon-" ^ name ^ "\"></sp
 
 let html_open_new_window ~height uri =
   html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "icon-open-new-window.png")
-
-let html_delete ?id ~title () =
-  html_img ?id ~height:16 ~alt:"Delete" ~title "icon-delete.png"
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
@@ -291,6 +289,15 @@ let html_freq ?id ?classe ?title ~unit ~partial value =
       | `Concepts | `Modifiers -> " (" ^ s ^ ")" (* should not happen *)
     )
 
+let html_delete ?id ~title () =
+  (*html_img ?id ~height:16 ~alt:"Delete" ~title "icon-delete.png"*)
+  html_span ?id ~title (html_glyphicon "remove")
+
+let html_focus_dropdown =
+  html_span ~id:"focus-dropdown"
+	    (html_glyphicon "menu-hamburger" ^
+	       "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>")
+	 
 let append_node_to_xml node xml =
   List.rev (node :: List.rev xml)
 let append_node_to_xml_list node lxml =
@@ -332,11 +339,13 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
       let id = state#add_focus focus in
       html_span ~id ~classe:"focus" (html_of_nl_xml ~highlight state xml)
     | Highlight xml ->
-      html_highlight true (html_of_nl_xml ~highlight:true state xml)
+       html_highlight true
+	 (html_of_nl_xml ~highlight:true state xml)
     | Suspended xml ->
       html_span ~classe:"suspended" (html_of_nl_xml ~highlight state xml)
     | DeleteCurrentFocus ->
-      html_delete ~id:"delete-current-focus" ~title:Lisql2nl.config_lang#grammar#tooltip_delete_current_focus ()
+       html_delete ~id:"delete-current-focus" ~title:Lisql2nl.config_lang#grammar#tooltip_delete_current_focus () ^
+	 html_focus_dropdown
     | DeleteIncr ->
       html_delete ~title:Lisql2nl.config_lang#grammar#tooltip_remove_element_at_focus ()
 and html_highlight h xml =
@@ -414,7 +423,10 @@ let html_count_unit freq (unit,units) =
   else if count = 1 then s_count ^ " " ^ unit
   else s_count ^ " " ^ units
 
-let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : compare_incr_data * string * bool * string =
+let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus (state : state) (incr,freq_opt) : (compare_incr_data * string * bool * string) option =
+ if not (filter incr)
+ then None
+ else begin
   let key = state#dico_incrs#add incr in
   let grammar = Lisql2nl.config_lang#grammar in
   let xml = Lisql2nl.xml_of_incr grammar ~id_labelling:state#id_labelling focus incr in
@@ -506,10 +518,11 @@ let freq_text_html_increment_frequency focus (state : state) (incr,freq_opt) : c
 	 if filterable then "increment filterable-increment"
 	 else "increment" in
        false, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq) in
-  sort_data, key, is_selection_incr, html
+  Some (sort_data, key, is_selection_incr, html)
+ end
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string * int =
+let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string * int =
   let sort_node_list nodes =
     List.sort
       (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
@@ -541,7 +554,7 @@ let html_index focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_fre
       sorted_nodes;
     Buffer.add_string buf_tree "</ul>"
   in
-  let enriched_index_tree = index#map_tree (freq_text_html_increment_frequency focus state) in
+  let enriched_index_tree = index#filter_map_tree (freq_text_html_increment_frequency ~filter focus state) in
   let buf_sel = Buffer.create 100 in
   let buf_tree = Buffer.create 1000 in
   let ref_count = ref 0 in

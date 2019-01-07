@@ -641,6 +641,13 @@ object (self)
 		 self#set_property_constr new_constr)))))))
 
   method private refresh_modifier_increments =
+    let filter_dropdown_increment =
+      let open Lisql in
+      function
+      | IncrThatIs | IncrSomethingThatIs | IncrTriplify
+      | IncrAnd | IncrDuplicate | IncrOr | IncrChoice | IncrMaybe
+      | IncrNot | IncrIn | IncrUnselect | IncrOrder _ -> true
+      | _ -> false in
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       match incr with
@@ -672,19 +679,34 @@ object (self)
     in
     jquery "#selection-modifiers-items" (fun elt_sel_items ->
     jquery "#list-modifiers" (fun elt_list ->
+    jquery "#focus-dropdown-content" (fun elt_dropdown ->
       let index = lis#index_modifiers in
       let html_sel, html_list, count =
-	html_index lis#focus html_state index
-		   ~sort_by_frequency:false in
+	html_index
+	  ~filter:(fun incr -> not (filter_dropdown_increment incr))
+	  lis#focus html_state index
+	  ~sort_by_frequency:false in
+      let _, html_drop, _ =
+	html_index
+	  ~filter:filter_dropdown_increment
+	  lis#focus html_state index
+	  ~sort_by_frequency:false in
+      elt_dropdown##innerHTML <- string html_drop;
       elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
       elt_list##scrollTop <- modifier_scroll;
       jquery_set_innerHTML "#count-modifiers"
 			   (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+      jquery "#focus-dropdown" (onclick (fun elt ev ->
+	Dom_html.stopPropagation ev;
+	jquery_toggle "#focus-dropdown-content"));
       modifier_selection#reset;
       stop_propagation_from elt_list ".term-input";
       jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 	 apply_incr elt));
+      jquery_all_from elt_dropdown ".increment" (onclick (fun elt ev ->
+	Dom_html.stopPropagation ev;
+	apply_incr elt));
       jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
 	if to_bool ev##ctrlKey
 	then toggle_incr elt
@@ -693,7 +715,7 @@ object (self)
 	Opt.iter (elt##parentNode) (fun node ->
 	  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 	    let incr_elt = Dom_html.element dom_elt in
-	    apply_incr incr_elt))))))
+	    apply_incr incr_elt)))))))
 
   method private refresh_sparql =
     function
