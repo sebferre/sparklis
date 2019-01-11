@@ -1,5 +1,11 @@
 # description of main changes that impact interface with outside
 
+2019-01-11
+- new option: Lis.config_concept_profile
+  - goal: allow for different user profiles
+  - value: a list of class URIs
+  - effect: retrieves only concept suggestions that are instances of one of those class URIs
+
 2019-01-04
 - distinct counts of values for each table column
   - new methods in Lis.place

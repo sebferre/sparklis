@@ -123,12 +123,31 @@ class incr_freq_tree_index th = [Lisql.increment, freq option] index ~parents:(i
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
 let config_nary_relations = new Config.boolean_input ~key:"nary_relations" ~input_selector:"#input-nary-relations" ~default:false ()
+let config_concept_profile = new Config.string_input ~key:"concept_profile" ~input_selector:"#input-concept-profile" ~default:"" ()
 let config_regexp_hidden_URIs = new Config.string_input ~key:"regexp_hidden_URIs" ~input_selector:"#input-regexp-hidden-uris" ~default:"^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)" ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
 let config_max_increment_samples = new Config.integer_input ~key:"max_increment_samples" ~input_selector:"#input-max-increment-samples" ~min:1 ~default:200 ()
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
 let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
 
+let regexp_sep = Regexp.regexp "[,;][ ]*"
+
+let formula_concept_profile_term (tx : _ Sparql.any_term) : Sparql.formula =
+  match config_concept_profile#value with
+  | "" -> Sparql.True
+  | profile ->
+     let uris = Regexp.split regexp_sep profile in
+     Sparql.(Pattern (union
+			(List.map
+			   (fun u -> rdf_type tx (uri u))
+			   uris)))
+let formula_concept_profile (v : string) : Sparql.formula =
+  formula_concept_profile_term (Sparql.var v)
+
+let pattern_concept_profile (v : string) : string =
+  (Sparql.pattern_of_formula (formula_concept_profile v) :> string)
+    
+			       
 let formula_hidden_URIs_term (tx : _ Sparql.any_term) : Sparql.formula =
   match config_regexp_hidden_URIs#value with
   | "" -> Sparql.True
@@ -837,6 +856,7 @@ object (self)
 	let g_pat = (graph_opt pat :> string) in
 	"SELECT DISTINCT ?" ^ String.concat " ?" lv ^ " " ^ sparql_froms ^ "WHERE { " ^
 	  g_pat ^
+	  pattern_concept_profile main_v ^
 	  (Sparql.pattern_of_formula (filter_constr sparql_genvar (Sparql.var main_v) constr) :> string) ^
 	  filter_hidden_URIs main_v ^
 	  " } LIMIT " ^ string_of_int config_max#value in
@@ -872,7 +892,8 @@ object (self)
 	let main_v = List.hd lv in
 	"SELECT DISTINCT ?" ^ String.concat " ?" lv ^ " " ^ sparql_froms ^ "WHERE { " ^
 	  pat ^
-	  (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
+	    (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
+	  pattern_concept_profile main_v ^
 	  (Sparql.pattern_of_formula (filter_constr sparql_genvar (Sparql.var main_v) constr) :> string) ^
 	  filter_hidden_URIs main_v ^
 	    " } LIMIT " ^ string_of_int config_max#value in
@@ -913,7 +934,6 @@ object (self)
 	"SELECT DISTINCT ?c " ^ sparql_froms ^ "WHERE { " ^
 	  (graph_opt (Sparql.(rdf_type (var "x") (var "c"))) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
-	    (*filter_hidden_URIs "class" ^*)
 	  " } GROUP BY ?c ORDER BY DESC(COUNT(?x)) LIMIT " ^ string_of_int config_max_classes#value in
       Sparql_endpoint.ajax_list_in
 	[elt] ajax_pool endpoint [sparql_class]
@@ -1056,7 +1076,10 @@ object (self)
 	| None -> ""
 	| Some query ->
 	   query
-	     ~hook:(fun tx -> Sparql.formula_and (filter_constr sparql_genvar tx constr) (formula_hidden_URIs_term tx))
+	     ~hook:(fun tx -> Sparql.formula_and_list
+				[formula_concept_profile_term tx;
+				 filter_constr sparql_genvar tx constr;
+				 formula_hidden_URIs_term tx])
 	     ~froms ~limit:config_max#value () in
       let sparql_class = make_sparql
 		       s_sparql.Lisql2sparql.query_class_opt
@@ -1120,6 +1143,7 @@ object (self)
 	   (Sparql.pattern_of_formula
 	      (Sparql.formula_and_list
 		 ( Sparql.Pattern gp
+		   :: formula_concept_profile main_v
 		   :: filter_constr sparql_genvar (Sparql.var main_v) constr
 		   :: List.map (fun v -> formula_hidden_URIs v) lv )))
 	 :> string) in

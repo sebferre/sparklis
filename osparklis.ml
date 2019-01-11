@@ -162,6 +162,7 @@ let config =
       (Ontology.config_show_logo :> Config.input);
       (Lis.config_intentional_init_concepts :> Config.input);
       (Lis.config_nary_relations :> Config.input);
+      (Lis.config_concept_profile :> Config.input);
       (Lis.config_regexp_hidden_URIs :> Config.input);
       (Lis.config_max_results :> Config.input);
       (Lis.config_max_increment_samples :> Config.input);
