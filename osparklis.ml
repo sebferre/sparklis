@@ -645,7 +645,7 @@ object (self)
     let filter_dropdown_increment =
       let open Lisql in
       function
-      | IncrThatIs | IncrSomethingThatIs | IncrTriplify
+      | IncrThatIs | IncrSomethingThatIs | IncrTriplify | IncrHierarchy _
       | IncrAnd | IncrDuplicate | IncrOr | IncrChoice | IncrMaybe
       | IncrNot | IncrIn | IncrUnselect | IncrOrder _ -> true
       | _ -> false in
