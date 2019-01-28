@@ -249,6 +249,8 @@ let permalink_of_place (lis : Lis.place) : string =
   
 (* navigation place and history *)
 
+let sorting_frequency = "frequency"
+		    
 class navigation =
 object
   method change_endpoint (url : string) : unit = ()
@@ -297,6 +299,10 @@ object (self)
   val mutable property_scroll = 0
   val mutable term_scroll = 0
   val mutable modifier_scroll = 0
+  val mutable inverse_terms = false
+  val mutable inverse_properties = false
+  val mutable sorting_terms = sorting_frequency
+  val mutable sorting_properties = sorting_frequency
   val mutable expanded_terms : Lisql.increment list = []
   val mutable expanded_properties : Lisql.increment list = []
 							     
@@ -554,9 +560,11 @@ object (self)
 	jquery_input "#input-inverse-terms" (fun input_inverse ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	    (fun ~partial index ->
+	      input_inverse##checked <- bool inverse_terms;
+	      sel_sorting##value <- string sorting_terms;
 	      let html_sel, html_list, count =
 		let inverse = to_bool input_inverse##checked in
-		let sort_by_frequency = to_string sel_sorting##value = "frequency" in 
+		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in 
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
@@ -622,9 +630,11 @@ object (self)
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
+	      input_inverse##checked <- bool inverse_properties;
+	      sel_sorting##value <- string sorting_properties;
 	      let html_sel, html_list, count =
 		let inverse = to_bool input_inverse##checked in
-		let sort_by_frequency = to_string sel_sorting##value = "frequency" in
+		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
@@ -906,6 +916,10 @@ object (self)
     jquery "#list-properties" (fun elt -> property_scroll <- elt##scrollTop);
     jquery "#list-terms" (fun elt -> term_scroll <- elt##scrollTop);
     jquery "#list-modifiers" (fun elt -> modifier_scroll <- elt##scrollTop);
+    jquery_input "#input-inverse-terms" (fun input -> inverse_terms <- to_bool input##checked);
+    jquery_input "#input-inverse-properties" (fun input -> inverse_properties <- to_bool input##checked);
+    jquery_select "#select-sorting-terms" (fun select -> sorting_terms <- to_string select##value);
+    jquery_select "#select-sorting-properties" (fun select -> sorting_properties <- to_string select##value);
     self#save_expanded_terms;
     self#save_expanded_properties
   method save_expanded_terms =
@@ -928,7 +942,8 @@ object (self)
     let id = to_string elt##id in
     let key = Html.key_of_collapse id in
     html_state#dico_incrs#get key
-	       
+
+			      
   method restore_expanded_terms =
     self#restore_expanded_gen expanded_terms
   method restore_expanded_properties =
@@ -962,6 +977,7 @@ object (self)
        property_scroll = 0;
        term_scroll = 0;
        modifier_scroll = 0;
+       (* keeping increment display options *)
        (* keeping expanded increments *) >}
 
 end
