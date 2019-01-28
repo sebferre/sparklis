@@ -9,10 +9,11 @@ open Js
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
 object (self)
   val mutable organized : bool = false
-  val mutable h : ('a, 'b * 'a list ref) Hashtbl.t = Hashtbl.create 101
+  val mutable h : ('a, 'b * 'a list ref (* children *) * 'a list ref (* parents *)) Hashtbl.t = Hashtbl.create 101
   val mutable roots : 'a list = []
+  val mutable leaves : 'a list = []
 
-  method add (elt, info : 'a * 'b) : unit = Hashtbl.add h elt (info, ref [])
+  method add (elt, info : 'a * 'b) : unit = Hashtbl.add h elt (info, ref [], ref [])
   method remove (elt : 'a) : unit = Hashtbl.remove h elt
     
   method private organize : unit = (* must be called after all additions *)
@@ -22,56 +23,68 @@ object (self)
     | false, Some parents ->
       let add_child k_parent k_child : bool = (* returns true if parent exists *)
 	try
-	  let _v, ref_children = Hashtbl.find h k_parent in
+	  let _v, ref_children, _ref_parents = Hashtbl.find h k_parent in
 	  ref_children := k_child::!ref_children;
 	  true
 	with Not_found -> false (* absent parents are ignored *)
       in
       Hashtbl.iter
-	(fun k_child _ ->
-	  let has_parent =
-	    List.fold_left
-	      (fun res k_parent ->
-		let res1 = add_child k_parent k_child in
-		res || res1)
-	      false (parents k_child) in
-	  if not has_parent then roots <- k_child::roots)
+	(fun k_child (_,_,ref_parents) ->
+	  let l_parents = parents k_child in
+	  let present_parents =
+	    List.filter
+	      (fun k_parent ->
+		let present = add_child k_parent k_child in
+		present)
+	      l_parents in
+	  ref_parents := present_parents;
+	(*if present_parents = [] then roots <- k_child::roots*))
+	h;
+      Hashtbl.iter
+	(fun k (_, ref_children, ref_parents) ->
+	  if !ref_children = [] then leaves <- k::leaves;
+	  if !ref_parents = [] then roots <- k::roots)
 	h;
       organized <- true
 
   method is_empty : bool = (Hashtbl.length h = 0)
   method length : int = Hashtbl.length h
   method fold : 'c. ('c -> 'a * 'b -> 'c) -> 'c -> 'c =
-    fun f init -> Hashtbl.fold (fun k (v,_) res -> f res (k,v)) h init
+    fun f init -> Hashtbl.fold (fun k (v,_,_) res -> f res (k,v)) h init
   method iter : ('a * 'b -> unit) -> unit =
-    fun f -> Hashtbl.iter (fun k (v,_) -> f (k,v)) h
+    fun f -> Hashtbl.iter (fun k (v,_,_) -> f (k,v)) h
   method filter_map_list : 'c. ('a * 'b -> 'c option) -> 'c list =
     fun f ->
     Hashtbl.fold
-      (fun k (v,_) res ->
+      (fun k (v,_,_) res ->
        match f (k,v) with
        | Some x -> x::res
        | None -> res)
       h []
-  method filter_map_tree : 'c. ('a * 'b -> 'c option) -> ([`Node of 'c * 'd list] as 'd) list =
-    fun f ->
+  method filter_map_tree : 'c. ?inverse:bool -> ('a * 'b -> 'c option) -> ([`Node of 'c * 'd list] as 'd) list =
+    fun ?(inverse = false) f ->
       self#organize;
       if organized then
 	let rec aux (keys : 'a list) =
 	  Common.mapfilter
 	    (fun k ->
-	     let k, (v, ref_children) =
+	     let k, (v, ref_children, ref_parents) =
 	       try k, Hashtbl.find h k
 	       with Not_found -> assert false in
 	     match f (k,v) with
-	     | Some x -> Some (`Node (x, aux !ref_children))
+	     | Some x ->
+		let node_children =
+		  if inverse
+		  then aux !ref_parents
+		  else aux !ref_children in
+		Some (`Node (x, node_children))
 	     | None -> None)
 	    keys
 	in
-	aux roots
+	aux (if inverse then leaves else roots)
       else (* no tree organization *)
 	Hashtbl.fold
-	  (fun k (v,_) res ->
+	  (fun k (v,_,_) res ->
 	   match f (k,v) with
 	   | Some x -> `Node (x, []) :: res
 	   | None -> res)
@@ -79,7 +92,7 @@ object (self)
   method sample_list (max : int) : int * ('a * 'b) list =
     let _, n, res =
       Hashtbl.fold
-	(fun k (v,_) (max,n,res as acc) ->
+	(fun k (v,_,_) (max,n,res as acc) ->
 	 if max <= 0 then acc else (max-1, n+1, (k,v)::res))
 	h (max,0,[]) in
     n, res

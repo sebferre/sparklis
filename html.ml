@@ -522,7 +522,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
  end
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(sort_by_frequency : bool): string * string * int =
+let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(inverse : bool) ~(sort_by_frequency : bool): string * string * int =
   let sort_node_list nodes =
     List.sort
       (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
@@ -554,7 +554,7 @@ let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state 
       sorted_nodes;
     Buffer.add_string buf_tree "</ul>"
   in
-  let enriched_index_tree = index#filter_map_tree (freq_text_html_increment_frequency ~filter focus state) in
+  let enriched_index_tree = index#filter_map_tree ~inverse (freq_text_html_increment_frequency ~filter focus state) in
   let buf_sel = Buffer.create 100 in
   let buf_tree = Buffer.create 1000 in
   let ref_count = ref 0 in

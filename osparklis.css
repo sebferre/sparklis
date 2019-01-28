@@ -132,6 +132,18 @@ select {
     padding-right: 15px;
 }
 
+.panel-footer {
+    padding: 10px 5px;
+}
+
+.buttons-incrs {
+    padding: 0px 5px;
+}
+
+.select-sorting-incrs {
+    padding: 0px 5px;
+}
+
 #focus-dropdown {
     position: relative;
     display: inline;
@@ -219,6 +231,7 @@ select {
 }
 
 .count-incrs {
+    padding: 5px 5px;
     text-align:right;
 }
 
@@ -228,14 +241,25 @@ select {
 .css-treeview input.input-treeview:checked ~ ul {
     display: block; /* showing sublists of checked increments */
 }
+/* showing/hiding arrow labels depending on check status */
 .css-treeview input.input-treeview {
   position: absolute;
   opacity: 0;
 }
-/* showing/hiding arrow labels depending on check status */
 .css-treeview input.input-treeview ~ .label-checked { display:none; }
 .css-treeview input.input-treeview:checked ~ .label-unchecked { display:none; }
 .css-treeview input.input-treeview:checked ~ .label-checked { display:inline; }
+
+/* switching labels for checkboxes inverting hierarchy display */
+input.input-inverse {
+    position: absolute;
+    opacity: 0;
+}
+input.input-inverse ~ .label-checked { display:none; }
+input.input-inverse ~ .label-unchecked { margin:0px; }
+input.input-inverse:checked ~ .label-unchecked { display:none; }
+input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
+
 
 #control-results {
     margin: 5px 0px;

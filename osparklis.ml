@@ -551,11 +551,13 @@ object (self)
       jquery "#selection-terms-items" (fun elt_sel_items ->
        jquery "#list-terms" (fun elt_list ->
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
+	jquery_input "#input-inverse-terms" (fun input_inverse ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr term_constr) [elt_list]
 	    (fun ~partial index ->
 	      let html_sel, html_list, count =
+		let inverse = to_bool input_inverse##checked in
 		let sort_by_frequency = to_string sel_sorting##value = "frequency" in 
-		html_index lis#focus html_state index ~sort_by_frequency in
+		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- term_scroll;
@@ -579,7 +581,7 @@ object (self)
 	      get_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
-		 self#set_term_constr new_constr)))))))
+		 self#set_term_constr new_constr))))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments (*_gen process_index*) =
@@ -617,11 +619,13 @@ object (self)
        jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
+	 jquery_input "#input-inverse-properties" (fun input_inverse ->
 	  lis#ajax_index_properties (norm_constr property_constr) elt_list
 	     (fun ~partial index ->
 	      let html_sel, html_list, count =
+		let inverse = to_bool input_inverse##checked in
 		let sort_by_frequency = to_string sel_sorting##value = "frequency" in
-		html_index lis#focus html_state index ~sort_by_frequency in
+		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
 	      elt_list##innerHTML <- string html_list;
 	      elt_list##scrollTop <- property_scroll;
@@ -639,7 +643,7 @@ object (self)
 	      get_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
-		 self#set_property_constr new_constr)))))))
+		 self#set_property_constr new_constr))))))))
 
   method private refresh_modifier_increments =
     let filter_dropdown_increment =
@@ -686,12 +690,12 @@ object (self)
 	html_index
 	  ~filter:(fun incr -> not (filter_dropdown_increment incr))
 	  lis#focus html_state index
-	  ~sort_by_frequency:false in
+	  ~inverse:false ~sort_by_frequency:false in
       let _, html_drop, _ =
 	html_index
 	  ~filter:filter_dropdown_increment
 	  lis#focus html_state index
-	  ~sort_by_frequency:false in
+	  ~inverse:false ~sort_by_frequency:false in
       elt_dropdown##innerHTML <- string html_drop;
       elt_sel_items##innerHTML <- string html_sel;
       elt_list##innerHTML <- string html_list;
@@ -1157,6 +1161,15 @@ let initialize endpoint focus =
 				place#refresh)))
       ["#select-sorting-terms";
        "#select-sorting-properties"];
+    List.iter
+      (fun sel_input ->
+       jquery_input sel_input
+		    (onchange (fun input ev ->
+			       let place = history#present in
+			       place#save_ui_state;
+			       place#refresh)))
+      ["#input-inverse-terms";
+       "#input-inverse-properties"];
     
     jquery "#previous-results" (onclick (fun elt ev -> history#present#page_up));
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
