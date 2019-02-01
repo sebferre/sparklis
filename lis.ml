@@ -114,11 +114,11 @@ class incr_freq_index = [Lisql.increment, freq option] index ()
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
   | None -> Ontology.no_relation
-  | Some (id,p,ori,inv) ->
+  | Some (id,p,ori) ->
      let inverse =
        match ori with
-       | Lisql.Fwd -> inv
-       | Lisql.Bwd -> not inv in
+       | Lisql.Fwd -> false
+       | Lisql.Bwd -> true in
      Ontology.sparql_relations#get_hierarchy
        ~froms:Sparql_endpoint.config_default_graphs#froms
        ~property:p
@@ -1064,8 +1064,7 @@ object (self)
 	  (fun incr ->
 	   if Lisql.insert_increment incr focus <> None
 	   then incr_index#add (incr,None))
-	  [Lisql.IncrHierarchy (true,false);
-	   Lisql.IncrHierarchy (true,true)];
+	  [Lisql.IncrHierarchy true];
       (* adding other increments *)
       if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
       if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
@@ -1223,7 +1222,7 @@ object (self)
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn ::
 	    IncrUnselect ::
-	    IncrHierarchy (false,false) :: IncrHierarchy (false,true) ::
+	    IncrHierarchy false ::
 	    incrs in
 	let incrs =
 	  List.fold_left

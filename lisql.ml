@@ -81,7 +81,7 @@ type 'a elt_p1 =
   | Pred of 'a * arg * pred * 'a elt_sn
   | Type of 'a * Rdf.uri
   | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
-  | Hier of 'a * id * Rdf.uri * modif_p2 * inverse * 'a elt_s1
+  | Hier of 'a * id * Rdf.uri * modif_p2 * 'a elt_s1
   | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | LatLong of 'a * latlong * id * id (* specialization of two Rel to get latitude and longitude *)
   | Search of 'a * constr
@@ -191,7 +191,7 @@ and ctx_s1 =
   | TripleX1 of arg * unit elt_s1 * ctx_p1 (* context on first S1 arg *)
   | TripleX2 of arg * unit elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX of ctx_s
-  | HierX of id * Rdf.uri * modif_p2 * inverse * ctx_p1
+  | HierX of id * Rdf.uri * modif_p2 * ctx_p1
   | AnAggregX of id * modif_s2 * aggreg * unit elt_p1 option * ctx_s1
   | NAndX of unit elt_s1 ctx_list * ctx_s1
   | NOrX of unit elt_s1 ctx_list * ctx_s1
@@ -362,7 +362,7 @@ let rec hierarchy_of_ctx_s1 = function
   | TripleX1 _ -> None
   | TripleX2 _ -> None
   | ReturnX _ -> None
-  | HierX (id,p,ori,inv,_) -> Some (id,p,ori,inv)
+  | HierX (id,p,ori,_) -> Some (id,p,ori)
   | AnAggregX _ -> None
   | NAndX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
   | NOrX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
@@ -371,7 +371,7 @@ let rec hierarchy_of_ctx_s1 = function
   | InGraphX (f1,ctx) -> None
   | InWhichThereIsX ctx -> None
 let hierarchy_of_focus = function
-  | AtP1 (Hier (_,id,p,ori,inv,_),_) -> Some (id,p,ori,inv)
+  | AtP1 (Hier (_,id,p,ori,_),_) -> Some (id,p,ori)
   | AtS1 (np,ctx) -> hierarchy_of_ctx_s1 ctx
   | _ -> None
 let is_hierarchy_ctx_s1 ctx =
@@ -396,7 +396,7 @@ let id_of_s = function
   | SExpr (_,_,id,_,_,_) -> Some id
   | _ -> None
 let id_of_focus = function
-  | AtP1 (Hier (_,id,_,_,_,_),_) -> Some id
+  | AtP1 (Hier (_,id,_,_,_),_) -> Some id
   | AtSn (cp,ctx) -> id_of_sn cp
   | AtS1 (np,ctx) when not (is_s1_as_p1_ctx_s1 ctx) -> id_of_s1 np
   | AtAggreg (aggreg,_) -> id_of_aggreg aggreg
@@ -474,7 +474,7 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Pred (a,arg,pred,cp) -> a
   | Type (a,c) -> a
   | Rel (a,p,modif,np) -> a
-  | Hier (a,id,p,ori,inv,np) -> a
+  | Hier (a,id,p,ori,np) -> a
   | Triple (a,arg,np1,np2) -> a
   | LatLong (a,ll,id1,id2) -> a
   | Search (a,constr) -> a
@@ -557,7 +557,7 @@ and elt_s_path_of_ctx_s1 path (f : unit elt_s1) = function
   | TripleX1 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Triple ((),arg,f,np)) ctx
   | TripleX2 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::RIGHT::path) (Triple ((),arg,np,f)) ctx
   | ReturnX ctx -> elt_s_path_of_ctx_s (DOWN::path) (Return ((),f)) ctx
-  | HierX (id,p,ori,inv,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Hier ((),id,p,ori,inv,f)) ctx
+  | HierX (id,p,ori,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Hier ((),id,p,ori,f)) ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
   | NAndX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NAnd ((),list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NOr ((),list_of_ctx f ll_rr)) ctx
@@ -603,7 +603,7 @@ let rec focus_of_path_p1 (ctx : ctx_p1) : path * unit elt_p1 -> focus = function
   | DOWN::path, Is (_,np) -> focus_of_path_s1 (IsX ctx) (path,np)
   | DOWN::path, Pred (_,arg,pred,cp) -> focus_of_path_sn (PredX (arg,pred,ctx)) (path,cp)
   | DOWN::path, Rel (_,p,m,np) -> focus_of_path_s1 (RelX (p,m,ctx)) (path,np)
-  | DOWN::path, Hier (_, id,p,ori,inv,np) -> focus_of_path_s1 (HierX (id,p,ori,inv,ctx)) (path,np)
+  | DOWN::path, Hier (_, id,p,ori,np) -> focus_of_path_s1 (HierX (id,p,ori,ctx)) (path,np)
   | DOWN::RIGHT::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX2 (arg,np1,ctx)) (path,np2)
   | DOWN::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX1 (arg,np2,ctx)) (path,np1)
   | DOWN::path, And (_,lr) ->
@@ -687,7 +687,7 @@ let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
   | Pred (_,arg,pred,cp) -> Some (AtSn (cp, PredX (arg,pred,ctx)))
   | Type _ -> None
   | Rel (_,p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
-  | Hier (_, id,p,ori,inv,np) -> Some (AtS1 (np, HierX (id,p,ori,inv,ctx)))
+  | Hier (_, id,p,ori,np) -> Some (AtS1 (np, HierX (id,p,ori,ctx)))
   | Triple (_,arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | LatLong _ -> None
   | Search _ -> None
@@ -778,7 +778,7 @@ let rec up_s1 f = function
   | TripleX1 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
   | ReturnX ctx -> Some (AtS (Return ((),f), ctx))
-  | HierX (id,p,ori,inv,ctx) -> Some (AtP1 (Hier ((),id,p,ori,inv,f),ctx))
+  | HierX (id,p,ori,ctx) -> Some (AtP1 (Hier ((),id,p,ori,f),ctx))
   | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, rel_opt, f), ctx))
   | NAndX (ll_rr,ctx) -> up_s1 (NAnd ((), list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr ((), list_of_ctx f ll_rr), ctx))
@@ -994,7 +994,7 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
   | Pred (a,arg,pred,cp) -> Pred (a, arg, pred, copy_sn cp)
   | Type (a,uri) -> Type (a,uri)
   | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
-  | Hier (a,id,p,ori,inv,np) -> Hier (a, factory#new_id, p, ori, inv, copy_s1 np)
+  | Hier (a,id,p,ori,np) -> Hier (a, factory#new_id, p, ori, copy_s1 np)
   | Triple (a,arg,np1,np2) -> Triple (a,arg, copy_s1 np1, copy_s1 np2)
   | LatLong (a,ll,id1,id2) -> LatLong (a, ll, factory#new_id, factory#new_id)
   | Search _ -> f
@@ -1068,7 +1068,7 @@ type increment =
   | IncrRel of Rdf.uri * modif_p2
   | IncrLatLong of latlong
   | IncrTriplify
-  | IncrHierarchy of bool * bool (* trans_rel, inv *)
+  | IncrHierarchy of bool (* trans_rel *)
   (* trans_rel: to indicate that relation in context can be made transitive *)
   (* inv: to indicate whether to display inversed hierarchies *)
   | IncrAnd
@@ -1140,7 +1140,7 @@ let hierarchy_p1_opt_of_uri (uri : Rdf.uri) : unit elt_p1 option =
   match lhp with
   | [] -> None
   | hp::_ -> (* TODO: what about other properties ? *)
-     Some (Hier ((), factory#new_id, hp, Fwd, false, factory#top_s1))
+     Some (Hier ((), factory#new_id, hp, Fwd, factory#top_s1))
 
 let hierarchy_s1_of_uri (uri : Rdf.uri) : unit elt_s1 =
  let fh_opt = hierarchy_p1_opt_of_uri uri in
@@ -1271,9 +1271,9 @@ let insert_elt_p1_in_rel_opt ctx elt = function
   | Some rel -> append_and_p1 ctx elt rel
     
 let rec insert_elt_p1 (elt : unit elt_p1) = function
-  | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
+  | AtP1 (Hier (_,id,p,ori,np),ctx) ->
      let elt_s1 = Det ((), factory#top_s2, Some elt) in
-     focus_opt_moves [down_focus] (append_and_s1 (HierX (id,p,ori,inv,ctx)) elt_s1 np)
+     focus_opt_moves [down_focus] (append_and_s1 (HierX (id,p,ori,ctx)) elt_s1 np)
   | AtP1 (f, ctx) -> append_and_p1 ctx elt f
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
@@ -1301,8 +1301,8 @@ let rec insert_elt_s1 elt focus =
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
        Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx))
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
-    | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
-       insert_elt_s1 elt (AtS1 (np, HierX (id,p,ori,inv,ctx)))
+    | AtP1 (Hier (_,id,p,ori,np),ctx) ->
+       insert_elt_s1 elt (AtS1 (np, HierX (id,p,ori,ctx)))
     | AtP1 _
     | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
     | _ -> None in
@@ -1317,8 +1317,8 @@ let rec insert_elt_s2 det : focus -> focus option = function
        then AtS1 (Det ((), factory#top_s2, rel_opt), ctx)
        else AtS1 (Det ((), det, rel_opt), ctx) in
      Some (focus_moves [focus_up_at_root_s1] focus2)
-  | AtP1 (Hier (_,id,p,ori,inv,np),ctx) ->
-     insert_elt_s2 det (AtS1 (np, HierX (id,p,ori,inv,ctx)))
+  | AtP1 (Hier (_,id,p,ori,np),ctx) ->
+     insert_elt_s2 det (AtS1 (np, HierX (id,p,ori,ctx)))
   | focus -> insert_elt_s1 (Det ((), det, None)) focus
 
 
@@ -1419,18 +1419,14 @@ let insert_triplify = function
   | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, Bwd, np), ctx))
   | _ -> None
 
-let toggle_hierarchy trans_rel inv = function
-  | AtP1 (Hier (_,id,p,ori,inv0,np),ctx) ->
-     if inv = inv0
-     then Some (AtS1 (np, RelX (p, ori, ctx)))
-     else Some (AtP1 (Hier ((),id,p,ori,inv,np),ctx))
-  | AtS1 (np, HierX (id,p,ori,inv0,ctx)) ->
-     if inv = inv0
-     then Some (AtS1 (np, RelX (p,ori,ctx)))
-     else Some (AtS1 (np, HierX (id,p,ori,inv,ctx)))
+let toggle_hierarchy trans_rel = function
+  | AtP1 (Hier (_,id,p,ori,np),ctx) ->
+     Some (AtS1 (np, RelX (p, ori, ctx)))
+  | AtS1 (np, HierX (id,p,ori,ctx)) ->
+     Some (AtS1 (np, RelX (p,ori,ctx)))
   | AtS1 (np, RelX (p, ori, ctx)) ->
        if trans_rel && not (is_unconstrained_ctx_p1 ctx)
-       then Some (AtS1 (np, HierX (factory#new_id,p,ori,inv,ctx)))
+       then Some (AtS1 (np, HierX (factory#new_id,p,ori,ctx)))
        else None
   | _ -> None
 	   
@@ -1819,7 +1815,7 @@ let insert_increment incr focus =
     | IncrLatLong ll -> insert_latlong ll focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
-    | IncrHierarchy (trans_rel,inv) -> toggle_hierarchy trans_rel inv focus
+    | IncrHierarchy trans_rel -> toggle_hierarchy trans_rel focus
     | IncrAnything -> insert_anything focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
@@ -1949,7 +1945,7 @@ and delete_ctx_s1 f_opt ctx =
       ( match f_opt with
 	| None -> delete_ctx_s None ctx2
 	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
-    | HierX (id,p,ori,inv,ctx2) ->
+    | HierX (id,p,ori,ctx2) ->
        ( match f_opt with
 	 | None -> delete_ctx_p1 ctx2
 	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )

@@ -32,7 +32,7 @@ object (self)
   method virtual whose : string
   method virtual according_to : string
   method virtual which : string
-  method virtual hierarchy_in : inv:bool -> in_:bool -> string (* [bool] for 'inverse' *)
+  method virtual hierarchy : in_:bool -> string (* [bool] for 'inverse' *)
 
   method virtual and_ : string
   method virtual or_ : string
@@ -163,8 +163,8 @@ object
   method whose = "whose"
   method according_to = "according to" (* "from" *)
   method which = "which"
-  method hierarchy_in ~inv ~in_ =
-    let s = if inv then "(inverse hierarchy)" else "(hierarchy)" in
+  method hierarchy ~in_ =
+    let s = "(hierarchy)" in
     if in_ then s ^ " in" else s
 
   method and_ = "and"
@@ -366,8 +366,8 @@ object
   method whose = "dont le·a"
   method according_to = "selon"
   method which = "lequel"
-  method hierarchy_in ~inv ~in_ =
-    let s = if inv then "(hiérarchie inversée)" else "(hiérarchie)" in
+  method hierarchy ~in_ =
+    let s = "(hiérarchie)" in
     if in_ then s ^ " dans" else s
 
   method and_ = "et"
@@ -568,8 +568,8 @@ object
   method whose = "cuyo"
   method according_to = "según"
   method which = "el/la cual"
-  method hierarchy_in ~inv ~in_ =
-    let s = if inv then "(jerarquía inversa)" else "(jerarquía)" in
+  method hierarchy ~in_ =
+    let s = "(jerarquía)" in
     if in_ then s ^ " en" else s
 
   method and_ = "y"
@@ -771,8 +771,8 @@ object
   method whose = "van wie"
   method according_to = "volgens" (* "from" *)
   method which = "welke"
-  method hierarchy_in ~inv ~in_ =
-    let s = if inv then "(omgekeerde hiërarchie)" else "(hiërarchie)" in
+  method hierarchy ~in_ =
+    let s = "(hiërarchie)" in
     if in_ then s ^ " in" else s
 
   method and_ = "en"

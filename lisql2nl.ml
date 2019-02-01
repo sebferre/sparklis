@@ -72,7 +72,7 @@ type ng_label =
   | `Of of word * ng_label
   | `AggregNoun of word * ng_label
   | `AggregAdjective of word * ng_label
-  | `Hierarchy of bool * ng_label
+  | `Hierarchy of ng_label
   | `Nth of int * ng_label ]
     
 type 'b annotated = X of 'b | A of annot * 'b
@@ -299,7 +299,7 @@ let word_of_incr grammar = function
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrHierarchy (trans_rel,inv) -> `Op (grammar#hierarchy_in ~inv ~in_:false)
+  | IncrHierarchy trans_rel -> `Op (grammar#hierarchy ~in_:false)
   | IncrAnything -> `Op grammar#anything
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
@@ -389,11 +389,11 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
 	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
 	| _ -> [] in
     ls, lab
-  | Hier (_, id, p, ori, inv, np) ->
+  | Hier (_, id, p, ori, np) ->
      (* TODO: how to use 'p' ? *)
      let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels:[] np in
      let labels_id =
-       List.map (fun (v,l) -> "hier_"^v, `Hierarchy (inv,l)) labels in
+       List.map (fun (v,l) -> "hier_"^v, `Hierarchy l) labels in
      ls_np, (id, `Labels labels_id) :: lab_np
   | LatLong (_,_ll,id1,id2) ->
     let ls_lat = List.map (fun (v,l) -> (v ^ "_lat", `Gen (l, `Op  grammar#latitude))) labels in
@@ -549,7 +549,7 @@ let rec size_ng_label ~(size_id_label : Lisql.id -> int) : ng_label -> int = fun
   | `AggregNoun (w,l) -> size_ng_label ~size_id_label l
   | `AggregAdjective (w,l) -> size_ng_label ~size_id_label l
   (* not favoring 'the average' w.r.t. 'the average <prop>' *)
-  | `Hierarchy (inv,l) -> 1 + size_ng_label ~size_id_label l
+  | `Hierarchy l -> 1 + size_ng_label ~size_id_label l
   | `Nth (k,l) -> 1 + size_ng_label ~size_id_label l
 
 
@@ -727,8 +727,8 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
     | `InvNoun -> A (annot, `HasProp (word, np, []))
     | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
-  | Hier (annot, id, p, ori, inv, np) -> (* TODO: render p, ori *)
-     A (annot, `IsPP (`Prep (`Op (grammar#hierarchy_in ~inv ~in_:true), np_of_elt_s1 grammar ~id_labelling np)))
+  | Hier (annot, id, p, ori, np) -> (* TODO: render p, ori *)
+     A (annot, `IsPP (`Prep (`Op (grammar#hierarchy ~in_:true), np_of_elt_s1 grammar ~id_labelling np)))
   | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
@@ -1185,7 +1185,7 @@ let xml_suspended susp xml =
   else xml
 
 
-let xml_hierarchy grammar inv in_ = [Word (`Op (grammar#hierarchy_in ~inv ~in_))]
+let xml_hierarchy grammar in_ = [Word (`Op (grammar#hierarchy ~in_))]
 (*  let xml_wh = match wh_opt with None -> [] | Some w -> [Word w] in
   Kwd "(" :: xml_wh @ Word (`Op (grammar#hierarchy inv)) :: Kwd ")" :: []*)
 let xml_seq grammar annot_opt (lr : xml list) =
@@ -1428,7 +1428,7 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     if grammar#adjective_before_noun
     then Word w :: xml_ng_label grammar ~id_labelling ng
     else xml_ng_label grammar ~id_labelling ng @ [Word w]
-  | `Hierarchy (inv,ng) -> xml_ng_label grammar ~id_labelling ng @ xml_hierarchy grammar inv false
+  | `Hierarchy ng -> xml_ng_label grammar ~id_labelling ng @ xml_hierarchy grammar false
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
 and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
   match ng with
@@ -1565,10 +1565,10 @@ let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = funct
       (Kwd grammar#relative_that :: Kwd grammar#is :: xml_a_an grammar [Word `Relation] @ Kwd grammar#rel_from :: xml_ellipsis @ Kwd grammar#rel_to :: xml_ellipsis)
   | IncrTriple (Q _) -> assert false
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
-  | IncrHierarchy (trans_rel,inv) ->
+  | IncrHierarchy trans_rel ->
      if trans_rel
-     then Word (`Prop ("", "...")) :: xml_hierarchy grammar inv true @  Word focus_span :: []
-     else xml_hierarchy grammar inv true
+     then Word (`Prop ("", "...")) :: xml_hierarchy grammar true @  Word focus_span :: []
+     else xml_hierarchy grammar true
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []

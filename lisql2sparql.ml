@@ -667,7 +667,7 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
        | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y p x)) in
      let q_np = form_s1 state np in
      (fun x -> q_np (fun y -> rel x y))
-  | Hier (annot,id,p,ori,inv,np) ->
+  | Hier (annot,id,p,ori,np) ->
      let vy = state#id_labelling#get_id_var id in
      state#set_modif vy (Lisql.Unselect,Lisql.Unordered);
      let y = (Sparql.var vy :> Sparql.term) in
