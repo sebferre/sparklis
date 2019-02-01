@@ -85,6 +85,9 @@ let ondblclick k elt =
 let onhover k elt =
   elt##onmouseover <- Dom.handler (fun ev -> k elt ev; bool true)
 
+let onhover_out k elt =
+  elt##onmouseout <- Dom.handler (fun ev -> k elt ev; bool true)
+
 let oninput k elt =
   elt##oninput <- Dom.handler (fun ev -> k elt ev; bool true)
 
