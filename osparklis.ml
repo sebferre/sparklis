@@ -712,6 +712,9 @@ object (self)
       elt_list##scrollTop <- modifier_scroll;
       jquery_set_innerHTML "#count-modifiers"
 			   (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+      jquery "#focus-dropdown" (onclick (fun elt ev ->
+	Dom_html.stopPropagation ev;
+	jquery_toggle "#focus-dropdown-content"));
       jquery "#focus-dropdown" (onhover (fun elt ev ->
 	Dom_html.stopPropagation ev;
 	jquery_show "#focus-dropdown-content"));
