@@ -1,5 +1,9 @@
 # description of main changes that impact interface with outside
 
+2019-02-01
+- IncrHierarchy: removed second argument (inversion flag)
+  - now handled at UI level
+
 2019-01-11
 - new option: Lis.config_concept_profile
   - goal: allow for different user profiles
