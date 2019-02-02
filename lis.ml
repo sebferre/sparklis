@@ -452,7 +452,7 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 (* LIS navigation places *)
 
 class place (endpoint : string) (focus : Lisql.focus) =
-  let focus_descr, s_annot = Lisql_annot.annot_focus focus in
+  let ids, focus_descr, s_annot = Lisql_annot.annot_focus focus in
   let _, path = Lisql.elt_s_path_of_focus focus in
 object (self)
   (* essential state *)
@@ -460,9 +460,11 @@ object (self)
   val endpoint = endpoint
   method endpoint = endpoint
 
-  method focus = focus
-  method query = s_annot
-  method path = path
+  method focus : Lisql.focus = focus (* focus-centric query representation *)
+  method query : Lisql_annot.annot Lisql.elt_s = s_annot (* annotated query *)
+  method path : Lisql.path = path (* focus path *)
+  method query_ids : Lisql_annot.Ids.t = ids (* defined entity ids in query *)
+  method focus_entity : Lisql_annot.focus_term = focus_descr#term (* entity at focus, if any *)
 
   (* derived state *)
 

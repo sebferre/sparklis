@@ -1059,7 +1059,8 @@ and annot_focus_aux (focus : focus) =
     let s_annot = annot_elt_s `At s ctx in
     annot_ctx_s fd s_annot s ctx
 
-let annot_focus (focus : focus) : focus_descr * annot elt_s =
+let annot_focus (focus : focus) : Ids.t * focus_descr * annot elt_s =
   let fd, (a,a_s) = annot_focus_aux focus in
-  factory#set (try Ids.max_elt a#ids.all with Not_found -> 0); (* to account for ids imported from we don't know where (ex., permalinks) *)
-  fd, a_s
+  let ids = a#ids.all in
+  factory#set (try Ids.max_elt ids with Not_found -> 0); (* to account for ids imported from we don't know where (ex., permalinks) *)
+  ids, fd, a_s
