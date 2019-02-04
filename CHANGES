@@ -1,6 +1,14 @@
 # description of main changes that impact interface with outside
 
 2019-02-01
+- signature change of Lis.place
+  - method 'query_ids' returning set of entity ids in query
+    - every result var map to some id in that set
+  - method 'focus_entity' returning kind of entity at focus
+    - one of: `Id id, `Term t, `Undefined
+  - method 'define_sparql' that computes the sparql query
+    - without ajax call, without computing results
+    - query then available via method 'sparql'
 - IncrHierarchy: removed second argument (inversion flag)
   - now handled at UI level
 

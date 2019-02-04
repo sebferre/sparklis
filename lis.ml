@@ -524,6 +524,20 @@ object (self)
 
   (* SPARQL query and results *)
 
+  val mutable sparql_opt : string option = None
+	
+  method define_sparql term_constr ~limit =
+    match s_sparql.Lisql2sparql.query_opt with
+    | None ->
+       sparql_opt <- None
+    | Some query ->
+       let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
+       let froms = Sparql_endpoint.config_default_graphs#froms in
+       let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
+       sparql_opt <- Some sparql
+
+  method sparql : string option = sparql_opt
+
   val mutable max_results = config_max_results#value
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
@@ -541,9 +555,8 @@ object (self)
     with Not_found -> (* no results *)
       Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
       []
-    
-  method ajax_sparql_results term_constr elts
-    ~(k_sparql : string option -> unit)
+
+  method ajax_results elts
     ~(k_results : string option -> unit) =
     (* re-initializing *)
     let filter_term =
@@ -565,9 +578,8 @@ object (self)
     focus_pred_args_index <- new nested_int_index;
     some_focus_term_is_blank <- false;
     (* computing results and derived attributes *)
-    match s_sparql.Lisql2sparql.query_opt with
+    match sparql_opt with
     | None ->
-        k_sparql None;
 	focus_type_constraints <-
 	  Lisql_type.of_focus
 	    (fun id -> Some [`IRI])
@@ -579,12 +591,7 @@ object (self)
 	| Some term -> focus_term_index#add (term, (1, new int_index))
 	| None -> () ); *)
 	k_results None
-    | Some query ->
-        let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
-	let froms = Sparql_endpoint.config_default_graphs#froms in
-	let limit = config_max_results#value in
-	let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
-	k_sparql (Some sparql);
+    | Some sparql ->
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
@@ -616,6 +623,13 @@ object (self)
 	    k_results (Some sparql))
 	  (fun code -> k_results (Some sparql))
 
+  method ajax_sparql_results term_constr elts
+			     ~(k_sparql : string option -> unit)
+			     ~(k_results : string option -> unit) =
+    self#define_sparql term_constr ~limit:config_max_results#value;
+    k_sparql sparql_opt;
+    self#ajax_results elts ~k_results
+    
   method partial_results = (results.Sparql_endpoint.length = max_results)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
@@ -629,14 +643,11 @@ object (self)
     if self#partial_results then
       begin
 	max_results <- max_results + config_max_results#value;
-	match s_sparql.Lisql2sparql.query_opt with
+	self#define_sparql term_constr ~limit:max_results;
+	k_sparql sparql_opt;
+	match sparql_opt with
 	| None -> ()
-	| Some query ->
-	   let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
-	   let froms = Sparql_endpoint.config_default_graphs#froms in
-	   let limit = max_results in
-	   let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
-	   k_sparql (Some sparql);
+	| Some sparql ->
 	   Sparql_endpoint.ajax_in
 	     ~send_results_to_yasgui:true
 	     elts ajax_pool endpoint sparql
