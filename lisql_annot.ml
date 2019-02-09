@@ -668,7 +668,7 @@ and annot_elt_s pos s ctx =
 	(ctx_of_list lr) in
     match clean_list a_lr lr with
     | `Changed lr ->
-      annot_elt_s pos (if lr=[] then factory#top_s else Seq ((), lr)) ctx
+      annot_elt_s pos (if lr=[] then fst factory#top_s else Seq ((), lr)) ctx
     | `Unchanged ->
       let seq_view = view_of_list a_lr in
       let la, lar = List.split a_lr in
@@ -991,8 +991,12 @@ and annot_ctx_s fd (a1,a_x) x = function
     | `Changed new_opt ->
       let focus =
 	match new_opt with
-	| None -> factory#home_focus
-	| Some (x,ll_rr) -> focus_moves [down_focus] (AtS (x, SeqX (ll_rr,ctx))) in
+	| None -> AtS (fst factory#top_s, Root)
+	| Some (x,ll_rr) -> AtS (x, SeqX (ll_rr,ctx)) in
+      let focus = 
+	match down_focus focus with
+	| None -> focus
+	| Some focus -> focus in
       annot_focus_aux focus
     | `Unchanged ->
       let seq_view = view_of_list_focus (focus_term_id fd#term) (a1,a_x) a_ll_rr in

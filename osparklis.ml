@@ -29,7 +29,18 @@ let session_id : string = (* random session ID to disambiguate undefinite IPs *)
 (* other configs *)
 
 let config_short_permalink = new Config.boolean_input ~key:"short-permalink" ~input_selector:"#input-short-permalink" ~default:true ()
-  
+
+
+(* debug utilities *)
+
+let rec string_of_delta =
+  let open Lisql in
+  function
+  | DeltaNil -> "no change"
+  | DeltaIds ids -> "new ids: " ^ String.concat ", " (List.map string_of_int ids)
+  | DeltaDuplicate map -> "dup: " ^ String.concat ", " (List.map (fun (id,id') -> string_of_int id ^ "->" ^ string_of_int id') map)
+  | DeltaSelection (d,ld) -> "sel: " ^ string_of_delta d ^ " [" ^ String.concat "; " (List.map string_of_delta ld) ^ "]"
+				 
 (* constraint compilation *)
 
 let get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) (k : Lisql.constr -> unit) : unit =
@@ -254,7 +265,7 @@ let sorting_frequency = "frequency"
 class navigation =
 object
   method change_endpoint (url : string) : unit = ()
-  method update_focus ~(push_in_history : bool) (f : Lisql.focus -> Lisql.focus option) : unit = ()
+  method update_focus ~(push_in_history : bool) (f : Lisql.focus -> (Lisql.focus * Lisql.delta) option) : unit = ()
 end
 
 class increment_selection (sel_selection : string) =
@@ -356,7 +367,7 @@ object (self)
 	Dom_html.stopPropagation ev;
 	navigation#update_focus ~push_in_history:false (fun _ ->
 	  let key = to_string (elt_foc##id) in
-	  Some (html_state#get_focus key))));
+	  Some (html_state#get_focus key, Lisql.DeltaNil))));
       jquery_from elt "#delete-current-focus"
 	(onclick (fun elt_button ev ->
 	  Dom_html.stopPropagation ev;
@@ -451,7 +462,7 @@ object (self)
 	    navigation#update_focus ~push_in_history:false (fun _ ->
 	      try
 		let key = to_string (elt_foc##id) in
-		Some (html_state#get_focus key)
+		Some (html_state#get_focus key, Lisql.DeltaNil)
 	      with _ -> None)));
 	  jquery_all_from elt_results ".partial-count" (onclick (fun elt ev ->
 	    Dom_html.stopPropagation ev;
@@ -1017,7 +1028,8 @@ object (self)
     present#save_ui_state;
     config#set_endpoint url;
     jquery_set_innerHTML "#sparql-endpoint-title" dummy_title;
-    let focus = Lisql.factory#reset; Lisql.factory#home_focus in
+    let focus, delta = Lisql.factory#reset; Lisql.home_focus () in
+    firebug ("delta = " ^ string_of_delta delta);
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
@@ -1026,7 +1038,8 @@ object (self)
   method update_focus ~push_in_history f =
     match f present#lis#focus with
       | None -> ()
-      | Some foc ->
+      | Some (foc,delta) ->
+	 firebug ("delta = " ^ string_of_delta delta);
 	 present#abort_all_ajax;
 	 present#save_ui_state;
 	 let p = present#new_place present#lis#endpoint foc in
@@ -1036,7 +1049,7 @@ object (self)
 
   method home =
     self#update_focus ~push_in_history:true
-      (fun _ -> Lisql.factory#reset; Some Lisql.factory#home_focus)
+      (fun _ -> Lisql.factory#reset; Some (Lisql.home_focus ()))
 
   method back : unit =
     match past with
@@ -1114,7 +1127,7 @@ let initialize endpoint focus =
     jquery_all ".config-close" (onclick (fun elt ev ->
       config#if_has_changed
 	~translate
-	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some focus))));
+	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some (focus, Lisql.DeltaNil)))));
     jquery "#switch-view" (onclick (fun elt ev ->
       jquery_toggle "#sparklis-view";
       jquery_toggle "#yasgui-view";
@@ -1263,7 +1276,7 @@ let _ =
 	      try Permalink.to_path (List.assoc "sparklis-path" args)
 	      with Not_found -> [] in
 	    Lisql.focus_of_query_path query path
-	 | None -> Lisql.factory#home_focus in
+	 | None -> fst Lisql.factory#home_focus in
        initialize endpoint focus);
     bool true))
 

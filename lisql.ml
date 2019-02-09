@@ -228,14 +228,14 @@ object (self)
 
   method top_p1 = IsThere ()
   method top_modif = (Select, Unordered)
-  method top_s2 = An (self#new_id, self#top_modif, Thing)
-  method top_s1 = Det ((), self#top_s2, None)
+  method top_s2 = let id = self#new_id in An (id, self#top_modif, Thing), id
+  method top_s1 = let det, id = self#top_s2 in Det ((), det, None), id
   method top_sn = CNil ()
   method top_expr = Undef ()
   method top_dim = ForEachResult ()
-  method top_dim_foreach id2 = ForEach ((), self#new_id, self#top_modif, None, id2)
-  method top_s = Return ((), self#top_s1)
-  method home_focus = AtS1 (self#top_s1, ReturnX Root)
+  method top_dim_foreach id2 = let id = self#new_id in ForEach ((), id, self#top_modif, None, id2), id
+  method top_s = let np, id = self#top_s1 in Return ((), np), id
+  method home_focus = let np, id = self#top_s1 in AtS1 (np, ReturnX Root), [id]
 end
 
 let is_top_p1 = function IsThere _ -> true | _ -> false
@@ -973,79 +973,189 @@ let focus_up_at_root_s1 = function
   | AtS1 (f, InGraphX (f1,ctx)) -> Some (AtP1 (f1, InX (f,ctx)))
   | _ -> None
 
-let rec focus_moves (steps : (focus -> focus option) list) (foc : focus) : focus = (* makes as many steps as possible *)
-  match steps with
-    | [] -> foc
-    | step::others ->
-      ( match step foc with
-	| None -> foc
-	| Some foc' -> focus_moves others foc' )
-
-let rec focus_opt_moves (steps : (focus -> focus option) list) (foc_opt : focus option) : focus option = (* makes as many steps as possible *)
-  match foc_opt with
-  | None -> None
-  | Some foc -> Some (focus_moves steps foc)
-
 (* copy *)
 
-let rec copy_p1 (f : unit elt_p1) : unit elt_p1 =
+type id_map = (id * id) list (* map from old ids to new ids *)
+	   
+let copy_list (copy : 'a -> 'a * id_map) (lf : 'a list) : 'a list * id_map =
+  List.fold_right
+    (fun f (lf',map) ->
+     let f', m = copy f in
+     f'::lf', m @ map)
+    lf ([],[])
+
+let rec copy_p1 (f : unit elt_p1) : unit elt_p1 * id_map =
   match f with
-  | Is (a,np) -> Is (a, copy_s1 np)
-  | Pred (a,arg,pred,cp) -> Pred (a, arg, pred, copy_sn cp)
-  | Type (a,uri) -> Type (a,uri)
-  | Rel (a,uri,modif,np) -> Rel (a,uri,modif, copy_s1 np)
-  | Hier (a,id,p,ori,np) -> Hier (a, factory#new_id, p, ori, copy_s1 np)
-  | Triple (a,arg,np1,np2) -> Triple (a,arg, copy_s1 np1, copy_s1 np2)
-  | LatLong (a,ll,id1,id2) -> LatLong (a, ll, factory#new_id, factory#new_id)
-  | Search _ -> f
-  | Filter _ -> f
-  | And (a,lr) -> And (a, List.map copy_p1 lr)
-  | Or (a,lr) -> Or (a, List.map copy_p1 lr)
-  | Maybe (a,f1) -> Maybe (a, copy_p1 f1)
-  | Not (a,f1) -> Not (a, copy_p1 f1)
-  | In (a,npg,f1) -> In (a, copy_s1 npg, copy_p1 f1)
-  | InWhichThereIs (a,np) -> InWhichThereIs (a, copy_s1 np)
-  | IsThere _ -> f
+  | Is (a,np) ->
+     let np', map = copy_s1 np in
+     Is (a, np'), map
+  | Pred (a,arg,pred,cp) ->
+     let cp', map = copy_sn cp in
+     Pred (a, arg, pred, cp'), map
+  | Type (a,uri) -> Type (a,uri), []
+  | Rel (a,uri,modif,np) ->
+     let np', map = copy_s1 np in
+     Rel (a,uri,modif,np'), map
+  | Hier (a,id,p,ori,np) ->
+     let id' = factory#new_id in
+     let np', map = copy_s1 np in
+     Hier (a, id', p, ori, np'), (id,id')::map
+  | Triple (a,arg,np1,np2) ->
+     let np1', map1 = copy_s1 np1 in
+     let np2', map2 = copy_s1 np2 in
+     Triple (a,arg, np1', np2'), map1 @ map2
+  | LatLong (a,ll,id1,id2) ->
+     let id1' = factory#new_id in
+     let id2' = factory#new_id in
+     LatLong (a, ll, id1', id2'), (id1,id1')::(id2,id2')::[]
+  | Search _ -> f, []
+  | Filter _ -> f, []
+  | And (a,lr) ->
+     let lr', map = copy_list copy_p1 lr in
+     And (a, lr'), map
+  | Or (a,lr) ->
+     let lr', map = copy_list copy_p1 lr in
+     Or (a, lr'), map
+  | Maybe (a,f1) ->
+     let f1', map = copy_p1 f1 in
+     Maybe (a, f1'), map
+  | Not (a,f1) ->
+     let f1', map = copy_p1 f1 in
+     Not (a, f1'), map
+  | In (a,npg,f1) ->
+     let npg', map1 = copy_s1 npg in
+     let f1', map2 = copy_p1 f1 in
+     In (a, npg', f1'), map1 @ map2
+  | InWhichThereIs (a,np) ->
+     let np', map = copy_s1 np in
+     InWhichThereIs (a, np'), map
+  | IsThere _ -> f, []
 and copy_p1_opt = function
-  | None -> None
-  | Some f -> Some (copy_p1 f)
-and copy_sn (cp : unit elt_sn) : unit elt_sn =
+  | None -> None, []
+  | Some f ->
+     let f', map = copy_p1 f in
+     Some f', map
+and copy_sn (cp : unit elt_sn) : unit elt_sn * id_map =
   match cp with
-  | CNil a -> CNil a
-  | CCons (a,arg,np,cp) -> CCons (a, arg, copy_s1 np, copy_sn cp)
-  | CAnd (a,lr) -> CAnd (a, List.map copy_sn lr)
-  | COr (a,lr) -> COr (a, List.map copy_sn lr)
-  | CMaybe (a,cp1) -> CMaybe (a, copy_sn cp1)
-  | CNot (a,cp1) -> CNot (a, copy_sn cp1)
-and copy_s1 (np : unit elt_s1) : unit elt_s1 =
+  | CNil a -> CNil a, []
+  | CCons (a,arg,np,cp) ->
+     let np', map1 = copy_s1 np in
+     let cp', map2 = copy_sn cp in
+     CCons (a, arg, np', cp'), map1 @ map2
+  | CAnd (a,lr) ->
+     let lr', map = copy_list copy_sn lr in
+     CAnd (a, lr'), map
+  | COr (a,lr) ->
+     let lr', map = copy_list copy_sn lr in
+     COr (a, lr'), map
+  | CMaybe (a,cp1) ->
+     let cp1', map = copy_sn cp1 in
+     CMaybe (a, cp1'), map
+  | CNot (a,cp1) ->
+     let cp1', map = copy_sn cp1 in
+     CNot (a, cp1'), map
+and copy_s1 (np : unit elt_s1) : unit elt_s1 * id_map =
   match np with
-  | Det (a,det,rel_opt) -> Det (a, copy_s2 det, copy_p1_opt rel_opt)
-  | AnAggreg (a,id,modif,g,rel_opt,np) -> AnAggreg (a, factory#new_id, modif,g, copy_p1_opt rel_opt, copy_s1 np)
-  | NAnd (a,lr) -> NAnd (a, List.map copy_s1 lr)
-  | NOr (a,lr) -> NOr (a, List.map copy_s1 lr)
-  | NMaybe (a,np1) -> NMaybe (a, copy_s1 np1)
-  | NNot (a,np1) -> NNot (a, copy_s1 np1)
-and copy_s2 (det : elt_s2) : elt_s2 =
+  | Det (a,det,rel_opt) ->
+     let det', map1 = copy_s2 det in
+     let rel_opt', map2 = copy_p1_opt rel_opt in
+     Det (a, det', rel_opt'), map1 @ map2
+  | AnAggreg (a,id,modif,g,rel_opt,np) ->
+     let id' = factory#new_id in
+     let rel_opt', map1 = copy_p1_opt rel_opt in
+     let np', map2 = copy_s1 np in
+     AnAggreg (a, id', modif,g, rel_opt', np'), (id,id')::map1@map2
+  | NAnd (a,lr) ->
+     let lr', map = copy_list copy_s1 lr in
+     NAnd (a, lr'), map
+  | NOr (a,lr) ->
+     let lr', map = copy_list copy_s1 lr in
+     NOr (a, lr'), map
+  | NMaybe (a,np1) ->
+     let np1', map = copy_s1 np1 in
+     NMaybe (a, np1'), map
+  | NNot (a,np1) ->
+     let np1', map = copy_s1 np1 in
+     NNot (a, np1'), map
+and copy_s2 (det : elt_s2) : elt_s2 * id_map =
   match det with
-  | Term _ -> det
-  | An (id,modif,head) -> An (factory#new_id, modif, head)
-  | The _ -> det
-and copy_aggreg (aggreg : unit elt_aggreg) : unit elt_aggreg =
+  | Term _ -> det, []
+  | An (id,modif,head) ->
+     let id' = factory#new_id in
+     An (id', modif, head), (id,id')::[]
+  | The _ -> det, []
+and copy_aggreg (aggreg : unit elt_aggreg) : unit elt_aggreg * id_map =
   match aggreg with
-  | ForEachResult _ -> aggreg
-  | ForEach (a,id,modif,rel_opt,id2) -> ForEach (a, factory#new_id, modif, copy_p1_opt rel_opt, id2)
-  | ForTerm _ -> aggreg
-  | TheAggreg (a,id,modif,g,rel_opt,id2) -> TheAggreg (a, factory#new_id, factory#top_modif, Sample, None, id2)
-and copy_expr (expr : unit elt_expr) : unit elt_expr =
-  expr
-and copy_s (s : unit elt_s) : unit elt_s =
+  | ForEachResult _ -> aggreg, []
+  | ForEach (a,id,modif,rel_opt,id2) ->
+     let id' = factory#new_id in
+     let rel_opt', map = copy_p1_opt rel_opt in
+     ForEach (a, id', modif, rel_opt', id2), (id,id')::map
+  | ForTerm _ -> aggreg, []
+  | TheAggreg (a,id,modif,g,rel_opt,id2) ->
+     let id' = factory#new_id in
+     let modif' = factory#top_modif in
+     TheAggreg (a, id', modif', Sample, None, id2), (id,id')::[]
+and copy_expr (expr : unit elt_expr) : unit elt_expr * id_map =
+  expr, []
+and copy_s (s : unit elt_s) : unit elt_s * id_map =
   match s with
-  | Return (a,np) -> Return (a, copy_s1 np)
-  | SAggreg (a,aggregs) -> SAggreg (a, List.map copy_aggreg aggregs)
-  | SExpr (a,name,id,modif,expr,rel_opt) -> SExpr (a,"", factory#new_id, modif, copy_expr expr, copy_p1_opt rel_opt)
-  | SFilter (a,id,expr) -> SFilter (a, factory#new_id, copy_expr expr)
-  | Seq (a, lr) -> Seq (a, List.map copy_s lr)
-    
+  | Return (a,np) ->
+     let np', map = copy_s1 np in
+     Return (a, np'), map
+  | SAggreg (a,aggregs) ->
+     let aggregs', map = copy_list copy_aggreg aggregs in
+     SAggreg (a, aggregs'), map
+  | SExpr (a,name,id,modif,expr,rel_opt) ->
+     let id' = factory#new_id in
+     let modif' = factory#top_modif in
+     let expr', map1 = copy_expr expr in
+     let rel_opt', map2 = copy_p1_opt rel_opt in
+     SExpr (a,"", id', modif', expr', rel_opt'), (id,id')::map1@map2
+  | SFilter (a,id,expr) ->
+     let id' = factory#new_id in
+     let expr', map = copy_expr expr in
+     SFilter (a, id', expr'), map
+  | Seq (a, lr) ->
+     let lr', map = copy_list copy_s lr in
+     Seq (a, lr'), map
+
+
+(* deltas *)
+		     
+type delta_ids = id list
+type delta =
+  | DeltaNil
+  | DeltaIds of delta_ids
+  | DeltaDuplicate of id_map
+  | DeltaSelection of delta * delta list
+
+let delta_ids ids = if ids=[] then DeltaNil else DeltaIds ids
+							  
+let focus_start ?(delta = DeltaNil) (foc : focus) : focus * delta = foc, delta
+									   
+let focus_opt_start ?(delta = DeltaNil) (foc_opt : focus option) : (focus * delta) option =
+  match foc_opt with
+  | None -> None
+  | Some foc -> Some (foc, delta)
+			    
+let rec focus_moves (steps : (focus -> focus option) list) (foc, delta : focus * delta) : focus * delta = (* makes as many steps as possible *)
+  match steps with
+    | [] -> foc, delta
+    | step::others ->
+      ( match step foc with
+	| None -> foc, delta
+	| Some foc' -> focus_moves others (foc',delta) )
+
+let rec focus_opt_moves (steps : (focus -> focus option) list) (foc_delta_opt : (focus * delta) option) : (focus * delta) option = (* makes as many steps as possible *)
+  match foc_delta_opt with
+  | None -> None
+  | Some foc_delta -> Some (focus_moves steps foc_delta)
+
+let home_focus () : focus * delta =
+  let foc, ids = factory#home_focus in
+  (foc, delta_ids ids)
+
 (* increments *)
 
 type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime | `Duration ]
@@ -1089,7 +1199,6 @@ type increment =
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *) * num_conv option (* function result *) * num_conv option (* argument *)
   | IncrName of string
 
-      
 let datatype_of_input_type = function
   | `IRI -> invalid_arg "datatype_of_input_type: URI has no datatype"
   | `String -> Rdf.xsd_string
@@ -1135,57 +1244,70 @@ let latlong_of_increment (incr : increment) : latlong option =
 
 					 
 
-let hierarchy_p1_opt_of_uri (uri : Rdf.uri) : unit elt_p1 option =
+let hierarchy_p1_opt_of_uri (uri : Rdf.uri) : (unit elt_p1 * delta_ids) option =
   let lhp = Ontology.config_hierarchy_inheritance#value#info uri in
   match lhp with
   | [] -> None
   | hp::_ -> (* TODO: what about other properties ? *)
-     Some (Hier ((), factory#new_id, hp, Fwd, factory#top_s1))
+     let idh = factory#new_id in
+     let np, id = factory#top_s1 in
+     Some (Hier ((), idh, hp, Fwd, np), [idh; id])
 
-let hierarchy_s1_of_uri (uri : Rdf.uri) : unit elt_s1 =
- let fh_opt = hierarchy_p1_opt_of_uri uri in
- Det ((), factory#top_s2, fh_opt)
+let hierarchy_s1_of_uri (uri : Rdf.uri) : unit elt_s1 * delta_ids =
+  let det, id = factory#top_s2 in
+  let fh_opt, ids =
+    match hierarchy_p1_opt_of_uri uri with
+    | None -> None, []
+    | Some (fh, ids) -> Some fh, ids in
+  Det ((), det, fh_opt), id::ids
 	  
-let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 =
+let elt_p1_of_arg_pred (arg : arg) (pred : pred) : unit elt_p1 * delta_ids =
   match pred with
   | Class _ ->
      ( match arg with
-       | S -> Pred ((), arg, pred, CNil ())
-       | _ -> Pred ((), arg, pred, CCons ((), S, factory#top_s1, CNil ())) )
+       | S -> Pred ((), arg, pred, CNil ()), []
+       | _ -> let np, id = factory#top_s1 in
+	      Pred ((), arg, pred, CCons ((), S, np, CNil ())), [id] )
   | Prop p
   | SO (_,p)
   | EO (_,p) ->
      ( match arg with
-       | S -> let np = hierarchy_s1_of_uri p in
-	      Pred ((), S, pred, CCons ((), O, np, CNil ()))
-       | O -> Pred ((), O, pred, CCons ((), S, factory#top_s1, CNil ()))
+       | S -> let np, ids = hierarchy_s1_of_uri p in
+	      Pred ((), S, pred, CCons ((), O, np, CNil ())), ids
+       | O -> let np, id = factory#top_s1 in
+	      Pred ((), O, pred, CCons ((), S, np, CNil ())), [id]
        | _ ->
+	  let np1, id1 = factory#top_s1 in
+	  let np2, id2 = factory#top_s1 in
 	  Pred ((), arg, pred,
-		CCons ((), S, factory#top_s1,
-		       CCons ((), O, factory#top_s1, CNil ()))) )
+		CCons ((), S, np1,
+		       CCons ((), O, np2, CNil ()))),
+	  [id1; id2] )
 	  
-let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 =
-  let np =
+let elt_p1_of_rel (p : Rdf.uri) (m : modif_p2) : unit elt_p1 * delta_ids =
+  let np, ids =
     match m with
     | Fwd -> hierarchy_s1_of_uri p
-    | Bwd -> factory#top_s1 in
-  Rel ((), p, m, np)
+    | Bwd -> let np, id = factory#top_s1 in np, [id]
+  in
+  Rel ((), p, m, np), ids
   
-let elt_p1_of_increment : increment -> unit elt_p1 option = function
+let elt_p1_of_increment : increment -> (unit elt_p1 * delta_ids) option = function
   | IncrPred (arg,pred) -> Some (elt_p1_of_arg_pred arg pred)
-  | IncrType c -> Some (Type ((), c))
+  | IncrType c -> Some (Type ((), c), [])
   | IncrRel (p,m) -> Some (elt_p1_of_rel p m)
-  | IncrLatLong ll -> Some (LatLong ((), ll, factory#new_id, factory#new_id))
+  | IncrLatLong ll -> let id1, id2 = factory#new_id, factory#new_id in
+		      Some (LatLong ((), ll, id1, id2), [id1; id2])
   | _ -> None
 	   
-let elt_s2_of_increment : increment -> elt_s2 option = function
-  | IncrTerm t -> Some (Term t)
-  | IncrId (id,_) -> Some (The id)
+let elt_s2_of_increment : increment -> (elt_s2 * delta_ids) option = function
+  | IncrTerm t -> Some (Term t, [])
+  | IncrId (id,_) -> Some (The id, [])
   | _ -> None
 
-let elt_s1_of_increment (incr : increment) : unit elt_s1 option =
+let elt_s1_of_increment (incr : increment) : (unit elt_s1 * delta_ids) option =
   match elt_s2_of_increment incr with
-  | Some det -> Some (Det ((), det, None))
+  | Some (det, ids) -> Some (Det ((), det, None), ids)
   | None -> None
 	   
 let apply_conv_ctx_expr conv_opt = function
@@ -1266,40 +1388,43 @@ let append_seq_s ctx (elt_s : unit elt_s) = function
   | Seq (_,lr) -> Some (AtS (elt_s, SeqX ((List.rev lr, []), ctx)))
   | s -> Some (AtS (elt_s, SeqX (([s], []), ctx)))
 
-let insert_elt_p1_in_rel_opt ctx elt = function
-  | None -> Some (AtP1 (elt, ctx))
-  | Some rel -> append_and_p1 ctx elt rel
-    
-let rec insert_elt_p1 (elt : unit elt_p1) = function
+let insert_elt_p1_in_rel_opt ctx ~elt_ids elt : unit elt_p1 option -> (focus * delta) option = function
+  | None -> Some (AtP1 (elt, ctx), delta_ids elt_ids)
+  | Some rel -> focus_opt_start ~delta:(delta_ids elt_ids) (append_and_p1 ctx elt rel)
+
+let rec insert_elt_p1 ?(elt_ids = []) (elt : unit elt_p1) : focus -> (focus * delta) option = function
   | AtP1 (Hier (_,id,p,ori,np),ctx) ->
-     let elt_s1 = Det ((), factory#top_s2, Some elt) in
-     focus_opt_moves [down_focus] (append_and_s1 (HierX (id,p,ori,ctx)) elt_s1 np)
-  | AtP1 (f, ctx) -> append_and_p1 ctx elt f
-  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
+     let det, id = factory#top_s2 in
+     let elt_s1 = Det ((), det, Some elt) in
+     focus_opt_moves [down_focus]
+		     (focus_opt_start ~delta:(delta_ids (id::elt_ids))
+				      (append_and_s1 (HierX (id,p,ori,ctx)) elt_s1 np))
+  | AtP1 (f, ctx) -> focus_opt_start ~delta:(delta_ids elt_ids) (append_and_p1 ctx elt f)
+  | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt ~elt_ids (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
-  | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt (DetThatX (det,ctx)) elt rel_opt
-  | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
+  | AtS1 (Det (_, det, rel_opt), ctx) -> insert_elt_p1_in_rel_opt ~elt_ids (DetThatX (det,ctx)) elt rel_opt
+  | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) -> insert_elt_p1_in_rel_opt ~elt_ids (AnAggregThatX (id,modif,g,np,ctx)) elt rel_opt
   | AtS1 _ -> None (* no insertion of increments on complex NPs *)
-  | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (ForEachThatX (id,modif,id2,ctx)) elt rel_opt
+  | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt ~elt_ids (ForEachThatX (id,modif,id2,ctx)) elt rel_opt
   (*  | AtAggreg (_, SAggregX ([],_,_)) -> None (* HAVING clauses are not allowed without GROUP BY dimensions, unique value anyway *) *)
-  | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
+  | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) -> insert_elt_p1_in_rel_opt ~elt_ids (TheAggregThatX (id,modif,g,id2,ctx)) elt rel_opt
   | AtAggreg _ -> None
-  | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) -> insert_elt_p1_in_rel_opt (SExprThatX (name,id,modif,expr,ctx)) elt rel_opt
+  | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) -> insert_elt_p1_in_rel_opt ~elt_ids (SExprThatX (name,id,modif,expr,ctx)) elt rel_opt
   | AtExpr _ -> None (* no insertion inside expressions *)
   | AtS _ -> None
 
-let rec insert_elt_s1 elt focus =
+let rec insert_elt_s1 elt focus : (focus * delta) option =
   let focus2_opt =
     match focus with
     | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
     | AtSn _ -> None
-    | AtS1 (_,ctx) when is_hierarchy_ctx_s1 ctx -> Some (at_s1 elt ctx)
+    | AtS1 (_,ctx) when is_hierarchy_ctx_s1 ctx -> Some (at_s1 elt ctx, DeltaNil)
     | AtS1 ((Det _ as np), ctx) ->
        if is_top_s1 np
-       then Some (at_s1 elt ctx)
+       then Some (at_s1 elt ctx, DeltaNil)
        else insert_elt_p1 (Is ((), elt)) focus
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
-       Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx))
+       Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx), DeltaNil)
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
     | AtP1 (Hier (_,id,p,ori,np),ctx) ->
        insert_elt_s1 elt (AtS1 (np, HierX (id,p,ori,ctx)))
@@ -1308,49 +1433,58 @@ let rec insert_elt_s1 elt focus =
     | _ -> None in
   focus_opt_moves [focus_up_at_root_s1] focus2_opt
 
-let rec insert_elt_s2 det : focus -> focus option = function
+let rec insert_elt_s2 det : focus -> (focus * delta) option = function
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s2 det (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
   | AtS1 (Det (_, det0, rel_opt), ctx) ->
-     let focus2 =
+     let focus_delta2 =
        if det0 = det (* erasing existing det *)
-       then AtS1 (Det ((), factory#top_s2, rel_opt), ctx)
-       else AtS1 (Det ((), det, rel_opt), ctx) in
-     Some (focus_moves [focus_up_at_root_s1] focus2)
+       then let det, id = factory#top_s2 in (* TODO: handle removed ids *)
+	    AtS1 (Det ((), det, rel_opt), ctx), delta_ids [id]
+       else AtS1 (Det ((), det, rel_opt), ctx), DeltaNil in
+     Some (focus_moves [focus_up_at_root_s1] focus_delta2)
   | AtP1 (Hier (_,id,p,ori,np),ctx) ->
      insert_elt_s2 det (AtS1 (np, HierX (id,p,ori,ctx)))
   | focus -> insert_elt_s1 (Det ((), det, None)) focus
 
 
-let insert_input s typ focus =
+let insert_input s typ focus : (focus * delta) option =
   match focus with
-  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((), term_of_input s typ), ctx))
+  | AtExpr (_,ctx) -> focus_opt_start (next_undef_focus (AtExpr (Const ((), term_of_input s typ), ctx)))
   | _ -> None
 
-let insert_term t focus =
+let insert_term t focus : (focus * delta) option =
   match t with
     | Rdf.Bnode _ -> None (* blank nodes cannot be injected in queries *)
     | _ ->
       match focus with
-      | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Const ((),t), ctx))
-      | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) -> Some (AtAggreg (ForTerm ((),t,id2), ctx))
+      | AtExpr (_,ctx) ->
+	 focus_opt_start (next_undef_focus (AtExpr (Const ((),t), ctx)))
+      | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) -> (* TODO: handle removed ids *)
+	 Some (AtAggreg (ForTerm ((),t,id2), ctx), DeltaNil)
       | _ -> insert_elt_s2 (Term t) focus
 let insert_id id conv_opt = function
-  | AtExpr (_,ctx) -> next_undef_focus (AtExpr (Var ((),id), apply_conv_ctx_expr conv_opt ctx))
+  | AtExpr (_,ctx) ->
+     focus_opt_start (next_undef_focus (AtExpr (Var ((),id), apply_conv_ctx_expr conv_opt ctx)))
   | focus -> insert_elt_s2 (The id) focus
 
-let rec insert_anything focus =
+let rec insert_anything focus : (focus * delta) option =
   match focus with
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_anything (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
   | _ ->
-     let focus2_opt =
+     let focus_delta2_opt =
        match focus with
        | AtS1 (Det (_, det, rel_opt), ctx) ->
-	  Some (AtS1 (Det ((), (if is_top_s2 det then det else factory#top_s2), rel_opt), ctx))
+	  let det, delta =
+	    if is_top_s2 det
+	    then det, DeltaNil
+	    else let det, id = factory#top_s2 in
+		 det, delta_ids [id] in
+	  Some (AtS1 (Det ((), det, rel_opt), ctx), delta)
        | AtS1 _ -> None (* no insertion of terms on complex NPs *)
        | _ -> None in
-     focus_opt_moves [focus_up_at_root_s1] focus2_opt
+     focus_opt_moves [focus_up_at_root_s1] focus_delta2_opt
 			   
 let rec insert_type c = function
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_type c (AtS1 (np, CConsX1 (arg,cp,ctx)))
@@ -1358,75 +1492,80 @@ let rec insert_type c = function
   | AtS1 (Det (_,det,rel_opt), ctx) ->
     ( match det with
       | Term _ ->
-	Some (AtS1 (Det ((), An (factory#new_id, factory#top_modif, Class c), rel_opt), ctx))
+	 let id = factory#new_id in
+	 Some (AtS1 (Det ((), An (id, factory#top_modif, Class c), rel_opt), ctx), delta_ids [id])
       | An (id, modif, Thing) ->
-	 let moves, rel_opt =
+	 let moves, rel_opt, delta =
 	   match rel_opt with
-	   | Some _ -> [], rel_opt
+	   | Some _ -> [], rel_opt, DeltaNil
 	   | None ->
 	      ( match hierarchy_p1_opt_of_uri c with
-		| Some fh -> [down_focus; down_focus], Some fh
-		| None -> [], None ) in
+		| Some (fh, ids) -> [down_focus; down_focus], Some fh, delta_ids ids
+		| None -> [], None, DeltaNil ) in
 	 focus_opt_moves
 	   moves
-	   (Some (AtS1 (Det ((), An (id, modif, Class c), rel_opt), ctx)))
+	   (Some (AtS1 (Det ((), An (id, modif, Class c), rel_opt), ctx), delta))
       | An (id, modif, Class c2) when c2 = c ->
-	Some (AtS1 (Det ((), An (id, modif, Thing), rel_opt), ctx))
+	Some (AtS1 (Det ((), An (id, modif, Thing), rel_opt), ctx), DeltaNil)
       | _ ->
 	let rel = match rel_opt with None -> IsThere () | Some rel -> rel in
 	insert_elt_p1 (Type ((),c)) (AtP1 (rel, DetThatX (det, ctx))) )
   | focus -> insert_elt_p1 (Type ((),c)) focus
 
 let insert_pred arg pred focus =
-  let foc_opt = insert_elt_p1 (elt_p1_of_arg_pred arg pred) focus in
+  let elt, elt_ids = elt_p1_of_arg_pred arg pred in
+  let foc_opt = insert_elt_p1 ~elt_ids elt focus in
   focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
 
 let insert_arg (q : Rdf.uri) focus =
   let arg = Q q in
-  let np_arg = hierarchy_s1_of_uri q in
+  let np_arg, ids = hierarchy_s1_of_uri q in
   let foc_opt =
+    let delta = delta_ids ids in
     match focus with
     | AtP1 (Pred (_,arg0,pred,cp), ctx) ->
-       Some (AtS1 (np_arg, CConsX1 (arg, cp, PredX (arg0, pred, ctx))))
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, PredX (arg0, pred, ctx))), delta)
     | AtSn (cp,ctx) ->
-       Some (AtS1 (np_arg, CConsX1 (arg, cp, ctx)))
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, ctx)), delta)
     | AtS1 (np, CConsX1 (arg0, cp, ctx)) ->
-       Some (AtS1 (np_arg, CConsX1 (arg, cp, CConsX2 (arg0, np, ctx))))
+       Some (AtS1 (np_arg, CConsX1 (arg, cp, CConsX2 (arg0, np, ctx))), delta)
     | _ -> None in
   focus_opt_moves [down_focus; down_focus] foc_opt 
 		  
 let insert_rel p m focus =
-  let foc_opt = insert_elt_p1 (elt_p1_of_rel p m) focus in
+  let elt, elt_ids = elt_p1_of_rel p m in
+  let foc_opt = insert_elt_p1 ~elt_ids elt focus in
   focus_opt_moves [down_focus; down_focus; down_focus] foc_opt
 
 let insert_latlong ll focus =
   let id_lat = factory#new_id in
   let id_long = factory#new_id in
-  insert_elt_p1 (LatLong ((), ll, id_lat, id_long)) focus
-
+  insert_elt_p1 ~elt_ids:[id_lat; id_long] (LatLong ((), ll, id_lat, id_long)) focus
+		
 let insert_triple arg focus =
   let foc_opt =
-    let np1 = factory#top_s1 in
-    let np2 = factory#top_s1 in
-    insert_elt_p1 (Triple ((), arg, np1, np2)) focus in
+    let np1, id1 = factory#top_s1 in
+    let np2, id2 = factory#top_s1 in
+    insert_elt_p1 ~elt_ids:[id1; id2] (Triple ((), arg, np1, np2)) focus in
   let steps = if arg = S then [down_focus; right_focus] else [down_focus] in
   focus_opt_moves steps foc_opt
 
 let insert_triplify = function
-  | AtP1 (Rel (_, p, Fwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)))
-  | AtP1 (Rel (_, p, Bwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX2 (O, np, ctx)))
-  | AtP1 (Triple (_, S, Det ((), Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel ((), p, Fwd, np), ctx))
-  | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, Bwd, np), ctx))
+  | AtP1 (Rel (_, p, Fwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX1 (S, np, ctx)), DeltaNil)
+  | AtP1 (Rel (_, p, Bwd, np), ctx) -> Some (AtS1 (Det ((), Term (Rdf.URI p), None), TripleX2 (O, np, ctx)), DeltaNil)
+  | AtP1 (Triple (_, S, Det ((), Term (Rdf.URI p), _), np), ctx) -> Some (AtP1 (Rel ((), p, Fwd, np), ctx), DeltaNil)
+  | AtP1 (Triple (_, O, np, Det ((), Term (Rdf.URI p), _)), ctx) -> Some (AtP1 (Rel ((), p, Bwd, np), ctx), DeltaNil)
   | _ -> None
 
 let toggle_hierarchy trans_rel = function
-  | AtP1 (Hier (_,id,p,ori,np),ctx) ->
-     Some (AtS1 (np, RelX (p, ori, ctx)))
-  | AtS1 (np, HierX (id,p,ori,ctx)) ->
-     Some (AtS1 (np, RelX (p,ori,ctx)))
+  | AtP1 (Hier (_,id,p,ori,np),ctx) -> (* TODO: removed ids *)
+     Some (AtS1 (np, RelX (p, ori, ctx)), DeltaNil)
+  | AtS1 (np, HierX (id,p,ori,ctx)) -> (* TODO: removed ids *)
+     Some (AtS1 (np, RelX (p, ori, ctx)), DeltaNil)
   | AtS1 (np, RelX (p, ori, ctx)) ->
        if trans_rel && not (is_unconstrained_ctx_p1 ctx)
-       then Some (AtS1 (np, HierX (factory#new_id,p,ori,ctx)))
+       then let id = factory#new_id in
+	    Some (AtS1 (np, HierX (id,p,ori,ctx)), delta_ids [id])
        else None
   | _ -> None
 	   
@@ -1442,59 +1581,90 @@ let rec insert_that_is = function
   (*  | AtS1 (f, IsX ctx) when is_top_s1 f -> None *)
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id,modif,Class _), None), _) as focus ->
-    (*  | focus -> *)
-    let foc_opt = insert_elt_p1 (Is ((),factory#top_s1)) focus in
-    focus_opt_moves [down_focus] foc_opt
+     (*  | focus -> *)
+     let np, id = factory#top_s1 in (* TODO: avoid id in s1_as_p1 *)
+     let foc_opt = insert_elt_p1 ~elt_ids:[id] (Is ((),np)) focus in
+     focus_opt_moves [down_focus] foc_opt
   | _ -> None
 
 (* introduces a NP id when there is none *)
 let rec insert_something_that_is = function
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_something_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
-  | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) -> Some (AtS1 (np,ctx))
-  | AtS1 (np,ctx) when id_of_s1 np = None -> Some (AtS1 (Det ((), factory#top_s2, Some (Is ((), np))), ctx))
+  | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) ->
+     Some (AtS1 (np,ctx), DeltaNil) (* TODO: removed ids *)
+  | AtS1 (np,ctx) when id_of_s1 np = None ->
+     let det, id = factory#top_s2 in
+     Some (AtS1 (Det ((), det, Some (Is ((), np))), ctx), delta_ids [id])
   | _ -> None
 
 let insert_and = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtSn (f,ctx) ->
-     let cp =
+     let cp, ids =
        match last_arg_of_sn f with
-       | None -> factory#top_sn
-       | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
-     append_and_sn ctx cp f
+       | None -> factory#top_sn, []
+       | Some arg -> let np, id = factory#top_s1 in
+		     CCons ((), arg, np, CNil ()), [id] in
+     focus_opt_start ~delta:(delta_ids ids)
+		     (append_and_sn ctx cp f)
   | AtS1 (f, ReturnX ctx) ->
-     Some (AtS1 (factory#top_s1, ReturnX (SeqX (([Return ((),f)],[]), ctx))))
+     let np, id = factory#top_s1 in
+     Some (AtS1 (np, ReturnX (SeqX (([Return ((),f)],[]), ctx))), delta_ids [id])
   | AtS1 (f, CConsX1 ((S|O as arg),cp,ctx)) -> (* because S|O miss a preposition to catch the Sn focus *)
-     append_and_sn ctx (CCons ((), arg, factory#top_s1, CNil ())) (CCons ((),arg,f,cp))
+     let np, id = factory#top_s1 in
+     focus_opt_start ~delta:(delta_ids [id])
+		     (append_and_sn ctx
+				    (CCons ((), arg, np, CNil ()))
+				    (CCons ((), arg, f, cp)))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
-     append_and_s1 ctx factory#top_s1 f
+     let np, id = factory#top_s1 in
+     focus_opt_start ~delta:(delta_ids [id])
+		     (append_and_s1 ctx np f)
   | _ -> None
 
 let insert_duplicate = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
-  | AtSn (f, ctx) -> append_and_sn ctx (copy_sn f) f
+  | AtSn (f, ctx) ->
+     let f', map = copy_sn f in
+     focus_opt_start ~delta:(DeltaDuplicate map)
+		     (append_and_sn ctx f' f)
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (_, InGraphX _) -> None (* to avoid duplication of focus, and complex focus graphs *)
-  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> append_and_s1 ctx (copy_s1 f) f
-  | AtAggreg ((TheAggreg _ as aggreg), SAggregX ((ll,rr),ctx)) -> Some (AtAggreg (copy_aggreg aggreg, SAggregX ((aggreg::ll,rr), ctx)))
-  | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) -> Some (AtS (copy_s f, SeqX ((f::ll,rr),ctx)))
+  | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
+     let f', map = copy_s1 f in
+     focus_opt_start ~delta:(DeltaDuplicate map)
+		     (append_and_s1 ctx f' f)
+  | AtAggreg ((TheAggreg _ as aggreg), SAggregX ((ll,rr),ctx)) ->
+     let aggreg', map = copy_aggreg aggreg in
+     Some (AtAggreg (aggreg', SAggregX ((aggreg::ll,rr), ctx)), DeltaDuplicate map)
+  | AtS ((SAggreg _ | SExpr _ | SFilter _ as f), SeqX ((ll,rr),ctx)) ->
+     let f', map = copy_s f in
+     Some (AtS (f', SeqX ((f::ll,rr),ctx)), DeltaDuplicate map)
   | _ -> None
 
 let insert_or = function
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> append_or_p1 ctx (IsThere ()) f
+  | AtP1 (f, ctx) when not (is_top_p1 f) ->
+     focus_opt_start (append_or_p1 ctx (IsThere ()) f)
   | AtSn (f, ctx) when not (is_top_sn f) ->
-     let cp =
+     let cp, ids =
        match last_arg_of_sn f with
-       | None -> factory#top_sn
-       | Some arg -> CCons ((), arg, factory#top_s1, CNil ()) in
-     append_and_sn ctx cp f
+       | None -> factory#top_sn, []
+       | Some arg -> let np, id = factory#top_s1 in
+		     CCons ((), arg, np, CNil ()), [id] in
+     focus_opt_start ~delta:(delta_ids ids)
+		     (append_and_sn ctx cp f)
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (f, ctx) when not (is_top_s1 f) -> append_or_s1 ctx factory#top_s1 f
+  | AtS1 (f, ctx) when not (is_top_s1 f) ->
+     let np, id = factory#top_s1 in
+     focus_opt_start ~delta:(delta_ids [id])
+		     (append_or_s1 ctx np f)
   | _ -> None
 
 let insert_choice = function
-  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) -> Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)))
-  | AtExpr (f, ctx) when not (is_top_expr f) -> append_choice ctx factory#top_expr f
+  | AtExpr (f, ChoiceX ((ll,rr),ctx2)) when not (is_top_expr f) ->
+     Some (AtExpr (factory#top_expr, ChoiceX ((f::ll,rr),ctx2)), DeltaNil)
+  | AtExpr (f, ctx) when not (is_top_expr f) ->
+     focus_opt_start (append_choice ctx factory#top_expr f)
   | _ -> None
 (*
 let insert_choice = function
@@ -1513,65 +1683,83 @@ let insert_choice = function
 *)
 
 let insert_maybe = function
-  | AtP1 (Maybe (_,f), ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (Maybe (_,f), ctx) -> Some (AtP1 (f,ctx), DeltaNil)
   | AtP1 (_, MaybeX ctx) -> None
   | AtP1 (Not _, ctx) -> None
   | AtP1 (_, NotX ctx) -> None				     
-  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe ((),f), ctx))
+  | AtP1 (f, ctx) when not (is_top_p1 f) -> Some (AtP1 (Maybe ((),f), ctx), DeltaNil)
   (*if is_top_p1 f then Some (AtP1 (f, MaybeX ctx)) else Some (AtP1 (Maybe f, ctx))*)
-  | AtSn (CMaybe (_,f), ctx) -> Some (AtSn (f,ctx))
+  | AtSn (CMaybe (_,f), ctx) -> Some (AtSn (f,ctx), DeltaNil)
   | AtSn (_, CMaybeX ctx) -> None
   | AtSn (CNot _, ctx) -> None
   | AtSn (_, CNotX ctx) -> None				     
-  | AtSn (f, ctx) when not (is_top_sn f) -> Some (AtSn (CMaybe ((),f), ctx))
+  | AtSn (f, ctx) when not (is_top_sn f) -> Some (AtSn (CMaybe ((),f), ctx), DeltaNil)
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (NMaybe (_,f), ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (NMaybe (_,f), ctx) -> Some (AtS1 (f,ctx), DeltaNil)
   | AtS1 (_, NMaybeX ctx) -> None
   | AtS1 (NNot _, ctx) -> None
   | AtS1 (_, NNotX ctx) -> None
   | AtS1 (_, ReturnX _) -> None
-  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe ((),f), ctx))
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe ((),f), ctx), DeltaNil)
   (*if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))*)
   | _ -> None
 
 let insert_not = function
-  | AtP1 (Not (_,f), ctx) -> Some (AtP1 (f,ctx))
+  | AtP1 (Not (_,f), ctx) -> Some (AtP1 (f,ctx), DeltaNil)
   | AtP1 (_, NotX ctx) -> None
   | AtP1 (Maybe _, ctx) -> None
   | AtP1 (_, MaybeX ctx) -> None
   | AtP1 (f, ctx) ->
-    if is_top_p1 f then Some (AtP1 (f, NotX ctx)) else Some (AtP1 (Not ((),f), ctx))
-  | AtSn (CNot (_,f), ctx) -> Some (AtSn (f,ctx))
+     if is_top_p1 f
+     then Some (AtP1 (f, NotX ctx), DeltaNil)
+     else Some (AtP1 (Not ((),f), ctx), DeltaNil)
+  | AtSn (CNot (_,f), ctx) -> Some (AtSn (f,ctx), DeltaNil)
   | AtSn (_, CNotX ctx) -> None
   | AtSn (CMaybe _, ctx) -> None
   | AtSn (_, CMaybeX ctx) -> None
   | AtSn (f, ctx) ->
-    if is_top_sn f then Some (AtSn (f, CNotX ctx)) else Some (AtSn (CNot ((),f), ctx))
+     if is_top_sn f
+     then Some (AtSn (f, CNotX ctx), DeltaNil)
+     else Some (AtSn (CNot ((),f), ctx), DeltaNil)
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx))
+  | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx), DeltaNil)
   | AtS1 (_, NNotX ctx) -> None
   | AtS1 (NMaybe _, ctx) -> None
   | AtS1 (_, NMaybeX ctx) -> None
   | AtS1 (_, ReturnX ctx) -> None
   | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
-    if is_top_s1 f then Some (AtS1 (f, NNotX ctx)) else Some (AtS1 (NNot ((),f), ctx))
+     if is_top_s1 f
+     then Some (AtS1 (f, NNotX ctx), DeltaNil)
+     else Some (AtS1 (NNot ((),f), ctx), DeltaNil)
   | _ -> None
 
 let rec insert_in = function
-  | AtP1 (f,ctx) -> Some (AtS1 (factory#top_s1, InGraphX (f,ctx)))
+  | AtP1 (f,ctx) ->
+     let np, id = factory#top_s1 in
+     Some (AtS1 (np, InGraphX (f,ctx)), delta_ids [id])
   | AtS1 (_, InGraphX _) -> None
-  | AtS1 (Det (_,det,None), ctx) -> Some (AtS1 (factory#top_s1, InGraphX (IsThere (), DetThatX (det, ctx))))
-  | AtS1 (Det (_,det,Some rel), ctx) -> Some (AtS1 (factory#top_s1, InGraphX (rel, DetThatX (det, ctx))))
+  | AtS1 (Det (_,det,None), ctx) ->
+     let np, id = factory#top_s1 in
+     Some (AtS1 (np, InGraphX (IsThere (), DetThatX (det, ctx))), delta_ids [id])
+  | AtS1 (Det (_,det,Some rel), ctx) ->
+     let np, id = factory#top_s1 in
+     Some (AtS1 (np, InGraphX (rel, DetThatX (det, ctx))), delta_ids [id])
   | _ -> None
 
 let insert_in_which_there_is focus =
-  let foc_opt = insert_elt_p1 (InWhichThereIs ((), factory#top_s1)) focus in
+  let np, id = factory#top_s1 in
+  let foc_opt = insert_elt_p1 ~elt_ids:[id] (InWhichThereIs ((), np)) focus in
   focus_opt_moves [down_focus] foc_opt
 
     
 let insert_seq = function
-  | AtS (f, SeqX ((ll,rr),ctx2)) -> Some (AtS (factory#top_s, SeqX ((f::ll,rr),ctx2)))
-  | AtS (f, ctx) -> append_seq_s ctx factory#top_s f
+  | AtS (f, SeqX ((ll,rr),ctx2)) ->
+     let s, id = factory#top_s in
+     Some (AtS (s, SeqX ((f::ll,rr),ctx2)), delta_ids [id])
+  | AtS (f, ctx) ->
+     let s, id = factory#top_s in
+     focus_opt_start ~delta:(delta_ids [id])
+		     (append_seq_s ctx s f)
   | _ -> None
 
 let out_of_unselect modif foc =
@@ -1584,30 +1772,30 @@ let rec insert_modif_transf f = function
   | AtS1 (Det (_, An (id, modif, head), rel_opt), ctx) when not (is_s1_as_p1_ctx_s1 ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (Det ((), An (id, modif2, head), rel_opt), ctx) in
-    out_of_unselect modif2 foc2
+    focus_opt_start (out_of_unselect modif2 foc2)
   | AtS1 (AnAggreg (_, id, modif, g, rel_opt, np), ctx) ->
     let modif2 = f modif in
     let foc2 = AtS1 (AnAggreg ((), id, modif2, g, rel_opt, np), ctx) in
-    out_of_unselect modif2 foc2
+    focus_opt_start (out_of_unselect modif2 foc2)
   | AtAggreg (ForEach (_,id,modif,rel_opt,id2), ctx) ->
     let modif2 = f modif in
     if fst modif2 = Unselect
     then None (* hidding dimensions is not allowed *)
-    else Some (AtAggreg (ForEach ((),id,modif2,rel_opt,id2), ctx))
+    else Some (AtAggreg (ForEach ((),id,modif2,rel_opt,id2), ctx), DeltaNil)
   | AtAggreg (TheAggreg (_,id,modif,g,rel_opt,id2), ctx) ->
     let modif2 = f modif in
     let foc2 = AtAggreg (TheAggreg ((),id,modif2,g,rel_opt,id2), ctx) in
-    out_of_unselect modif2 foc2
+    focus_opt_start (out_of_unselect modif2 foc2)
   | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) ->
     let modif2 = f modif in
     if fst modif2 = Unselect
     then None (* hidding expressions is not allowed *)
-    else Some (AtExpr (expr, SExprX (name,id,modif2,rel_opt,ctx)))
+    else Some (AtExpr (expr, SExprX (name,id,modif2,rel_opt,ctx)), DeltaNil)
   | AtS (SExpr (_,name,id,modif,expr,rel_opt),ctx) ->
     let modif2 = f modif in
     if fst modif2 = Unselect
     then None  (* hidding expressions is not allowed *)
-    else Some (AtS (SExpr ((), name, id, modif2, expr, rel_opt), ctx))
+    else Some (AtS (SExpr ((), name, id, modif2, expr, rel_opt), ctx), DeltaNil)
   | _ -> None
 
 let insert_foreach = function
@@ -1615,36 +1803,43 @@ let insert_foreach = function
     ( match id_of_focus focus with
     | None -> None
     | Some id2 ->
-      let s = elt_s_of_focus focus in
-      let aggregs = [ForEach ((), factory#new_id, factory#top_modif, None, id2)] in
-      let focus2_opt =
-	append_seq_s Root
-		     (SAggreg ((), aggregs))
-		     s in
-      focus_opt_moves [down_focus] focus2_opt)
+       let s = elt_s_of_focus focus in
+       let id = factory#new_id in
+       let aggregs = [ForEach ((), id, factory#top_modif, None, id2)] in
+       focus_opt_moves
+	 [down_focus]
+	 (focus_opt_start
+	    ~delta:(delta_ids [id])
+	    (append_seq_s Root
+			  (SAggreg ((), aggregs))
+			  s)) )
     
 let insert_aggreg g focus =
   match id_of_focus focus with
   | None -> None
   | Some id2 ->
      let s = elt_s_of_focus focus in
-     let aggregs = [TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2)] in
-     let focus2_opt = append_seq_s Root (SAggreg ((), aggregs)) s in
-     focus_opt_moves [down_focus] focus2_opt
+     let id = factory#new_id in
+     let aggregs = [TheAggreg ((), id, factory#top_modif, g, None, id2)] in
+     focus_opt_moves
+       [down_focus]
+       (focus_opt_start
+	  ~delta:(delta_ids [id])
+	  (append_seq_s Root (SAggreg ((), aggregs)) s))
   
 let insert_foreach_result = function
   | AtS (SAggreg (_, aggregs), ctx) ->
      if List.exists is_ForEachResult aggregs
-     then Some (AtS (SAggreg ((), List.filter (not1 is_ForEachResult) aggregs), ctx))
-     else Some (AtS (SAggreg ((), ForEachResult () :: List.filter (not1 is_dim) aggregs), ctx))
-  | AtAggreg (ForEachResult _, SAggregX ((ll,rr), ctx)) -> Some (AtS (SAggreg ((), List.rev ll @ rr), ctx))
+     then Some (AtS (SAggreg ((), List.filter (not1 is_ForEachResult) aggregs), ctx), DeltaNil)
+     else Some (AtS (SAggreg ((), ForEachResult () :: List.filter (not1 is_dim) aggregs), ctx), DeltaNil)
+  | AtAggreg (ForEachResult _, SAggregX ((ll,rr), ctx)) -> Some (AtS (SAggreg ((), List.rev ll @ rr), ctx), DeltaNil)
   | AtAggreg (aggreg, SAggregX ((ll,rr), ctx)) ->
      if List.exists is_ForEachResult ll || List.exists is_ForEachResult rr
-     then Some (AtAggreg (aggreg, SAggregX ((List.filter (not1 is_ForEachResult) ll, List.filter (not1 is_ForEachResult) rr), ctx)))
+     then Some (AtAggreg (aggreg, SAggregX ((List.filter (not1 is_ForEachResult) ll, List.filter (not1 is_ForEachResult) rr), ctx)), DeltaNil)
      else (* remove all dims, and replace by ForEachResult *)
        if is_dim aggreg
-       then Some (AtS (SAggreg ((), ForEachResult () :: List.filter (not1 is_dim) (List.rev ll @ rr)), ctx))
-       else Some (AtAggreg (aggreg, SAggregX ((List.filter (not1 is_dim) ll @ [ForEachResult ()], List.filter (not1 is_dim) rr), ctx)))
+       then Some (AtS (SAggreg ((), ForEachResult () :: List.filter (not1 is_dim) (List.rev ll @ rr)), ctx), DeltaNil)
+       else Some (AtAggreg (aggreg, SAggregX ((List.filter (not1 is_dim) ll @ [ForEachResult ()], List.filter (not1 is_dim) rr), ctx)), DeltaNil)
   | _ -> None
 (*    
   | AtS (SAggreg (_, [ForEachResult _], aggregs), ctx) -> Some (AtS (SAggreg ((), [], aggregs), ctx))
@@ -1657,23 +1852,24 @@ let insert_foreach_result = function
  *)
 		 
 let insert_foreach_id id2 focus =
-  let new_dim = factory#top_dim_foreach id2 in
+  let new_dim, id = factory#top_dim_foreach id2 in
   match focus with
   | AtS (SAggreg (_,aggregs), ctx) ->
      let aggregs = List.filter (not1 is_ForEachResult) aggregs in
      let ll_rr = List.rev aggregs, [] in
-     Some (AtAggreg (new_dim, SAggregX (ll_rr, ctx)))
+     Some (AtAggreg (new_dim, SAggregX (ll_rr, ctx)), delta_ids [id])
   | AtAggreg (aggreg, SAggregX ((ll,rr), ctx)) ->
      let ll, rr = List.filter (not1 is_ForEachResult) ll, List.filter (not1 is_ForEachResult) rr in
      let ll_rr = if is_ForEachResult aggreg then ll, rr else aggreg::ll, rr in
-     Some (AtAggreg (new_dim, SAggregX (ll_rr, ctx)))
+     Some (AtAggreg (new_dim, SAggregX (ll_rr, ctx)), delta_ids [id])
   | _ -> None
 
 let insert_aggreg_id g id2 focus =
   match focus with
   | AtS (SAggreg (_,aggregs), ctx) ->
-     let new_aggreg = TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2) in
-     Some (AtAggreg (new_aggreg, SAggregX ((List.rev aggregs, []), ctx)))
+     let id = factory#new_id in
+     let new_aggreg = TheAggreg ((), id, factory#top_modif, g, None, id2) in
+     Some (AtAggreg (new_aggreg, SAggregX ((List.rev aggregs, []), ctx)), delta_ids [id])
   | AtAggreg (TheAggreg (_,id0,modif0,g0,rel0_opt,id20), ctx) when id20=id2 ->
      (* assuming type-compatibility of g over g0's values *)
      let can_be_replaced, with_same_id =
@@ -1688,15 +1884,17 @@ let insert_aggreg_id g id2 focus =
        | _ -> false, false in
      if can_be_replaced && g <> g0
      then
-       let id, modif =
+       let id, modif, delta =
 	 if with_same_id
-	 then id0, modif0
-	 else factory#new_id, factory#top_modif in
-       Some (AtAggreg (TheAggreg ((),id,modif,g,None,id2), ctx))
+	 then id0, modif0, DeltaNil
+	 else let id = factory#new_id in
+	      id, factory#top_modif, delta_ids [id] in
+       Some (AtAggreg (TheAggreg ((),id,modif,g,None,id2), ctx), delta)
      else None
   | AtAggreg (aggreg, SAggregX ((ll,rr), ctx)) ->
-     let new_aggreg = TheAggreg ((), factory#new_id, factory#top_modif, g, None, id2) in
-     Some (AtAggreg (new_aggreg, SAggregX ((aggreg::ll,rr), ctx)))
+     let id = factory#new_id in
+     let new_aggreg = TheAggreg ((), id, factory#top_modif, g, None, id2) in
+     Some (AtAggreg (new_aggreg, SAggregX ((aggreg::ll,rr), ctx)), delta_ids [id])
   | _ -> None
 
 let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
@@ -1720,7 +1918,7 @@ let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
       if arity = 0
       then []
       else list_of_ctx (arg_conv_opt,expr) ll_rr in
-    next_undef_focus (AtExpr (Apply ((), func, args), ctx))
+    focus_opt_start (next_undef_focus (AtExpr (Apply ((), func, args), ctx)))
   | focus ->
     ( match id_of_focus focus with
     | None -> None
@@ -1733,27 +1931,36 @@ let insert_func_arg is_pred func arity pos res_conv_opt arg_conv_opt =
 	then SFilter ((), factory#new_id, expr)
 	else SExpr ((), "", factory#new_id, factory#top_modif, expr, None) in
       let focus2_opt = append_seq_s Root s2 s in
-      focus_opt_moves [move_seq down_focus next_undef_focus] focus2_opt )
+      focus_opt_moves [move_seq down_focus next_undef_focus]
+		      (focus_opt_start focus2_opt) )
 
 let insert_name new_name = function
-  | AtS (SExpr (_,name,id,modif,expr,rel_opt), ctx) -> Some (AtS (SExpr ((), new_name, id, modif, expr, rel_opt), ctx))
-  | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) -> Some (AtExpr (expr, SExprX (new_name, id, modif, rel_opt, ctx)))
+  | AtS (SExpr (_,name,id,modif,expr,rel_opt), ctx) ->
+     Some (AtS (SExpr ((), new_name, id, modif, expr, rel_opt), ctx), DeltaNil)
+  | AtExpr (expr, SExprX (name,id,modif,rel_opt,ctx)) ->
+     Some (AtExpr (expr, SExprX (new_name, id, modif, rel_opt, ctx)), DeltaNil)
   | AtExpr (_, SFilterX _) -> None
   | AtExpr (f,ctx) ->
     let id = factory#new_id in
     let s, ctx2 = root_expr_of_ctx_expr (Var ((),id)) ctx in
     let ll, rr, ctx3 = match ctx2 with Root -> [], [], Root | SeqX ((ll,rr),ctx3) -> ll, rr, ctx3 in
     Some (AtS (SExpr ((), new_name, id, factory#top_modif, f, None),
-	       SeqX ((ll,s::rr), ctx3)))
+	       SeqX ((ll,s::rr), ctx3)), delta_ids [id])
   | _ -> None
 
 
 let insert_selection_gen
-      ~(elt_of_increment : increment -> 'elt option)
+      ~(elt_of_increment : increment -> ('elt * delta_ids) option)
       ~(coord : 'elt list -> 'elt)
-      ~(insert_elt : 'elt -> focus -> focus option)
-      (l_incr : increment list) (focus : focus) : focus option =
-  let l_f_incr = Common.mapfilter elt_of_increment l_incr in
+      ~(insert_elt : 'elt -> focus -> (focus * delta) option)
+      (l_incr : increment list) (focus : focus) : (focus * delta) option =
+  let l_f_incr, ldelta =
+    List.fold_right
+      (fun incr (lf,ldelta) ->
+       match elt_of_increment incr with
+       | None -> lf, DeltaNil::ldelta
+       | Some (f,ids) -> f::lf, (delta_ids ids)::ldelta)
+      l_incr ([],[]) in
   let f_incr_opt =
     match l_f_incr with
     | [] -> None
@@ -1761,7 +1968,10 @@ let insert_selection_gen
     | _ -> Some (coord l_f_incr) in
   match f_incr_opt with
   | None -> None
-  | Some f_incr -> insert_elt f_incr focus
+  | Some f_incr ->
+     ( match insert_elt f_incr focus with
+       | None -> None
+       | Some (foc,delta) -> Some (foc, DeltaSelection (delta, ldelta)) )
 
 let insert_selection_p1 =
   insert_selection_gen
@@ -1785,6 +1995,22 @@ let insert_selection_aggreg l_incr focus =
   match focus with
   | AtAggreg _
   | AtS (SAggreg _, _) ->
+     let foc2, ldelta =
+       List.fold_right
+	 (fun incr (foc2,ldelta) ->
+	  match incr with
+	  | IncrForeachId id ->
+	     ( match insert_foreach_id id foc2 with
+	       | None -> foc2, DeltaNil::ldelta
+	       | Some (foc2,delta) -> foc2, delta::ldelta )
+	  | IncrAggregId (g,id) ->
+	     ( match insert_aggreg_id g id foc2 with
+	       | None -> foc2, DeltaNil::ldelta
+	       | Some (foc2,delta) -> foc2, delta::ldelta )
+	  | _ -> foc2, DeltaNil::ldelta)
+	 l_incr (focus,[]) in
+     Some (foc2, DeltaSelection (DeltaNil, ldelta))
+(*
      List.fold_left
        (fun focus2_opt incr ->
 	match incr with
@@ -1794,9 +2020,10 @@ let insert_selection_aggreg l_incr focus =
 	   focus_opt_moves [insert_aggreg_id g id] focus2_opt
 	| _ -> focus2_opt)
        (Some focus) l_incr
+ *)
   | _ -> None
 	     
-let insert_increment incr focus =
+let insert_increment (incr : increment) (focus : focus) : (focus * delta) option =
   match incr with
     | IncrSelection (selop, l_incr) ->
        ( match selop with
@@ -1857,81 +2084,98 @@ let delete_list = function
   | [], x::rr1 -> `List (x,[],rr1)
 
 let rec delete_elt_sn_is_top cp =
-  let cp' = delete_elt_sn cp in
-  (cp = cp'), cp'
-and delete_elt_sn = function
-  | CNil () -> CNil ()
+  let cp', ids = delete_elt_sn cp in
+  (cp = cp'), cp', ids
+and delete_elt_sn : unit elt_sn -> unit elt_sn * delta_ids = function
+  | CNil () -> CNil (), []
   | CCons ((), Q _, _, cp) -> delete_elt_sn cp
   | CCons ((), arg, np, cp) ->
-     let np = if is_top_s1 np then np else factory#top_s1 in
-     CCons ((), arg, np, delete_elt_sn cp)
+     let np, ids1 = delete_elt_s1 np in
+     let cp, ids2 = delete_elt_sn cp in
+     CCons ((), arg, np, cp), ids1@ids2
   | CAnd ((), l) ->
      ( match delete_elt_sn_list l with
-       | [] -> CNil ()
-       | [cp] -> cp
-       | l -> CAnd ((),l) )
+       | [], ids -> CNil (), ids
+       | [cp], ids -> cp, ids
+       | l, ids -> CAnd ((),l), ids )
   | COr ((), l) ->
      ( match delete_elt_sn_list l with
-       | [] -> CNil ()
-       | [cp] -> cp
-       | l -> COr ((),l) )
+       | [], ids -> CNil (), ids
+       | [cp], ids -> cp, ids
+       | l, ids -> COr ((),l), ids )
   | CMaybe ((), cp) ->
      ( match delete_elt_sn cp with
-       | CNil () -> CNil ()
-       | cp -> CMaybe ((), cp) )
+       | CNil (), ids -> CNil (), ids
+       | cp, ids -> CMaybe ((), cp), ids )
   | CNot ((), cp) ->
      ( match delete_elt_sn cp with
-       | CNil () -> CNil ()
-       | cp -> CNot ((), cp) )
+       | CNil (), ids -> CNil (), ids
+       | cp, ids -> CNot ((), cp), ids )
 and delete_elt_sn_list = function
-  | [] -> []
+  | [] -> [], []
   | cp::l ->
-     let l' = delete_elt_sn_list l in
-     ( match delete_elt_sn cp with
-     | CNil () -> l'
-     | cp' -> cp'::l' )
+     let cp', ids1 = delete_elt_sn cp in
+     let l', ids2 = delete_elt_sn_list l in
+     ( match cp' with
+     | CNil () -> l', ids1@ids2
+     | cp' -> cp'::l', ids1@ids2 )
+and delete_elt_s1 : unit elt_s1 -> unit elt_s1 * delta_ids = function
+  | Det ((), An (id,_,_), _) ->
+     Det ((), An (id, factory#top_modif, Thing), None), []
+  | _ ->
+     let np, id = factory#top_s1 in
+     np, [id]
+and delete_elt_s : unit elt_s -> unit elt_s * delta_ids = function
+  | Return ((), np) ->
+     let np, ids = delete_elt_s1 np in
+     Return ((), np), ids
+  | _ ->
+     let s, id = factory#top_s in
+     s, [id]
 		   
-let rec delete_ctx_p1 = function
-  | DetThatX (det,ctx) -> Some (AtS1 (Det ((),det,None), ctx))
-  | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx))
-  | ForEachThatX (id,modif,id2,ctx) -> Some (AtAggreg (ForEach ((), id,modif,None,id2), ctx))
-  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx))
-  | SExprThatX (name,id,modif,expr,ctx) -> Some (AtS (SExpr ((), name, id, modif, expr, None), ctx))
+let rec delete_ctx_p1 : ctx_p1 -> (focus * delta) option = function
+  | DetThatX (det,ctx) -> Some (AtS1 (Det ((),det,None), ctx), DeltaNil)
+  | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx), DeltaNil)
+  | ForEachThatX (id,modif,id2,ctx) -> Some (AtAggreg (ForEach ((), id,modif,None,id2), ctx), DeltaNil)
+  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx), DeltaNil)
+  | SExprThatX (name,id,modif,expr,ctx) -> Some (AtS (SExpr ((), name, id, modif, expr, None), ctx), DeltaNil)
   | AndX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
-      | `Single elt -> Some (AtP1 (elt, ctx))
-      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, AndX ((ll2,rr2),ctx))) )
+      | `Single elt -> Some (AtP1 (elt, ctx), DeltaNil)
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, AndX ((ll2,rr2),ctx)), DeltaNil) )
   | OrX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
-      | `Single elt -> Some (AtP1 (elt, ctx))
-      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx))) )
+      | `Single elt -> Some (AtP1 (elt, ctx), DeltaNil)
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx)), DeltaNil) )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
   | InX (npg,ctx) -> delete_ctx_p1 ctx
-and delete_ctx_sn (is_top,f) ctx =
+and delete_ctx_sn (is_top,f,ids) ctx =
   if is_top
   then
     match ctx with
     | PredX (arg,pred,ctx2) -> delete_ctx_p1 ctx2
     | CConsX2 (arg,np,ctx2) ->
        delete_ctx_sn
-	 (delete_elt_sn_is_top (CCons ((),arg,np,f)))
+	 (let is_top2, f2, ids2 =
+	    delete_elt_sn_is_top (CCons ((),arg,np,f)) in
+	  is_top2, f2, ids@ids2)
 	 ctx2
     | CAndX (ll_rr,ctx2) ->
        ( match delete_list ll_rr with
-	 | `Empty -> delete_ctx_sn (is_top,f) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2))
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))) )
+	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
+	 | `Single elt -> Some (AtSn (elt, ctx2), delta_ids ids)
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2)), delta_ids ids) )
     | COrX (ll_rr,ctx2) ->
        ( match delete_list ll_rr with
-	 | `Empty -> delete_ctx_sn (is_top,f) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2))
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))) )
-    | CMaybeX ctx2 -> Some (at_sn f ctx2)
-    | CNotX ctx2 -> Some (at_sn f ctx2)
-  else Some (at_sn f ctx)
+	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
+	 | `Single elt -> Some (AtSn (elt, ctx2), delta_ids ids)
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2)), delta_ids ids) )
+    | CMaybeX ctx2 -> Some (at_sn f ctx2, delta_ids ids)
+    | CNotX ctx2 -> Some (at_sn f ctx2, delta_ids ids)
+  else Some (at_sn f ctx, delta_ids ids)
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
@@ -1940,51 +2184,63 @@ and delete_ctx_s1 f_opt ctx =
     | TripleX2 (_,_,ctx2) ->
       ( match f_opt with
 	| None -> delete_ctx_p1 ctx2
-	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
+	| Some f ->
+	   let np, ids = delete_elt_s1 f in
+	   Some (AtS1 (np, ctx), delta_ids ids) )
     | ReturnX ctx2 ->
       ( match f_opt with
 	| None -> delete_ctx_s None ctx2
-	| Some f -> Some (AtS1 (factory#top_s1, ctx)) )
+	| Some f ->
+	   let np, ids = delete_elt_s1 f in
+	   Some (AtS1 (np, ctx), delta_ids ids) )
     | HierX (id,p,ori,ctx2) ->
        ( match f_opt with
 	 | None -> delete_ctx_p1 ctx2
-	 | Some f -> Some (AtS1 (factory#top_s1, ctx)) )
+	 | Some f ->
+	    let np, ids = delete_elt_s1 f in
+	    Some (AtS1 (np, ctx), delta_ids ids) )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
     | CConsX1 (arg,cp,ctx2) ->
        ( match arg, f_opt with
-	 | Q _, None -> Some (at_sn cp ctx2)
+	 | Q _, None -> Some (at_sn cp ctx2, DeltaNil)
 	 | (S|P|O), None -> (* those args cannot be removed *)
 	    delete_ctx_sn
-	      (delete_elt_sn_is_top (CCons ((),arg,factory#top_s1,cp)))
+	      (let np, id = factory#top_s1 in
+	       let is_top2, f2, ids = delete_elt_sn_is_top (CCons ((),arg,np,cp)) in
+	       is_top2, f2, id::ids)
 	      ctx2
-	 | _, Some f -> Some (AtS1 (factory#top_s1, ctx)) )
+	 | _, Some f ->
+	    let np, ids = delete_elt_s1 f in
+	    Some (AtS1 (np, ctx), delta_ids ids) )
     | NAndX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
-	| `Single elt -> Some (AtS1 (elt, ctx2))
-	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NAndX ((ll2,rr2),ctx2))) )
+	| `Single elt -> Some (AtS1 (elt, ctx2), DeltaNil)
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NAndX ((ll2,rr2),ctx2)), DeltaNil) )
     | NOrX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
-	| `Single elt -> Some (AtS1 (elt, ctx2))
-	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2))) )
+	| `Single elt -> Some (AtS1 (elt, ctx2), DeltaNil)
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2)),DeltaNil) )
     | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
     | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
     | InGraphX (_,ctx2) ->
       ( match f_opt with
       | None -> delete_ctx_p1 ctx2
-      | Some _ -> Some (AtS1 (factory#top_s1, ctx)) )
+      | Some f -> let np, ids = delete_elt_s1 f in
+		  Some (AtS1 (np, ctx), delta_ids ids) )
     | InWhichThereIsX ctx2 ->
       ( match f_opt with
       | None -> delete_ctx_p1 ctx2
-      | Some _ -> Some (AtS1 (factory#top_s1, ctx)) )
+      | Some f -> let np, ids = delete_elt_s1 f in
+		  Some (AtS1 (np, ctx), delta_ids ids) )
 and delete_ctx_aggreg ctx =
   match ctx with
   | SAggregX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_s None ctx
-    | `Single elt -> Some (AtAggreg (elt, SAggregX (([],[]),ctx)))
-    | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX ((ll2,rr2), ctx))) )
+    | `Single elt -> Some (AtAggreg (elt, SAggregX (([],[]),ctx)), DeltaNil)
+    | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX ((ll2,rr2), ctx)), DeltaNil) )
 and delete_ctx_expr f_opt ctx =
   match ctx with
   | SExprX (name,id,modif,rel_opt,ctx2) -> delete_ctx_s None ctx2
@@ -1992,23 +2248,26 @@ and delete_ctx_expr f_opt ctx =
   | ApplyX (func,ll_rr,conv_opt,ctx2) ->
     ( match f_opt with
     | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx (None, factory#top_expr) ll_rr))) ctx2
-    | Some _ -> Some (AtExpr (factory#top_expr, apply_conv_ctx_expr None ctx)) ) (* forgetting conversion *)
+    | Some _ -> Some (AtExpr (factory#top_expr, apply_conv_ctx_expr None ctx), DeltaNil) ) (* forgetting conversion *)
   | ChoiceX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_expr None ctx2
-    | `Single elt -> Some (AtExpr (elt, ctx2))
-    | `List (elt,ll2,rr2) -> Some (AtExpr (elt, ChoiceX ((ll2,rr2),ctx2))) )
+    | `Single elt -> Some (AtExpr (elt, ctx2), DeltaNil)
+    | `List (elt,ll2,rr2) -> Some (AtExpr (elt, ChoiceX ((ll2,rr2),ctx2)), DeltaNil) )
 and delete_ctx_s f_opt ctx =
   match ctx with
   | Root ->
-    if f_opt = None
-    then None
-    else Some factory#home_focus
+     ( match f_opt with
+       | None -> None
+       | Some f ->
+	  let s, ids = delete_elt_s f in
+	  focus_opt_moves [down_focus]
+			  (Some (AtS (s, Root), delta_ids ids)) )
   | SeqX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_s None ctx2
-    | `Single elt -> Some (AtS (elt,ctx2))
-    | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2))) )
+    | `Single elt -> Some (AtS (elt,ctx2), DeltaNil)
+    | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2)), DeltaNil) )
 
 let delete_focus focus =
   let new_focus_opt =
@@ -2016,12 +2275,15 @@ let delete_focus focus =
     | AtP1 (_, ctx) -> delete_ctx_p1 ctx
     | AtSn (f, ctx) -> delete_ctx_sn (delete_elt_sn_is_top f) ctx
     | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
-    | AtAggreg (ForTerm (_,t,id2), ctx) -> Some (AtAggreg (factory#top_dim_foreach id2, ctx))
+    | AtAggreg (ForTerm (_,t,id2), ctx) ->
+       let dim, id = factory#top_dim_foreach id2 in
+       Some (AtAggreg (dim, ctx), delta_ids [id])
     | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
     | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
     | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx in
   match new_focus_opt with
-  | Some (AtSn (CNil (), _) as new_focus) -> up_focus new_focus
+  | Some (AtSn (CNil (), _), _) ->
+     focus_opt_moves [up_focus] new_focus_opt
   | _ -> new_focus_opt
 
 (* goto to query *)
