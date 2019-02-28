@@ -1,5 +1,9 @@
 # description of main changes that impact interface with outside
 
+2019-02-09
+- new datatype Lisql.delta to represent new entity ids when inserting increments
+  - Lisql.insert_increment and Lisql.delete_focus now return (optionally) not only a new focus but also a delta
+
 2019-02-01
 - signature change of Lis.place
   - method 'query_ids' returning set of entity ids in query
