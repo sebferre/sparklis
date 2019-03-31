@@ -462,8 +462,9 @@ let process_querylog () =
   print_newline ();
   close_out out_txt;
   close_out out_ttl;
-  ignore (Sys.command ("java -jar /local/ferre/soft/rdf2rdf.jar data/querylog_processed.ttl data/querylog_processed.rdf"));;
-
+  (*  ignore (Sys.command ("java -jar /local/ferre/soft/rdf2rdf.jar data/querylog_processed.ttl data/querylog_processed.rdf"));;*)
+  ignore (Sys.command ("rapper -i turtle data/querylog_processed.ttl -o rdfxml > data/querylog_processed.rdf"));;
+  
 let _ =
   process_hitlog ();
   process_querylog ();;
