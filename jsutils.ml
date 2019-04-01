@@ -256,3 +256,38 @@ object
 
 end
 
+(* Wikidata services *)
+module Wikidata =
+  struct
+    let entities_of_json ojson : string list option =
+      try
+	let oquery = Unsafe.get ojson (string "query") in
+	let osearch = Unsafe.get oquery (string "search") in
+	let n = truncate (to_float (Unsafe.get osearch (string "length"))) in
+	let le = ref [] in
+	for i = n-1 downto 0 do
+	  let oresult = Unsafe.get osearch (string (string_of_int i)) in
+	  let otitle = Unsafe.get oresult (string "title") in
+	  le := (Js.to_string otitle)::!le
+	done;
+	firebug (string_of_int n ^ " wikidata entities found");
+	Some !le
+      with _ ->
+	None
+
+    let ajax_entity_search (query : string) (limit : int) (k : string list option -> unit) : unit =
+      firebug ("Wikidata search: " ^ query);
+      let query_url =
+	Printf.sprintf
+	  "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
+	  limit
+	  (Url.urlencode query) in
+      Lwt.ignore_result
+	(Lwt.bind
+	   (Jsonp.call_custom_url (*~timeout:0.5*)
+	      (fun name -> query_url ^ "&callback=" ^ name))
+	   (fun json ->
+	    k (entities_of_json json);
+	    Lwt.return ()))
+	
+  end

@@ -1244,6 +1244,12 @@ let _ =
     (* initializing YASGUI and other libs *)
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
+    (* test of Wikidata entity search *)
+    (*Jsutils.Wikidata.ajax_entity_search
+      "Tim+Burton" 10
+      (function
+	| None -> firebug "Wikidata search: failed"
+	| Some lq -> firebug ("Wikidata search: " ^ String.concat " " lq));*)
     (* defining endpoint, title *)
     let args = Url.Current.arguments in
     let endpoint =

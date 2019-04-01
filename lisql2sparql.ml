@@ -96,7 +96,7 @@ let sparql_order = function
   | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
 type filter_context = [`Properties|`Terms] * [`Bind|`Filter]
-			     
+
 let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) ~(op : [`All|`Any]) ~(kwds : string list) : bool * Sparql.formula =
   let label_props, label_langs = label_properties_langs in
   let log_op =
