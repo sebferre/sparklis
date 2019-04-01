@@ -91,45 +91,58 @@ let string_is_float =
   let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
   (fun s -> Regexp.string_match re s 0 <> None)
 
-let make_constr op pat =
+let make_constr op pat (k : Lisql.constr -> unit) : unit =
   (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-  match op, lpat with
-  | "true", _ -> True
-  | "matchesAll", _ -> MatchesAll lpat
-  | "matchesAny", _ -> MatchesAny lpat
-  | "after", [] -> After ""
-  | "after", pat::_ -> After pat
-  | "before", [] -> Before ""
-  | "before", pat::_ -> Before pat
-  | "fromTo", [] -> FromTo ("","")
-  | "fromTo", pat1::[] -> FromTo (pat1, "")
-  | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
-  | "higherThan", [] -> HigherThan ""
-  | "higherThan", pat::_ ->
-     if string_is_float pat 
-     then HigherThan pat
-     else invalid_arg "a numeric value is expected"
-  | "lowerThan", [] -> LowerThan ""
-  | "lowerThan", pat::_ ->
-     if string_is_float pat
-     then LowerThan pat
-     else invalid_arg "a numeric value is expected"
-  | "between", [] -> Between ("","")
-  | "between", pat::[] ->
-     if string_is_float pat
-     then Between (pat, "") (* HigherThan pat *)
-     else invalid_arg "a numeric value is expected"
-  | "between", pat1::pat2::_ ->
-     if string_is_float pat1 && string_is_float pat2
-     then Between (pat1, pat2)
-     else invalid_arg "two numeric values are expected"
-  | "hasLang", [] -> HasLang ""
-  | "hasLang", pat::_ -> HasLang pat
-  | "hasDatatype", [] -> HasDatatype ""
-  | "hasDatatype", pat::_ -> HasDatatype pat
-  | _ -> True (* in case of undefined option *)
+  let pre_constr =
+    match op, lpat with
+    | "true", _ -> True
+    | "matchesAll", _ -> MatchesAll lpat
+    | "matchesAny", _ -> MatchesAny lpat
+    | "after", [] -> After ""
+    | "after", pat::_ -> After pat
+    | "before", [] -> Before ""
+    | "before", pat::_ -> Before pat
+    | "fromTo", [] -> FromTo ("","")
+    | "fromTo", pat1::[] -> FromTo (pat1, "")
+    | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
+    | "higherThan", [] -> HigherThan ""
+    | "higherThan", pat::_ ->
+       if string_is_float pat 
+       then HigherThan pat
+       else invalid_arg "a numeric value is expected"
+    | "lowerThan", [] -> LowerThan ""
+    | "lowerThan", pat::_ ->
+       if string_is_float pat
+       then LowerThan pat
+       else invalid_arg "a numeric value is expected"
+    | "between", [] -> Between ("","")
+    | "between", pat::[] ->
+       if string_is_float pat
+       then Between (pat, "") (* HigherThan pat *)
+       else invalid_arg "a numeric value is expected"
+    | "between", pat1::pat2::_ ->
+       if string_is_float pat1 && string_is_float pat2
+       then Between (pat1, pat2)
+       else invalid_arg "two numeric values are expected"
+    | "hasLang", [] -> HasLang ""
+    | "hasLang", pat::_ -> HasLang pat
+    | "hasDatatype", [] -> HasDatatype ""
+    | "hasDatatype", pat::_ -> HasDatatype pat
+    | "wikidata", _ -> ExternalSearch (`Wikidata lpat, [])
+    | _ -> True (* in case of undefined option *) in
+  match pre_constr with
+  | ExternalSearch (`Wikidata kwds, _) ->
+     Jsutils.Wikidata.ajax_entity_search
+       (String.concat "+" kwds) 20
+       (function
+	 | None ->
+	    k (MatchesAll kwds)
+	 | Some lq ->
+	    let lt = List.map (fun q -> Rdf.URI (Rdf.wikidata_entity q)) lq in
+	    k (ExternalSearch (`Wikidata kwds, lt)))					 
+  | _ -> k pre_constr
     
 let option_of_constr =
   let open Lisql in
@@ -145,6 +158,7 @@ let option_of_constr =
   | Between _ -> "between"
   | HasLang _ -> "hasLang"
   | HasDatatype _ -> "hasDatatype"
+  | ExternalSearch (`Wikidata _, _) -> "wikidata"
 
 let pattern_of_constr =
   let open Lisql in
@@ -162,6 +176,8 @@ let pattern_of_constr =
   | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
   | HasLang pat -> pat
   | HasDatatype pat -> pat
+  | ExternalSearch (`Wikidata kwds, _) -> String.concat " " kwds
+
 			 
   
 (* pretty-printing of terms, NL in HTML *)

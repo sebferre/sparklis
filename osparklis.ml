@@ -47,8 +47,7 @@ let get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElemen
   let op = to_string (select##value) in
   let pat = to_string (input##value) in
   try
-    let constr = Html.make_constr op pat in
-    k constr
+    Html.make_constr op pat k
   with Invalid_argument msg ->
     Jsutils.alert ("Invalid filter: " ^ msg)
 
@@ -74,6 +73,7 @@ let norm_constr = (* normalizing for empty patterns "" *)
   | Between (a,"") -> HigherThan a
   | HasLang "" -> True
   | HasDatatype "" -> True
+  | ExternalSearch (`Wikidata [], _) -> True
   | c -> c
 
 let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
@@ -106,6 +106,7 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   | HasDatatype pat ->
     let re = regexp_of_pat pat in
     (fun s_dt -> matches s_dt re)
+  | ExternalSearch _ -> (fun s -> true) (* not safe/possible to mimick external search tool *)
 
 (* constraint subsumption *)
 
@@ -137,6 +138,12 @@ let subsumed_constr constr1 constr2 : bool =
   | Between (s1a,s1b), Between (s2a,s2b) -> (s2a="" || leq s2a s1a) && (s2b="" || leq s1b s2b)
   | HasLang s1, HasLang s2 -> Common.has_prefix s1 s2
   | HasDatatype s1, HasDatatype s2 -> Common.has_prefix s1 s2
+  | ExternalSearch (`Wikidata kwds1, _), ExternalSearch (`Wikidata kwds2, _) ->
+     List.for_all (fun s2 ->
+      List.exists (fun s1 ->
+	Common.has_prefix s1 s2 (* 'has_prefix' used as an approximation of 'contains' *)
+      ) kwds1
+    ) kwds2
   | _ -> false
 
 
@@ -855,7 +862,7 @@ object (self)
       (*if self#is_home
       then self#refresh_term_increments
 	else*) self#refresh
-    end
+      end
 
   method set_property_constr constr =
     let to_refresh =

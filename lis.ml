@@ -1365,19 +1365,25 @@ object (self)
   method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in
     let l_constr =
+      [ MatchesAll ["..."; "..."];
+	MatchesAny ["..."; "..."];
+	After "...";
+	Before "...";
+	FromTo ("...","...");
+	HigherThan "...";
+	LowerThan "...";
+	Between ("...","...");
+	HasLang "...";
+	HasDatatype "..." ] in
+    let l_constr =
+      if Rdf.config_wikidata_mode#value
+      then ExternalSearch (`Wikidata ["..."], []) :: l_constr
+      else l_constr in
+    let l_constr =
       List.filter
 	(fun constr ->
 	 Lisql_type.is_insertable_constr constr focus_type_constraints)
-	[ MatchesAll ["..."; "..."];
-	  MatchesAny ["..."; "..."];
-	  After "...";
-	  Before "...";
-	  FromTo ("...","...");
-	  HigherThan "...";
-	  LowerThan "...";
-	  Between ("...","...");
-	  HasLang "...";
-	  HasDatatype "..." ] in
+	l_constr in
     if l_constr = []
     then [Lisql.reset_constr constr]
     else l_constr

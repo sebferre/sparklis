@@ -50,6 +50,7 @@ let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
 let wikibase_claim = "http://wikiba.se/ontology#claim"
 let wikibase_statementProperty = "http://wikiba.se/ontology#statementProperty"
+let wikidata_entity (q : string) = "http://www.wikidata.org/entity/" ^ q
 let wikidata_Q (n : int) = "http://www.wikidata.org/entity/Q" ^ string_of_int n
 let wikidata_P (n : int) = "http://www.wikidata.org/prop/P" ^ string_of_int n
 let p_P625 = wikidata_P 625 (* Wikidata: geographical coordinates *)

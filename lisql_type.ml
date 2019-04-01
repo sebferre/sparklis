@@ -187,6 +187,7 @@ let constr_domains : constr -> datatype list = function
   | Between _ -> [`Float]
   | HasLang _ -> [`StringLiteral]
   | HasDatatype _ -> [`Literal]
+  | ExternalSearch (`Wikidata _, _) -> [`IRI]
 
        
 let func_signatures : func -> (datatype list * datatype) list = function

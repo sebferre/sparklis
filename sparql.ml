@@ -364,6 +364,12 @@ and subquery =
     having : expr;
     limit : int option }
 
+let formula_term_in_term_list (t : _ any_term) (lt : _ any_term list) : formula =
+  let s_t = (t : _ sparql :> string) in
+  if s_t<>"" && s_t.[0]='?'
+  then Pattern (values (sparql s_t :> var) lt)
+  else Filter (expr_in t lt)
+
 let make_subquery ~projections ?(groupings = []) ?(having = log_true) ?limit formula =
   { projections; formula; groupings; having; limit}
 

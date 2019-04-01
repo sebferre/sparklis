@@ -764,6 +764,9 @@ and vp_of_constr grammar annot = function
   | Between (pat1,pat2) -> A (annot, `IsPP (`PrepBin (`Op grammar#interval_between, np_of_literal pat1, `Op grammar#interval_and, np_of_literal pat2)))
   | HasLang pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#language, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
   | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
+  | ExternalSearch (s,_) -> vp_of_search grammar annot s
+and vp_of_search grammar annot = function
+  | `Wikidata kwds -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal (String.concat " " kwds), X `Nil)), [])) (* TODO: make wikidata explicit *)
 and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
   | Some (InWhichThereIs (annot,np)) -> A (annot, `InWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))

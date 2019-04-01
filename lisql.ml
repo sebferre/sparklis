@@ -9,6 +9,10 @@ open Common
 (* LISQL representations *)
 
 (* LISQL constraints *)
+
+type search =
+  [ `Wikidata of string list ]
+       
 type constr =
   | True
   | MatchesAll of string list
@@ -21,7 +25,11 @@ type constr =
   | Between of string * string
   | HasLang of string
   | HasDatatype of string
+  | ExternalSearch of search * Rdf.term list (* search service and query, results *)
 
+let reset_search = function
+  | `Wikidata _ -> `Wikidata ["..."]
+				
 let reset_constr : constr -> constr = function
   | True -> True
   | MatchesAll _ -> MatchesAll ["..."; "..."]
@@ -34,6 +42,7 @@ let reset_constr : constr -> constr = function
   | Between _ -> Between ("...","...")
   | HasLang _ -> HasLang "..."
   | HasDatatype _ -> HasDatatype "..."
+  | ExternalSearch (s, _) -> ExternalSearch (reset_search s, [])
 
 (* LISQL modifiers *)
 
@@ -1573,7 +1582,7 @@ let insert_constr constr focus =
   match focus with
   | AtS1 (f, ReturnX _) when is_top_s1 f ->
      ( match constr with
-       | MatchesAll _ | MatchesAny _ -> insert_elt_p1 (Search ((),constr)) focus
+       | MatchesAll _ | MatchesAny _ | ExternalSearch _ -> insert_elt_p1 (Search ((),constr)) focus
        | _ -> None )
   | _ -> insert_elt_p1 (Filter ((),constr)) focus
 
