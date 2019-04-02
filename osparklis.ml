@@ -43,14 +43,6 @@ let rec string_of_delta =
 				 
 (* constraint compilation *)
 
-let get_constr (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) (k : Lisql.constr -> unit) : unit =
-  let op = to_string (select##value) in
-  let pat = to_string (input##value) in
-  try
-    Html.make_constr op pat k
-  with Invalid_argument msg ->
-    Jsutils.alert ("Invalid filter: " ^ msg)
-
 let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
 let matches s re = Regexp.search re s 0 <> None
 let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
@@ -308,6 +300,9 @@ object (self)
   val mutable term_constr = Lisql.True
   val mutable property_constr = Lisql.MatchesAll []
 
+  method term_constr = term_constr
+  method property_constr = property_constr
+						 
   val term_selection = new increment_selection "#selection-terms"
   val property_selection = new increment_selection "#selection-properties"
   val modifier_selection = new increment_selection "#selection-modifiers"
@@ -534,6 +529,28 @@ object (self)
 	    end))
       end)
 
+  val mutable getting_constr = false
+  (* flag to avoid parallel run of [get_constr] *)
+  method get_constr (current_constr : Lisql.constr) (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) (k : Lisql.constr -> unit) : unit =
+  if not getting_constr then
+    begin
+      getting_constr <- true;
+      let op = to_string (select##value) in
+      let pat = to_string (input##value) in
+      try
+	Html.make_new_constr
+	  current_constr
+	  op pat
+	  (fun constr_opt ->
+	   getting_constr <- false;
+	   match constr_opt with
+	   | Some constr -> k constr
+	   | None -> ()) (* do nothing when the constraint has not changed *)
+      with Invalid_argument msg ->
+	getting_constr <- false;
+	Jsutils.alert ("Invalid filter: " ^ msg)
+    end
+
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
   method private refresh_term_increments (* _gen ajax_index *) =
     let get_incr_opt elt =
@@ -604,7 +621,7 @@ object (self)
 		    let incr_elt = Dom_html.element dom_elt in
 		    apply_incr incr_elt))));
 	      refreshing_terms <- false;
-	      get_constr select input
+	      self#get_constr term_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
 		 self#set_term_constr new_constr))))))))
@@ -668,7 +685,7 @@ object (self)
 		 then toggle_incr elt
 		 else apply_incr elt));
 	      refreshing_properties <- false;
-	      get_constr select input
+	      self#get_constr property_constr select input
 		(fun new_constr ->
 		 self#filter_increments elt_list new_constr;
 		 self#set_property_constr new_constr))))))))
@@ -798,6 +815,27 @@ object (self)
 	      self#refresh_term_increments;
 	      self#refresh_focus)))
 
+  method refresh_for_term_constr =
+    (* same as method refresh, but assuming same query and focus *)
+    jquery "#increments" (fun elt_incrs ->
+      jquery "#list-results" (fun elt_res ->
+	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
+	  ~k_sparql:self#refresh_sparql
+	  ~k_results:
+	  (function
+	  | None ->
+	      self#refresh_extension;
+	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
+	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
+	      self#refresh_modifier_increments;
+	      self#refresh_property_increments;
+	      self#refresh_term_increments
+	  | Some sparql ->
+	      self#refresh_extension;
+	      self#refresh_modifier_increments;
+	      self#refresh_property_increments;
+	      self#refresh_term_increments)))
+
   method private get_more_results (k : unit -> unit) =
     jquery "#list-results"
 	   (fun elt_res ->
@@ -853,15 +891,13 @@ object (self)
     let to_refresh =
       if equivalent_constr constr term_constr then false
       else if subsumed_constr constr term_constr then not refreshing_terms
-      else begin self#abort_all_ajax; true end in	
+      else begin self#abort_all_ajax; true end in
     term_constr <- constr;
     if to_refresh (* not refreshing_terms && constr <> term_constr *)
     then begin
       refreshing_terms <- true;
       self#save_ui_state;
-      (*if self#is_home
-      then self#refresh_term_increments
-	else*) self#refresh
+      self#refresh_for_term_constr
       end
 
   method set_property_constr constr =
@@ -882,9 +918,12 @@ object (self)
     ~(select : Dom_html.selectElement t)
     ~(input : Dom_html.inputElement t)
     ~(elt_list : Dom_html.element t)
+    ~(current_constr : unit -> Lisql.constr)
     (k : Lisql.constr -> unit)
     =
-    get_constr select input
+    self#get_constr
+      (current_constr ())
+      select input
       (fun new_constr ->
        self#filter_increments ?on_modifiers elt_list new_constr;
        k new_constr)
@@ -1155,29 +1194,33 @@ let initialize endpoint focus =
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
-	   get_constr select input
-	     (fun constr ->
-	      let constr = norm_constr constr in
-	      if constr = Lisql.True
-	      then
-		Jsutils.alert "Empty filter"
-	      else
-		history#update_focus ~push_in_history:true
-				     (Lisql.insert_constr constr))))));
+	   let constr = norm_constr history#present#term_constr in
+	   if constr = Lisql.True
+	   then
+	     Jsutils.alert "Empty filter"
+	   else
+	     history#update_focus ~push_in_history:true
+				  (Lisql.insert_constr constr)))));
 
     jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter
-      (fun (on_modifiers, sel_select, sel_input, sel_list, k) ->
+      (fun (on_modifiers, sel_select, sel_input, sel_list, current_constr, k) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
 	    jquery sel_list (fun elt_list ->
 	      (oninput
-		 (fun input ev -> history#present#pattern_changed ~on_modifiers ~select ~input ~elt_list k)
+		 (fun input ev -> history#present#pattern_changed ~on_modifiers ~select ~input ~elt_list ~current_constr k)
 		 input)))))
-      [(false, "#select-terms", "#pattern-terms", "#list-terms", (fun constr -> history#present#set_term_constr constr));
-       (false, "#select-properties", "#pattern-properties", "#list-properties", (fun constr -> history#present#set_property_constr constr));
-       (true, "#select-modifiers", "#pattern-modifiers", "#list-modifiers", (fun constr -> ()))];
+      [(false, "#select-terms", "#pattern-terms", "#list-terms",
+	(fun () -> history#present#term_constr),
+	(fun constr -> history#present#set_term_constr constr));
+       (false, "#select-properties", "#pattern-properties", "#list-properties",
+	(fun () -> history#present#property_constr),
+	(fun constr -> history#present#set_property_constr constr));
+       (true, "#select-modifiers", "#pattern-modifiers", "#list-modifiers",
+	(fun () -> Lisql.True),
+	(fun constr -> ()))];
 
     List.iter
       (fun (sel_btn,sel_list_incrs,checked) ->

@@ -91,11 +91,12 @@ let string_is_float =
   let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
   (fun s -> Regexp.string_match re s 0 <> None)
 
-let make_constr op pat (k : Lisql.constr -> unit) : unit =
+let make_new_constr (current_constr : Lisql.constr) op pat (k : Lisql.constr option -> unit) : unit =
+  (* calls [k] on [None] if the new contraint is not different from [current_constr] *)
   (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-  let pre_constr =
+  let new_constr =
     match op, lpat with
     | "true", _ -> True
     | "matchesAll", _ -> MatchesAll lpat
@@ -132,17 +133,23 @@ let make_constr op pat (k : Lisql.constr -> unit) : unit =
     | "hasDatatype", pat::_ -> HasDatatype pat
     | "wikidata", _ -> ExternalSearch (`Wikidata lpat, [])
     | _ -> True (* in case of undefined option *) in
-  match pre_constr with
-  | ExternalSearch (`Wikidata kwds, _) ->
-     Jsutils.Wikidata.ajax_entity_search
-       (String.concat "+" kwds) 20
-       (function
-	 | None ->
-	    k (MatchesAll kwds)
-	 | Some lq ->
-	    let lt = List.map (fun q -> Rdf.URI (Rdf.wikidata_entity q)) lq in
-	    k (ExternalSearch (`Wikidata kwds, lt)))					 
-  | _ -> k pre_constr
+  match new_constr with
+  | ExternalSearch ((`Wikidata kwds as new_s), _) ->
+     ( match current_constr with
+       | ExternalSearch (s, _) when s = new_s -> k None
+       | _ ->
+	  Jsutils.Wikidata.ajax_entity_search
+	    (String.concat "+" kwds) 20
+	    (function
+	      | None ->
+		 k (Some (MatchesAll kwds))
+	      | Some lq ->
+		 let lt = List.map (fun q -> Rdf.URI (Rdf.wikidata_entity q)) lq in
+		 k (Some (ExternalSearch (`Wikidata kwds, lt)))) )
+  | _ ->
+     if new_constr = current_constr
+     then k None
+     else k (Some new_constr)
     
 let option_of_constr =
   let open Lisql in
