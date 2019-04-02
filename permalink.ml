@@ -243,7 +243,7 @@ and print_constr = function
   | Between (s1,s2) -> print_bin "Between" (print_string s1) (print_string s2)
   | HasLang s -> print_un "HasLang" (print_string s)
   | HasDatatype s -> print_un "HasDatatype" (print_string s)
-  | ExternalSearch (s,lt) -> print_bin "ExternalSearch" (print_search s) (print_list print_term "ListTerm" lt)
+  | ExternalSearch (s,lt_opt) -> print_bin "ExternalSearch" (print_search s) (print_opt (print_list print_term "ListTerm") lt_opt)
 and print_search = function
   | `Wikidata kwds -> print_list print_string "Wikidata" kwds
 and print_term = function
@@ -457,7 +457,7 @@ and parse_constr ~version = parser
   | [< s1, s2 = parse_bin ~version "Between" parse_string parse_string >] -> Between (s1,s2)
   | [< s = parse_un ~version "HasLang" parse_string >] -> HasLang s
   | [< s = parse_un ~version "HasDatatype" parse_string >] -> HasDatatype s
-  | [< s, lt = parse_bin ~version "ExternalSearch" parse_search (parse_list parse_term "ListTerm") >] -> ExternalSearch (s,lt)
+  | [< s, lt_opt = parse_bin ~version "ExternalSearch" parse_search (parse_opt (parse_list parse_term "ListTerm")) >] -> ExternalSearch (s,lt_opt)
   | [<>] -> syntax_error "invalid constr"
 and parse_search ~version = parser
   | [< kwds = parse_list parse_string ~version "Wikidata" >] -> `Wikidata kwds

@@ -131,7 +131,7 @@ let make_new_constr (current_constr : Lisql.constr) op pat (k : Lisql.constr opt
     | "hasLang", pat::_ -> HasLang pat
     | "hasDatatype", [] -> HasDatatype ""
     | "hasDatatype", pat::_ -> HasDatatype pat
-    | "wikidata", _ -> ExternalSearch (`Wikidata lpat, [])
+    | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
     | _ -> True (* in case of undefined option *) in
   match new_constr with
   | ExternalSearch ((`Wikidata kwds as new_s), _) ->
@@ -140,12 +140,15 @@ let make_new_constr (current_constr : Lisql.constr) op pat (k : Lisql.constr opt
        | _ ->
 	  Jsutils.Wikidata.ajax_entity_search
 	    (String.concat "+" kwds) 20
-	    (function
-	      | None ->
-		 k (Some (MatchesAll kwds))
-	      | Some lq ->
-		 let lt = List.map (fun q -> Rdf.URI (Rdf.wikidata_entity q)) lq in
-		 k (Some (ExternalSearch (`Wikidata kwds, lt)))) )
+	    (fun lq_opt ->
+	     let lt_opt =
+	       match lq_opt with
+	       | None -> None
+	       | Some lq ->
+		  Some (List.map
+			  (fun q -> Rdf.URI (Rdf.wikidata_entity q))
+			  lq) in
+	     k (Some (ExternalSearch (new_s, lt_opt)))) )
   | _ ->
      if new_constr = current_constr
      then k None

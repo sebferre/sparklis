@@ -25,7 +25,7 @@ type constr =
   | Between of string * string
   | HasLang of string
   | HasDatatype of string
-  | ExternalSearch of search * Rdf.term list (* search service and query, results *)
+  | ExternalSearch of search * Rdf.term list option (* search service and query, results (None means no constraint, Some lt means one of lt *)
 
 let reset_search = function
   | `Wikidata _ -> `Wikidata ["..."]
@@ -42,7 +42,7 @@ let reset_constr : constr -> constr = function
   | Between _ -> Between ("...","...")
   | HasLang _ -> HasLang "..."
   | HasDatatype _ -> HasDatatype "..."
-  | ExternalSearch (s, _) -> ExternalSearch (reset_search s, [])
+  | ExternalSearch (s, _) -> ExternalSearch (reset_search s, None)
 
 (* LISQL modifiers *)
 

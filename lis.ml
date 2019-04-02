@@ -1377,7 +1377,7 @@ object (self)
 	HasDatatype "..." ] in
     let l_constr =
       if Rdf.config_wikidata_mode#value
-      then ExternalSearch (`Wikidata ["..."], []) :: l_constr
+      then ExternalSearch (`Wikidata ["..."], None) :: l_constr
       else l_constr in
     let l_constr =
       List.filter
@@ -1390,12 +1390,12 @@ object (self)
 
   method list_property_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in
-    [ MatchesAll ["..."];
-      MatchesAny ["..."] ]
+    [ MatchesAll ["..."; "..."];
+      MatchesAny ["..."; "..."] ]
 
   method list_modifier_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in
-    [ MatchesAll ["..."];
-      MatchesAny ["..."] ]
+    [ MatchesAll ["..."; "..."];
+      MatchesAny ["..."; "..."] ]
       
 end

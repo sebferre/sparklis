@@ -276,18 +276,21 @@ module Wikidata =
 	None
 
     let ajax_entity_search (query : string) (limit : int) (k : string list option -> unit) : unit =
-      firebug ("Wikidata search: " ^ query);
-      let query_url =
-	Printf.sprintf
-	  "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
-	  limit
-	  (Url.urlencode query) in
-      Lwt.ignore_result
-	(Lwt.bind
-	   (Jsonp.call_custom_url (*~timeout:0.5*)
-	      (fun name -> query_url ^ "&callback=" ^ name))
-	   (fun json ->
-	    k (entities_of_json json);
-	    Lwt.return ()))
+      if String.length query < 3
+      then k None
+      else
+	let _ = firebug ("Wikidata search: " ^ query) in
+	let query_url =
+	  Printf.sprintf
+	    "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
+	    limit
+	    (Url.urlencode query) in
+	Lwt.ignore_result
+	  (Lwt.bind
+	     (Jsonp.call_custom_url (*~timeout:0.5*)
+		(fun name -> query_url ^ "&callback=" ^ name))
+	     (fun json ->
+	      k (entities_of_json json);
+	      Lwt.return ()))
 	
   end

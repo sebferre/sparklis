@@ -223,7 +223,8 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
 	(Sparql.log_and
 	   [Sparql.expr_func "isLiteral" [t];
 	    Sparql.expr_regex (Sparql.expr_func "str" [Sparql.expr_func "datatype" [t]]) pat])
-    | ExternalSearch (_, lt) ->
+    | ExternalSearch (_, None) -> Sparql.True
+    | ExternalSearch (_, Some lt) ->
        Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
 
 let filter_constr_entity gv t c = filter_constr_gen (`Terms,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
@@ -241,7 +242,8 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) : Sp
   match c with
   | MatchesAll lpat when lpat<>[] -> aux_matches `All lpat
   | MatchesAny lpat when lpat<>[] -> aux_matches `Any lpat
-  | ExternalSearch (_, lt) -> Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
+  | ExternalSearch (_, Some lt) ->
+     Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
   | _ -> Sparql.Pattern (Sparql.something t)
   
 
