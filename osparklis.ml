@@ -851,35 +851,19 @@ object (self)
       jquery_from elt_li ".filterable-increment" (fun elt_incr ->
 	let str =
 	  match constr with
-	  | Lisql.HasLang _ | Lisql.HasDatatype _ -> to_string elt_incr##innerHTML (* TODO: extract proper lang/datatype part *)
+	  | Lisql.HasLang _
+	  | Lisql.HasDatatype _ ->
+	     to_string elt_incr##innerHTML (* TODO: extract proper lang/datatype part *)
 	  | _ ->
-	    Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
-	      (fun () -> to_string elt_incr##innerHTML)
-	      (fun elt -> to_string elt##innerHTML) in
-(*	  
-	  let s = Opt.case (elt_incr##querySelector(string ".classURI, .propURI, .URI, .Literal, .nodeID, .modifier"))
-	      (* only works if a single element *)
-	    (fun () -> to_string (elt_incr##innerHTML))
-	    (fun elt -> to_string (elt##innerHTML)) in
-	  Rdf.PlainLiteral (s, "") in
-*)
-(*
-	  let t =
-	    let textContent = elt_incr##textContent in (* ##textContent only available since js_of_ocaml v2.4 *)
-	    let text = Opt.case textContent (fun () -> "") to_string in
-	    Rdf.PlainLiteral (text, "") in
-*)
-(*
-	  let t =
-	    let incr = html_state#dico_incrs#get (to_string (elt_incr##id)) in
-	    match Lisql.term_of_increment incr with
-	      | Some t -> t
-	      | None ->
-		let s = Opt.case (elt_incr##querySelector(string ".modifier"))
-		  (fun () -> to_string (elt_incr##innerHTML))
-		  (fun elt -> to_string (elt##innerHTML)) in
-		Rdf.PlainLiteral (s, "") in
-*)
+	     if on_modifiers = Some true
+	     then
+	       Opt.case (elt_incr##textContent)
+			(fun () -> to_string elt_incr##innerHTML)
+			(fun s -> to_string s)
+	     else
+	       Opt.case (elt_incr##querySelector(string ".function, .classURI, .propURI, .naryURI, .URI, .Literal, .nodeID, .modifier"))
+			(fun () -> to_string elt_incr##innerHTML)
+			(fun elt -> to_string elt##innerHTML) in
 	if matcher str
 	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
 	else elt_li##style##display <- string "none"))
