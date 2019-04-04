@@ -342,10 +342,11 @@ let wikidata_lat_long (x : _ any_term) (lat : _ any_var) (long : _ any_var) : pa
 	(path_seq (qname "p:P625") (qname "psv:P625"))
 	(bnode_triples
 	   [ qname "wikibase:geoLatitude", lat;
-	     qname "wikibase:geoLongitude", long ]);
+	     qname "wikibase:geoLongitude", long ]) ]
+    (* no more necessary it seems
       filter (log_and
 		[ expr_comp "=" (expr_func "datatype" [lat]) (qname "xsd:decimal");
-		  expr_comp "=" (expr_func "datatype" [long]) (qname "xsd:decimal") ]) ]
+		  expr_comp "=" (expr_func "datatype" [long]) (qname "xsd:decimal") ]) ] *)
 
 							     
 (* formulas *)

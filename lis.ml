@@ -991,7 +991,7 @@ object (self)
 	"SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^ sparql_froms ^ "WHERE { " ^
 	  (Sparql.(rdf_type (var "x") (var "c")) :> string) ^
 	    (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
-	      " } GROUP BY ?c ORDER BY DESC(?n) LIMIT " ^ string_of_int config_max_classes#value in
+	      " } GROUP BY ?c ORDER BY DESC(?n) LIMIT 1000" (*^ string_of_int config_max_classes#value*) in
       Sparql_endpoint.ajax_list_in
 	[elt] ajax_pool endpoint [sparql_class]
 	(function
