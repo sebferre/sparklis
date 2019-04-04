@@ -283,6 +283,7 @@ module Wikidata =
 	let query_url =
 	  Printf.sprintf
 	    "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
+	    (*"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=%d&search=%s" (* type=item|property *) NOTE: less flexible search *)
 	    limit
 	    (Url.urlencode query) in
 	Lwt.ignore_result

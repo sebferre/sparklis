@@ -181,7 +181,7 @@ let nested_hashtbl_of_results_varterm_list
     | Rdf.Var v ->
        if List.mem_assoc v results.vars
        then
-	 let i = List.assoc v results.vars in
+	 let i = List.assoc v results.vars in (* TODO: factorize this access across bindings *)
 	 (fun binding -> binding.(i))
        else (fun binding -> None)
     | t ->
@@ -306,30 +306,42 @@ let nested_index_of_results_varterm_list ~(mapfilter : Rdf.term option -> 'a opt
     | None -> empty_index ()
     end		      
 
-let index_of_results_2columns (var_x : Rdf.var) (var_count : Rdf.var) results : Rdf.term int_index =
+let index_of_results_varterm_list_count (keys_vt : Rdf.term list) (var_count : Rdf.var) results : Rdf.term option list int_index =
   let open Sparql_endpoint in
+  let get vt : binding -> Rdf.term option =
+    match vt with
+    | Rdf.Var v ->
+       if List.mem_assoc v results.vars
+       then
+	 let i = List.assoc v results.vars in
+	 (fun binding -> try binding.(i) with _ -> assert false)
+       else (fun binding -> None)
+    | t ->
+       (fun binding -> Some t) in
+  let get_keys =
+    (fun binding ->
+     List.map
+       (fun vt -> get vt binding)
+       keys_vt) in
   let index = new int_index in
   try
-    let i_x = List.assoc var_x results.vars in
     let i_count = try List.assoc var_count results.vars with _ -> -1 in
     List.iter
       (fun binding ->
-	match binding.(i_x) with
-	| None -> ()
-	| Some x ->
-	  let count =
-	    if i_count < 0
-	    then 1
-	    else
-	      match binding.(i_count) with
-	      | Some (Rdf.Number (f,s,dt)) -> (try int_of_string s with _ -> 0)
-	      | Some (Rdf.TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 0)
-	      | _ -> 0 in
-	  index#add (x, count))
+       let keys = get_keys binding in
+       let count =
+	 if i_count < 0
+	 then 1
+	 else
+	   match binding.(i_count) with
+	   | Some (Rdf.Number (f,s,dt)) -> (try int_of_string s with _ -> 1)
+	   | Some (Rdf.TypedLiteral (s,dt)) -> (try int_of_string s with _ -> 1)
+	   | _ -> 1 in
+       index#add (keys, count))
       results.bindings;
     index
   with Not_found ->
-    Firebug.console##log(string ("index_of_results_2columns: missing variables " ^ var_x ^ ", " ^ var_count));
+    Firebug.console##log(string ("index_of_results_varterm_list_count: missing variables"));
     index
 
 (* extraction of the extension and indexes *)
@@ -948,6 +960,29 @@ object (self)
 	  | _ -> assert false)
 	(fun _ -> ajax_extent ()) (* looking at facts *)
     in
+    let process_wikidata results_class =
+      let max_value = None in
+      let partial = results_class.Sparql_endpoint.length = config_max_classes#value in
+      let unit = `Entities in
+      let int_index_class = index_of_results_varterm_list_count [Rdf.Var "c"] "n" results_class in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
+      int_index_class#iter
+	(fun (lt, count) ->
+	 List.iter
+	   (function
+	     | Some (Rdf.URI uri) ->
+		Ontology.enqueue_class uri;
+		Lexicon.enqueue_class uri
+	     | _ -> ())
+	   lt;
+	 let freq = { value=count; max_value; partial=false; unit } in
+	 Lisql2sparql.WhichClass.increments_of_terms ~init:true lt |>
+	   List.iter
+	     (fun incr -> incr_index#add (incr, Some freq)));
+      Ontology.sync_concepts (fun () ->
+	Lexicon.sync_concepts (fun () ->
+	    k ~partial incr_index))
+    in
     let ajax_wikidata () =
       let sparql_genvar = new Lisql2sparql.genvar in
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
@@ -956,17 +991,17 @@ object (self)
 	| None -> gp
 	| Some _ ->  Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
       in      
-      let sparql_class = (* use (List.hd Lisql2sparql.WhichClass.pattern_vars = "c") as result variable *)
-	"SELECT DISTINCT ?c " ^ sparql_froms ^ "WHERE { " ^
+      let sparql_class =
+	"SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^ sparql_froms ^ "WHERE { " ^
 	  (graph_opt (Sparql.(rdf_type (var "x") (var "c"))) :> string) ^
 	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
-	  " } GROUP BY ?c ORDER BY DESC(COUNT(?x)) LIMIT " ^ string_of_int config_max_classes#value in
+	  " } GROUP BY ?c ORDER BY DESC(?n) LIMIT " ^ string_of_int config_max_classes#value in
       Sparql_endpoint.ajax_list_in
 	[elt] ajax_pool endpoint [sparql_class]
 	(function
-	  | [results_class] -> process results_class Sparql_endpoint.empty_results Sparql_endpoint.empty_results
+	  | [results_class] -> process_wikidata results_class
 	  | _ -> assert false)
-	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	(fun code -> process_wikidata Sparql_endpoint.empty_results)
     in
     if Rdf.config_wikidata_mode#value
     then ajax_wikidata ()
