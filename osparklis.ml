@@ -298,7 +298,7 @@ object (self)
   val mutable limit = 10
 
   val mutable term_constr = Lisql.True
-  val mutable property_constr = Lisql.MatchesAll []
+  val mutable property_constr = Lisql.True
 
   method term_constr = term_constr
   method property_constr = property_constr
@@ -902,8 +902,11 @@ object (self)
 
   method set_property_constr constr =
     let to_refresh =
-      if equivalent_constr constr property_constr then false
-      else if subsumed_constr constr property_constr then not refreshing_properties
+      if Rdf.config_wikidata_mode#value then false
+	(* NOTE: on Wikidata, constraints don't work with classes and properties *)
+      else if equivalent_constr constr property_constr then false
+      else if subsumed_constr constr property_constr then
+	not refreshing_properties
       else begin self#abort_all_ajax; true end in	
     property_constr <- constr;
     if to_refresh (* not refreshing_properties && constr <> property_constr *)

@@ -986,16 +986,12 @@ object (self)
     let ajax_wikidata () =
       let sparql_genvar = new Lisql2sparql.genvar in
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
-      let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
-	match s_sparql.Lisql2sparql.focus_graph_opt with
-	| None -> gp
-	| Some _ ->  Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
-      in      
       let sparql_class =
+	(* NOTE: pat+constraint does not work on wikidata, don't know why *)
 	"SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^ sparql_froms ^ "WHERE { " ^
-	  (graph_opt (Sparql.(rdf_type (var "x") (var "c"))) :> string) ^
-	  (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
-	  " } GROUP BY ?c ORDER BY DESC(?n) LIMIT " ^ string_of_int config_max_classes#value in
+	  (Sparql.(rdf_type (var "x") (var "c")) :> string) ^
+	    (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
+	      " } GROUP BY ?c ORDER BY DESC(?n) LIMIT " ^ string_of_int config_max_classes#value in
       Sparql_endpoint.ajax_list_in
 	[elt] ajax_pool endpoint [sparql_class]
 	(function
