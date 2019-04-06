@@ -138,8 +138,10 @@ let make_new_constr (current_constr : Lisql.constr) op pat (k : Lisql.constr opt
      ( match current_constr with
        | ExternalSearch (s, _) when s = new_s -> k None
        | _ ->
+	  let query = String.concat "+" kwds in
+	  let limit = 20 in
 	  Jsutils.Wikidata.ajax_entity_search
-	    (String.concat "+" kwds) 20
+	    query limit
 	    (fun lq_opt ->
 	     let lt_opt =
 	       match lq_opt with
