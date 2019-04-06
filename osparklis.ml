@@ -49,24 +49,18 @@ let rec get_constr
 	  (input_changed : bool ref) (* flag to know when some input was blocked by getting_constr=true *)
 	  (select : Dom_html.selectElement t) (input : Dom_html.inputElement t)
 	  (k : Lisql.constr -> unit) : unit =
-  let op = to_string (select##value) in
-  let pat = to_string (input##value) in
   input_changed := false;
-  try
-    Html.make_new_constr
-      current_constr
-      op pat
-      (fun new_constr_opt ->
-       let new_constr =
-	 match new_constr_opt with
-	 | Some new_constr -> k new_constr; new_constr
-	 | None -> current_constr in (* do nothing when the constraint has not changed *)
-       if !input_changed
-       then get_constr new_constr getting_constr input_changed select input k
-       else getting_constr := false)
-  with Invalid_argument msg ->
-    Jsutils.alert ("Invalid filter: " ^ msg);
-    getting_constr := false
+  Html.make_new_constr
+    current_constr
+    select input
+    (fun new_constr_opt ->
+     let new_constr =
+       match new_constr_opt with
+       | Some new_constr -> k new_constr; new_constr
+       | None -> current_constr in (* do nothing when the constraint has not changed *)
+     if !input_changed
+     then get_constr new_constr getting_constr input_changed select input k
+     else getting_constr := false)
 
 let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
 let matches s re = Regexp.search re s 0 <> None

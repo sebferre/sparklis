@@ -91,70 +91,77 @@ let string_is_float =
   let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
   (fun s -> Regexp.string_match re s 0 <> None)
 
-let make_new_constr (current_constr : Lisql.constr) op pat (k : Lisql.constr option -> unit) : unit =
+let make_new_constr (current_constr : Lisql.constr) select input (k : Lisql.constr option -> unit) : unit =
   (* calls [k] on [None] if the new contraint is not different from [current_constr] *)
   (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
+  let op = to_string (select##value) in
+  let pat = to_string (input##value) in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
-  let new_constr =
-    match op, lpat with
-    | "true", _ -> True
-    | "matchesAll", _ -> MatchesAll lpat
-    | "matchesAny", _ -> MatchesAny lpat
-    | "after", [] -> After ""
-    | "after", pat::_ -> After pat
-    | "before", [] -> Before ""
-    | "before", pat::_ -> Before pat
-    | "fromTo", [] -> FromTo ("","")
-    | "fromTo", pat1::[] -> FromTo (pat1, "")
-    | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
-    | "higherThan", [] -> HigherThan ""
-    | "higherThan", pat::_ ->
-       if string_is_float pat 
-       then HigherThan pat
-       else invalid_arg "a numeric value is expected"
-    | "lowerThan", [] -> LowerThan ""
-    | "lowerThan", pat::_ ->
-       if string_is_float pat
-       then LowerThan pat
-       else invalid_arg "a numeric value is expected"
-    | "between", [] -> Between ("","")
-    | "between", pat::[] ->
-       if string_is_float pat
-       then Between (pat, "") (* HigherThan pat *)
-       else invalid_arg "a numeric value is expected"
-    | "between", pat1::pat2::_ ->
-       if string_is_float pat1 && string_is_float pat2
-       then Between (pat1, pat2)
-       else invalid_arg "two numeric values are expected"
-    | "hasLang", [] -> HasLang ""
-    | "hasLang", pat::_ -> HasLang pat
-    | "hasDatatype", [] -> HasDatatype ""
-    | "hasDatatype", pat::_ -> HasDatatype pat
-    | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
-    | _ -> True (* in case of undefined option *) in
-  match new_constr with
-  | ExternalSearch ((`Wikidata kwds as new_s), _) ->
-     ( match current_constr with
-       | ExternalSearch (s, _) when s = new_s -> k None
-       | _ ->
-	  let query = String.concat "+" kwds in
-	  let limit = 20 in
-	  Jsutils.Wikidata.ajax_entity_search
-	    query limit
-	    (fun lq_opt ->
-	     let lt_opt =
-	       match lq_opt with
-	       | None -> None
-	       | Some lq ->
-		  Some (List.map
-			  (fun q -> Rdf.URI (Rdf.wikidata_entity q))
-			  lq) in
-	     k (Some (ExternalSearch (new_s, lt_opt)))) )
-  | _ ->
-     if new_constr = current_constr
-     then k None
-     else k (Some new_constr)
+  try
+    let new_constr =
+      match op, lpat with
+      | "true", _ -> True
+      | "matchesAll", _ -> MatchesAll lpat
+      | "matchesAny", _ -> MatchesAny lpat
+      | "after", [] -> After ""
+      | "after", pat::_ -> After pat
+      | "before", [] -> Before ""
+      | "before", pat::_ -> Before pat
+      | "fromTo", [] -> FromTo ("","")
+      | "fromTo", pat1::[] -> FromTo (pat1, "")
+      | "fromTo", pat1::pat2::_ -> FromTo (pat1,pat2)
+      | "higherThan", [] -> HigherThan ""
+      | "higherThan", pat::_ ->
+	 if string_is_float pat 
+	 then HigherThan pat
+	 else invalid_arg "a numeric value is expected"
+      | "lowerThan", [] -> LowerThan ""
+      | "lowerThan", pat::_ ->
+	 if string_is_float pat
+	 then LowerThan pat
+	 else invalid_arg "a numeric value is expected"
+      | "between", [] -> Between ("","")
+      | "between", pat::[] ->
+	 if string_is_float pat
+	 then Between (pat, "") (* HigherThan pat *)
+	 else invalid_arg "a numeric value is expected"
+      | "between", pat1::pat2::_ ->
+	 if string_is_float pat1 && string_is_float pat2
+	 then Between (pat1, pat2)
+	 else invalid_arg "two numeric values are expected"
+      | "hasLang", [] -> HasLang ""
+      | "hasLang", pat::_ -> HasLang pat
+      | "hasDatatype", [] -> HasDatatype ""
+      | "hasDatatype", pat::_ -> HasDatatype pat
+      | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
+      | _ -> True (* in case of undefined option *) in
+    input##style##color <- string "black";
+    match new_constr with
+    | ExternalSearch ((`Wikidata kwds as new_s), _) ->
+       ( match current_constr with
+	 | ExternalSearch (s, _) when s = new_s -> k None
+	 | _ ->
+	    let query = String.concat "+" kwds in
+	    let limit = 20 in
+	    Jsutils.Wikidata.ajax_entity_search
+	      query limit
+	      (fun lq_opt ->
+	       let lt_opt =
+		 match lq_opt with
+		 | None -> None
+		 | Some lq ->
+		    Some (List.map
+			    (fun q -> Rdf.URI (Rdf.wikidata_entity q))
+			    lq) in
+	       k (Some (ExternalSearch (new_s, lt_opt)))) )
+    | _ ->
+       if new_constr = current_constr
+       then k None
+       else k (Some new_constr)
+  with Invalid_argument _msg ->
+    input##style##color <- string "red";
+    k None
     
 let option_of_constr =
   let open Lisql in
