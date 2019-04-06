@@ -906,19 +906,6 @@ object (self)
       self#refresh_property_increments
       end
 
-  method pattern_changed
-    ~(select : Dom_html.selectElement t)
-    ~(input : Dom_html.inputElement t)
-    ~(current_constr : unit -> Lisql.constr)
-    (k : Lisql.constr -> Lisql.constr -> unit)
-    =
-    let current_constr = current_constr () in
-    self#get_constr
-      current_constr
-      select input
-      (fun new_constr ->
-       k current_constr new_constr)
-
   method set_limit n =
     limit <- n;
     self#refresh_extension
@@ -1201,9 +1188,12 @@ let initialize endpoint focus =
 	  jquery_input sel_input (fun input ->
 	      (oninput
 		 (fun input ev ->
-		  history#present#pattern_changed
-		    ~select ~input
-		    ~current_constr k)
+		  let current_constr = current_constr () in
+		  history#present#get_constr
+		    current_constr
+		    select input
+		    (fun new_constr ->
+		     k current_constr new_constr))
 		 input))))
       [("#select-terms", "#pattern-terms",
 	(fun () -> history#present#term_constr),
