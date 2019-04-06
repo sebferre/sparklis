@@ -252,7 +252,7 @@ let results_of_json s_json =
 
 let start_progress elt =  (* setting progress cursor on 'elt' *)
   elt##style##cursor <- string "progress";
-  elt##style##opacity <- def (string "0.5")
+  elt##style##opacity <- def (string "0.7")
 let end_progress elt = (* removing progress cursor on 'elt' *)
   elt##style##cursor <- string "default";
   elt##style##opacity <- def (string "1")

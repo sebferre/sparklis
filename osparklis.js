@@ -3635,7 +3635,7 @@ var
 v=f;var
 p=v}var
 k=p}return I(i,d)[d+1]=k},d);return[0,a[1]+1|0,[0,i,a[2]]]},UF,p),q=at(j[2]),e=[0,g,h,j[1],q];return e}catch(f){f=i(f);fT.log(lT(f).toString());return c7}}function
-UQ(a){a.style.cursor="progress";return a.style.opacity="0.5"}function
+UQ(a){a.style.cursor="progress";return a.style.opacity="0.7"}function
 xg(a){a.style.cursor="default";return a.style.opacity="1"}var
 qw=a4(UR,function(g){var
 a=aR(g,Uf,Ug),c=a[7],d=a[8],e=a[9],b=a[1],f=a[2],h=a[3],i=a[4],j=a[5],l=a[6];function
