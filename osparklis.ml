@@ -43,6 +43,31 @@ let rec string_of_delta =
 				 
 (* constraint compilation *)
 
+let rec get_constr
+	  (current_constr : Lisql.constr)
+	  (getting_constr : bool ref)  (* flag to avoid parallel run of [get_constr] *)
+	  (input_changed : bool ref) (* flag to know when some input was blocked by getting_constr=true *)
+	  (select : Dom_html.selectElement t) (input : Dom_html.inputElement t)
+	  (k : Lisql.constr -> unit) : unit =
+  let op = to_string (select##value) in
+  let pat = to_string (input##value) in
+  input_changed := false;
+  try
+    Html.make_new_constr
+      current_constr
+      op pat
+      (fun new_constr_opt ->
+       let new_constr =
+	 match new_constr_opt with
+	 | Some new_constr -> k new_constr; new_constr
+	 | None -> current_constr in (* do nothing when the constraint has not changed *)
+       if !input_changed
+       then get_constr new_constr getting_constr input_changed select input k
+       else getting_constr := false)
+  with Invalid_argument msg ->
+    Jsutils.alert ("Invalid filter: " ^ msg);
+    getting_constr := false
+
 let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
 let matches s re = Regexp.search re s 0 <> None
 let leq s1 s2 = try (float_of_string s1) <= (float_of_string s2) with _ -> false
@@ -394,7 +419,7 @@ object (self)
 	       (fun elt ->
 		elt##innerHTML <- string html_focus_ng)
 
-  method private refresh_constrs =
+  method private refresh_constrs term_constr property_constr =
     List.iter
       (fun (sel_select, sel_input, constr, get_list_constraints) ->
 	jquery_select sel_select (fun select ->
@@ -525,39 +550,9 @@ object (self)
 	    end))
       end)
 
-  val mutable getting_constr = false
-  val mutable unprocessed_input_change = false
-  (* flag to avoid parallel run of [get_constr] *)
-  method get_constr (current_constr : Lisql.constr) (select : Dom_html.selectElement t) (input : Dom_html.inputElement t) (k : Lisql.constr -> unit) : unit =
-  if getting_constr then
-    unprocessed_input_change <- true
-  else
-    begin
-      getting_constr <- true;
-      let op = to_string (select##value) in
-      let pat = to_string (input##value) in
-      try
-	Html.make_new_constr
-	  current_constr
-	  op pat
-	  (fun constr_opt ->
-	   getting_constr <- false;
-	   let new_constr =
-	     match constr_opt with
-	     | Some constr -> k constr; constr
-	     | None -> current_constr in (* do nothing when the constraint has not changed *)
-	   if unprocessed_input_change then
-	     begin
-	       unprocessed_input_change <- false;
-	       self#get_constr new_constr select input k
-	     end)
-      with Invalid_argument msg ->
-	getting_constr <- false;
-	Jsutils.alert ("Invalid filter: " ^ msg)
-    end
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
-  method private refresh_term_increments (* _gen ajax_index *) =
+  method private refresh_term_increments current_constr =
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       (* retrieving input value for input increments *)
@@ -598,7 +593,6 @@ object (self)
        jquery "#list-terms" (fun elt_list ->
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
 	jquery_input "#input-inverse-terms" (fun input_inverse ->
-          let current_constr = term_constr in
 	  lis#ajax_index_terms_inputs_ids (norm_constr current_constr) [elt_list]
 	    (fun ~partial index ->
 	      input_inverse##checked <- bool inverse_terms;
@@ -631,7 +625,7 @@ object (self)
 	      self#refresh_new_term_constr current_constr new_constr)))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
-  method private refresh_property_increments (*_gen process_index*) =
+  method private refresh_property_increments current_constr =
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string (elt##id)) in
       (* retrieving selected increments for selection *)
@@ -667,7 +661,6 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
-           let current_constr = property_constr in
 	   lis#ajax_index_properties (norm_constr current_constr) elt_list
 	     (fun ~partial index ->
 	      input_inverse##checked <- bool inverse_properties;
@@ -793,6 +786,8 @@ object (self)
     self#refresh_lisql;
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
+	let term_constr = term_constr in (* BECAUSE state term_constr can change any time *)
+	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  ~k_sparql:self#refresh_sparql
 	  ~k_results:
@@ -801,27 +796,28 @@ object (self)
 	      (*Jsutils.yasgui#set_response "";
 	      elt_res##style##display <- string "none";*)
 	      self#refresh_extension;
-	      self#refresh_constrs;
+	      self#refresh_constrs term_constr property_constr;
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      self#refresh_modifier_increments;
-	      self#refresh_property_increments;
-	      self#refresh_term_increments;
+	      self#refresh_property_increments property_constr;
+	      self#refresh_term_increments term_constr;
 	      self#refresh_focus (* after increments, because they have `FocusName words *)
 	  | Some sparql ->
 	      self#refresh_extension;
-	      self#refresh_constrs;
+	      self#refresh_constrs term_constr property_constr;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
 	      self#refresh_modifier_increments;
-	      self#refresh_property_increments;
-	      self#refresh_term_increments;
+	      self#refresh_property_increments property_constr;
+	      self#refresh_term_increments term_constr;
 	      self#refresh_focus)))
 
-  method refresh_for_term_constr =
+  method refresh_for_term_constr term_constr =
     (* same as method refresh, but assuming same query and focus *)
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
+	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
 	  ~k_sparql:self#refresh_sparql
 	  ~k_results:
@@ -831,13 +827,13 @@ object (self)
 	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
 	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
 	      self#refresh_modifier_increments;
-	      self#refresh_property_increments;
-	      self#refresh_term_increments
+	      self#refresh_property_increments property_constr;
+	      self#refresh_term_increments term_constr
 	  | Some sparql ->
 	      self#refresh_extension;
 	      self#refresh_modifier_increments;
-	      self#refresh_property_increments;
-	      self#refresh_term_increments)))
+	      self#refresh_property_increments property_constr;
+	      self#refresh_term_increments term_constr)))
 
   method private get_more_results (k : unit -> unit) =
     jquery "#list-results"
@@ -886,7 +882,7 @@ object (self)
     if to_refresh then begin (* not refreshing_terms && constr <> term_constr *)
       refreshing_terms <- true;
       self#save_ui_state;
-      self#refresh_for_term_constr
+      self#refresh_for_term_constr new_constr
       end
 
   method refresh_new_property_constr current_constr new_constr =
@@ -903,7 +899,7 @@ object (self)
     if to_refresh then begin (* not refreshing_properties && constr <> property_constr *)
       refreshing_properties <- true;
       self#save_ui_state;
-      self#refresh_property_increments
+      self#refresh_property_increments new_constr
       end
 
   method set_limit n =
@@ -1013,7 +1009,7 @@ object (self)
        permalink = permalink_of_place lis;
        offset = 0;
        term_constr = Lisql.True (*Lisql.MatchesAll []*);
-       property_constr = Lisql.MatchesAll [];
+       property_constr = Lisql.True (*Lisql.MatchesAll []*);
        (* keeping same document scroll *)
        property_scroll = 0;
        term_scroll = 0;
@@ -1183,29 +1179,41 @@ let initialize endpoint focus =
     jquery_input "#pattern-terms" (onenter (fun input ev ->
       jquery_click "#button-terms"));
     List.iter
-      (fun (sel_select, sel_input, current_constr, k) ->
+      (fun (getting_constr, input_changed,
+	    sel_select, sel_input,
+	    current_constr, k) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
 	      (oninput
 		 (fun input ev ->
-		  let current_constr = current_constr () in
-		  history#present#get_constr
-		    current_constr
-		    select input
-		    (fun new_constr ->
-		     k current_constr new_constr))
+		  if !getting_constr
+		  then input_changed := true
+		  else
+		    begin
+		      getting_constr := true;
+		      let current_constr = current_constr () in
+		      get_constr
+			current_constr
+			getting_constr input_changed
+			select input
+			(fun new_constr ->
+			 k current_constr new_constr)
+		    end)
 		 input))))
-      [("#select-terms", "#pattern-terms",
+      [(ref false, ref false,
+	"#select-terms", "#pattern-terms",
 	(fun () -> history#present#term_constr),
 	(fun current_constr new_constr ->
 	 history#present#set_term_constr new_constr;
 	 history#present#refresh_new_term_constr current_constr new_constr));
-       ("#select-properties", "#pattern-properties",
+       (ref false, ref false,
+	"#select-properties", "#pattern-properties",
 	(fun () -> history#present#property_constr),
 	(fun current_constr new_constr ->
 	 history#present#set_property_constr new_constr;
 	 history#present#refresh_new_property_constr current_constr new_constr));
-       ("#select-modifiers", "#pattern-modifiers",
+       (ref false, ref false,
+	"#select-modifiers", "#pattern-modifiers",
 	(fun () -> Lisql.True),
 	(fun current_constr new_constr -> ()))];
 
