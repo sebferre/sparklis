@@ -883,8 +883,9 @@ object (self)
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
       let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
-	| None -> gp
-	| Some _ ->  Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+	| Some _ when not focus_graph_index#is_empty ->
+	   Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+	| _ -> gp
       in
       let make_sparql lv (pat : Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
@@ -1122,6 +1123,7 @@ object (self)
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
     let ajax_intent () =
+      (* focus_term_index is not empty *)
       let max_value_term, max_value_arg = None, None in
       let partial = self#partial_results in
       let unit = `Results in
@@ -1165,11 +1167,13 @@ object (self)
 	    (fun code -> process ~max_value_term ~max_value_arg ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
     in
     let ajax_extent () =
+      (* focus_term_index is not empty *)
       let sparql_genvar = new Lisql2sparql.genvar in
       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
-	| None -> gp
-	| Some _ ->  Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+	| Some _ when not graph_index#is_empty ->
+	   Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+	| _ -> gp
       in
       let nb_samples_term, samples_term =
 	focus_term_index#sample_list config_max_increment_samples#value in
@@ -1180,7 +1184,7 @@ object (self)
 	assert (lv <> []);
 	let main_v = List.hd lv in
 	let projections = List.map (fun v -> `Bare, v) lv in
-	let gp = Sparql.union
+	let gp = Sparql.union (* cannot fail because sample<>[] because focus_term_index is not empty *)
 		   (List.map
 		      (fun (key,(_, graph_index)) ->
 		       let pat = graph_opt graph_index (make_pattern key) in
