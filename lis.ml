@@ -187,14 +187,14 @@ let nested_hashtbl_of_results_varterm_list
     | t ->
        (fun binding -> Some t) in
   let get_keys =
-    (fun binding ->
-     List.map
-       (fun vt -> get vt binding)
-       keys_vt) in
+    let l_get_key = List.map get keys_vt in
+    (fun binding -> List.map ((|>) binding) l_get_key) in
   let get_nested =
     match nested_vt_opt with
     | None -> (fun binding -> None)
-    | Some nested_vt -> (fun binding -> get nested_vt binding)
+    | Some nested_vt ->
+       let get_nested = get nested_vt in
+       (fun binding -> get_nested binding)
   in
   let ht = Hashtbl.create 1000 in
   List.iter
@@ -319,10 +319,8 @@ let index_of_results_varterm_list_count (keys_vt : Rdf.term list) (var_count : R
     | t ->
        (fun binding -> Some t) in
   let get_keys =
-    (fun binding ->
-     List.map
-       (fun vt -> get vt binding)
-       keys_vt) in
+    let l_get_key = List.map get keys_vt in
+    (fun binding -> List.map ((|>) binding) l_get_key) in
   let index = new int_index in
   try
     let i_count = try List.assoc var_count results.vars with _ -> -1 in
