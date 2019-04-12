@@ -1,5 +1,11 @@
 # description of main changes that impact interface with outside
 
+2019-04-12
+- lis.ml: methods computing increments have their callback expecting *optional* index
+  - callbacks are called on None
+    - in case the AJAX calls failed (instead of called on empty indexes as before)
+    - in case increments cannot be computed for some reason (ex: constraints on properties in wikidata)
+
 2019-02-09
 - new datatype Lisql.delta to represent new entity ids when inserting increments
   - Lisql.insert_increment and Lisql.delete_focus now return (optionally) not only a new focus but also a delta

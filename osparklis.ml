@@ -588,7 +588,9 @@ object (self)
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
 	jquery_input "#input-inverse-terms" (fun input_inverse ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr current_constr) [elt_list]
-	    (fun ~partial index ->
+	   (fun ~partial -> function
+	    | None -> ()
+	    | Some index ->
 	      input_inverse##checked <- bool inverse_terms;
 	      sel_sorting##value <- string sorting_terms;
 	      let html_sel, html_list, count =
@@ -656,7 +658,9 @@ object (self)
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
 	   lis#ajax_index_properties (norm_constr current_constr) elt_list
-	     (fun ~partial index ->
+	    (fun ~partial -> function
+	    | None -> ()
+	    | Some index ->
 	      input_inverse##checked <- bool inverse_properties;
 	      sel_sorting##value <- string sorting_properties;
 	      let html_sel, html_list, count =

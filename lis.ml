@@ -707,7 +707,7 @@ object (self)
 	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
       let max_value = None in
@@ -725,7 +725,7 @@ object (self)
 	(fun () ->
 	 term_hierarchy#sync
 	   (fun () ->
-	    k ~partial incr_index))
+	    k ~partial (Some incr_index)))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
@@ -736,11 +736,11 @@ object (self)
 	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
-      (fun code -> process Sparql_endpoint.empty_results)
+      (fun code -> k ~partial:true None)
 
-  method ajax_index_terms_inputs_ids constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method ajax_index_terms_inputs_ids constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     if focus_descr#term = `Undefined then
-      k ~partial:false (new incr_freq_index)
+      k ~partial:false (Some (new incr_freq_index))
     else if focus_descr#unconstrained then
       self#ajax_index_terms_init constr elt k
     else begin
@@ -818,10 +818,10 @@ object (self)
 	(fun () ->
 	 term_hierarchy#sync
 	   (fun () ->
-	    k ~partial incr_index))
+	    k ~partial (Some incr_index)))
       end
 
-  method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     let process results_class results_prop results_pred =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -876,7 +876,7 @@ object (self)
 		List.iter incr_index#remove));
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
-	    k ~partial incr_index))
+	    k ~partial (Some incr_index)))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -919,7 +919,7 @@ object (self)
 	(function
 	| [results_class; results_prop; results_pred] -> process results_class results_prop results_pred
 	| _ -> assert false)
-	(fun code -> process Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	(fun code -> k ~partial:true None)
     in
     let ajax_intent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -980,7 +980,7 @@ object (self)
 	     (fun incr -> incr_index#add (incr, Some freq)));
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
-	    k ~partial incr_index))
+	    k ~partial (Some incr_index)))
     in
     let ajax_wikidata () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -996,7 +996,7 @@ object (self)
 	(function
 	  | [results_class] -> process_wikidata results_class
 	  | _ -> assert false)
-	(fun code -> process_wikidata Sparql_endpoint.empty_results)
+	(fun code -> k ~partial:true None)
     in
     if Rdf.config_wikidata_mode#value
     then ajax_wikidata ()
@@ -1005,9 +1005,9 @@ object (self)
       then ajax_intent ()
       else ajax_extent ()
 
-  method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index -> unit) =
+  method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
-      k ~partial:false (new incr_freq_index) (* only constraints on aggregations (HAVING clause) *)
+      k ~partial:false (Some (new incr_freq_index)) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_index_properties_init constr elt k
     else begin
@@ -1118,7 +1118,7 @@ object (self)
 	[Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
-	  k ~partial incr_index))
+	  k ~partial (Some incr_index)))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1164,7 +1164,7 @@ object (self)
 	      | [results_class; results_prop; results_pred; results_arg] ->
 		 process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
 	      | _ -> assert false)
-	    (fun code -> process ~max_value_term ~max_value_arg ~partial ~unit Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results Sparql_endpoint.empty_results)
+	    (fun code -> k ~partial:true None)
     in
     let ajax_extent () =
       (* focus_term_index is not empty *)
