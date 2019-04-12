@@ -980,23 +980,67 @@ object (self)
 	     (fun incr -> incr_index#add (incr, Some freq)));
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
-	    k ~partial (Some incr_index)))
+	  k ~partial (Some incr_index))) in
+    let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
+      let freq = { value=1; max_value=None; partial=true; unit=`Entities } in
+      let incr_index = new incr_freq_tree_index term_hierarchy in
+      let open Sparql_endpoint in
+      ( match results_class.bindings with
+	| binding::_ -> (* LIMIT 1 => at most one binding *)
+	   List.iter2
+	     (fun x t ->
+	      try
+		let pos = List.assoc x results_class.vars in
+		match t, binding.(pos) with
+		| Rdf.URI uri, Some _ -> (* if some instance was found for t *)
+		   Ontology.enqueue_class uri;
+		   Lexicon.enqueue_class uri;
+		   Lisql2sparql.WhichClass.increments_of_terms ~init:true [Some t] |>
+		     List.iter
+		       (fun incr -> incr_index#add (incr, Some freq))
+		| _ -> ()
+	      with Not_found -> assert false)
+	     lx lt
+	| _ -> () );
+      Ontology.sync_concepts (fun () ->
+	Lexicon.sync_concepts (fun () ->
+	  k ~partial:true (Some incr_index)))
     in
     let ajax_wikidata () =
-      let sparql_genvar = new Lisql2sparql.genvar in
+      (* NOTE: pat+constraint does not work on wikidata, don't know why *)
+      (*let sparql_genvar = new Lisql2sparql.genvar in*)
       let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
-      let sparql_class =
-	(* NOTE: pat+constraint does not work on wikidata, don't know why *)
-	"SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^ sparql_froms ^ "WHERE { " ^
-	  (Sparql.(rdf_type (var "x") (var "c")) :> string) ^
-	    (Sparql.pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (Sparql.var "c") constr) : Sparql.pattern :> string) ^
-	      " } GROUP BY ?c ORDER BY DESC(?n) LIMIT 1000" (*^ string_of_int config_max_classes#value*) in
-      Sparql_endpoint.ajax_list_in
-	[elt] ajax_pool endpoint [sparql_class]
-	(function
-	  | [results_class] -> process_wikidata results_class
-	  | _ -> assert false)
-	(fun code -> k ~partial:true None)
+      let sparql_class, lt_opt =
+	let open Sparql in
+	match constr with
+	| Lisql.True ->
+	   ("SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^< sparql_froms ^< "WHERE { " ^<
+	     (rdf_type (var "x") (var "c")) ^>
+	       (* (pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (var "c") constr) : pattern) ^> *)
+		 " } GROUP BY ?c ORDER BY DESC(?n) LIMIT 1000" : 'a sparql :> string), (*^ string_of_int config_max_classes#value*)
+	   None
+	| Lisql.ExternalSearch (_, Some lt) ->
+	   let lx = List.mapi (fun i t -> "x" ^ string_of_int (i+1)) lt in
+	   ("SELECT " ^< concat " " (List.map var lx) ^^ sparql_froms ^< " WHERE { " ^<
+	     concat " "
+		    (List.map2
+		       (fun x t -> optional (rdf_type (var x) (term t)))
+		       lx lt) ^>
+	       " } LIMIT 1" : 'a sparql :> string),
+	   Some (lx,lt)
+	| _ -> "", None in (* avoiding timeouts in evaluations *)
+      Jsutils.firebug sparql_class;
+      if sparql_class = "" then k ~partial:true None
+      else
+	Sparql_endpoint.ajax_list_in
+	  [elt] ajax_pool endpoint [sparql_class]
+	  (function
+	    | [results_class] ->
+	       ( match lt_opt with
+		 | Some (lx,lt) -> process_wikidata_with_external_search lx lt results_class
+		 | None -> process_wikidata results_class )
+	    | _ -> assert false)
+	  (fun code -> k ~partial:true None)
     in
     if Rdf.config_wikidata_mode#value
     then ajax_wikidata ()
@@ -1010,6 +1054,8 @@ object (self)
       k ~partial:false (Some (new incr_freq_index)) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_index_properties_init constr elt k
+    else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
+      k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
     else begin
     let focus_as_incr_rel_opt =
       match focus with
@@ -1423,8 +1469,12 @@ object (self)
 
   method list_property_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in
-    [ MatchesAll ["..."; "..."];
-      MatchesAny ["..."; "..."] ]
+    let l_constr =
+      [ MatchesAll ["..."; "..."];
+	MatchesAny ["..."; "..."] ] in
+    if Rdf.config_wikidata_mode#value && focus_descr#unconstrained
+    then ExternalSearch (`Wikidata ["..."], None) :: l_constr
+    else l_constr
 
   method list_modifier_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in

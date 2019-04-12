@@ -589,7 +589,10 @@ object (self)
 	jquery_input "#input-inverse-terms" (fun input_inverse ->
 	  lis#ajax_index_terms_inputs_ids (norm_constr current_constr) [elt_list]
 	   (fun ~partial -> function
-	    | None -> ()
+	    | None ->
+	       refreshing_terms <- false;
+	       let new_constr = term_constr in
+	       self#refresh_new_term_constr current_constr new_constr
 	    | Some index ->
 	      input_inverse##checked <- bool inverse_terms;
 	      sel_sorting##value <- string sorting_terms;
@@ -659,7 +662,10 @@ object (self)
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
 	   lis#ajax_index_properties (norm_constr current_constr) elt_list
 	    (fun ~partial -> function
-	    | None -> ()
+	    | None ->
+	       refreshing_properties <- false;
+	       let new_constr = property_constr in
+	       self#refresh_new_property_constr current_constr new_constr    
 	    | Some index ->
 	      input_inverse##checked <- bool inverse_properties;
 	      sel_sorting##value <- string sorting_properties;
@@ -885,9 +891,7 @@ object (self)
 
   method refresh_new_property_constr current_constr new_constr =
     let to_filter, to_refresh =
-      if Rdf.config_wikidata_mode#value then true, false
-	(* NOTE: on Wikidata, constraints don't work with classes and properties *)
-      else if equivalent_constr new_constr current_constr then false, false
+      if equivalent_constr new_constr current_constr then false, false
       else if subsumed_constr new_constr current_constr then true, not refreshing_properties
       else begin self#abort_all_ajax; true, true end in
     if to_filter then begin
@@ -1287,12 +1291,6 @@ let _ =
     (* initializing YASGUI and other libs *)
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)
-    (* test of Wikidata entity search *)
-    (*Jsutils.Wikidata.ajax_entity_search
-      "Tim+Burton" 10
-      (function
-	| None -> firebug "Wikidata search: failed"
-	| Some lq -> firebug ("Wikidata search: " ^ String.concat " " lq));*)
     (* defining endpoint, title *)
     let args = Url.Current.arguments in
     let endpoint =
