@@ -352,6 +352,13 @@ let enqueue_term = function
      Lexicon.enqueue_class dt
   | _ -> ()
 
+let enqueue_binding_terms binding =
+  Array.iter
+    (function
+      | Some t -> enqueue_term t
+      | None -> ())
+    binding
+	   
 let sync_terms k =
   Lexicon.sync_entities
     (fun () ->
@@ -371,11 +378,7 @@ let page_of_results
     | binding::l ->
       if offset > 0 then aux (offset-1) limit acc l
       else if limit > 0 then begin
-	Array.iter
-	  (function
-	    | Some t -> enqueue_term t
-	    | None -> ())
-	  binding;
+	enqueue_binding_terms binding;
 	aux offset (limit-1) (binding :: acc) l end
       else acc
   in
@@ -416,6 +419,7 @@ let slides_of_results results (k : slide_data list -> unit) : unit =
 	  match term_opt with
 	  | Some (Rdf.URI uri)
 	       when Rdf.uri_is_image uri || Rdf.uri_is_video uri ->
+	     enqueue_binding_terms binding;
 	     let data = { media_uri = uri;
 			  binding_fields =
 			    List.map
@@ -427,7 +431,8 @@ let slides_of_results results (k : slide_data list -> unit) : unit =
 	 rev_l binding)
       [] results.bindings
   in
-  k (List.rev rev_l)
+  sync_terms
+    (fun () -> k (List.rev rev_l))
       
 let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * Rdf.term) list -> unit) : unit =
   let open Sparql_endpoint in
@@ -450,6 +455,7 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 	    (fun data binding ->
 	      match binding.(i_lat), binding.(i_long), get_term_opt binding with
 	      | Some (Rdf.Number (lat,_,_)), Some (Rdf.Number (long,_,_)), Some term ->
+		 enqueue_term term;
 		 (lat,long,term)::data
 	      | _ -> data)
 	    data results.bindings
@@ -457,7 +463,8 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 	  Jsutils.firebug ("Missing geoloc vars in results: " ^ v_lat ^ ", " ^ v_long);
 	  data)
       [] geolocs in
-  k l
+  sync_terms
+    (fun () -> k l)
 
 (* LIS navigation places *)
 
