@@ -318,6 +318,10 @@ object (self)
   method property_constr = property_constr
   method set_property_constr c = property_constr <- c
 						 
+  val mutable modifier_constr = Lisql.True
+  method modifier_constr = modifier_constr
+  method set_modifier_constr c = modifier_constr <- c
+						 
   val term_selection = new increment_selection "#selection-terms"
   val property_selection = new increment_selection "#selection-properties"
   val modifier_selection = new increment_selection "#selection-modifiers"
@@ -904,6 +908,13 @@ object (self)
       self#refresh_property_increments new_constr
       end
 
+  method refresh_new_modifier_constr current_constr new_constr =
+    let to_filter =
+      not (equivalent_constr new_constr current_constr) in
+    if to_filter then
+      jquery "#list-modifiers" (fun elt_list ->
+	 self#filter_increments elt_list new_constr)
+
   method set_limit n =
     limit <- n;
     self#refresh_extension
@@ -1216,8 +1227,10 @@ let initialize endpoint focus =
 	 history#present#refresh_new_property_constr current_constr new_constr));
        (ref false, ref false,
 	"#select-modifiers", "#pattern-modifiers",
-	(fun () -> Lisql.True),
-	(fun current_constr new_constr -> ()))];
+	(fun () -> history#present#modifier_constr),
+	(fun current_constr new_constr ->
+	 history#present#set_modifier_constr new_constr;
+	 history#present#refresh_new_modifier_constr current_constr new_constr))];
 
     List.iter
       (fun (sel_btn,sel_list_incrs,checked) ->
