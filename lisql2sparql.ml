@@ -651,6 +651,17 @@ module WhichArg =
       | _ -> []
   end
 	   
+let path_pred_args_argo pred args argo =
+  let open Sparql in
+  match pred, args, argo with
+  | Prop p, S, O -> (uri p :> pred)
+  | Prop p, O, S -> path_inverse (uri p)
+  | SO (ps,po), S, O -> path_seq (path_inverse (uri ps)) (uri po) 
+  | SO (po,ps), O, S -> path_seq (path_inverse (uri po)) (uri ps)
+  | EO (pe,po), S, O -> path_seq (uri pe) (uri po)
+  | EO (pe,po), O, S -> path_inverse (path_seq (uri pe)  (uri po))
+  | _ -> assert false (* from Lisql.toggle_hierarchy *)
+	     
 let form_pred state (pred : pred) : sparql_pn =
   (fun l -> Sparql.Pattern (pattern_pred_args pred l []))
 	      
@@ -670,15 +681,15 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
        | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y p x)) in
      let q_np = form_s1 state np in
      (fun x -> q_np (fun y -> rel x y))
-  | Hier (annot,id,p,ori,np) ->
+  | Hier (annot,id,pred,args,argo,np) ->
      let vy = state#id_labelling#get_id_var id in
      state#set_modif vy (Lisql.Unselect,Lisql.Unordered);
      let y = (Sparql.var vy :> Sparql.term) in
      let hier =
-       let ptrans = Sparql.path_transitive (Sparql.uri p) in
-       match ori with
-       | Fwd -> (fun x y -> Sparql.Pattern (Sparql.triple x ptrans y))
-       | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y ptrans x)) in
+       let open Sparql in
+       let path = path_pred_args_argo pred args argo in
+       let trans_path = path_transitive path in
+       (fun x y -> Pattern (triple x trans_path y)) in
      let q_np = form_s1 ~ignore_top:true state np in
      (fun x ->
       state#add_var vy;

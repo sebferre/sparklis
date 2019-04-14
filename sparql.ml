@@ -221,6 +221,7 @@ let path_alt (lp : _ any_pred list) : pred =
   | [p] -> p
   | _ -> "(" ^< concat "|" lp ^> ")"
 let path_transitive (p : _ any_pred) : pred = "(" ^< p ^> ")*"
+let path_inverse (p : _ any_pred) : pred = "^(" ^< p ^> ")"
 								   
 let empty : pattern = sparql ""
 let something (s : _ any_term) : pattern =

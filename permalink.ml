@@ -156,7 +156,7 @@ and print_p1 = function
   | Pred (_,arg,pred,cp) -> print_ter "Pred" (print_arg arg) (print_pred pred) (print_sn cp)
   | Type (_,c) -> print_un "Type" (print_uri c)
   | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
-  | Hier (_,id,p,ori,np) -> print_nary "Hier" [print_id id; print_uri p; print_modif_p2 ori; print_bool false; print_s1 np] (* 4:false for backward compatibility *)
+  | Hier (_,id,pred,args,argo,np) -> print_nary "HierPred" [print_id id; print_pred pred; print_arg args; print_arg argo; print_s1 np]
   | Triple (_,arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | LatLong (_,ll,id1,id2) -> print_ter "LatLong3" (print_latlong ll) (print_id id1) (print_id id2)
   | Search (_,c) -> print_un "Search" (print_constr c)
@@ -342,7 +342,12 @@ and parse_p1 ~version = parser
   | [< p, m, np = parse_ter ~version "Rel" parse_property parse_modif_p2 parse_s1 >] -> Rel ((),p,m,np)
   | [< p, np = parse_bin ~version "Has" parse_property parse_s1 >] -> Rel ((),p,Fwd,np) (* for backward compatibility *)
   | [< p, np = parse_bin ~version "IsOf" parse_property parse_s1 >] -> Rel ((),p,Bwd,np) (* for backward compatibility *)
-  | [< id, p, ori, _inv, np = parse_quin ~version "Hier" parse_id parse_property parse_modif_p2 parse_bool parse_s1 >] -> Hier ((),id,p,ori,np)
+  | [< id, p, ori, _inv, np = parse_quin ~version "Hier" parse_id parse_property parse_modif_p2 parse_bool parse_s1 >] ->
+     let pred, args, argo =
+       let open Lisql in
+       match ori with Fwd -> Prop p, S, O | Bwd -> Prop p, O, S in
+     Hier ((),id,pred,args,argo,np)
+  | [< id, pred, args, argo, np = parse_quin ~version "HierPred" parse_id parse_pred parse_arg parse_arg parse_s1 >] -> Hier ((),id,pred,args,argo,np)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
   | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_property parse_property parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
   | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)

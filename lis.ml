@@ -114,15 +114,10 @@ class incr_freq_index = [Lisql.increment, freq option] index ()
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
   | None -> Ontology.no_relation
-  | Some (id,p,ori) ->
-     let inverse =
-       match ori with
-       | Lisql.Fwd -> false
-       | Lisql.Bwd -> true in
+  | Some (id,pred,args,argo) ->
      Ontology.sparql_relations#get_hierarchy
        ~froms:Sparql_endpoint.config_default_graphs#froms
-       ~property:p
-       ~inverse
+       ~property_path:(Lisql2sparql.path_pred_args_argo pred args argo)
 						       
 let increment_parents (term_hierarchy : Rdf.uri Ontology.relation) = function
   | Lisql.IncrTerm (Rdf.URI uri) -> List.map (fun u -> Lisql.IncrTerm (Rdf.URI u)) (term_hierarchy#info uri)
@@ -1064,9 +1059,15 @@ object (self)
     else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
       k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
     else begin
-    let focus_as_incr_rel_opt =
+    let hierarchy_focus_as_incr_opt =
+      let open Lisql in
       match focus with
-      | Lisql.AtS1 (np, Lisql.RelX (p,ori,ctx)) -> Some (Lisql.IncrRel (p,ori))
+      | AtS1 (np, RelX (p,ori,ctx)) ->
+	 Some (IncrRel (p,ori))
+      | AtS1 (_np, CConsX1 ((S|O as _argo), CNil _, PredX ((S|O as args), pred, _ctx))) ->
+	 Some (IncrPred (args, pred))
+      | AtSn (_cp, PredX ((S|O as args), pred, _ctx)) ->
+	 Some (IncrPred (args, pred))
       | _ -> None in
     let process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg =
       let partial_class = partial || results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -1113,7 +1114,7 @@ object (self)
 	   List.iter
 	     (fun incr ->
 	      incr_index#add (incr, freq_opt);
-	      if Some incr = focus_as_incr_rel_opt then
+	      if Some incr = hierarchy_focus_as_incr_opt then
 		trans_rel := true;
 	      ( match incr with
 		| Lisql.IncrRel (_,Lisql.Fwd) -> fwd_prop := true
@@ -1136,6 +1137,8 @@ object (self)
 	   List.iter
 	     (fun incr ->
 	      incr_index#add (incr, freq_opt);
+	      if Some incr = hierarchy_focus_as_incr_opt then
+		trans_rel := true;
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
 		| None -> () );

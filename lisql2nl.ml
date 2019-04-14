@@ -389,8 +389,8 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
 	| `InvNoun, Fwd -> List.map (fun (_,l) -> (v, `Of (w,l))) ls_np @ [(v, `Word w)]
 	| _ -> [] in
     ls, lab
-  | Hier (_, id, p, ori, np) ->
-     (* TODO: how to use 'p' ? *)
+  | Hier (_, id, pred, args, argo, np) ->
+     (* TODO: how to use pred, args, argo ? *)
      let ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels:[] np in
      let labels_id =
        List.map (fun (v,l) -> "hier_"^v, `Hierarchy l) labels in
@@ -727,7 +727,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
     | `InvNoun -> A (annot, `HasProp (word, np, []))
     | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
-  | Hier (annot, id, p, ori, np) -> (* TODO: render p, ori *)
+  | Hier (annot, id, pred, args, argo, np) -> (* TODO: render pred, args, argo *)
      A (annot, `IsPP (`Prep (`Op (grammar#hierarchy ~in_:true), np_of_elt_s1 grammar ~id_labelling np)))
   | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))

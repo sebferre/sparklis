@@ -99,15 +99,10 @@ let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : 
     ~image_opt_of_term
 
 (* SPARQL-based hierarchy, retrieving hierarchical relation from endpoint *)    
-let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
+let sparql_relation_hierarchy ~endpoint ~froms ~(property_path : Sparql.pred) : Rdf.uri relation =
   let make_pattern v_child v_parent : Sparql.pattern =
     let open Sparql in
-    let has_parent s o =
-      let uri_property = (uri property :> pred) in
-      if inverse
-      then triple o uri_property s
-      else triple s uri_property o
-    in
+    let has_parent s o = triple s property_path o in
     let v_middle = var "middle" in
     join
       [ has_parent (v_child :> term) (v_parent :> term);
@@ -122,7 +117,7 @@ let sparql_relation_hierarchy ~endpoint ~froms ~(property : Rdf.uri) ~(inverse :
       ]
   in
   sparql_relation
-    ~name:("property <" ^ property ^ ">")
+    ~name:("property path: " ^ (property_path :> string))
     ~endpoint
     ~froms
     ~make_pattern
@@ -139,7 +134,7 @@ let sparql_relations =
 
     val ht_property_number : (Rdf.uri, float relation) Hashtbl.t = Hashtbl.create 7
     val ht_property_uri : (Rdf.uri * bool (* inverse *), Rdf.uri relation) Hashtbl.t = Hashtbl.create 7
-    val ht_hierarchy : (Rdf.uri * bool (* inverse *), Rdf.uri relation) Hashtbl.t = Hashtbl.create 7
+    val ht_hierarchy : (Sparql.pred, Rdf.uri relation) Hashtbl.t = Hashtbl.create 7
 											     
     method init = ()
       
@@ -169,15 +164,15 @@ let sparql_relations =
 	Hashtbl.add ht_property_uri (property,inverse) rel;
 	rel
 
-    method get_hierarchy ~(froms : Rdf.uri list) ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
-      try Hashtbl.find ht_hierarchy (property,inverse)
+    method get_hierarchy ~(froms : Rdf.uri list) ~(property_path : Sparql.pred) : Rdf.uri relation =
+      try Hashtbl.find ht_hierarchy property_path
       with Not_found ->
-	let rel = sparql_relation_hierarchy ~endpoint ~froms ~property ~inverse in
-	Hashtbl.add ht_hierarchy (property,inverse) rel;
+	let rel = sparql_relation_hierarchy ~endpoint ~froms ~property_path in
+	Hashtbl.add ht_hierarchy property_path rel;
 	rel
 	  
-    method subclassof ~froms = self#get_hierarchy ~froms ~property:Rdf.rdfs_subClassOf ~inverse:false
-    method subpropertyof ~froms = self#get_hierarchy ~froms ~property:Rdf.rdfs_subPropertyOf ~inverse:false
+    method subclassof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.uri Rdf.rdfs_subClassOf :> Sparql.pred)
+    method subpropertyof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.uri Rdf.rdfs_subPropertyOf :> Sparql.pred)
     method domain ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_domain ~inverse:false
     method range ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_range ~inverse:false
     method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
