@@ -677,7 +677,12 @@ and annot_elt_s pos s ctx =
   
 let rec annot_ctx_p1 fd (a1,a_x) x = function
   | DetThatX (det, ctx) ->
-    fd#define_focus_term (term_id_s2 det :> focus_term);
+    ( match hierarchy_of_ctx_s1 ctx with
+      | Some (id,_,_,_) ->
+	 fd#define_focus_term (`Id id)
+      | None when not (is_s1_as_p1_ctx_s1 ctx) ->
+	 fd#define_focus_term (term_id_s2 det :> focus_term)
+      | _ -> () );
     fd#resolve_focus_graph (focus_graph_s2 det);
     let f = Det ((),det,Some x) in
     let ids_det =
