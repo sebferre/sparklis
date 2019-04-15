@@ -134,8 +134,8 @@ end
 
 let uri (uri : Rdf.uri) : term =
   match prologue#qname_of_uri uri with
-    | None -> sparql ("<" ^ uri ^ ">")
-    | Some qname -> sparql qname
+  | None -> sparql ("<" ^ uri ^ ">")
+  | Some qname -> sparql qname
 
 let qname (qn : string) : term = sparql qn
 
@@ -214,7 +214,16 @@ let log_or (le : _ any_expr list) : expr =
       | [e] -> e
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
-let path_seq (p1 : _ any_pred) (p2 : _ any_pred) : pred = p1 ^^ "/" ^< p2
+let path_seq (p1 : _ any_pred) (p2 : _ any_pred) : pred =
+  if Rdf.config_wikidata_mode#value
+  then
+    let s1, s2 = (p1 : _ any_pred :> string), (p2 : _ any_pred :> string) in
+    let n1, n2 = String.length s1, String.length s2 in
+    if n1 > 2 && String.sub s1 0 2 = "p:"
+       && n2 > 3 && String.sub s2 0 3 = "ps:"
+    then (sparql ("wdt:" ^ String.sub s1 2 (n1-2)) : pred)
+    else p1 ^^ "/" ^< p2
+  else p1 ^^ "/" ^< p2
 let path_alt (lp : _ any_pred list) : pred =
   match lp with
   | [] -> assert false
