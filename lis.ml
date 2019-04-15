@@ -13,10 +13,14 @@ object (self)
   val mutable roots : 'a list = []
   val mutable leaves : 'a list = []
 
-  method add (elt, info : 'a * 'b) : unit = Hashtbl.add h elt (info, ref [], ref [])
-  method remove (elt : 'a) : unit = Hashtbl.remove h elt
+  method add (elt, info : 'a * 'b) : unit =
+    assert (not organized);
+    Hashtbl.add h elt (info, ref [], ref [])
+  method remove (elt : 'a) : unit =
+    assert (not organized);
+    Hashtbl.remove h elt
     
-  method private organize : unit = (* must be called after all additions *)
+  method private organize : unit = (* WARNING: must be called after all additions *)
     match organized, parents with
     | _, None -> ()
     | true, _ -> ()
@@ -34,11 +38,10 @@ object (self)
 	  let present_parents =
 	    List.filter
 	      (fun k_parent ->
-		let present = add_child k_parent k_child in
+	        let present = add_child k_parent k_child in
 		present)
 	      l_parents in
-	  ref_parents := present_parents;
-	(*if present_parents = [] then roots <- k_child::roots*))
+	  ref_parents := present_parents)
 	h;
       Hashtbl.iter
 	(fun k (_, ref_children, ref_parents) ->
@@ -65,23 +68,26 @@ object (self)
     fun ?(inverse = false) f ->
       self#organize;
       if organized then
-	let rec aux (keys : 'a list) =
+	let rec aux ancestors (keys : 'a list) =
 	  Common.mapfilter
 	    (fun k ->
-	     let k, (v, ref_children, ref_parents) =
-	       try k, Hashtbl.find h k
-	       with Not_found -> assert false in
-	     match f (k,v) with
-	     | Some x ->
-		let node_children =
-		  if inverse
-		  then aux !ref_parents
-		  else aux !ref_children in
-		Some (`Node (x, node_children))
-	     | None -> None)
+	     if List.mem k ancestors (* there is a loop through k *)
+	     then None
+	     else
+	       let k, (v, ref_children, ref_parents) =
+		 try k, Hashtbl.find h k
+		 with Not_found -> assert false in
+	       match f (k,v) with
+	       | Some x ->
+		  let node_children =
+		    if inverse
+		    then aux (k::ancestors) !ref_parents
+		    else aux (k::ancestors) !ref_children in
+		  Some (`Node (x, node_children))
+	       | None -> None)
 	    keys
 	in
-	aux (if inverse then leaves else roots)
+	aux [] (if inverse then leaves else roots)
       else (* no tree organization *)
 	Hashtbl.fold
 	  (fun k (v,_,_) res ->
