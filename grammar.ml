@@ -32,7 +32,8 @@ object (self)
   method virtual whose : string
   method virtual according_to : string
   method virtual which : string
-  method virtual hierarchy : in_:bool -> string (* [bool] for 'inverse' *)
+  method virtual hierarchy : string
+  method virtual in_ : string
 
   method virtual and_ : string
   method virtual or_ : string
@@ -163,9 +164,8 @@ object
   method whose = "whose"
   method according_to = "according to" (* "from" *)
   method which = "which"
-  method hierarchy ~in_ =
-    let s = "(hierarchy)" in
-    if in_ then s ^ " in" else s
+  method hierarchy = "(hierarchy)"
+  method in_ = "in"
 
   method and_ = "and"
   method or_ = "or"
@@ -366,9 +366,8 @@ object
   method whose = "dont le·a"
   method according_to = "selon"
   method which = "lequel"
-  method hierarchy ~in_ =
-    let s = "(hiérarchie)" in
-    if in_ then s ^ " dans" else s
+  method hierarchy = "(hiérarchie)"
+  method in_ = "dans"
 
   method and_ = "et"
   method or_ = "ou"
@@ -568,9 +567,8 @@ object
   method whose = "cuyo"
   method according_to = "según"
   method which = "el/la cual"
-  method hierarchy ~in_ =
-    let s = "(jerarquía)" in
-    if in_ then s ^ " en" else s
+  method hierarchy = "(jerarquía)"
+  method in_ = "en"
 
   method and_ = "y"
   method or_ = "o"
@@ -771,9 +769,8 @@ object
   method whose = "van wie"
   method according_to = "volgens" (* "from" *)
   method which = "welke"
-  method hierarchy ~in_ =
-    let s = "(hiërarchie)" in
-    if in_ then s ^ " in" else s
+  method hierarchy = "(hiërarchie)"
+  method in_ = "in"
 
   method and_ = "en"
   method or_ = "of"

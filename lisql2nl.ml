@@ -299,7 +299,7 @@ let word_of_incr grammar = function
   | IncrLatLong _ -> `Op grammar#geolocation
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
-  | IncrHierarchy trans_rel -> `Op (grammar#hierarchy ~in_:false)
+  | IncrHierarchy trans_rel -> `Op grammar#in_
   | IncrAnything -> `Op grammar#anything
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
@@ -728,7 +728,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
     | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
   | Hier (annot, id, pred, args, argo, np) -> (* TODO: render pred, args, argo *)
-     A (annot, `IsPP (`Prep (`Op (grammar#hierarchy ~in_:true), np_of_elt_s1 grammar ~id_labelling np)))
+     A (annot, `IsPP (`Prep (`Op grammar#in_, np_of_elt_s1 grammar ~id_labelling np)))
   | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
@@ -1187,10 +1187,6 @@ let xml_suspended susp xml =
   then [Suspended xml]
   else xml
 
-
-let xml_hierarchy grammar in_ = [Word (`Op (grammar#hierarchy ~in_))]
-(*  let xml_wh = match wh_opt with None -> [] | Some w -> [Word w] in
-  Kwd "(" :: xml_wh @ Word (`Op (grammar#hierarchy inv)) :: Kwd ")" :: []*)
 let xml_seq grammar annot_opt (lr : xml list) =
   let seq_susp : bool list =
     match annot_opt with
@@ -1431,7 +1427,7 @@ and xml_ng_label ?(isolated = false) grammar ~id_labelling = function
     if grammar#adjective_before_noun
     then Word w :: xml_ng_label grammar ~id_labelling ng
     else xml_ng_label grammar ~id_labelling ng @ [Word w]
-  | `Hierarchy ng -> xml_ng_label grammar ~id_labelling ng @ xml_hierarchy grammar false
+  | `Hierarchy ng -> xml_ng_label grammar ~id_labelling ng @ [Word (`Op grammar#hierarchy)]
   | `Nth (k,ng) -> Word (`Op (grammar#n_th k)) :: xml_ng_label grammar ~id_labelling ng
 and xml_np_label ?(isolated = false) grammar ~id_labelling ng =
   match ng with
@@ -1570,8 +1566,8 @@ let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = funct
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
   | IncrHierarchy trans_rel ->
      if trans_rel
-     then Word (`Prop ("", "...")) :: xml_hierarchy grammar true @  Word focus_span :: []
-     else xml_hierarchy grammar true
+     then Word (`Prop ("", "...")) :: Word (`Op grammar#in_) :: Word focus_span :: []
+     else Word (`Op grammar#in_) :: []
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []

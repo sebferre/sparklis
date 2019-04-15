@@ -1015,9 +1015,7 @@ and annot_focus_aux (focus : focus) =
   let fd = new focus_descr ~pred_args in
   match focus with
   | AtP1 (f,ctx) ->
-     ( match f with
-       | Hier (_,id,_,_,_,_) -> fd#define_focus_term (`Id id)
-       | _ -> if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained );
+     if is_unconstrained_focus_p1 f ctx then fd#set_unconstrained;
      let f_annot = annot_elt_p1 `At f ctx in
      annot_ctx_p1 fd f_annot f ctx
 (*  | AtSn (CCons (_,arg,np,cp),ctx) ->

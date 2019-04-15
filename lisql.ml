@@ -380,7 +380,6 @@ let rec hierarchy_of_ctx_s1 = function
   | InGraphX (f1,ctx) -> None
   | InWhichThereIsX ctx -> None
 let hierarchy_of_focus = function
-  | AtP1 (Hier (_,id,pred,args,argo,_),_) -> Some (id,pred,args,argo)
   | AtS1 (np,ctx) -> hierarchy_of_ctx_s1 ctx
   | _ -> None
 let is_hierarchy_ctx_s1 ctx =
@@ -1402,12 +1401,6 @@ let insert_elt_p1_in_rel_opt ctx ~elt_ids elt : unit elt_p1 option -> (focus * d
   | Some rel -> focus_opt_start ~delta:(delta_ids elt_ids) (append_and_p1 ctx elt rel)
 
 let rec insert_elt_p1 ?(elt_ids = []) (elt : unit elt_p1) : focus -> (focus * delta) option = function
-  | AtP1 (Hier (_,id,pred,args,argo,np),ctx) ->
-     let det, id = factory#top_s2 in
-     let elt_s1 = Det ((), det, Some elt) in
-     focus_opt_moves [down_focus]
-		     (focus_opt_start ~delta:(delta_ids (id::elt_ids))
-				      (append_and_s1 (HierX (id,pred,args,argo,ctx)) elt_s1 np))
   | AtP1 (f, ctx) -> focus_opt_start ~delta:(delta_ids elt_ids) (append_and_p1 ctx elt f)
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_p1 elt ~elt_ids (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtSn _ -> None
@@ -1435,8 +1428,6 @@ let rec insert_elt_s1 elt focus : (focus * delta) option =
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
        Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx), DeltaNil)
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
-    | AtP1 (Hier (_,id,pred,args,argo,np),ctx) ->
-       insert_elt_s1 elt (AtS1 (np, HierX (id,pred,args,argo,ctx)))
     | AtP1 _
     | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
     | _ -> None in
@@ -1452,8 +1443,6 @@ let rec insert_elt_s2 det : focus -> (focus * delta) option = function
 	    AtS1 (Det ((), det, rel_opt), ctx), delta_ids [id]
        else AtS1 (Det ((), det, rel_opt), ctx), DeltaNil in
      Some (focus_moves [focus_up_at_root_s1] focus_delta2)
-  | AtP1 (Hier (_,id,pred,args,argo,np),ctx) ->
-     insert_elt_s2 det (AtS1 (np, HierX (id,pred,args,argo,ctx)))
   | focus -> insert_elt_s1 (Det ((), det, None)) focus
 
 

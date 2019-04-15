@@ -1,10 +1,12 @@
 # description of main changes that impact interface with outside
 
-2019-04-12
+2019-04
+- new kind of constraint: ExternalSearch
 - lis.ml: methods computing increments have their callback expecting *optional* index
   - callbacks are called on None
     - in case the AJAX calls failed (instead of called on empty indexes as before)
     - in case increments cannot be computed for some reason (ex: constraints on properties in wikidata)
+- grammar.ml: [hierarchy ~in_] split into [hierarchy] and [in_]
 
 2019-02-09
 - new datatype Lisql.delta to represent new entity ids when inserting increments
