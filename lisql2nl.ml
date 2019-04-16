@@ -46,7 +46,7 @@ type word =
   | `Op of string
   | `Undefined
   | `FocusName
-  | `FocusSpan ]
+  | `FocusSpan of Lisql.increment (* increment in which is used this FocusSpan word *) ]
 
 let word_text_content grammar : word -> string = function
   | `Thing -> grammar#thing
@@ -61,7 +61,7 @@ let word_text_content grammar : word -> string = function
   | `Func s -> s
   | `Op s -> s
   | `Undefined -> ""
-  | `FocusSpan -> ""
+  | `FocusSpan _ -> ""
   | `FocusName -> ""
 
 type ng_label =
@@ -179,8 +179,8 @@ let top_np : np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
 let top_expr : np = X (`PN (`Undefined, top_rel))
 let top_s : s = X (`Return top_np)
 
-let focus_span : word = `FocusSpan
-let focus_span_np : np = X (`PN (`FocusSpan, top_rel))
+let focus_span (incr : Lisql.increment) : word = `FocusSpan incr
+let focus_span_np (incr : Lisql.increment) : np = X (`PN (`FocusSpan incr, top_rel))
 let focus_name : word = `FocusName
 let focus_name_ng : ng = X (`That (`FocusName, top_rel))
 let undefined_np : np = X (`PN (`Undefined, top_rel))
@@ -1461,7 +1461,9 @@ let xml_incr_coordinate grammar focus xml = xml
   | AtP1 (IsThere _, _) -> xml
   | _ -> Kwd grammar#and_ :: xml *)
 
-let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = function
+let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
+  let focus_span = focus_span incr in
+  match incr with
   | IncrSelection (selop,_) ->
      [Selection (xml_selection_op grammar selop)]
   | IncrInput (_,typ) ->
@@ -1565,9 +1567,10 @@ let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = funct
   | IncrTriple (Q _) -> assert false
   | IncrTriplify -> Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ Kwd (grammar#rel_from ^ "/" ^ grammar#rel_to) :: []
   | IncrHierarchy trans_rel ->
+     let xml = [Word (`Op grammar#in_); Word focus_span] in
      if trans_rel
-     then Word (`Prop ("", "...")) :: Word (`Op grammar#in_) :: Word focus_span :: []
-     else Word (`Op grammar#in_) :: []
+     then Word (`Prop ("", "...")) :: xml
+     else xml
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []
@@ -1603,7 +1606,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) : increment -> xml = funct
 	 top_adj
 	 func
 	 (List.map
-	    (fun i -> if i=pos then focus_span_np else undefined_np)
+	    (fun i -> if i=pos then focus_span_np incr else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
   | IncrName name -> [Input `String; Word (`Op "="); Word focus_span]

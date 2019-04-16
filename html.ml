@@ -294,7 +294,8 @@ let html_word = function
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
-  | `FocusSpan -> html_span ~classe:"highlighted" "___"
+  | `FocusSpan incr -> html_span ~classe:"highlighted"
+				 (match incr with Lisql.IncrHierarchy _ -> "▼ ___" | _ -> "___")
   | `FocusName -> html_span ~classe:"focus-ng" "thing"
 
 let html_input dt =
@@ -372,7 +373,15 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
       ^ "</li></ul>"
     | Focus (focus,xml) ->
       let id = state#add_focus focus in
-      html_span ~id ~classe:"focus" (html_of_nl_xml ~highlight state xml)
+      let xml =
+	if Lisql.hierarchy_of_focus focus <> None
+	then
+	  match xml with
+	  | Highlight xml1 :: xml2 -> Highlight (Kwd "▼" :: xml1) :: xml2
+	  | _ -> Kwd "▼" :: xml
+	else xml in
+      let html = html_of_nl_xml ~highlight state xml in
+      html_span ~id ~classe:"focus" html
     | Highlight xml ->
        html_highlight true
 	 (html_of_nl_xml ~highlight:true state xml)

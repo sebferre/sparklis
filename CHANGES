@@ -7,6 +7,8 @@
     - in case the AJAX calls failed (instead of called on empty indexes as before)
     - in case increments cannot be computed for some reason (ex: constraints on properties in wikidata)
 - grammar.ml: [hierarchy ~in_] split into [hierarchy] and [in_]
+- lisql2nl.ml: word `FocusSpan takes the increment to which verbalization it belongs
+  - to allow for customized rendering in HTML
 
 2019-02-09
 - new datatype Lisql.delta to represent new entity ids when inserting increments
