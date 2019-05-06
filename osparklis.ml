@@ -1300,7 +1300,6 @@ let _ =
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
   Dom_html.window##onload <- Dom.handler (fun ev ->
    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
-    firebug "Loaded document and google charts";
     (* initializing YASGUI and other libs *)
     Jsutils.yasgui#init;
     (* (try Jsutils.google#draw_map with exn -> firebug (Printexc.to_string exn));*)

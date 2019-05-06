@@ -222,12 +222,22 @@ end
   
 let google =
 object
-  val mutable viz_opt = None
-
   method set_on_load_callback : 'a. (unit -> 'a) -> 'a = fun k ->
-    Unsafe.global##google##charts##setOnLoadCallback(wrap_callback k)
+    let g = Unsafe.global##google in
+    if g = Js.undefined
+    then k ()
+    else (
+      let k () =
+	firebug "Loaded document and google charts";
+	k () in
+      g##charts##setOnLoadCallback(wrap_callback k)
+    )
       
   method draw_map (points : (float * float * string) list) (elt_map : Dom_html.element t) : unit =
+    let g = Unsafe.global##google in
+    if g = Js.undefined
+    then ()
+    else (
     firebug "Drawing map";
     let map = jsnew (Unsafe.global##google##visualization##_Map) (elt_map) in
     let table =
@@ -253,6 +263,7 @@ object
 		    string "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" |] |] |]) in
     map##draw(table, options);
     firebug "Drawed the map"
+    )
 
 end
 
