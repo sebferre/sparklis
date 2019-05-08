@@ -363,7 +363,16 @@ let is_unconstrained_det det rel_opt ctx =
 let is_unconstrained_focus_p1 f ctx =
   is_unconstrained_elt_p1 f &&
     is_unconstrained_ctx_p1 ctx
-    
+
+let rec has_left_conjunct_ctx_sn = function
+  | CAndX ((ll,rr),ctx) -> ll <> [] || has_left_conjunct_ctx_sn ctx
+  | COrX (_,ctx) -> has_left_conjunct_ctx_sn ctx
+  | _ -> false
+let rec has_left_conjunct_ctx_s1 = function
+  | NAndX ((ll,rr),ctx) -> ll <> [] || has_left_conjunct_ctx_s1 ctx
+  | NOrX (_,ctx) -> has_left_conjunct_ctx_s1 ctx
+  | _ -> false
+			    
 let rec hierarchy_of_ctx_s1 = function
   | IsX _ -> None
   | CConsX1 _ -> None
@@ -1612,7 +1621,7 @@ let rec insert_something_that_is = function
      Some (AtS1 (Det ((), det, Some (Is ((), np))), ctx), delta_ids [id])
   | _ -> None
 
-let insert_and = function
+let rec insert_and = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtSn (f,ctx) ->
      let cp, ids =
@@ -1625,19 +1634,15 @@ let insert_and = function
   | AtS1 (f, ReturnX ctx) ->
      let np, id = factory#top_s1 in
      Some (AtS1 (np, ReturnX (SeqX (([Return ((),f)],[]), ctx))), delta_ids [id])
-  | AtS1 (f, CConsX1 ((S|O as arg),cp,ctx)) -> (* because S|O miss a preposition to catch the Sn focus *)
-     let np, id = factory#top_s1 in
-     focus_opt_start ~delta:(delta_ids [id])
-		     (append_and_sn ctx
-				    (CCons ((), arg, np, CNil ()))
-				    (CCons ((), arg, f, cp)))
+  | AtS1 (f, CConsX1 (arg,cp,ctx)) ->
+     insert_and (AtSn (CCons ((), arg, f, cp), ctx))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
      let np, id = factory#top_s1 in
      focus_opt_start ~delta:(delta_ids [id])
 		     (append_and_s1 ctx np f)
   | _ -> None
 
-let insert_duplicate = function
+let rec insert_duplicate = function
   | AtP1 _ -> None (* P1 conjunction is implicit *)
   | AtSn (f, ctx) ->
      let f', map = copy_sn f in
@@ -1645,6 +1650,8 @@ let insert_duplicate = function
 		     (append_and_sn ctx f' f)
   | AtS1 (f, ReturnX ctx) -> None (* to avoid Cartesian products *)
   | AtS1 (_, InGraphX _) -> None (* to avoid duplication of focus, and complex focus graphs *)
+  | AtS1 (f, CConsX1 (arg,cp,ctx)) ->
+     insert_duplicate (AtSn (CCons ((), arg, f, cp), ctx))
   | AtS1 (f, ctx) when not (is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
      let f', map = copy_s1 f in
      focus_opt_start ~delta:(DeltaDuplicate map)
@@ -1657,7 +1664,7 @@ let insert_duplicate = function
      Some (AtS (f', SeqX ((f::ll,rr),ctx)), DeltaDuplicate map)
   | _ -> None
 
-let insert_or = function
+let rec insert_or = function
   | AtP1 (f, ctx) when not (is_top_p1 f) ->
      focus_opt_start (append_or_p1 ctx (IsThere ()) f)
   | AtSn (f, ctx) when not (is_top_sn f) ->
@@ -1667,8 +1674,10 @@ let insert_or = function
        | Some arg -> let np, id = factory#top_s1 in
 		     CCons ((), arg, np, CNil ()), [id] in
      focus_opt_start ~delta:(delta_ids ids)
-		     (append_and_sn ctx cp f)
+		     (append_or_sn ctx cp f)
   | AtS1 (_, InGraphX _) -> None
+  | AtS1 (f, CConsX1 (arg,cp,ctx)) ->
+     insert_or (AtSn (CCons ((), arg, f, cp), ctx))
   | AtS1 (f, ctx) when not (is_top_s1 f) ->
      let np, id = factory#top_s1 in
      focus_opt_start ~delta:(delta_ids [id])
@@ -1697,7 +1706,7 @@ let insert_choice = function
   | _ -> None
 *)
 
-let insert_maybe = function
+let rec insert_maybe = function
   | AtP1 (Maybe (_,f), ctx) -> Some (AtP1 (f,ctx), DeltaNil)
   | AtP1 (_, MaybeX ctx) -> None
   | AtP1 (Not _, ctx) -> None
@@ -1708,18 +1717,26 @@ let insert_maybe = function
   | AtSn (_, CMaybeX ctx) -> None
   | AtSn (CNot _, ctx) -> None
   | AtSn (_, CNotX ctx) -> None				     
-  | AtSn (f, ctx) when not (is_top_sn f) -> Some (AtSn (CMaybe ((),f), ctx), DeltaNil)
+  | AtSn (f, ctx) when not (is_top_sn f) ->
+     let ctx =
+       if has_left_conjunct_ctx_sn ctx
+       then ctx
+       else CAndX (([CNil ()],[]), ctx) in
+     Some (AtSn (CMaybe ((),f), ctx), DeltaNil)
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (NMaybe (_,f), ctx) -> Some (AtS1 (f,ctx), DeltaNil)
   | AtS1 (_, NMaybeX ctx) -> None
   | AtS1 (NNot _, ctx) -> None
   | AtS1 (_, NNotX ctx) -> None
   | AtS1 (_, ReturnX _) -> None
-  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) -> Some (AtS1 (NMaybe ((),f), ctx), DeltaNil)
+  | AtS1 (np, CConsX1 (arg,cp,ctx)) ->
+     insert_maybe (AtSn (CCons ((),arg,np,cp),ctx))
+  | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
+     Some (AtS1 (NMaybe ((),f), ctx), DeltaNil)
   (*if is_top_s1 f then Some (AtS1 (f, NMaybeX ctx)) else Some (AtS1 (NMaybe f, ctx))*)
   | _ -> None
 
-let insert_not = function
+let rec insert_not = function
   | AtP1 (Not (_,f), ctx) -> Some (AtP1 (f,ctx), DeltaNil)
   | AtP1 (_, NotX ctx) -> None
   | AtP1 (Maybe _, ctx) -> None
@@ -1733,19 +1750,27 @@ let insert_not = function
   | AtSn (CMaybe _, ctx) -> None
   | AtSn (_, CMaybeX ctx) -> None
   | AtSn (f, ctx) ->
+     let ctx =
+       if has_left_conjunct_ctx_sn ctx
+       then ctx
+       else CAndX (([CNil ()],[]), ctx) in
+     let foc_delta = (AtSn (CNot ((),f), ctx), DeltaNil) in
      if is_top_sn f
-     then Some (AtSn (f, CNotX ctx), DeltaNil)
-     else Some (AtSn (CNot ((),f), ctx), DeltaNil)
+     then Some (focus_moves [down_focus] foc_delta)
+     else Some foc_delta
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx), DeltaNil)
   | AtS1 (_, NNotX ctx) -> None
   | AtS1 (NMaybe _, ctx) -> None
   | AtS1 (_, NMaybeX ctx) -> None
   | AtS1 (_, ReturnX ctx) -> None
+  | AtS1 (np, CConsX1 (arg,cp,ctx)) ->
+     insert_not (AtSn (CCons ((),arg,np,cp),ctx))
   | AtS1 (f, ctx) when not (is_aggregated_ctx_s1 ctx || is_s1_as_p1_ctx_s1 ctx && is_top_s1 f) ->
+     let foc_delta = (AtS1 (NNot ((),f), ctx), DeltaNil) in
      if is_top_s1 f
-     then Some (AtS1 (f, NNotX ctx), DeltaNil)
-     else Some (AtS1 (NNot ((),f), ctx), DeltaNil)
+     then Some (focus_moves [down_focus] foc_delta)
+     else Some foc_delta
   | _ -> None
 
 let rec insert_in = function

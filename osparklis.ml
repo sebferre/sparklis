@@ -405,7 +405,7 @@ object (self)
 		 let html = escapeHTML v in
 		 html, html)
 	| Some t ->
-	   let html = Html.html_term t in
+ 	   let html = Html.html_term t in
 	   html, html
 	| None ->
 	   let html = "(" ^ Lisql2nl.config_lang#grammar#undefined ^ ")" in
