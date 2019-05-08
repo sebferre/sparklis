@@ -652,7 +652,7 @@ object (self)
 	    Lisql.insert_increment incr) in
     let toggle_incr elt =
       match get_incr_opt elt with
-      | Some (Lisql.IncrType _ | Lisql.IncrRel _ as incr) ->
+      | Some (Lisql.IncrType _ | Lisql.IncrRel _ | Lisql.IncrLatLong _ | Lisql.IncrPred _ as incr) ->
 	 let _present = toggle_class elt "selected-incr" in
 	 property_selection#toggle incr
       | _ -> ()
