@@ -1040,8 +1040,8 @@ and map_cp transf cp =
     | `Cons (pp,cp) -> `Cons (map_pp transf pp, map_cp transf cp)
     | `And lr -> `And (List.map (map_cp transf) lr)
     | `Or lr -> `Or (List.map (map_cp transf) lr)
-    | `Maybe vp -> `Maybe (map_cp transf cp)
-    | `Not vp -> `Not (map_cp transf cp) )
+    | `Maybe cp -> `Maybe (map_cp transf cp)
+    | `Not cp -> `Not (map_cp transf cp) )
 and map_pp transf pp =
   match transf#pp pp with
     | `Bare np -> `Bare (map_np transf np)  
