@@ -147,14 +147,18 @@ let config_max_properties = new Config.integer_input ~key:"max_properties" ~inpu
 let regexp_sep = Regexp.regexp "[,;][ ]*"
 
 let formula_concept_profile_term (tx : _ Sparql.any_term) : Sparql.formula =
-  match config_concept_profile#value with
-  | "" -> Sparql.True
-  | profile ->
-     let uris = Regexp.split regexp_sep profile in
-     Sparql.(Pattern (union
-			(List.map
-			   (fun u -> rdf_type tx (uri u))
-			   uris)))
+  let profile = config_concept_profile#value in
+  if profile = ""
+  then Sparql.True
+  else
+    let uris = List.filter ((<>) "") (Regexp.split regexp_sep profile) in
+    if uris = []
+    then Sparql.True
+    else Sparql.(Pattern
+		   (union
+		      (List.map
+			 (fun u -> rdf_type tx (uri u))
+			 uris)))
 let formula_concept_profile (v : string) : Sparql.formula =
   formula_concept_profile_term (Sparql.var v)
 
@@ -182,7 +186,7 @@ let nested_hashtbl_of_results_varterm_list
     | Rdf.Var v ->
        if List.mem_assoc v results.vars
        then
-	 let i = List.assoc v results.vars in (* TODO: factorize this access across bindings *)
+	 let i = List.assoc v results.vars in
 	 (fun binding -> binding.(i))
        else (fun binding -> None)
     | t ->
@@ -1244,29 +1248,32 @@ object (self)
       let unit = `Entities in
       let make_sparql (type a) ((nb_samples, samples) : int * (a * 'b) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : a -> Sparql.pattern) =
 	assert (lv <> []);
-	let main_v = List.hd lv in
-	let projections = List.map (fun v -> `Bare, v) lv in
-	let gp = Sparql.union (* cannot fail because sample<>[] because focus_term_index is not empty *)
-		   (List.map
-		      (fun (key,(_, graph_index)) ->
-		       let pat = graph_opt graph_index (make_pattern key) in
-		       if Rdf.config_wikidata_mode#value
-		       then pat (* TODO: create an independent option for that because mostly useful when lack of shuffling in endpoint indexes *)
-		       else Sparql.subquery
-			      (Sparql.select
-				 ~distinct:true ~projections
-				 ~limit:config_max#value
-				 pat))
-		      samples) in
-	(Sparql.select
-	   ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
-	   (Sparql.pattern_of_formula
-	      (Sparql.formula_and_list
-		 ( Sparql.Pattern gp
-		   :: formula_concept_profile main_v
-		   :: filter_constr sparql_genvar (Sparql.var main_v) constr
-		   :: List.map (fun v -> formula_hidden_URIs v) lv )))
-	 :> string) in
+	if samples = []
+	then ""
+	else
+	  let main_v = List.hd lv in
+	  let projections = List.map (fun v -> `Bare, v) lv in
+	  let gp = Sparql.union
+		     (List.map
+			(fun (key,(_, graph_index)) ->
+			 let pat = graph_opt graph_index (make_pattern key) in
+			 if Rdf.config_wikidata_mode#value
+			 then pat (* TODO: create an independent option for that because mostly useful when lack of shuffling in endpoint indexes *)
+			 else Sparql.subquery
+				(Sparql.select
+				   ~distinct:true ~projections
+				   ~limit:config_max#value
+				   pat))
+			samples) in
+	  (Sparql.select
+	     ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
+	     (Sparql.pattern_of_formula
+		(Sparql.formula_and_list
+		   ( Sparql.Pattern gp
+		     :: formula_concept_profile main_v
+		     :: filter_constr sparql_genvar (Sparql.var main_v) constr
+		     :: List.map (fun v -> formula_hidden_URIs v) lv )))
+	   :> string) in
       let sparql_class =
 	make_sparql (nb_samples_term, samples_term)
 		    config_max_classes Lisql2sparql.filter_constr_class
