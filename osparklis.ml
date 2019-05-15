@@ -113,6 +113,18 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
      let lre = List.map regexp_of_pat kwds in
      (fun s -> List.for_all (fun re -> matches s re) lre)
 
+let replace_symbol_by_ascii = (* for constraint matching on modifiers *)
+  let l_re_by =
+    List.map
+      (fun (symbol,ascii) -> (Regexp.regexp_string symbol, ascii))
+      ["≠", "!=";
+       "≥", ">=";
+       "≤", "<="] in
+  fun str ->
+  List.fold_left
+    (fun str (re,by) -> Regexp.global_replace re str by)
+    str l_re_by
+
 (* constraint subsumption *)
 
 let equivalent_constr constr1 constr2 : bool =
@@ -864,9 +876,11 @@ object (self)
 	  | _ ->
 	     if on_modifiers = Some true
 	     then
-	       Opt.case (elt_incr##textContent)
-			(fun () -> to_string elt_incr##innerHTML)
-			(fun s -> to_string s)
+	       let str =
+		 Opt.case (elt_incr##textContent)
+			  (fun () -> to_string elt_incr##innerHTML)
+			  (fun s -> to_string s) in
+	       replace_symbol_by_ascii str
 	     else
 	       Opt.case (elt_incr##querySelector(string ".function, .classURI, .propURI, .naryURI, .URI, .Literal, .nodeID, .modifier"))
 			(fun () -> to_string elt_incr##innerHTML)
@@ -913,7 +927,7 @@ object (self)
       not (equivalent_constr new_constr current_constr) in
     if to_filter then
       jquery "#list-modifiers" (fun elt_list ->
-	 self#filter_increments elt_list new_constr)
+	 self#filter_increments ~on_modifiers:true elt_list new_constr)
 
   method set_limit n =
     limit <- n;
