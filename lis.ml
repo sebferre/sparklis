@@ -95,11 +95,12 @@ object (self)
 	   | Some x -> `Node (x, []) :: res
 	   | None -> res)
 	  h []
-  method sample_list (max : int) : int * ('a * 'b) list =
+  method sample_list : 'c. int -> ('a * 'b -> 'c) -> int * 'c list =
+    fun max f ->
     let _, n, res =
       Hashtbl.fold
 	(fun k (v,_,_) (max,n,res as acc) ->
-	 if max <= 0 then acc else (max-1, n+1, (k,v)::res))
+	 if max <= 0 then acc else (max-1, n+1, f (k,v) :: res))
 	h (max,0,[]) in
     n, res
 end
@@ -162,9 +163,6 @@ let formula_concept_profile_term (tx : _ Sparql.any_term) : Sparql.formula =
 let formula_concept_profile (v : string) : Sparql.formula =
   formula_concept_profile_term (Sparql.var v)
 
-let pattern_concept_profile (v : string) : string =
-  (Sparql.pattern_of_formula (formula_concept_profile v) :> string)
-    
 			       
 let formula_hidden_URIs_term (tx : _ Sparql.any_term) : Sparql.formula =
   match config_regexp_hidden_URIs#value with
@@ -172,7 +170,8 @@ let formula_hidden_URIs_term (tx : _ Sparql.any_term) : Sparql.formula =
   | re -> Sparql.(Filter (log_not (log_and [expr_func "BOUND" [tx]; expr_regex (expr_func "str" [tx]) re])))
 let formula_hidden_URIs (v : string) : Sparql.formula =
   formula_hidden_URIs_term (Sparql.var v)
-
+let pattern_hidden_URIs (v : string) : Sparql.pattern =
+  Sparql.pattern_of_formula (formula_hidden_URIs v)
 let filter_hidden_URIs (v : string) : string =
   (Sparql.pattern_of_formula (formula_hidden_URIs v) :> string)
     
@@ -892,38 +891,42 @@ object (self)
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
-      let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
+      let froms = Sparql_endpoint.config_default_graphs#froms in
       let graph_opt (gp : Sparql.pattern) : Sparql.pattern =
 	match s_sparql.Lisql2sparql.focus_graph_opt with
 	| Some _ when not focus_graph_index#is_empty ->
 	   Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
 	| _ -> gp
       in
-      let make_sparql lv (pat : Sparql.pattern) filter_constr config_max =
+      let make_sparql lv (make_pattern : ?hook:(string -> Sparql.formula) -> unit -> Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
-	let main_v = List.hd lv in
-	let g_pat = (graph_opt pat :> string) in
-	"SELECT DISTINCT ?" ^ String.concat " ?" lv ^ " " ^ sparql_froms ^ "WHERE { " ^
-	  g_pat ^
-	  pattern_concept_profile main_v ^
-	  (Sparql.pattern_of_formula (filter_constr sparql_genvar (Sparql.var main_v) constr) :> string) ^
-	  filter_hidden_URIs main_v ^
-	  " } LIMIT " ^ string_of_int config_max#value in
+	let hook v =
+	  Sparql.formula_and_list
+	    [formula_concept_profile v;
+	     filter_constr sparql_genvar (Sparql.var v) constr] in
+	let g_pat = graph_opt (make_pattern ~hook ()) in
+	Sparql.(select
+		  ~froms
+		  ~distinct:true
+		  ~projections:(List.map (fun v -> `Bare, v) lv)
+		  ~limit:config_max#value
+		  (join (g_pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
+	:> string) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
-			   (Lisql2sparql.WhichClass.pattern_of_term None)
+			   (fun ?hook () -> Lisql2sparql.WhichClass.pattern_of_term ?hook None)
 			   Lisql2sparql.filter_constr_class
 			   config_max_classes in
       let sparql_prop = make_sparql
 			  Lisql2sparql.WhichProp.pattern_vars
-			  (Lisql2sparql.WhichProp.pattern_of_term None)
+			  (fun ?hook () -> Lisql2sparql.WhichProp.pattern_of_term ?hook None)
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
       let sparql_pred =
 	if config_nary_relations#value
 	then make_sparql
 	       Lisql2sparql.WhichPred.pattern_vars
-	       (Lisql2sparql.WhichPred.pattern_of_term None)
+	       (fun ?hook () -> Lisql2sparql.WhichPred.pattern_of_term ?hook None)
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties
 	else "" in
@@ -935,32 +938,36 @@ object (self)
     in
     let ajax_intent () =
       let sparql_genvar = new Lisql2sparql.genvar in
-      let sparql_froms = Sparql_endpoint.config_schema_graphs#sparql_froms in
-      let make_sparql lv pat filter_constr config_max =
+      let froms = Sparql_endpoint.config_schema_graphs#froms in
+      let make_sparql lv (make_pattern : ?hook:(string -> Sparql.formula) -> unit -> Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
-	let main_v = List.hd lv in
-	"SELECT DISTINCT ?" ^ String.concat " ?" lv ^ " " ^ sparql_froms ^ "WHERE { " ^
-	  pat ^
-	    (* "FILTER EXISTS { [] a ?class } " ^ *) (* 'EXISTS' not widely supported, and also fails for pure ontologies! *)
-	  pattern_concept_profile main_v ^
-	  (Sparql.pattern_of_formula (filter_constr sparql_genvar (Sparql.var main_v) constr) :> string) ^
-	  filter_hidden_URIs main_v ^
-	    " } LIMIT " ^ string_of_int config_max#value in
+	let hook v =
+	  Sparql.formula_and_list
+	    [ formula_concept_profile v;
+	      filter_constr sparql_genvar (Sparql.var v) constr ] in
+	let pat = make_pattern ~hook () in
+	Sparql.(select
+		  ~froms
+		  ~distinct:true
+		  ~projections:(List.map (fun v -> `Bare, v) lv)
+		  ~limit:config_max#value
+		  (join (pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
+		:> string) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
-			   (Lisql2sparql.WhichClass.intent_pattern () :> string)
+			   (fun ?hook () -> Lisql2sparql.WhichClass.intent_pattern ?hook ())
 			   Lisql2sparql.filter_constr_class
 			   config_max_classes in
       let sparql_prop = make_sparql
 			  Lisql2sparql.WhichProp.pattern_vars
-			  (Lisql2sparql.WhichProp.intent_pattern () :> string)
+			  (fun ?hook () -> Lisql2sparql.WhichProp.intent_pattern ?hook ())
 			  Lisql2sparql.filter_constr_property
 			  config_max_properties in
       let sparql_pred =
 	if config_nary_relations#value
 	then make_sparql
 	       Lisql2sparql.WhichPred.pattern_vars
-	       (Lisql2sparql.WhichPred.intent_pattern () :> string)
+	       (fun ?hook () -> Lisql2sparql.WhichPred.intent_pattern ?hook ())
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties
 	else "" in
@@ -1235,63 +1242,106 @@ object (self)
     let ajax_extent () =
       (* focus_term_index is not empty *)
       let sparql_genvar = new Lisql2sparql.genvar in
-      let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
-	match s_sparql.Lisql2sparql.focus_graph_opt with
-	| Some _ when not graph_index#is_empty ->
-	   Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
-	| _ -> gp
-      in
       let nb_samples_term, samples_term =
-	focus_term_index#sample_list config_max_increment_samples#value in
+	focus_term_index#sample_list config_max_increment_samples#value
+				     (fun (t,(f,graph_index)) -> ([t],(f,graph_index))) in
       let max_value_term = Some nb_samples_term in
       let partial = self#partial_results || nb_samples_term < focus_term_index#length in
       let unit = `Entities in
-      let make_sparql (type a) ((nb_samples, samples) : int * (a * 'b) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : a -> Sparql.pattern) =
+      let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string -> Sparql.formula) -> Rdf.term list -> Sparql.pattern) =
 	assert (lv <> []);
-	if samples = []
-	then ""
-	else
-	  let main_v = List.hd lv in
+	match samples with
+	| [] -> ""
+	| (key0, (_, graph_index0))::_ ->
 	  let projections = List.map (fun v -> `Bare, v) lv in
-	  let gp = Sparql.union
-		     (List.map
-			(fun (key,(_, graph_index)) ->
-			 let pat = graph_opt graph_index (make_pattern key) in
-			 if Rdf.config_wikidata_mode#value
-			 then pat (* TODO: create an independent option for that because mostly useful when lack of shuffling in endpoint indexes *)
-			 else Sparql.subquery
-				(Sparql.select
-				   ~distinct:true ~projections
-				   ~limit:config_max#value
-				   pat))
-			samples) in
-	  (Sparql.select
-	     ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
-	     (Sparql.pattern_of_formula
-		(Sparql.formula_and_list
-		   ( Sparql.Pattern gp
-		     :: formula_concept_profile main_v
-		     :: filter_constr sparql_genvar (Sparql.var main_v) constr
-		     :: List.map (fun v -> formula_hidden_URIs v) lv )))
-	   :> string) in
+	  let hook v =
+	    Sparql.formula_and_list
+	      [formula_concept_profile v;
+	       filter_constr sparql_genvar (Sparql.var v) constr] in
+	  let gp =
+	    match hook "_" with
+	    | Sparql.True -> (* when no constraint, use this to have a better sample of properties *)
+	       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
+		 match s_sparql.Lisql2sparql.focus_graph_opt with
+		 | Some _ when not graph_index#is_empty ->
+		    Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+		 | _ -> gp
+	       in
+	       Sparql.union
+		 (List.map
+		    (fun (key,(_, graph_index)) ->
+		     let pat = graph_opt graph_index (make_pattern ?hook:None key) in
+		     if Rdf.config_wikidata_mode#value
+		     then pat (* TODO: create an independent option for that because mostly useful when lack of shuffling in endpoint indexes *)
+		     else Sparql.subquery
+			    (Sparql.select
+			       ~distinct:true ~projections
+			       ~limit:config_max#value
+			       pat))
+		    samples)
+	    | _ -> (* when constraint, use this to avoid Garguanta queries (repeats of constraints) *)
+	       let key_vars = List.map (fun _ -> sparql_genvar#new_var "key") key0 in
+	       let graph_var_opt =
+		 match s_sparql.Lisql2sparql.focus_graph_opt with
+		 | Some _ when not graph_index0#is_empty -> Some (sparql_genvar#new_var "graph")
+		 | _ -> None in
+	       let pat_values =
+		 match graph_var_opt with
+		 | None ->
+		    Sparql.(values_tuple
+			      (List.map Sparql.var key_vars)
+			      (List.map
+				 (fun (key,_) -> List.map Sparql.term key)
+				 samples))
+		 | Some gv ->
+		    Sparql.(values_tuple
+			      (List.map Sparql.var (gv::key_vars))
+			      (List.concat
+				 (List.map
+				    (fun (key,(_, graph_index)) ->
+				     (graph_index : Rdf.term int_index)#filter_map_list
+				       (fun (tg,_) -> Some (List.map Sparql.term (tg::key) : Sparql.term list)))
+				    samples))) in
+	       let pat_incr =
+		 let pat = make_pattern ~hook (List.map (fun v -> Rdf.Var v) key_vars) in
+		 match graph_var_opt with
+		 | None -> pat
+		 | Some gv -> Sparql.(graph (var gv) pat) in
+	       Sparql.(subquery
+			 (select
+			    ~distinct:true
+			    ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
+			    ~limit:(config_max#value * min 10 nb_samples)
+			    (join [pat_values; pat_incr]))) in
+	  Sparql.(select
+		    ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
+		    (join (gp :: List.map (fun v -> pattern_hidden_URIs v) lv))
+		  :> string)
+      in
       let sparql_class =
 	make_sparql (nb_samples_term, samples_term)
 		    config_max_classes Lisql2sparql.filter_constr_class
 		    Lisql2sparql.WhichClass.pattern_vars
-		    (fun t -> Lisql2sparql.WhichClass.pattern_of_term (Some t)) in
+		    (fun ?hook lt ->
+		     assert (lt<>[]);
+		     Lisql2sparql.WhichClass.pattern_of_term ?hook (Some (List.hd lt))) in
       let sparql_prop =
 	if Rdf.config_wikidata_mode#value && config_nary_relations#value
 	then ""
 	else make_sparql (nb_samples_term, samples_term)
 			 config_max_properties Lisql2sparql.filter_constr_property
 			 Lisql2sparql.WhichProp.pattern_vars
-			 (fun t -> Lisql2sparql.WhichProp.pattern_of_term (Some t)) in
+			 (fun ?hook lt ->
+			  assert (lt<>[]);
+			  Lisql2sparql.WhichProp.pattern_of_term ?hook (Some (List.hd lt))) in
       let sparql_pred =
 	if config_nary_relations#value
 	then make_sparql (nb_samples_term, samples_term)
 			 config_max_properties Lisql2sparql.filter_constr_property
 			 Lisql2sparql.WhichPred.pattern_vars
-			 (fun t -> Lisql2sparql.WhichPred.pattern_of_term (Some t))
+			 (fun ?hook lt ->
+			  assert (lt<>[]);
+			  Lisql2sparql.WhichPred.pattern_of_term ?hook (Some (List.hd lt)))
 	else "" in
       let max_value_arg, sparql_arg =
 	match s_sparql.Lisql2sparql.focus_pred_args_opt with
@@ -1299,14 +1349,15 @@ object (self)
 	| Some ((Lisql.Class _ | Lisql.Prop _),_) -> None, "" (* non-reified predicates *)
 	| Some (pred,args) ->
 	   let nb_samples_arg, samples_arg =
-	     focus_pred_args_index#sample_list config_max_increment_samples#value in
+	     focus_pred_args_index#sample_list config_max_increment_samples#value
+					       (fun lt_v -> lt_v) in
 	   Some nb_samples_arg,
 	   make_sparql (nb_samples_arg, samples_arg)
 		       config_max_properties Lisql2sparql.filter_constr_property
 		       Lisql2sparql.WhichArg.pattern_vars
-		       (fun lt ->
+		       (fun ?hook lt ->
 			let args = List.map2 (fun (arg,_) t -> (arg,t)) args lt in
-			Lisql2sparql.WhichArg.pattern_of_pred_args pred args) in
+			Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
       Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	(function
 	| [results_class; results_prop; results_pred; results_arg] -> process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg

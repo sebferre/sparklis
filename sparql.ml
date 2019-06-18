@@ -247,7 +247,10 @@ let bnode_triples (lpo : (_ any_pred * _ any_term) list) : term =
 let bnode_triples_as_pattern lpo : pattern =
   bnode_triples lpo ^> " ."
 let bind (e : _ any_expr) (v : var) : pattern = "BIND (" ^< e ^^ " AS " ^< v ^> ")"
-let values (v : _ any_var) (l : _ any_term list) : pattern = "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
+let values (v : _ any_var) (l : _ any_term list) : pattern =
+  "VALUES " ^< v ^^ " { " ^< concat " " l ^> "}"
+let values_tuple (vs : _ any_var list) (lt : _ any_term list list) : pattern =
+  "VALUES (" ^< concat " " vs ^^ ") { " ^< concat " " (List.map (fun t -> "(" ^< concat " " t ^> ")") lt) ^> "}"
 let filter (e : _ any_expr) : pattern =
   if e = log_true then empty
   else "FILTER ( " ^< indent 9 e ^> " )"

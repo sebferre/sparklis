@@ -180,9 +180,12 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
     | `NoFilter -> false, Sparql.True (* kwds not specific enough *)
     | `Filter label_filter ->
        true,
-       Sparql.formula_or_list (* TODO: avoid this OR, choose from focus type (URI vs literal) *)
-	 [ str_filter;
-	   label_filter ] in
+       if fst ctx = `Properties
+       then label_filter
+       else
+	 Sparql.formula_or_list (* TODO: avoid this OR, choose from focus type (URI vs literal) *)
+	   [ str_filter;
+	     label_filter ] in
   binding, f
 
 let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) (c : constr) : Sparql.formula =
@@ -350,25 +353,33 @@ type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_sn = sparql_pn -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
 type sparql_s = Sparql.formula
-
+		  
 let get_arg (arg : arg) (l : (arg * _ Sparql.any_term) list) : Sparql.term =
   try List.assoc arg l
   with Not_found -> Sparql.bnode ""
 
+let make_pat ?(hook : (string -> Sparql.formula) option) (v : string) (pat : Sparql.pattern) : Sparql.pattern =
+  match hook with
+  | None -> pat
+  | Some h ->
+     Sparql.pattern_of_formula
+       (Sparql.formula_and (Sparql.Pattern pat) (h v))
+				 
 (* definitions to retrieve classes from focus *)
 module WhichClass =
   struct
     let pattern_vars = ["c"]
-    let intent_pattern () =
-      Sparql.(union
-		[ rdf_type (var "c") (uri Rdf.rdfs_Class);
-		  rdf_type (var "c") (uri Rdf.owl_Class) ])
-    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+    let intent_pattern ?(hook : (string -> Sparql.formula) option) () =
+      make_pat ?hook "c"
+	       Sparql.(union
+			 [ rdf_type (var "c") (uri Rdf.rdfs_Class);
+			   rdf_type (var "c") (uri Rdf.owl_Class) ])
+    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
 	| Some t -> false, t in
-      Sparql.(rdf_type (term t) (var "c"))
+      make_pat ?hook "c" Sparql.(rdf_type (term t) (var "c"))
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       (* ~init: for initial focus *)
       match lt with
@@ -380,28 +391,33 @@ module WhichClass =
 module WhichProp =
   struct
     let pattern_vars = ["p";"ip"] (* property, inverse property *)
-    let intent_pattern () =
-      Sparql.(union
-		[ rdf_type (var "p") (uri Rdf.rdf_Property);
-		  rdf_type (var "p") (uri Rdf.owl_ObjectProperty);
-		  rdf_type (var "p") (uri Rdf.owl_DatatypeProperty) ])
-    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+
+    let filter_wikidata vp =
+      Sparql.(filter (expr_func
+		"strstarts"
+		[expr_func "str" [var vp];
+		 (string "http://www.wikidata.org/prop/direct/P" :> expr)]))
+    let intent_pattern ?(hook : (string -> Sparql.formula) option) () =
+      make_pat ?hook "p"
+	       Sparql.(union
+			 [ rdf_type (var "p") (uri Rdf.rdf_Property);
+			   rdf_type (var "p") (uri Rdf.owl_ObjectProperty);
+			   rdf_type (var "p") (uri Rdf.owl_DatatypeProperty) ])
+    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
 	| Some t -> false, t in
-      let filt p =
-	if Rdf.config_wikidata_mode#value
-	then Sparql.(filter (expr_func "strstarts" [expr_func "str" [var p]; (string "http://www.wikidata.org/prop/direct/P" :> expr)]))
-	else Sparql.empty in
+      let make_pat vp pat =
+	let pat =
+	  if Rdf.config_wikidata_mode#value
+	  then Sparql.(join [pat; filter_wikidata vp])
+	  else pat in
+	make_pat ?hook vp pat in
       Sparql.(union
-		[ join
-		    [ triple (term t) (var "p") (bnode "");
-		      filt "p" ];
+		[ make_pat "p" (triple (term t) (var "p") (bnode ""));
 		  if init then empty
-		  else join
-			 [ triple (bnode "") (var "ip") (term t);
-			   filt "ip" ] ])
+		  else make_pat "ip" (triple (bnode "") (var "ip") (term t)) ])
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       match lt with
       | [Some (Rdf.URI p); None] ->
@@ -438,25 +454,61 @@ module WhichPred =
 		[ (uri Rdf.wikibase_claim :> pred), var pe;
 		  (uri Rdf.wikibase_statementProperty :> pred), var po ])
 	    
-    let intent_pattern () : Sparql.pattern =
+    let intent_pattern ?(hook : (string -> Sparql.formula) option) () : Sparql.pattern =
       if Rdf.config_wikidata_mode#value
-      then pattern_wikidata "pe" "po"
-      else Sparql.(union [pattern_SO "ps" "po"; pattern_EO "pe" "po"])
+      then make_pat ?hook "pe" (pattern_wikidata "pe" "po")
+      else Sparql.(union [ make_pat ?hook "po" (pattern_SO "ps" "po");
+			   make_pat ?hook "pe" (pattern_EO "pe" "po") ])
 		 
-    let pattern_of_term (t_opt : Rdf.term option) : Sparql.pattern =
+    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
-	| Some t -> false, t in		 
-      let pat_SO =
-	Sparql.(join
-		  [ pattern_SO "ps" "po";
-		    filter
-		      (exists (
-			   union
-			     [ bnode_triples_as_pattern (* relation: ps, po *)
-				 [ var "ps", term t;
-				   var "po", bnode "" ];
+	| Some t -> false, t in
+      if Rdf.config_wikidata_mode#value
+      then
+	let make_pat p1 p2 pat =
+	  let pat = Sparql.join [pat; filter_wikidata p1 p2] in
+	  make_pat ?hook p1 pat in
+	let pat_wikidata =
+	  Sparql.(union
+		    [ make_pat "pe" "po"
+			       (triple (* forward: pe, po *)
+				  (term t)
+				  (var "pe")
+				  (bnode_triples
+				     [ var "po", bnode "" ]));
+		      if init
+		      then empty
+		      else join (* backward: pe, ps, po *)
+			     [ make_pat "pe" "ps"
+					(triple
+					   (bnode "")
+					   (var "pe")
+					   (bnode_triples
+					      [ var "ps", term t ])) ] (* binding 'ps' to distinguish orientation *)
+		    (*join (* qualifier: pe, po, pq *)
+		      [ triple
+			  (bnode "")
+			  (var "pe")
+			  (bnode_triples
+			     [ var "po", bnode "";
+			       var "pq", term t ]);
+			filter
+			  (expr_infix "!=" [var "pq"; var "po"])
+		      ]*)
+		    ]) in
+	pat_wikidata
+      else
+	let pat_SO =
+	  Sparql.(join
+		    [ make_pat ?hook "po" (pattern_SO "ps" "po");
+		      filter
+			(exists (
+			     union
+			       [ bnode_triples_as_pattern (* relation: ps, po *)
+				   [ var "ps", term t;
+				     var "po", bnode "" ];
 			       (*join (* qualifier: ps, po, pq *)
 				 [ bnode_triples_as_pattern
 				     [ var "ps", bnode "";
@@ -467,30 +519,30 @@ module WhichPred =
 					[ expr_infix "!=" [var "pq"; var "ps"];
 					  expr_infix "!=" [var "pq"; var "po"] ])
 				 ]*)
-			     ]))
-		  ]) in
-      let pat_EO =
-	Sparql.(union
-		  [ join
-		      [ pattern_EO "pe" "po";
-			filter (exists (
-			triple (* forward: pe, po *)
-			  (term t)
-			  (var "pe")
-			  (bnode_triples
-			     [ var "po", bnode "" ]))) ];
-		    if init
-		    then empty
-		    else join (* backward: pe, ps, po *)
-			   [ pattern_EO "pe" "ps";
-			     filter
-			       (exists (
-				    triple
-				      (bnode "")
-				      (var "pe")
-				      (bnode_triples
-					 [ var "ps", term t ]))) (* binding 'ps' to distinguish orientation *)
-			   ];
+			       ]))
+		    ]) in
+	let pat_EO =
+	  Sparql.(union
+		    [ join
+			[ make_pat ?hook "pe" (pattern_EO "pe" "po");
+			  filter (exists (
+				      triple (* forward: pe, po *)
+					(term t)
+					(var "pe")
+					(bnode_triples
+					   [ var "po", bnode "" ]))) ];
+		      if init
+		      then empty
+		      else join (* backward: pe, ps, po *)
+			     [ make_pat ?hook "pe" (pattern_EO "pe" "ps");
+			       filter
+				 (exists (
+				      triple
+					(bnode "")
+					(var "pe")
+					(bnode_triples
+					   [ var "ps", term t ]))) (* binding 'ps' to distinguish orientation *)
+			     ];
 		    (*join (* qualifier: pe, po, pq *)
 		      [ triple
 			  (bnode "")
@@ -501,46 +553,8 @@ module WhichPred =
 			filter
 			  (expr_infix "!=" [var "pq"; var "po"])
 		      ]*)
-		  ]) in
-      let pat_wikidata =
-	Sparql.(union
-		  [ join
-		      [ (*triple (term t) (var "pe") (bnode "");
-			pattern_wikidata "pe" "po";*)
-			(* filter (exists ( *)
-			triple (* forward: pe, po *)
-			  (term t)
-			  (var "pe")
-			  (bnode_triples
-			     [ var "po", bnode "" ]);
-			filter_wikidata "pe" "po" ];
-		    if init
-		    then empty
-		    else join (* backward: pe, ps, po *)
-			   [ (* triple (bnode "") (var "ps") (term t);
-			     pattern_wikidata "pe" "ps" *)
-			     (* filter
-			       (exists ( *)
-				    triple
-				      (bnode "")
-				      (var "pe")
-				      (bnode_triples
-					 [ var "ps", term t ]); (* binding 'ps' to distinguish orientation *)
-			     filter_wikidata "pe" "ps" ];
-		    (*join (* qualifier: pe, po, pq *)
-		      [ triple
-			  (bnode "")
-			  (var "pe")
-			  (bnode_triples
-			     [ var "po", bnode "";
-			       var "pq", term t ]);
-			filter
-			  (expr_infix "!=" [var "pq"; var "po"])
-		      ]*)
-		  ]) in
-      if Rdf.config_wikidata_mode#value
-      then pat_wikidata
-      else Sparql.(union [pat_SO; pat_EO])
+		    ]) in
+	Sparql.(union [pat_SO; pat_EO])
 	    
     let increments_of_terms ~(init : bool) (lt : Rdf.term option list) : Lisql.increment list =
       (* ~init: for initial focus, remind to generate increments in all relevant directions S/P/O *)
@@ -628,7 +642,7 @@ module WhichArg =
   struct
     let pattern_vars = ["pq"]
 
-    let pattern_of_pred_args (pred : Lisql.pred) (args : (Lisql.arg * Rdf.term) list) : Sparql.pattern =
+    let pattern_of_pred_args ?(hook : (string -> Sparql.formula) option) (pred : Lisql.pred) (args : (Lisql.arg * Rdf.term) list) : Sparql.pattern =
       let filter_qualifier =
 	match pred with
 	| Class _ -> Sparql.empty
@@ -639,11 +653,13 @@ module WhichArg =
 	   then Sparql.(filter (expr_func "strstarts" [expr_func "str" [var "pq"]; (string "http://www.wikidata.org/prop/qualifier/P" :> expr)]))
 	   else Sparql.(filter (expr_not_in (var "pq") [uri Rdf.rdf_type; uri po])) in
       Sparql.(join
-		[ pattern_pred_args
-		    pred
-		    (List.map (fun (arg,t) -> (arg, term t)) args)
-		    ["pq", bnode ""];
-		  filter_qualifier ])
+		[ make_pat ?hook "pq"
+			   (Sparql.join
+			      [ pattern_pred_args
+				  pred
+				  (List.map (fun (arg,t) -> (arg, term t)) args)
+				  ["pq", bnode ""];
+				filter_qualifier ]) ])
 
     let increments_of_terms (lt : Rdf.term option list) : Lisql.increment list =
       match lt with
