@@ -43,7 +43,7 @@ let rec string_of_delta =
 				 
 (* constraint compilation *)
 
-let rec get_constr
+let rec get_constr ~endpoint
 	  (current_constr : Lisql.constr)
 	  (getting_constr : bool ref)  (* flag to avoid parallel run of [get_constr] *)
 	  (input_changed : bool ref) (* flag to know when some input was blocked by getting_constr=true *)
@@ -51,6 +51,7 @@ let rec get_constr
 	  (k : Lisql.constr -> unit) : unit =
   input_changed := false;
   Html.make_new_constr
+    ~endpoint
     current_constr
     select input
     (fun new_constr_opt ->
@@ -59,7 +60,7 @@ let rec get_constr
        | Some new_constr -> k new_constr; new_constr
        | None -> current_constr in (* do nothing when the constraint has not changed *)
      if !input_changed
-     then get_constr new_constr getting_constr input_changed select input k
+     then get_constr ~endpoint new_constr getting_constr input_changed select input k
      else getting_constr := false)
 
 let regexp_of_pat pat = Regexp.regexp_with_flag (Regexp.quote pat) "i"
@@ -85,6 +86,7 @@ let norm_constr = (* normalizing for empty patterns "" *)
   | HasLang "" -> True
   | HasDatatype "" -> True
   | ExternalSearch (`Wikidata [], _) -> True
+  | ExternalSearch (`TextQuery [], _) -> True
   | c -> c
 
 let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
@@ -109,7 +111,7 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   | HasDatatype pat ->
      let re = regexp_of_pat pat in
      (fun s_dt -> matches s_dt re)
-  | ExternalSearch (`Wikidata kwds, _) ->
+  | ExternalSearch ((`Wikidata kwds | `TextQuery kwds), _) ->
      let lre = List.map regexp_of_pat kwds in
      (fun s -> List.for_all (fun re -> matches s re) lre)
 
@@ -155,7 +157,8 @@ let subsumed_constr constr1 constr2 : bool =
   | Between (s1a,s1b), Between (s2a,s2b) -> (s2a="" || leq s2a s1a) && (s2b="" || leq s1b s2b)
   | HasLang s1, HasLang s2 -> Common.has_prefix s1 s2
   | HasDatatype s1, HasDatatype s2 -> Common.has_prefix s1 s2
-  | ExternalSearch (`Wikidata kwds1, _), ExternalSearch (`Wikidata kwds2, _) ->
+  | ExternalSearch (`Wikidata kwds1, _), ExternalSearch (`Wikidata kwds2, _)
+  | ExternalSearch (`TextQuery kwds1, _), ExternalSearch (`TextQuery kwds2, _) ->
      List.for_all (fun s2 ->
       List.exists (fun s1 ->
 	Common.has_prefix s1 s2 (* 'has_prefix' used as an approximation of 'contains' *)
@@ -1220,6 +1223,7 @@ let initialize endpoint focus =
 		      getting_constr := true;
 		      let current_constr = current_constr () in
 		      get_constr
+			~endpoint
 			current_constr
 			getting_constr input_changed
 			select input

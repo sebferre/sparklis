@@ -11,8 +11,9 @@ open Common
 (* LISQL constraints *)
 
 type search =
-  [ `Wikidata of string list ]
-       
+  [ `Wikidata of string list
+  | `TextQuery of string list ]
+
 type constr =
   | True
   | MatchesAll of string list
@@ -29,6 +30,7 @@ type constr =
 
 let reset_search = function
   | `Wikidata _ -> `Wikidata ["..."]
+  | `TextQuery _ -> `TextQuery ["..."]
 				
 let reset_constr : constr -> constr = function
   | True -> True

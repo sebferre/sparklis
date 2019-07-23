@@ -91,7 +91,7 @@ let string_is_float =
   let re = Regexp.regexp "^[+-]?(\\d+|\\d*[.]\\d+|\\d+[.]\\d*[eE][+-]?\\d+|[.]\\d+[eE][+-]?\\d+|\\d+[eE][+-]?\\d+)$" in
   (fun s -> Regexp.string_match re s 0 <> None)
 
-let make_new_constr (current_constr : Lisql.constr) select input (k : Lisql.constr option -> unit) : unit =
+let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : Lisql.constr option -> unit) : unit =
   (* calls [k] on [None] if the new contraint is not different from [current_constr] *)
   (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
@@ -135,26 +135,55 @@ let make_new_constr (current_constr : Lisql.constr) select input (k : Lisql.cons
       | "hasDatatype", [] -> HasDatatype ""
       | "hasDatatype", pat::_ -> HasDatatype pat
       | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
+      | "text:query", _ -> ExternalSearch (`TextQuery lpat, None)
       | _ -> True (* in case of undefined option *) in
     input##style##color <- string "black";
     match new_constr with
-    | ExternalSearch ((`Wikidata kwds as new_s), _) ->
+    | ExternalSearch (new_s,_) ->
        ( match current_constr with
-	 | ExternalSearch (s, _) when s = new_s -> k None
+	 | ExternalSearch (s,_) when s = new_s -> k None
 	 | _ ->
-	    let query = String.concat "+" kwds in
-	    let limit = 20 in
-	    Jsutils.Wikidata.ajax_entity_search
-	      query limit
-	      (fun lq_opt ->
-	       let lt_opt =
-		 match lq_opt with
-		 | None -> None
-		 | Some lq ->
-		    Some (List.map
-			    (fun q -> Rdf.URI (Rdf.wikidata_entity q))
-			    lq) in
-	       k (Some (ExternalSearch (new_s, lt_opt)))) )
+	    ( match new_s with
+	      | `Wikidata kwds ->
+		 let query = String.concat "+" kwds in
+		 let limit = 20 in
+		 Jsutils.Wikidata.ajax_entity_search
+		   query limit
+		   (fun lq_opt ->
+		    let lt_opt =
+		      match lq_opt with
+		      | None -> None
+		      | Some lq ->
+			 Some (List.map
+				 (fun q -> Rdf.URI (Rdf.wikidata_entity q))
+				 lq) in
+		    k (Some (ExternalSearch (new_s, lt_opt))))
+	      | `TextQuery kwds ->
+		 let lucene = Jsutils.lucene_query_of_kwds kwds in
+		 if lucene = ""
+		 then k (Some (ExternalSearch (new_s, None)))
+		 else (
+		   let sparql =
+		     let x = "x" in
+		     Sparql.(select
+			       ~distinct:true
+			       ~projections:[`Bare, x]
+			       ~limit:Lis.config_max_increment_samples#value
+			       (text_query (var x) lucene)) in
+		   Sparql_endpoint.(ajax_in
+				      [] (new ajax_pool) (* TODO: define element(s) *)
+				      endpoint (sparql :> string)
+				      (fun results ->
+				       let lt =
+					 List.fold_left
+					   (fun lt binding ->
+					    match binding with
+					    | [| Some t |] -> t::lt
+					    | _ -> lt)
+					   [] results.bindings in
+				       k (Some (ExternalSearch (new_s, Some lt))))
+				      (fun code -> k (Some (ExternalSearch (new_s, None))))
+		 ) ) ) )
     | _ ->
        if new_constr = current_constr
        then k None
@@ -178,6 +207,7 @@ let option_of_constr =
   | HasLang _ -> "hasLang"
   | HasDatatype _ -> "hasDatatype"
   | ExternalSearch (`Wikidata _, _) -> "wikidata"
+  | ExternalSearch (`TextQuery _, _) -> "text:query"
 
 let pattern_of_constr =
   let open Lisql in
@@ -196,6 +226,7 @@ let pattern_of_constr =
   | HasLang pat -> pat
   | HasDatatype pat -> pat
   | ExternalSearch (`Wikidata kwds, _) -> String.concat " " kwds
+  | ExternalSearch (`TextQuery kwds, _) -> String.concat " " kwds
 
 			 
   

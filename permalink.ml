@@ -246,6 +246,7 @@ and print_constr = function
   | ExternalSearch (s,lt_opt) -> print_bin "ExternalSearch" (print_search s) (print_opt (print_list print_term "ListTerm") lt_opt)
 and print_search = function
   | `Wikidata kwds -> print_list print_string "Wikidata" kwds
+  | `TextQuery kwds -> print_list print_string "TextQuery" kwds
 and print_term = function
   | URI uri -> print_un "URI" (print_uri uri)
   | Number (f,s,dt) -> print_ter "Number" (print_float f) (print_string s) (print_string dt)
@@ -466,6 +467,7 @@ and parse_constr ~version = parser
   | [<>] -> syntax_error "invalid constr"
 and parse_search ~version = parser
   | [< kwds = parse_list parse_string ~version "Wikidata" >] -> `Wikidata kwds
+  | [< kwds = parse_list parse_string ~version "TextQuery" >] -> `TextQuery kwds
   | [<>] -> syntax_error "invalid search"
 and parse_term ~version = parser
   | [< uri = parse_un ~version "URI" parse_entity >] -> URI uri

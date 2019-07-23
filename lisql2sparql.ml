@@ -114,21 +114,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
   let label_filter_opt =
     match config_fulltext_search#value, ctx with
     | "text:query", _ ->
-       let terms =
-	 Common.mapfilter
-	   (fun kwd ->
-	    let n = String.length kwd in
-	    if n < 3 then None
-	    else if kwd.[n-1] = '~' then Some kwd
-	    else Some (kwd ^ "*"))
-	   kwds in
-       let lucene_query =
-	 let sep = match op with `All -> " AND " | `Any -> " OR " in
-	 match terms with
-	 | [] -> ""
-	 | [term] -> term
-	 | _ -> "(" ^ String.concat sep terms ^ ")" in
-       let _ = firebug ("Lucene query: " ^ lucene_query) in
+       let lucene_query = Jsutils.lucene_query_of_kwds ~op kwds in
        if lucene_query = ""
        then `NoFilter
        else `Filter (Sparql.Pattern (Sparql.text_query t lucene_query))

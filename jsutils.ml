@@ -306,3 +306,24 @@ module Wikidata =
 	      Lwt.return ()))
 	
   end
+
+
+(* Fuseki services *)
+
+let lucene_query_of_kwds ?(op = `All) kwds =
+  let terms =
+    Common.mapfilter
+      (fun kwd ->
+       let n = String.length kwd in
+       if n < 3 then None
+       else if kwd.[n-1] = '~' then Some kwd
+       else Some (kwd ^ "*"))
+      kwds in
+  let lucene_query =
+    let sep = match op with `All -> " AND " | `Any -> " OR " in
+    match terms with
+    | [] -> ""
+    | [term] -> term
+    | _ -> "(" ^ String.concat sep terms ^ ")" in
+  let _ = firebug ("Lucene query: " ^ lucene_query) in
+  lucene_query

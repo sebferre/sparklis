@@ -766,7 +766,8 @@ and vp_of_constr grammar annot = function
   | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
   | ExternalSearch (s,_) -> vp_of_search grammar annot s
 and vp_of_search grammar annot = function
-  | `Wikidata kwds -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal (String.concat " " kwds), X `Nil)), [])) (* TODO: make wikidata explicit *)
+  | `Wikidata kwds
+  | `TextQuery kwds -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal (String.concat " " kwds), X `Nil)), [])) (* TODO: make search kind explicit *)
 and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
   | Some (InWhichThereIs (annot,np)) -> A (annot, `InWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
