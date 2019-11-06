@@ -143,10 +143,10 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
 	   let term_l = var (gv#new_var "constr_label") in
 	   `Filter (formula_and_list
 		      [ Pattern (triple t (path_alt (List.map uri label_props :> pred list)) term_l);
-		     (if label_langs = []
-		      then True
-		      else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs)));
-		     Pattern (bif_contains term_l sql_query) ])
+			(if label_langs = []
+			 then True
+			 else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs)));
+			Pattern (bif_contains term_l sql_query) ])
     | _ -> (* using REGEX *)
        if label_props = []
        then `Undefined
@@ -349,7 +349,7 @@ let make_pat ?(hook : (string -> Sparql.formula) option) (v : string) (pat : Spa
   | None -> pat
   | Some h ->
      Sparql.pattern_of_formula
-       (Sparql.formula_and (Sparql.Pattern pat) (h v))
+       (Sparql.formula_and (h v) (Sparql.Pattern pat))
 				 
 (* definitions to retrieve classes from focus *)
 module WhichClass =
@@ -1084,7 +1084,7 @@ let make_query_formula (focus_term_opt : Rdf.term option) (view : Sparql.view) =
     let form_hook =
       match focus_term_opt, hook with
       | Some (Rdf.Var v), Some f_hook ->
-	Sparql.formula_and sq_view.Sparql.formula (f_hook (Sparql.var v :> Sparql.term))
+	Sparql.formula_and (f_hook (Sparql.var v :> Sparql.term)) sq_view.Sparql.formula
       | _ -> sq_view.Sparql.formula in
     sq_view, form_hook)
 
@@ -1190,7 +1190,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
 	  match focus_term_opt with
 	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ?limit view) form_x
 	  | _ -> form_x in
-	let form_x = Sparql.formula_and form_x (hook tx) in
+	let form_x = Sparql.formula_and (hook tx) form_x in
 	let projections = List.map (fun x -> (`Bare,x)) lx in
 	(Sparql.select ~projections ~froms ?limit
 	   (Sparql.pattern_of_formula form_x) :> string))

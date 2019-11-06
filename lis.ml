@@ -1531,13 +1531,16 @@ object (self)
     let l_constr =
       if Rdf.config_wikidata_mode#value then
 	ExternalSearch (`Wikidata ["..."], None) :: l_constr
-      else (* PEGASE specific hack *)
+      (*else if Lisql2sparql.config_fulltext_search#value = "text:query" then
+	ExternalSearch (`TextQuery ["..."], None) :: l_constr*)
+      else l_constr in
+(*      else (* PEGASE specific hack *)
 	let open Lisql in
 	match focus with
 	| AtS1 (_, CConsX1 (O, _, PredX (S, EO ("http://semlis-test/faers/associatedDrugEvent","http://semlis-test/faers/activeIngredient"), _))) ->
 	   Jsutils.firebug "PEGASE Express!";
 	   ExternalSearch (`TextQuery ["..."], None) :: l_constr
-	| _ -> l_constr in
+	| _ -> l_constr in *)
     let l_constr =
       List.filter
 	(fun constr ->
