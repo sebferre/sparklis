@@ -776,7 +776,7 @@ object (self)
       incr_index#add (Lisql.IncrSelection (`NAnd, []), None);
       incr_index#add (Lisql.IncrSelection (`NOr, []), None);
     (* adding increment 'anything' *)
-      if Lisql.insert_increment Lisql.IncrAnything focus <> None then
+      if focus_term_index#length > 1 && Lisql.insert_increment Lisql.IncrAnything focus <> None then
 	incr_index#add (Lisql.IncrAnything, None);
     (* adding term increments *)
       focus_term_index#iter (*rev_map*)

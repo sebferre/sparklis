@@ -391,7 +391,7 @@ object
   method quantif_one = "un·e"
   method quantif_of = "parmi"
   method something = "quelque chose"
-  method anything = "n'importe quoi"
+  method anything = "n'importe lequel"
   method everything = "tout"
   method nothing = "rien"
   method for_ = "pour"
