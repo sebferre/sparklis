@@ -30,6 +30,7 @@ let session_id : string = (* random session ID to disambiguate undefinite IPs *)
 
 let config_short_permalink = new Config.boolean_input ~key:"short-permalink" ~input_selector:"#input-short-permalink" ~default:true ()
 
+let config_auto_filtering = new Config.boolean_input ~key:"auto-filtering" ~input_selector:"#input-auto-filtering" ~default:true ()
 
 (* debug utilities *)
 
@@ -215,7 +216,8 @@ let config =
       (Lisql2sparql.config_fulltext_search :> Config.input);
       (Html.config_logo_height :> Config.input);
       (config_logging :> Config.input);
-      (config_short_permalink :> Config.input); ] in
+      (config_short_permalink :> Config.input);
+      (config_auto_filtering :> Config.input); ] in
 object (self)
   method set_endpoint (endpoint : string) : unit =
     Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
@@ -897,9 +899,13 @@ object (self)
 
   method refresh_new_term_constr current_constr new_constr =
     let to_filter, to_refresh =
-      if equivalent_constr new_constr current_constr then false, false
-      else if subsumed_constr new_constr current_constr then true, not refreshing_terms
-      else begin self#abort_all_ajax; true, true end in
+      if equivalent_constr new_constr current_constr then
+	false, false
+      else if config_auto_filtering#value && subsumed_constr new_constr current_constr then
+	true, not refreshing_terms
+      else (
+	self#abort_all_ajax;
+	true, true ) in
     if to_filter then begin
       jquery "#list-terms" (fun elt_list ->
 	self#filter_increments elt_list new_constr)
@@ -1206,31 +1212,35 @@ let initialize endpoint focus =
 	     history#update_focus ~push_in_history:true
 				  (Lisql.insert_constr constr)))));
 
-    jquery_input "#pattern-terms" (onenter (fun input ev ->
-      jquery_click "#button-terms"));
     List.iter
       (fun (getting_constr, input_changed,
 	    sel_select, sel_input,
 	    current_constr, k) ->
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
-	      (oninput
-		 (fun input ev ->
-		  if !getting_constr
-		  then input_changed := true
-		  else
-		    begin
-		      getting_constr := true;
-		      let current_constr = current_constr () in
-		      get_constr
-			~endpoint
-			current_constr
-			getting_constr input_changed
-			select input
-			(fun new_constr ->
-			 k current_constr new_constr)
-		    end)
-		 input))))
+	    let handler ~oninput input ev =
+	      if oninput = config_auto_filtering#value || input##value##length = 0 then
+		if !getting_constr
+		then input_changed := true
+		else
+		  begin
+		    getting_constr := true;
+		    let current_constr = current_constr () in
+		    get_constr
+		      ~endpoint
+		      current_constr
+		      getting_constr input_changed
+		      select input
+		      (fun new_constr ->
+		       k current_constr new_constr)
+		  end
+	      else if not oninput (* onenter, and auto-filtering *)
+		      && sel_input = "#pattern-terms" then
+		jquery_click "#button-terms"
+	    in
+	    (* register on both events, and handler decides based on config *)
+	    oninput (handler ~oninput:true) input;
+	    onenter (handler ~oninput:false) input)))
       [(ref false, ref false,
 	"#select-terms", "#pattern-terms",
 	(fun () -> history#present#term_constr),
