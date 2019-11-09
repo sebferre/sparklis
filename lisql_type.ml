@@ -178,7 +178,7 @@ let constr_domains : constr -> datatype list = function
   (* constraints assimilated to one-argument functions with Bool results *)
   | True -> [`Term]
   | MatchesAll _
-  | MatchesAny _ -> [`IRI; `StringLiteral; `Date; `Time; `Duration]
+  | MatchesAny _ -> [`IRI; `StringLiteral; `Date; `Time; `DateTime; `Duration]
   | After _
   | Before _
   | FromTo _ -> [`IRI; `StringLiteral; `Date; `Time; `Duration]
@@ -349,6 +349,10 @@ type focus_type_constraints = { input_constr : type_constraint;
 
 let default_focus_type_constraints = { input_constr = None; output_constr = None }
 
+let union_focus_type_constraints ftc1 ftc2 =
+  { input_constr = union_constraints [ftc1.input_constr; ftc2.input_constr];
+    output_constr = union_constraints [ftc1.output_constr; ftc2.output_constr] }
+				       
 exception TypeError
 
 let rec constr_of_elt_expr (env : id -> type_constraint) : 'a elt_expr -> type_constraint (* raise TypeError *) = function

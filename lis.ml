@@ -547,18 +547,6 @@ object (self)
 
   val mutable sparql_opt : string option = None
 	
-  method define_sparql term_constr ~limit =
-    match s_sparql.Lisql2sparql.query_opt with
-    | None ->
-       sparql_opt <- None
-    | Some query ->
-       let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
-       let froms = Sparql_endpoint.config_default_graphs#froms in
-       let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr) ~froms ~limit () in
-       sparql_opt <- Some sparql
-
-  method sparql : string option = sparql_opt
-
   val mutable max_results = config_max_results#value
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_typing : Lisql_type.datatype list array = [||]
@@ -568,6 +556,28 @@ object (self)
   val mutable focus_pred_args_index : (Rdf.term list, Rdf.term) nested_int_index = new nested_int_index (* used when some focus-pred-args *)
   val mutable some_focus_term_is_blank : bool = false
 
+  method define_sparql term_constr ~limit =
+    match s_sparql.Lisql2sparql.query_opt with
+    | None ->
+       sparql_opt <- None
+    | Some query ->
+       let ft : Lisql2sparql.filter_type =
+	 let has_IRI =
+	   Lisql_type.(check_input_constraint focus_type_constraints.input_constr `IRI) in
+	 let has_Literal =
+	   Lisql_type.(check_input_constraint focus_type_constraints.input_constr `String) in
+	 match has_IRI, has_Literal with
+	 | true, true -> `Mixed
+	 | true, false -> `OnlyIRIs
+	 | false, true -> `OnlyLiterals
+	 | false, false -> `OnlyIRIs in
+       let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
+       let froms = Sparql_endpoint.config_default_graphs#froms in
+       let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity ft sparql_genvar tx term_constr) ~froms ~limit () in
+       sparql_opt <- Some sparql
+
+  method sparql : string option = sparql_opt
+						  
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
     try
       let v = id_labelling#get_id_var id in
@@ -617,9 +627,12 @@ object (self)
 	  (fun res ->
 	    results <- res;
 	    results_typing <- Lisql_type.of_sparql_results res;
-	    focus_type_constraints <- Lisql_type.of_focus
-	      (fun id -> Some (self#id_typing id))
-	      focus focus_descr;
+	    focus_type_constraints <-
+	      Lisql_type.union_focus_type_constraints
+		focus_type_constraints
+		(Lisql_type.of_focus
+		   (fun id -> Some (self#id_typing id))
+		   focus focus_descr);
 	    (* defining focus_term_index and focus_graph_index *)
 	    ( match
 		(if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
