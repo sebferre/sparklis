@@ -984,9 +984,11 @@ let rec root_expr_of_ctx_expr (f : unit elt_expr) : ctx_expr -> unit elt_s * ctx
   | ChoiceX (ll_rr,ctx) -> root_expr_of_ctx_expr (Choice ((), list_of_ctx f ll_rr)) ctx
 
 
-let focus_up_at_root_s1 = function
+let rec focus_up_at_root_s1 = function
   | AtS1 (f, CConsX1 (arg2,cp, PredX (arg1,pred,ctx))) -> Some (AtP1 (Pred ((),arg1,pred,CCons ((),arg2,f,cp)), ctx))
   | AtS1 (f, RelX (p, m, ctx)) -> Some (AtP1 (Rel ((),p,m,f), ctx))
+  | AtS1 (f, HierX (id,pred,arg1,arg2, DetThatX (det, ctx))) ->
+     focus_up_at_root_s1 (AtS1 (Det ((),det, Some (Hier ((),id,pred,arg1,arg2,f))), ctx))
   | AtS1 (f, TripleX1 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,f,np), ctx))
   | AtS1 (f, TripleX2 (arg,np,ctx)) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
   | AtS1 (f, InGraphX (f1,ctx)) -> Some (AtP1 (f1, InX (f,ctx)))
