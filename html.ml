@@ -598,6 +598,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
 let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(inverse : bool) ~(sort_by_frequency : bool): string * string * int =
+  let grammar = Lisql2nl.config_lang#grammar in
   let sort_node_list nodes =
     List.sort
       (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
@@ -627,6 +628,13 @@ let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state 
 	 Buffer.add_string buf_tree "</li>";
 	 incr ref_count end)
       sorted_nodes;
+    if !ref_count = 0 then ( (* feedback for no suggestion *)
+      Buffer.add_string buf_tree "<li class=\"col-xs-11\">";
+      Buffer.add_string buf_tree "<label style=\"visibility:hidden;\">►&nbsp;</label>";
+      let text = "(" ^ grammar#no ^ " " ^ fst grammar#item_items ^ ")" in
+      Buffer.add_string buf_tree (html_span ~classe:"no-match" text);
+      Buffer.add_string buf_tree "</li>"
+    ); 
     Buffer.add_string buf_tree "</ul>"
   in
   let enriched_index_tree = index#filter_map_tree ~inverse (freq_text_html_increment_frequency ~filter focus state) in

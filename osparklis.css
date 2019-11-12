@@ -101,6 +101,10 @@ select {
     margin:0px;
 }
 
+.no-match {
+    opacity:0.5;
+}
+
 .increments-focus {
 }
 
