@@ -38,6 +38,9 @@ type results =
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
 let unit_results = { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
 
+let results_vars (res : results) =
+  List.map fst res.vars
+		     
 let float_of_results (res: results) : float option =
 (* useful for simple aggregations returning a single number cell *)
   match res.bindings with

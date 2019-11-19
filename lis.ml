@@ -356,6 +356,10 @@ let enqueue_term = function
      Lexicon.enqueue_class dt
   | _ -> ()
 
+let enqueue_term_opt = function
+  | None -> ()
+  | Some t -> enqueue_term t
+
 let enqueue_binding_terms binding =
   Array.iter
     (function
@@ -410,6 +414,137 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
     []
 
 
+(* use of dependencies between vars to structure query results *)
+    
+type results_shape =
+  | Concat of results_shape list (* INV: at least 2 elements *)
+  | Map of Rdf.var * results_shape
+  | Unit
+
+let rec string_of_results_shape = function
+  | Concat lsh ->
+     String.concat " " (List.map (fun sh -> "< " ^ string_of_results_shape sh ^ " >") lsh)
+  | Map (x,Unit) -> x
+  | Map (x,sh) -> x ^ ", " ^ string_of_results_shape sh
+  | Unit -> "[]"
+      
+module FMDeps =
+  Find_merge.Set
+    (struct type t = Rdf.var let compare = Pervasives.compare end)
+	     
+let results_shape_of_deps (deps : Lisql2sparql.deps) (lx : Rdf.var list) : results_shape =
+  let xdeps = (* converting dependencies from terms to variables *)
+    List.map
+      (fun dep -> Common.mapfilter (function Rdf.Var x -> Some x |_ -> None) dep)
+      deps in
+  let fm_of_xdeps xdeps =
+    List.fold_left
+      (fun fm xdep ->
+       match xdep with
+       | [] -> fm
+       | x::_ -> snd (FMDeps.merge xdep fm))
+      FMDeps.empty xdeps in
+  let rec shape_of_xdeps xdeps lx : results_shape =
+    match lx with
+    | [] -> Unit
+    | x1::lxr ->
+       let fm = fm_of_xdeps xdeps in
+       match list_shape_of_fm fm x1 lxr xdeps with
+       | [] -> Unit
+       | [sh] -> sh
+       | lsh -> Concat lsh
+  and list_shape_of_fm fm x1 lxr xdeps =
+    let root1, _fm = FMDeps.find_root x1 fm in
+    let lx1, lxr =
+      List.partition
+	(fun x -> fst (FMDeps.find_root x fm) = root1)
+	lxr in
+    let xdeps1, xdepsr =
+      List.partition
+	(function
+	  | [] -> false
+	  | x::_ -> fst (FMDeps.find_root x fm) = root1)
+	xdeps in
+    let xdeps1 = (* removing x1 from dependencies *)
+      List.map
+	(fun xdep1 -> List.filter ((<>) x1) xdep1)
+	xdeps1 in
+    let shape1 = Map (x1, shape_of_xdeps xdeps1 lx1) in
+    let lshaper =
+      match lxr with
+      | [] -> []
+      | x2::lxr -> list_shape_of_fm fm x2 lxr xdepsr in
+    shape1::lshaper
+  in
+  shape_of_xdeps xdeps lx
+  
+type shape_data =
+  [ `Unit
+  | `Concat of shape_data list
+  | `Map of Rdf.var * (Rdf.term option * shape_data) list
+  | `Table of Rdf.var list * Rdf.term option list list ]
+
+let shape_data_of_results (shape : results_shape) results (k : Rdf.var list -> shape_data -> unit) : unit =
+  let open Sparql_endpoint in
+  let var_index = results.vars in (* assoc var -> binding index *)
+  let rec aux shape bindings =
+    match shape with
+    | Unit -> [], 1, `Unit
+    | Concat lsh ->
+       let lv, c, ld =
+	 List.fold_right
+	   (fun sh (lv,c,ld) ->
+	    let lvi, ci, di = aux sh bindings in
+	    lvi@lv, c*ci, di::ld)
+	   lsh ([],1,[]) in
+       assert (c > 0);
+       lv, c, `Concat ld
+    | Map (v,sh) ->
+       let i = try List.assoc v var_index with Not_found -> assert false in
+       let ht = Hashtbl.create 201 in
+       bindings
+       |> List.iter
+	    (fun binding ->
+	     let t_opt = binding.(i) in
+	     let ref_t_bindings =
+	       try Hashtbl.find ht t_opt
+	       with Not_found ->
+		 let r = ref [] in
+		 Hashtbl.add ht t_opt r;
+		 r in
+	     ref_t_bindings := binding::!ref_t_bindings);
+       let functional, lv, c, ltd =
+	 Hashtbl.fold
+	   (fun t_opt ref_t_bindings (func,lv,c,ltd) ->
+	    let lvi, ci, di = aux sh !ref_t_bindings in (* all [lvi] are the same *)
+	    enqueue_term_opt t_opt;
+	    func && ci=1, v::lvi, c+ci, (t_opt,di)::ltd)
+	   ht (true,[],0,[]) in
+       assert (c > 0);
+       let d = `Map (v,ltd) in
+       let d =
+	 if functional
+	 then
+	   let rows = List.map (fun (t_opt,d) -> t_opt :: row_of_data d) ltd in
+	   `Table (lv,rows)
+	 else d in
+       lv, c, d
+  and row_of_data = function
+    | `Unit -> []
+    | `Concat ld ->
+       List.concat (List.map row_of_data ld)
+    | `Map (_,[(t_opt,d)]) -> t_opt :: row_of_data d
+    | `Map _ -> assert false       
+    | `Table (_,[row]) -> row
+    | `Table _ -> assert false
+  in
+  let lv, _c, data = aux shape results.bindings in
+  sync_terms
+    (fun () -> k lv data)
+
+		 
+(* slidewhow *)
+      
 type slide_data = { media_uri : Rdf.uri;
 		    binding_fields : (string (* var name *) * Rdf.term option) list }
       
@@ -437,7 +572,9 @@ let slides_of_results results (k : slide_data list -> unit) : unit =
   in
   sync_terms
     (fun () -> k (List.rev rev_l))
-      
+
+(* geolocations *)
+    
 let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list) results (k : (float * float * Rdf.term) list -> unit) : unit =
   let open Sparql_endpoint in
   let l =
@@ -500,6 +637,7 @@ object (self)
       focus_term_opt = None;
       focus_graph_opt = None;
       focus_pred_args_opt = None;
+      deps = [];
       query_opt = None;
       query_count_opt = None;
       query_class_opt = None;
@@ -549,6 +687,7 @@ object (self)
 	
   val mutable max_results = config_max_results#value
   val mutable results = Sparql_endpoint.empty_results
+  val mutable results_shape = Unit
   val mutable results_typing : Lisql_type.datatype list array = [||]
   val mutable focus_type_constraints : Lisql_type.focus_type_constraints = Lisql_type.default_focus_type_constraints
   val mutable focus_term_index : (Rdf.term, Rdf.term) nested_int_index = new nested_int_index (* used when some focus term *)
@@ -603,6 +742,7 @@ object (self)
       | None -> None
     in
     results <- Sparql_endpoint.empty_results;
+    results_shape <- Unit;
     results_typing <- [||];
     focus_term_index <- new nested_int_index;
     focus_graph_index <- new int_index;
@@ -626,6 +766,8 @@ object (self)
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
+	    results_shape <- results_shape_of_deps s_sparql.Lisql2sparql.deps (Sparql_endpoint.results_vars res);
+	    Jsutils.firebug ("SHAPE: " ^ string_of_results_shape results_shape);
 	    results_typing <- Lisql_type.of_sparql_results res;
 	    focus_type_constraints <-
 	      Lisql_type.union_focus_type_constraints
@@ -663,11 +805,14 @@ object (self)
     self#define_sparql term_constr ~limit:config_max_results#value;
     k_sparql sparql_opt;
     self#ajax_results elts ~k_results
-    
+
+  method results = results
+  method results_shape = results_shape
   method partial_results = (results.Sparql_endpoint.length = max_results)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
   method results_page offset limit k = page_of_results offset limit s_sparql.Lisql2sparql.state#geolocs results k
+  method results_shape_data k = shape_data_of_results results_shape results k
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.state#geolocs results k
   method results_slides k = slides_of_results results k
 

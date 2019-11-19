@@ -691,10 +691,14 @@ let html_cell_contents (t : Rdf.term) =
      else html_word (Lisql2nl.word_of_term t)
   | _ -> html_word (Lisql2nl.word_of_term t)
 			 
-let html_cell state ~(view : results_view) ~(rank : int) ~(column : Lisql.id) t =
+let html_cell state ?(view : results_view option) ?(rank : int option) ?(column : Lisql.id option) t =
   let contents = html_cell_contents t in
-  let key = state#dico_results#add (view,rank,column,t) in
-  html_span ~id:key ~classe:"cell" contents
+  let key_opt =
+    match view, rank, column with
+    | Some view, Some rank, Some column ->
+       Some (state#dico_results#add (view,rank,column,t))
+    | _ -> None in
+  html_span ?id:key_opt ~classe:"cell" contents
 
 let html_table_of_results (state : state) ~partial ~first_rank ~focus_var results counts =
   let open Sparql_endpoint in
@@ -755,6 +759,92 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
   Buffer.contents buf
 
 
+let html_trees (state : state) lv shape_data =
+  let open Sparql_endpoint in
+  let grammar = Lisql2nl.config_lang#grammar in
+  let var_html =
+    let id_labelling = state#id_labelling in
+    List.map
+      (fun v ->
+       v,
+       html_of_nl_xml
+	 state
+	 (Lisql2nl.xml_ng_id
+	    ~isolated:true
+	    grammar
+	    ~id_labelling
+	    (id_labelling#get_var_id v)))
+      lv in
+  let buf = Buffer.create 1000 in
+  let add_string str : unit = Buffer.add_string buf str in
+  let add_term_opt t_opt =
+    match t_opt with
+    | None -> add_string "?"
+    | Some t -> add_string (html_cell state t) in
+  let rec aux = function
+    | `Unit -> ()
+    | `Concat ld ->
+       List.iter
+	 (fun d -> aux d)
+	 ld;
+    | `Map (v,ltd) ->
+       add_string "<div class=\"table-responsive\" style=\"float:left; margin:0px 5px\">";
+       add_string "<table class=\"table table-bordered table-condensed table-hover\">";
+       (* headers *)
+       add_string "<tr>";
+       add_string "<th class=\"header\">";
+       add_string (try List.assoc v var_html with _ -> assert false);
+       add_string "</th>";
+       add_string "</tr>";
+       (* rows *)
+       List.iter
+	 (fun (t_opt, d) ->
+	  add_string "<tr>";
+	  add_string "<td>";
+	  add_term_opt t_opt;
+	  add_string "</td>";
+	  ( match d with
+	    | `Unit -> ()
+	    | _ ->
+	       add_string "<td>";
+	       aux d;
+	       add_string "</td>"
+	  );
+	  add_string "</tr>")
+	 ltd;
+       add_string "</table>";
+       add_string "</div>"
+    | `Table (lv,rows) ->
+       add_string "<div class=\"table-responsive\" style=\"float:left; margin:0px 5px\">";
+       add_string "<table class=\"table table-bordered table-condensed table-hover\">";
+       (* headers *)
+       add_string "<tr>";
+       List.iter
+	 (fun v ->
+	  add_string "<th class=\"header\">";
+	  add_string (try List.assoc v var_html with _ -> assert false);
+	  add_string "</th>")
+	 lv;
+       add_string "</tr>";
+       (* rows *)
+       List.iter
+	 (fun row ->
+	  add_string "<tr>";
+	  List.iter
+	    (fun t_opt ->
+	     add_string "<td>";
+	     add_term_opt t_opt;
+	     add_string "</td>")
+	    row;
+	  add_string "</tr>")
+	 rows;
+       add_string "</table>";
+       add_string "</div>"
+  in
+  aux shape_data;
+  Buffer.contents buf
+
+		  
 let html_slides state slides =
   let id_labelling = state#id_labelling in
   let buf = Buffer.create 1000 in

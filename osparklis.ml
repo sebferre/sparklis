@@ -461,6 +461,8 @@ object (self)
 	  jquery_set_innerHTML "#count-results"
 			       (let grammar = Lisql2nl.config_lang#grammar in
 				grammar#no ^ " " ^ fst grammar#result_results);
+	  jquery_disable_all "#nav-results-trees";
+	  jquery_set_innerHTML "#trees" "";
 	  jquery_disable_all "#nav-results-map";
 	  jquery_set_innerHTML "#map" "No geolocalized data";
 	  jquery_disable_all "#nav-results-slideshow";
@@ -518,6 +520,11 @@ object (self)
 	      let _view, _rank, id, term = html_state#dico_results#get key in
 	      let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	      Lisql.insert_term term id_focus ))));
+	(* trees of results *)
+	lis#results_shape_data
+	  (fun lv shape_data ->
+	   jquery_enable_all "#nav-results-trees";
+	   jquery_set_innerHTML "#trees" (Html.html_trees html_state lv shape_data));
 	(* slideshow of results *)
 	lis#results_slides
 	  (function

@@ -63,6 +63,7 @@ object (self)
   method genvar = gv
 end
 
+  
 (* assuming only few variables are created with same prefix in a given query *)
 (*let random_sparql_var prefix : Sparql.var = Sparql.var (prefix ^ string_of_int (Random.int 1000))*)
   
@@ -328,7 +329,12 @@ and name_func = function
   | `REGEX | `REGEX_i -> "REGEX"
   | `LangMatches -> "langMatches"
 
-    
+type deps = Rdf.term list list (* each dependency corresponds to a hyper-edge over a list of vars *)
+type deps_p1 = Rdf.term -> deps
+type deps_pn = Rdf.term list -> deps
+type deps_s1 = deps_p1 -> deps
+type deps_sn = deps_pn -> deps
+
 type sparql_p1 = Sparql.term -> Sparql.formula
 type sparql_p2 = Sparql.term -> Sparql.term -> Sparql.formula
 type sparql_pn = (arg * Sparql.term) list -> Sparql.formula
@@ -665,13 +671,15 @@ let path_pred_args_argo pred args argo =
 let form_pred state (pred : pred) : sparql_pn =
   (fun l -> Sparql.Pattern (pattern_pred_args pred l []))
 	      
-let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
+let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
   | Is (annot,np) -> form_s1_as_p1 state np
   | Pred (annot,arg,pred,cp) ->
      let pred = form_pred state pred in
-     let cp = form_sn state cp in
+     let cp_deps, cp = form_sn state cp in
+     (fun x -> cp_deps (fun l -> [x::l])),
      (fun x -> cp (fun l -> pred ((arg,x)::l)))
   | Type (annot,c) ->
+     (fun x -> []),
      (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
   | Rel (annot,prop,ori,np) ->
      let p = Sparql.uri prop in
@@ -679,7 +687,8 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
        match ori with
        | Fwd -> (fun x y -> Sparql.Pattern (Sparql.triple x p y))
        | Bwd -> (fun x y -> Sparql.Pattern (Sparql.triple y p x)) in
-     let q_np = form_s1 state np in
+     let q_np_deps, q_np = form_s1 state np in
+     (fun x -> q_np_deps (fun y -> [[x;y]])),
      (fun x -> q_np (fun y -> rel x y))
   | Hier (annot,id,pred,args,argo,np) ->
      let vy = state#id_labelling#get_id_var id in
@@ -690,7 +699,8 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
        let path = path_pred_args_argo pred args argo in
        let trans_path = path_transitive path in
        (fun x y -> Pattern (triple x trans_path y)) in
-     let q_np = form_s1 ~ignore_top:true state np in
+     let q_np_deps, q_np = form_s1 ~ignore_top:true state np in
+     (fun x -> q_np_deps (fun z -> [[x;z]]) @ [[x; Rdf.Var vy]]),
      (fun x ->
       state#add_var vy;
       Sparql.formula_and_list [q_np (fun z -> hier x z); hier x y])
@@ -699,44 +709,58 @@ let rec form_p1 state : annot elt_p1 -> sparql_p1 = function
     let v2 = state#id_labelling#get_id_var id2 in
     let lat, long = Sparql.var v1, Sparql.var v2 in
     let f_ll = form_latlong ll in
+    (fun x -> [[x; Rdf.Var v1; Rdf.Var v2]]),
     (fun x ->
      state#add_geoloc x v1 v2;
      f_ll x lat long)
   | Triple (annot,arg,np1,np2) ->
-    let q_np1 = form_s1 state np1 in
-    let q_np2 = form_s1 state np2 in
+    let q_np1_deps, q_np1 = form_s1 state np1 in
+    let q_np2_deps, q_np2 = form_s1 state np2 in
+    (fun x -> q_np1_deps (fun y -> q_np2_deps (fun z -> [[x;y;z]]))),
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
-  | Search (annot,c) -> (fun x -> search_constr_entity state#genvar x c)
-  | Filter (annot,c) -> (fun x -> filter_constr_entity `Mixed state#genvar x c) (* TODO: how to refine `Mixed when `OnlyIRIs or `OnlyLiterals ? *)
+  | Search (annot,c) ->
+     (fun x -> []),
+     (fun x -> search_constr_entity state#genvar x c)
+  | Filter (annot,c) ->
+     (fun x -> []),
+     (fun x -> filter_constr_entity `Mixed state#genvar x c) (* TODO: how to refine `Mixed when `OnlyIRIs or `OnlyLiterals ? *)
   | And (annot,lr) ->
-    let lr_d = List.map (fun elt -> form_p1 state elt) lr in
-    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+     let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_p1 state elt) lr) in
+     (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
+     (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
   | Or (annot,lr) ->
     ( match annot#get_susp_focus_index with
     | Some i -> form_p1 state (List.nth lr i)
     | None ->
-      let lr_d = List.map (fun elt -> form_p1 state elt) lr in
-      (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d)) )
+       let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_p1 state elt) lr) in
+       (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
+       (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d)) )
   | Maybe (annot,f) ->
     if annot#is_susp_focus
     then form_p1 state f
     else
-      let d = form_p1 state f in
+      let d_deps, d = form_p1 state f in
+      (fun x -> d_deps x),
       (fun x -> Sparql.formula_optional (d x))
   | Not (annot,f) ->
     if annot#is_susp_focus
     then form_p1 state f
     else
-      let d = form_p1 (Oo.copy state) f in
+      let d_deps, d = form_p1 (Oo.copy state) f in
+      (fun x -> d_deps x),
       (fun x -> Sparql.formula_not (d x))
   | In (annot,npg,f) ->
-    let q = form_s1 state npg in
-    let d = form_p1 state f in
+    let q_deps, q = form_s1 state npg in
+    let d_deps, d = form_p1 state f in
+    (fun x -> q_deps (fun g -> d_deps x |> List.map (fun dep -> g::dep))),
     (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
   | InWhichThereIs (annot,np) ->
-    let q = form_s1 state np in
-    (fun g -> Sparql.formula_graph g (q (fun x -> Sparql.True)))
-  | IsThere annot -> (fun x -> Sparql.True)
+     let q_deps, q = form_s1 state np in
+     (fun g -> q_deps (fun x -> []) |> List.map (fun dep -> g::dep)),
+     (fun g -> Sparql.formula_graph g (q (fun x -> Sparql.True)))
+  | IsThere annot ->
+     (fun x -> []),
+     (fun x -> Sparql.True)
 and form_latlong = function
   | `Custom (plat,plong) ->
      (fun x lat long ->
@@ -746,12 +770,13 @@ and form_latlong = function
   | `Wikidata ->
      (fun x lat long -> Sparql.Pattern (Sparql.wikidata_lat_long x lat long))
 and form_p1_opt state = function
-  | None -> (fun x -> Sparql.True)
+  | None -> (fun x -> []), (fun x -> Sparql.True)
   | Some rel -> form_p1 state rel
-and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
+and form_s1_as_p1 state : annot elt_s1 -> deps_p1 * sparql_p1 = function
   | Det (annot,det,rel_opt) ->
     let d1 = form_s2_as_p1 state det in
-    let d2 = form_p1_opt state rel_opt in
+    let d2_deps, d2 = form_p1_opt state rel_opt in
+    (fun x -> d2_deps x),
     (fun x -> Sparql.formula_and (d1 x) (d2 x))
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
@@ -760,29 +785,34 @@ and form_s1_as_p1 state : annot elt_s1 -> sparql_p1 = function
       ( match np with
       | Det (_, An (id, _, _), _)
       | AnAggreg (_, id, _, _, _, _) ->
-	form_aggreg_op state idg modifg g (form_p1_opt state relg_opt) id;
-	form_s1_as_p1 state np
+	 let _d_deps, d = form_p1_opt state relg_opt in
+	 form_aggreg_op state idg modifg g d id;
+	 form_s1_as_p1 state np
       | _ -> assert false )
   | NAnd (annot,lr) ->
-    let lr_d = List.map (fun elt -> form_s1_as_p1 state elt) lr in
-    (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
+     let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_s1_as_p1 state elt) lr) in
+     (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
+     (fun x -> Sparql.formula_and_list (List.map (fun d -> d x) lr_d))
   | NOr (annot,lr) ->
     ( match annot#get_susp_focus_index with
     | Some i -> form_s1_as_p1 state (List.nth lr i)
     | None ->
-      let lr_d = List.map (fun elt -> form_s1_as_p1 state elt) lr in
-      (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d)) )
+       let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_s1_as_p1 state elt) lr) in
+       (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
+       (fun x -> Sparql.formula_or_list (List.map (fun d -> d x) lr_d)) )
   | NMaybe (annot,f) ->
     if annot#is_susp_focus
     then form_s1_as_p1 state f
     else
-      let d = form_s1_as_p1 state f in
+      let d_deps, d = form_s1_as_p1 state f in
+      (fun x -> d_deps x),
       (fun x -> Sparql.formula_optional (d x))
   | NNot (annot,f) ->
     if annot#is_susp_focus
     then form_s1_as_p1 state f
     else
-      let d = form_s1_as_p1 (Oo.copy state) f in
+      let d_deps, d = form_s1_as_p1 (Oo.copy state) f in
+      (fun x -> d_deps x),
       (fun x -> Sparql.formula_not (d x))
 and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
   | Term t ->
@@ -797,42 +827,48 @@ and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
 and form_head_as_p1 state : elt_head -> sparql_p1 = function
   | Thing -> (fun x -> Sparql.True)
   | Class c -> (fun x -> Sparql.(Pattern (rdf_type x (uri c))))
-and form_sn state : annot elt_sn -> sparql_sn = function
+and form_sn state : annot elt_sn -> deps_sn * sparql_sn = function
   | CNil annot ->
+     (fun p -> p []),
      (fun p -> p [])
   | CCons (annot,arg,np,cp) ->
-     let np = form_s1 state np in
-     let cp = form_sn state cp in
+     let np_deps, np = form_s1 state np in
+     let cp_deps, cp = form_sn state cp in
+     (fun p -> np_deps (fun x -> cp_deps (fun l -> p (x::l)))),
      (fun p -> np (fun x -> cp (fun l -> p ((arg,x)::l))))
   | CAnd (annot,lr) ->
-    let lr_q = List.map (fun elt -> form_sn state elt) lr in
-    (fun p -> Sparql.formula_and_list (List.map (fun q -> q p) lr_q))
+     let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_sn state elt) lr) in
+     (fun p -> List.concat (List.map (fun q_deps -> q_deps p) lr_q_deps)),
+     (fun p -> Sparql.formula_and_list (List.map (fun q -> q p) lr_q))
   | COr (annot,lr) ->
     ( match annot#get_susp_focus_index with
     | Some i -> form_sn state (List.nth lr i)
     | None ->
-      let lr_q = List.map (fun elt -> form_sn state elt) lr in
-      (fun p -> Sparql.formula_or_list (List.map (fun q -> q p) lr_q)) )
+       let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_sn state elt) lr) in
+       (fun p -> List.concat (List.map (fun q_deps -> q_deps p) lr_q_deps)),
+       (fun p -> Sparql.formula_or_list (List.map (fun q -> q p) lr_q)) )
   | CMaybe (annot,f) ->
     if annot#is_susp_focus
     then form_sn state f
     else
-      let q = form_sn state f in
+      let q_deps, q = form_sn state f in
+      (fun p -> q_deps p),
       (fun p -> Sparql.formula_optional (q p))
   | CNot (annot,f) ->
     if annot#is_susp_focus
     then form_sn state f
     else
-      let q = form_sn (Oo.copy state) f in
+      let q_deps, q = form_sn (Oo.copy state) f in
+      (fun p -> q_deps p),
       (fun p -> Sparql.formula_not (q p))
-and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
+and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = function
   | Det (annot,det,rel_opt) ->
-     if ignore_top && is_top_s2 det && is_top_p1_opt rel_opt
-     then (fun d -> Sparql.True)
-     else
-       let qu = form_s2 state det in
-       let d1 = form_p1_opt state rel_opt in
-       (fun d -> qu d1 d)
+     let t, qu = form_s2 state det in
+     let d1_deps, d1 = form_p1_opt state rel_opt in
+     (fun d -> d t @ d1_deps t),
+     (if ignore_top && is_top_s2 det && is_top_p1_opt rel_opt
+      then (fun d -> Sparql.True)
+      else (fun d -> qu d1 d))
   | AnAggreg (annot,idg,modifg,g,relg_opt,np) ->
     if annot#is_susp_focus
     then form_s1 state np
@@ -840,29 +876,34 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
       ( match np with
       | Det (_, An (id, _, _), _)
       | AnAggreg (_, id, _, _, _, _) ->
-	form_aggreg_op state idg modifg g (form_p1_opt state relg_opt) id;
+	 let _d_deps, d = form_p1_opt state relg_opt in
+	form_aggreg_op state idg modifg g d id;
 	form_s1 state np
       | _ -> assert false )
   | NAnd (annot,lr) ->
-    let lr_q = List.map (fun elt -> form_s1 ~ignore_top state elt) lr in
-    (fun d -> Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
+     let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_s1 ~ignore_top state elt) lr) in
+     (fun d -> List.concat (List.map (fun q_deps -> q_deps d) lr_q_deps)),
+     (fun d -> Sparql.formula_and_list (List.map (fun q -> q d) lr_q))
   | NOr (annot,lr) ->
     ( match annot#get_susp_focus_index with
     | Some i -> form_s1 ~ignore_top state (List.nth lr i)
     | None ->
-      let lr_q = List.map (fun elt -> form_s1 ~ignore_top state elt) lr in
-      (fun d -> Sparql.formula_or_list (List.map (fun q -> q d) lr_q)) )
+       let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_s1 ~ignore_top state elt) lr) in
+       (fun d -> List.concat (List.map (fun q_deps -> q_deps d) lr_q_deps)),
+       (fun d -> Sparql.formula_or_list (List.map (fun q -> q d) lr_q)) )
   | NMaybe (annot,f) ->
     if annot#is_susp_focus
     then form_s1 ~ignore_top state f
     else
-      let q = form_s1 ~ignore_top state f in
+      let q_deps, q = form_s1 ~ignore_top state f in
+      (fun d -> q_deps d),
       (fun d -> Sparql.formula_optional (q d))
   | NNot (annot,f) ->
     if annot#is_susp_focus
     then form_s1 ~ignore_top state f
     else
-      let q = form_s1 ~ignore_top (Oo.copy state) f in
+      let q_deps, q = form_s1 ~ignore_top (Oo.copy state) f in
+      (fun d -> q_deps d),
       (fun d -> Sparql.formula_not (q d))
 (*      
   | NRelax f ->
@@ -871,19 +912,22 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> sparql_s1 = function
     state#set_relax false;
     q
 *)
-and form_s2 state : elt_s2 -> sparql_s2 = function
+and form_s2 state : elt_s2 -> Rdf.term * sparql_s2 = function
   | Term term ->
-    let t = Sparql.term term in
-    (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
+     let t = Sparql.term term in
+     term,
+     (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = form_head state head in
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
     let t = (Sparql.var v :> Sparql.term) in
+    Rdf.Var v,
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d2 t) (d1 t))) (* YES: d2 - d1 *)
   | The id ->
     let v = state#id_labelling#get_id_var id in
     let t = (Sparql.var v :> Sparql.term) in
+    Rdf.Var v,
     (fun d1 d2 -> Sparql.formula_and (d2 t) (d1 t)) (* YES: d2 - s1 *)
 and form_head state : elt_head -> (Sparql.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->
@@ -895,58 +939,73 @@ and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let v = state#id_labelling#get_id_var id in
   state#set_aggreg v (vg, g, (d (Sparql.var vg :> Sparql.term)));
   state#set_modif vg modifg
-and form_dim state : annot elt_aggreg -> Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
+and form_dim state : annot elt_aggreg -> deps * Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
   | ForEachResult annot -> assert false
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
-    let d = form_p1_opt state rel_opt in
+    let d_deps, d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
+    [Rdf.Var v; Rdf.Var v2] :: d_deps (Rdf.Var v2),
     Some (`Expr (Sparql.var v2 :> Sparql.expr), v), Some v2, (d (Sparql.var v2 :> Sparql.term))
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
+    [[t; Rdf.Var v2]],
     None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
   | _ -> assert false
-and form_aggreg state : annot elt_aggreg -> Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
+and form_aggreg state : annot elt_aggreg -> deps * Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
-    let d = form_p1_opt state rel_opt in
+    let d_deps, d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
     let sparql_g = sparql_aggreg g in
     let t_v2 = (Sparql.var v2 :> Sparql.term) in
+    [Rdf.Var v; Rdf.Var v2] :: d_deps (Rdf.Var v2),
     (`Aggreg (sparql_g, t_v2), v), v2, Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
   | _ -> assert false
-and form_expr_list state : annot elt_expr -> Sparql.expr list = function (* non-deterministic semantics *)
-  | Undef annot -> []
-  | Const (annot,t) -> [(Sparql.term t :> Sparql.expr)]
-  | Var (annot,id) -> [(Sparql.var (state#id_labelling#get_id_var id) :> Sparql.expr)]
+and form_expr_list state : annot elt_expr -> Rdf.var list * Sparql.expr list = function (* non-deterministic semantics *)
+  | Undef annot -> [], []
+  | Const (annot,t) -> [], [(Sparql.term t :> Sparql.expr)]
+  | Var (annot,id) ->
+     let v = state#id_labelling#get_id_var id in
+     [v], [(Sparql.var v :> Sparql.expr)]
   | Apply (annot,func,args) ->
     if not annot#defined
-    then []
+    then [], []
     else
       ( match annot#focus_pos with
-      | `Above (true, Some pos) -> form_expr_list state (snd (List.nth args (pos-1)))
-      | _ ->
-	let sparql_list_args =
-	  List.map
-	    (fun (conv_opt,arg_expr) -> List.map (sparql_converter conv_opt) (form_expr_list state arg_expr))
-	    args in
-	Common.list_fold_prod
-	  (fun res sparql_args -> expr_apply func sparql_args :: res)
-	  [] sparql_list_args )
+	| `Above (true, Some pos) ->
+	   form_expr_list state (snd (List.nth args (pos-1)))
+	| _ ->
+	   let l_lv, sparql_list_args =
+	     List.split
+	       (List.map
+		  (fun (conv_opt,arg_expr) ->
+		   let lv, le = form_expr_list state arg_expr in
+		   lv,
+		   List.map (sparql_converter conv_opt) le)
+		  args) in
+	   List.concat l_lv,
+	   Common.list_fold_prod
+	     (fun res sparql_args -> expr_apply func sparql_args :: res)
+	     [] sparql_list_args )
   | Choice (annot,le) ->
     ( match annot#focus_pos with
     | `Above (true, Some pos) -> form_expr_list state (try List.nth le pos with _ -> assert false)
-    | _ -> List.concat (List.map (form_expr_list state) le) )
-and form_s state (s : annot elt_s) : seq_view * Sparql.view =
+    | _ ->
+       let l_lv, l_le = List.split (List.map (form_expr_list state) le) in
+       List.concat l_lv,
+       List.concat l_le )
+and form_s state (s : annot elt_s) : seq_view * deps * Sparql.view =
   let (_, view as seq_view), lr =
     match s with
     | Return (annot,np) -> (0, Atom (annot#ids,0)), [s]
     | Seq (annot,lr) -> (match annot#seq_view with Some seq_view -> seq_view | None -> assert false), lr
     | _ -> assert false in
-  seq_view, form_view state lr view
-and form_view state (lr : annot elt_s list) (v : view) : Sparql.view =
+  let deps, view = form_view state lr view in
+  seq_view, deps, view
+and form_view state (lr : annot elt_s list) (v : view) : deps * Sparql.view =
   let lv =
     match v with
     | Unit -> []
@@ -954,47 +1013,60 @@ and form_view state (lr : annot elt_s list) (v : view) : Sparql.view =
     | InlineAggregs _ -> [v]
     | Aggreg _ -> [v]
     | Join (_,lv) -> lv in
-  form_view_list state lr Sparql.empty_view lv
-and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view list -> Sparql.view =
+  form_view_list state lr [] Sparql.empty_view lv
+and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.view) : view list -> deps * Sparql.view =
   let ids2vars ids = List.map state#id_labelling#get_id_var ids in
   function
-  | [] -> view
-  | Unit::lv -> form_view_list state lr view lv
+  | [] -> deps, view
+  | Unit::lv -> form_view_list state lr deps view lv
   | Atom (ids,sid)::lv ->
     ( match List.nth lr sid with
     | Return (annot,np) ->
       let ids = annot#ids in
       let lx = ids2vars (Ids.elements ids.defs) in
-      let form = form_s1 state np (fun t -> Sparql.True) in
-      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv
+      let q_deps, q = form_s1 state np in
+      let form = q (fun t -> Sparql.True) in
+      let deps = q_deps (fun x -> []) @ deps in
+      form_view_list state lr deps (Sparql.join_views [view; Sparql.simple_view lx form]) lv
     | SExpr (annot,name,id,modif,expr,rel_opt) ->
       let x = state#id_labelling#get_id_var id in
       state#set_modif x modif;
-      let sparql_expr_list = form_expr_list state expr in
-      let form =
+      let ly, sparql_expr_list = form_expr_list state expr in
+      let deps, form =
 	if sparql_expr_list = []
-	then Sparql.True
+	then deps, Sparql.True
 	else
-	  let d = form_p1_opt state rel_opt in
+	  let dep0 = List.map (fun v -> Rdf.Var v) (x::ly) in (* x depends on expression vars *)
+	  let d_deps1, d = form_p1_opt state rel_opt in
+	  dep0 :: d_deps1 (Rdf.Var x) @ deps,
 	  Sparql.formula_and
 	    (Sparql.formula_or_list
 	       (List.map
 		  (fun sparql_expr -> Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x)))
 		  sparql_expr_list))
 	    (d (Sparql.var x :> Sparql.term)) in
-      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view [x] form]) lv
+      form_view_list state lr deps (Sparql.join_views [view; Sparql.simple_view [x] form]) lv
     | SFilter (annot,id,expr) ->
       let x = state#id_labelling#get_id_var id in
-      let sparql_expr_list = form_expr_list state expr in
-      let lx, form =
-	match annot#focus_pos with
-	| `Above _ -> [x], Sparql.formula_or_list (List.map (fun sparql_expr -> Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x))) sparql_expr_list)
-	| _ -> [], Sparql.Filter (Sparql.log_or sparql_expr_list) in
-      let form =
+      let ly, sparql_expr_list = form_expr_list state expr in
+      let deps, view =
 	if sparql_expr_list = []
-	then Sparql.True
-	else form in
-      form_view_list state lr (Sparql.join_views [view; Sparql.simple_view lx form]) lv
+	then deps, view
+	else
+	  let lx, deps, form =
+	    match annot#focus_pos with
+	    | `Above _ ->
+	       let dep0 = List.map (fun v -> Rdf.Var v) (x::ly) in
+	       [x], dep0 :: deps,
+	       Sparql.formula_or_list
+		 (List.map (fun sparql_expr ->
+			    Sparql.Pattern (Sparql.bind sparql_expr (Sparql.var x)))
+			   sparql_expr_list)
+	    | _ ->
+	       [], deps,
+	       Sparql.Filter (Sparql.log_or sparql_expr_list) in
+	  deps, Sparql.join_views [view; Sparql.simple_view lx form] in
+      form_view_list state lr deps view lv
     | _ -> assert false )
   | InlineAggregs (ids,sid,_ids2)::lv ->
     ( match List.nth lr sid with
@@ -1002,9 +1074,12 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
       assert (List.exists is_ForEachResult aggregs);
       let aggregs = List.filter is_aggreg aggregs in 
       let l_aggregs = List.map (form_aggreg state) aggregs in
-      let lx2 = List.map (fun (_,x2,_) -> x2) l_aggregs in
-      let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
-      let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
+      let ldeps1, lx2 =
+	List.split
+	  (List.map (fun (deps_aggreg,_,x2,_) -> deps_aggreg, x2) l_aggregs) in
+      let deps = List.fold_left (@) deps ldeps1 in
+      let projections_aggregs = List.map (fun (_,proj,_,_) -> proj) l_aggregs in
+      let havings_aggregs = List.map (fun (_,_,_,hav) -> hav) l_aggregs in
       let view =
 	(fun ?limit () ->
 	  let sq = view ?limit () in
@@ -1012,22 +1087,36 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
 	    Sparql.projections = List.filter (fun (_,x) -> not (List.mem x lx2)) sq.Sparql.projections @ projections_aggregs;
 	    groupings = List.filter (fun x -> not (List.mem x lx2)) sq.Sparql.groupings;
 	    having = Sparql.log_and (sq.Sparql.having :: havings_aggregs) }) in
-      form_view_list state lr view lv
+      form_view_list state lr deps view lv
     | _ -> assert false )
   | Aggreg (ids,sid,v2)::lv ->
-    let aggregated_view = form_view state lr v2 in
+    let deps2, aggregated_view = form_view state lr v2 in
+    let deps = deps2 @ deps in
     ( match List.nth lr sid with
     | SAggreg (annot,dims_aggregs) ->
       let dims = List.filter is_dim dims_aggregs in
       let aggregs = List.filter is_aggreg dims_aggregs in
       let l_dims = List.map (form_dim state) dims in
       let l_aggregs = List.map (form_aggreg state) aggregs in
-      let projections_dims = List.fold_right (fun (proj_opt,_,_) res -> match proj_opt with None -> res | Some proj -> proj::res) l_dims [] in
-      let projections_aggregs = List.map (fun (proj,_,_) -> proj) l_aggregs in
+      let deps, projections_dims =
+	List.fold_right
+	  (fun (deps_dim,proj_opt,_,_) (deps,lproj) ->
+	   deps_dim@deps,
+	   (match proj_opt with None -> lproj | Some proj -> proj::lproj))
+	  l_dims (deps,[]) in
+      let deps, projections_aggregs =
+	List.fold_right
+	  (fun (deps_aggreg,proj,_,_) (deps,lproj) ->
+	   deps_aggreg@deps, proj::lproj)
+	  l_aggregs (deps,[]) in
       let projections = projections_dims @ projections_aggregs in
-      let groupings_dims = List.fold_right (fun (_,group_opt,_) res -> match group_opt with None -> res | Some group -> group::res) l_dims [] in
-      let lf_dims = List.map (fun (_,_,hav) -> hav) l_dims in
-      let havings_aggregs = List.map (fun (_,_,hav) -> hav) l_aggregs in
+      let groupings_dims =
+	List.fold_right
+	  (fun (_,_,group_opt,_) res ->
+	   match group_opt with None -> res | Some group -> group::res)
+	  l_dims [] in
+      let lf_dims = List.map (fun (_,_,_,hav) -> hav) l_dims in
+      let havings_aggregs = List.map (fun (_,_,_,hav) -> hav) l_aggregs in
       let view_aggreg =
 	(fun ?limit () ->
 	  let form =
@@ -1039,8 +1128,8 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
 	    then Sparql.Subquery
 	      (Sparql.make_subquery
 		 ~projections:(List.fold_right
-				 (fun (_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
-				 (List.map (fun (_,v2,_) -> (`Bare,v2)) l_aggregs))
+				 (fun (_,_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
+				 (List.map (fun (_,_,v2,_) -> (`Bare,v2)) l_aggregs))
 		 ~groupings:[]
 		 ~having:Sparql.log_true
 		 ?limit
@@ -1060,9 +1149,9 @@ and form_view_list state (lr : annot elt_s list) (view : Sparql.view) : view lis
 	      ~projections:(List.map (fun (_,x) -> (`Bare,x)) sq_aggreg.Sparql.projections)
 	      ~groupings:(List.map (fun (_,x) -> x) sq_aggreg.Sparql.projections)
 	      (Sparql.Subquery sq_aggreg)) in
-      form_view_list state lr (Sparql.join_views [view; view_aggreg]) lv
+      form_view_list state lr deps (Sparql.join_views [view; view_aggreg]) lv
     | _ -> assert false)
-  | Join (_,lv1)::lv -> form_view_list state lr view (lv1@lv)
+  | Join (_,lv1)::lv -> form_view_list state lr deps view (lv1@lv)
 
     
 type template = ?hook:(Sparql.term -> Sparql.formula) -> froms:(Rdf.uri list) -> ?limit:int -> unit -> string
@@ -1136,12 +1225,14 @@ let make_query_count state (focus_term_opt : Rdf.term option) (view : Sparql.vie
 	~froms
 	pattern in
     (query :> string))
-    
+
+	     
 type s_sparql =
   { state : state;
     focus_term_opt : Rdf.term option;
     focus_graph_opt : Rdf.term option;
     focus_pred_args_opt : (pred * (arg * Rdf.term) list) option;
+    deps : deps;
     query_opt : template option;
     query_count_opt : (Rdf.var -> template) option;
     query_class_opt : template option;
@@ -1152,7 +1243,7 @@ type s_sparql =
     
 let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot : annot elt_s) : s_sparql =
   let state = new state id_labelling in
-  let seq_view, view = form_s state s_annot in
+  let seq_view, deps, view = form_s state s_annot in
   let rdf_term_of_term_id : term_id -> Rdf.term = function
     | `Term t -> t
     | `Id id -> Rdf.Var (id_labelling#get_id_var id) in
@@ -1217,6 +1308,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     focus_term_opt;
     focus_graph_opt;
     focus_pred_args_opt;
+    deps;
     query_opt;
     query_count_opt;
     query_class_opt;
