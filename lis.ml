@@ -432,7 +432,10 @@ module FMDeps =
   Find_merge.Set
     (struct type t = Rdf.var let compare = Pervasives.compare end)
 	     
-let results_shape_of_deps (deps : Lisql2sparql.deps) (lx : Rdf.var list) : results_shape =
+let results_shape_of_deps
+      (deps : Lisql2sparql.deps)
+      (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
+      (lx : Rdf.var list) : results_shape =
   let xdeps = (* converting dependencies from terms to variables *)
     List.map
       (fun dep -> Common.mapfilter (function Rdf.Var x -> Some x |_ -> None) dep)
@@ -476,6 +479,10 @@ let results_shape_of_deps (deps : Lisql2sparql.deps) (lx : Rdf.var list) : resul
       | x2::lxr -> list_shape_of_fm fm x2 lxr xdepsr in
     shape1::lshaper
   in
+  let lx =
+    List.filter
+      (fun x -> not (List.exists (fun (_,(vlat,vlong)) -> x=vlat || x=vlong) geolocs))
+      lx in
   shape_of_xdeps xdeps lx
   
 type shape_data =
@@ -483,7 +490,10 @@ type shape_data =
   | `Concat of shape_data list
   | `MapN of Rdf.var list * (Rdf.term option list * shape_data) list ]
     
-let shape_data_of_results (shape : results_shape) results (k : Rdf.var list -> shape_data -> unit) : unit =
+let shape_data_of_results
+      (shape : results_shape)
+      (results : Sparql_endpoint.results)
+      (k : Rdf.var list -> shape_data -> unit) : unit =
   (* [f] stands for 'functional depth' *)
   let open Sparql_endpoint in
   let var_index = results.vars in (* assoc var -> binding index *)
@@ -789,7 +799,10 @@ object (self)
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
 	    results <- res;
-	    results_shape <- results_shape_of_deps s_sparql.Lisql2sparql.deps (Sparql_endpoint.results_vars res);
+	    results_shape <- results_shape_of_deps
+			       s_sparql.Lisql2sparql.deps
+			       s_sparql.Lisql2sparql.state#geolocs
+			       (Sparql_endpoint.results_vars res);
 	    Jsutils.firebug ("SHAPE: " ^ string_of_results_shape results_shape);
 	    results_typing <- Lisql_type.of_sparql_results res;
 	    focus_type_constraints <-
