@@ -506,36 +506,37 @@ let shape_data_of_results (shape : results_shape) results (k : Rdf.var list -> s
        lv, c, f, `Concat ld
     | Map (v,sh) ->
        let i = try List.assoc v var_index with Not_found -> assert false in
+       let rank = ref 0 in
        let ht = Hashtbl.create 201 in
        bindings
        |> List.iter
 	    (fun binding ->
+	     incr rank;
 	     let t_opt = binding.(i) in
-	     let ref_t_bindings =
-	       try Hashtbl.find ht t_opt
-	       with Not_found ->
-		 let r = ref [] in
-		 Hashtbl.add ht t_opt r;
-		 r in
-	     ref_t_bindings := binding::!ref_t_bindings);
-       let lv, c, f1, rows =
+	     try
+	       let first_rank, ref_t_bindings = Hashtbl.find ht t_opt in
+	       ref_t_bindings := binding::!ref_t_bindings
+	     with Not_found ->
+	       Hashtbl.add ht t_opt (!rank, ref [binding]));
+       let lv, c, f1, rank_rows =
 	 Hashtbl.fold
-	   (fun t_opt ref_t_bindings (lv,c,f1,rows) ->
-	    let lvi, ci, fi, di = aux sh !ref_t_bindings in (* all [lvi] are the same *)
+	   (fun t_opt (first_rank,ref_t_bindings) (lv,c,f1,rank_rows) ->
+	    let lvi, ci, fi, di = aux sh (List.rev !ref_t_bindings) in (* all [lvi] are the same *)
 	    enqueue_term_opt t_opt;
-	    v::lvi, c+ci, min fi f1, ([t_opt],di)::rows)
+	    v::lvi, c+ci, min fi f1, (first_rank,[t_opt],di)::rank_rows)
 	   ht ([],0,max_int,[]) in
        assert (c > 0);
+       let ranked_rows = List.sort Pervasives.compare rank_rows in
        let d =
 	 let lv = Common.list_take (1+f1) lv in
 	 let rows =
 	   List.map
-	     (fun (lt,di) ->
+	     (fun (_,lt,di) ->
 	      let lt1, fd1 = row_of_data f1 di in
 	      match fd1 with
 	      | `D d1 -> lt @ lt1, d1
 	      | `F f1 -> assert false)
-	     rows in
+	     ranked_rows in
 	 `MapN (lv, rows) in
        let f = if Hashtbl.length ht = 1 then 1+f1 else 0 in
        lv, c, f, d
