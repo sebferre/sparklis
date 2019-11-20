@@ -698,7 +698,11 @@ let html_cell state ?(view : results_view option) ?(rank : int option) ?(column 
     | Some view, Some rank, Some column ->
        Some (state#dico_results#add (view,rank,column,t))
     | _ -> None in
-  html_span ?id:key_opt ~classe:"cell" contents
+  let classe =
+    match t with
+    | Rdf.Number _ -> "cell numeric"
+    | _ -> "cell" in
+  html_div ?id:key_opt ~classe contents
 
 let html_table_of_results (state : state) ~partial ~first_rank ~focus_var results counts =
   let open Sparql_endpoint in

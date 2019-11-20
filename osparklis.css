@@ -73,6 +73,10 @@ select {
     color:darkgreen;
 }
 
+.numeric {
+    text-align:right;
+}
+
 .nodeID {
     color:darkgrey;
 }
