@@ -481,24 +481,29 @@ let results_shape_of_deps (deps : Lisql2sparql.deps) (lx : Rdf.var list) : resul
 type shape_data =
   [ `Unit
   | `Concat of shape_data list
-  | `Map of Rdf.var * (Rdf.term option * shape_data) list
-  | `Table of Rdf.var list * Rdf.term option list list ]
-
+  | `MapN of Rdf.var list * (Rdf.term option list * shape_data) list ]
+    
 let shape_data_of_results (shape : results_shape) results (k : Rdf.var list -> shape_data -> unit) : unit =
+  (* [f] stands for 'functional depth' *)
   let open Sparql_endpoint in
   let var_index = results.vars in (* assoc var -> binding index *)
+  let make_concat = function
+    | [] -> `Unit
+    | [d] -> d
+    | ld -> `Concat ld in
   let rec aux shape bindings =
     match shape with
-    | Unit -> [], 1, `Unit
+    | Unit -> [], 1, 0, `Unit
     | Concat lsh ->
-       let lv, c, ld =
+       let lv, c, f, ld =
 	 List.fold_right
-	   (fun sh (lv,c,ld) ->
-	    let lvi, ci, di = aux sh bindings in
-	    lvi@lv, c*ci, di::ld)
-	   lsh ([],1,[]) in
+	   (fun sh (lv,c,f,ld) ->
+	    let lvi, ci, fi, di = aux sh bindings in
+	    let f = if fi = List.length lvi then fi+f else fi in
+	    lvi@lv, c*ci, f, di::ld)
+	   lsh ([],1,0,[]) in
        assert (c > 0);
-       lv, c, `Concat ld
+       lv, c, f, `Concat ld
     | Map (v,sh) ->
        let i = try List.assoc v var_index with Not_found -> assert false in
        let ht = Hashtbl.create 201 in
@@ -513,32 +518,49 @@ let shape_data_of_results (shape : results_shape) results (k : Rdf.var list -> s
 		 Hashtbl.add ht t_opt r;
 		 r in
 	     ref_t_bindings := binding::!ref_t_bindings);
-       let functional, lv, c, ltd =
+       let lv, c, f1, rows =
 	 Hashtbl.fold
-	   (fun t_opt ref_t_bindings (func,lv,c,ltd) ->
-	    let lvi, ci, di = aux sh !ref_t_bindings in (* all [lvi] are the same *)
+	   (fun t_opt ref_t_bindings (lv,c,f1,rows) ->
+	    let lvi, ci, fi, di = aux sh !ref_t_bindings in (* all [lvi] are the same *)
 	    enqueue_term_opt t_opt;
-	    func && ci=1, v::lvi, c+ci, (t_opt,di)::ltd)
-	   ht (true,[],0,[]) in
+	    v::lvi, c+ci, min fi f1, ([t_opt],di)::rows)
+	   ht ([],0,max_int,[]) in
        assert (c > 0);
-       let d = `Map (v,ltd) in
        let d =
-	 if functional
-	 then
-	   let rows = List.map (fun (t_opt,d) -> t_opt :: row_of_data d) ltd in
-	   `Table (lv,rows)
-	 else d in
-       lv, c, d
-  and row_of_data = function
-    | `Unit -> []
-    | `Concat ld ->
-       List.concat (List.map row_of_data ld)
-    | `Map (_,[(t_opt,d)]) -> t_opt :: row_of_data d
-    | `Map _ -> assert false       
-    | `Table (_,[row]) -> row
-    | `Table _ -> assert false
+	 let lv = Common.list_take (1+f1) lv in
+	 let rows =
+	   List.map
+	     (fun (lt,di) ->
+	      let lt1, fd1 = row_of_data f1 di in
+	      match fd1 with
+	      | `D d1 -> lt @ lt1, d1
+	      | `F f1 -> assert false)
+	     rows in
+	 `MapN (lv, rows) in
+       let f = if Hashtbl.length ht = 1 then 1+f1 else 0 in
+       lv, c, f, d
+  and row_of_data (f : int) (d : shape_data) : Rdf.term option list * [`F of int | `D of shape_data] =
+    if f = 0
+    then [], `D d
+    else
+      match d with
+      | `Unit -> [], `F f
+      | `Concat [] -> [], `F f
+      | `Concat (di::ldi) ->
+	 let lt1, fd1 = row_of_data f di in
+	 ( match fd1 with
+	   | `D d1 -> lt1, `D (make_concat (d1::ldi))
+	   | `F f1 ->
+	      let lt2, fd2 = row_of_data f1 (make_concat ldi) in
+	      lt1 @ lt2, fd2 )
+      | `MapN (lv,[lt1,d1]) ->
+	 let n = List.length lv in
+	 assert (n <= f);
+	 let lt2, fd2 = row_of_data (f-n) d1 in
+	 lt1 @ lt2, fd2
+      | `MapN _ -> assert false
   in
-  let lv, _c, data = aux shape results.bindings in
+  let lv, _c, _f, data = aux shape results.bindings in
   sync_terms
     (fun () -> k lv data)
 

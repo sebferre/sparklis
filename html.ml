@@ -787,34 +787,7 @@ let html_trees (state : state) lv shape_data =
        List.iter
 	 (fun d -> aux d)
 	 ld;
-    | `Map (v,ltd) ->
-       add_string "<div class=\"table-responsive\" style=\"float:left; margin:0px 5px\">";
-       add_string "<table class=\"table table-bordered table-condensed table-hover\">";
-       (* headers *)
-       add_string "<tr>";
-       add_string "<th class=\"header\">";
-       add_string (try List.assoc v var_html with _ -> assert false);
-       add_string "</th>";
-       add_string "</tr>";
-       (* rows *)
-       List.iter
-	 (fun (t_opt, d) ->
-	  add_string "<tr>";
-	  add_string "<td>";
-	  add_term_opt t_opt;
-	  add_string "</td>";
-	  ( match d with
-	    | `Unit -> ()
-	    | _ ->
-	       add_string "<td>";
-	       aux d;
-	       add_string "</td>"
-	  );
-	  add_string "</tr>")
-	 ltd;
-       add_string "</table>";
-       add_string "</div>"
-    | `Table (lv,rows) ->
+    | `MapN (lv,rows) ->
        add_string "<div class=\"table-responsive\" style=\"float:left; margin:0px 5px\">";
        add_string "<table class=\"table table-bordered table-condensed table-hover\">";
        (* headers *)
@@ -828,14 +801,21 @@ let html_trees (state : state) lv shape_data =
        add_string "</tr>";
        (* rows *)
        List.iter
-	 (fun row ->
+	 (fun (lt,d) ->
 	  add_string "<tr>";
 	  List.iter
 	    (fun t_opt ->
 	     add_string "<td>";
 	     add_term_opt t_opt;
 	     add_string "</td>")
-	    row;
+	    lt;
+	  ( match d with
+	    | `Unit -> ()
+	    | _ ->
+	       add_string "<td>";
+	       aux d;
+	       add_string "</td>"
+	  );
 	  add_string "</tr>")
 	 rows;
        add_string "</table>";

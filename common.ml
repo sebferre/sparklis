@@ -135,3 +135,10 @@ let list_fold_prod (f : 'a -> 'b list -> 'a) (acc : 'a) (list_col_x : 'b list li
 	acc col_x
   in
   aux acc [] list_col_x
+
+let rec list_take n l =
+  match n, l with
+  | 0, _ -> []
+  | _, [] -> []
+  | _, x::r -> x :: list_take (n-1) r
+
