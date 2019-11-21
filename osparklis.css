@@ -272,6 +272,17 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 #list-results {
 }
 
+.simple-table {
+}
+
+#trees {
+    padding-top: 5px;
+}
+
+.nested-table {
+    float:left;
+}
+
 table {
     border-collapse:collapse;
 }

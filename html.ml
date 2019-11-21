@@ -714,7 +714,7 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
       (fun (var,i) -> (state#id_labelling#get_var_id var, i))
       results.vars in
   let buf = Buffer.create 1000 in
-  Buffer.add_string buf ("<div class=\"table-responsive\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ grammar#tooltip_header_hide_focus ^ "\"></th>");
+  Buffer.add_string buf ("<div class=\"table-responsive simple-table\"><table id=\"extension\" class=\"table table-bordered table-condensed table-hover\"><tr><th id=\"" ^ focus_key_of_root ^ "\" class=\"header\" title=\"" ^ grammar#tooltip_header_hide_focus ^ "\"></th>");
   List.iter2
     (fun (id,i) count ->
       Buffer.add_string buf
@@ -792,8 +792,8 @@ let html_trees (state : state) lv shape_data =
 	 (fun d -> aux d)
 	 ld;
     | `MapN (lv,rows) ->
-       add_string "<div class=\"table-responsive\" style=\"float:left; margin:0px 5px\">";
-       add_string "<table class=\"table table-bordered table-condensed table-hover\">";
+       add_string "<div class=\"table-responsive nested-table\">";
+       add_string "<table class=\"table table-bordered table-condensed\">";
        (* headers *)
        add_string "<tr>";
        List.iter
