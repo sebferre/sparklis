@@ -454,22 +454,51 @@ object (self)
 
   method private refresh_extension =
     let open Sparql_endpoint in
-    jquery "#list-results" (fun elt_results ->
-      if lis#results_dim = 0 then begin
-	  jquery_disable_all "#nav-results-table";
-	  jquery_set_innerHTML "#list-results" "";
-	  jquery_set_innerHTML "#count-results"
-			       (let grammar = Lisql2nl.config_lang#grammar in
-				grammar#no ^ " " ^ fst grammar#result_results);
-	  jquery_disable_all "#nav-results-trees";
-	  jquery_set_innerHTML "#trees" "";
-	  jquery_disable_all "#nav-results-map";
-	  jquery_set_innerHTML "#map" "No geolocalized data";
-	  jquery_disable_all "#nav-results-slideshow";
-	  jquery_set_innerHTML "#carousel-slides" "No media"
-	(*elt_results##style##display <- string "none"*) end
-      else begin
-	(* table of results *)
+    if lis#results_dim = 0 then (
+	jquery_disable_all "#nav-results-table";
+	jquery_set_innerHTML "#list-results" "";
+	jquery_set_innerHTML "#count-results"
+			     (let grammar = Lisql2nl.config_lang#grammar in
+			      grammar#no ^ " " ^ fst grammar#result_results);
+	jquery_disable_all "#nav-results-trees";
+	jquery_set_innerHTML "#trees" "";
+	jquery_disable_all "#nav-results-map";
+	jquery_set_innerHTML "#map" "No geolocalized data";
+	jquery_disable_all "#nav-results-slideshow";
+	jquery_set_innerHTML "#carousel-slides" "No media" )
+    else begin
+      let focus_var =
+	match lis#focus_term_opt with
+	| Some (Rdf.Var v) -> Some v
+	| _ -> None in
+      let tables_handler elt_table =
+	(* common handlers between table and nested-table *)
+	stop_links_propagation_from elt_table;
+	jquery_all_from elt_table ".header" (onclick (fun elt_foc ev ->
+	  navigation#update_focus ~push_in_history:false (fun _ ->
+	    try
+	      let key = to_string (elt_foc##id) in
+	      Some (html_state#get_focus key, Lisql.DeltaNil)
+	    with _ -> None)));
+	jquery_all_from elt_table ".partial-count" (onclick (fun elt ev ->
+	  Dom_html.stopPropagation ev;
+	  let key = to_string elt##id in
+	  let id = html_state#dico_counts#get key in
+	  lis#ajax_count_id id [elt]
+	    ~k_count:(function
+		       | Some n ->
+			  elt##innerHTML <- string (string_of_int n);
+			  elt##className <- string "frequency-entities"
+		       | None -> ())));
+	jquery_all_from elt_table ".cell" (onclick (fun elt ev ->
+	  navigation#update_focus ~push_in_history:true (fun current_focus ->
+	    let key = to_string (elt##id) in
+	    let _view, _rank, id, term = html_state#dico_results#get key in
+	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
+	    Lisql.insert_term term id_focus)))
+      in
+      (* table of results *)
+      jquery "#list-results" (fun elt_results ->
 	lis#results_page offset limit (fun results_page ->
 	  let counts =
 	    List.map
@@ -481,7 +510,7 @@ object (self)
 	    (html_table_of_results html_state
 	       ~partial
 	       ~first_rank:(offset+1)
-	       ~focus_var:(match lis#focus_term_opt with Some (Rdf.Var v) -> Some v | _ -> None)
+	       ~focus_var
 	       results_page counts);
 	  jquery "#count-results" (fun elt ->
 	    elt##innerHTML <- string
@@ -497,47 +526,33 @@ object (self)
 		 else
 		   s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
 		     " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
-	  stop_links_propagation_from elt_results;
-	  jquery_all_from elt_results ".header" (onclick (fun elt_foc ev ->
-	    navigation#update_focus ~push_in_history:false (fun _ ->
-	      try
-		let key = to_string (elt_foc##id) in
-		Some (html_state#get_focus key, Lisql.DeltaNil)
-	      with _ -> None)));
-	  jquery_all_from elt_results ".partial-count" (onclick (fun elt ev ->
-	    Dom_html.stopPropagation ev;
-	    let key = to_string elt##id in
-	    let id = html_state#dico_counts#get key in
-	    lis#ajax_count_id id [elt]
-	      ~k_count:(function
-			 | Some n ->
-			    elt##innerHTML <- string (string_of_int n);
-			    elt##className <- string "frequency-entities"
-			 | None -> ())));
-	  jquery_all_from elt_results ".cell" (onclick (fun elt ev ->
-	    navigation#update_focus ~push_in_history:true (fun current_focus ->
-	      let key = to_string (elt##id) in
-	      let _view, _rank, id, term = html_state#dico_results#get key in
-	      let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
-	      Lisql.insert_term term id_focus ))));
-	(* trees of results *)
+	  tables_handler elt_results));
+      (* nested table *)
+      jquery "#trees" (fun elt_table ->
 	lis#results_shape_data
 	  (fun lv shape_data ->
+	   let counts =
+	     match lv with (* only on first column *)
+	     | v::lv1 -> lis#estimate_count_var v :: List.map (fun _ -> None) lv1
+	     | [] -> [] in
+	   let partial = lis#partial_results in
 	   jquery_enable_all "#nav-results-trees";
-	   jquery_set_innerHTML "#trees" (Html.html_trees html_state lv shape_data));
-	(* slideshow of results *)
-	lis#results_slides
-	  (function
-	    | [] ->
-	       jquery_disable_all "#nav-results-slideshow";
-	       jquery_set_innerHTML "#carousel-slides" "No media"
-	    | slides ->
-	       jquery_enable_all "#nav-results-slideshow";
-	       jquery_set_innerHTML
-		 "#carousel-slides"
-		 (Html.html_slides html_state slides));
-	(* map of results *)
-	lis#results_geolocations (fun geolocations ->
+	   jquery_set_innerHTML "#trees"
+	     (Html.html_trees html_state ~partial ~focus_var lv shape_data counts);
+	   tables_handler elt_table));
+      (* slideshow of results *)
+      lis#results_slides
+	(function
+	  | [] ->
+	     jquery_disable_all "#nav-results-slideshow";
+	     jquery_set_innerHTML "#carousel-slides" "No media"
+	  | slides ->
+	     jquery_enable_all "#nav-results-slideshow";
+	     jquery_set_innerHTML
+	       "#carousel-slides"
+	       (Html.html_slides html_state slides));
+      (* map of results *)
+      lis#results_geolocations (fun geolocations ->
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
 		jquery_disable_all "#nav-results-map";
@@ -570,7 +585,7 @@ object (self)
 				Unsafe.(meth_call elt "click" [||]));
 			());
 	    end))
-      end)
+      end
 
 
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
@@ -982,6 +997,10 @@ object (self)
       self#refresh_extension
     end
 
+  method more_results =
+    self#get_more_results
+      (fun () -> self#refresh_extension)
+	   
   method abort_all_ajax =
     lis#abort_all_ajax;
     refreshing_terms <- false;
@@ -1307,6 +1326,7 @@ let initialize endpoint focus =
         firebug "changed limit-results";
 	let limit = int_of_string (to_string (select##value)) in
 	history#present#set_limit limit));
+    jquery "#next-nested-table" (onclick (fun elt ev -> history#present#more_results));
     (* to force redraw of Google Map when changing BS tab *)
 (*
     jquery "#nav-tab-map"

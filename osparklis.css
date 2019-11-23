@@ -281,6 +281,20 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 
 .nested-table {
     float:left;
+    margin-right:5px;
+}
+
+#div-next-nested-table {
+    clear: both;
+}
+
+
+.header {
+    cursor:pointer;
+}
+
+.cell {
+    cursor:pointer;
 }
 
 table {
