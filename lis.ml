@@ -512,7 +512,6 @@ let shape_data_of_results
 	    let f = if fi = List.length lvi then fi+f else fi in
 	    lvi@lv, c*ci, f, di::ld)
 	   lsh ([],1,0,[]) in
-       assert (c > 0);
        lv, c, f, `Concat ld
     | Map (v,sh) ->
        let i = try List.assoc v var_index with Not_found -> assert false in
@@ -535,10 +534,9 @@ let shape_data_of_results
 	    enqueue_term_opt t_opt;
 	    v::lvi, c+ci, min fi f1, (first_rank,[t_opt],di)::rank_rows)
 	   ht ([],0,max_int,[]) in
-       assert (c > 0);
        let ranked_rows = List.sort Pervasives.compare rank_rows in
        let d =
-	 let lv = Common.list_take (1+f1) lv in
+	 let lv_n, _ = Common.split_list_at lv (1+f1) in
 	 let rows =
 	   List.map
 	     (fun (_,lt,di) ->
@@ -547,8 +545,8 @@ let shape_data_of_results
 	      | `D d1 -> lt @ lt1, d1
 	      | `F f1 -> assert false)
 	     ranked_rows in
-	 `MapN (lv, rows) in
-       let f = if Hashtbl.length ht = 1 then 1+f1 else 0 in
+	 `MapN (lv_n, rows) in
+       let f = if List.length ranked_rows = 1 then 1+f1 else 0 in
        lv, c, f, d
   and row_of_data (f : int) (d : shape_data) : Rdf.term option list * [`F of int | `D of shape_data] =
     if f = 0
@@ -566,9 +564,14 @@ let shape_data_of_results
 	      lt1 @ lt2, fd2 )
       | `MapN (lv,[lt1,d1]) ->
 	 let n = List.length lv in
-	 assert (n <= f);
-	 let lt2, fd2 = row_of_data (f-n) d1 in
-	 lt1 @ lt2, fd2
+	 if f < n
+	 then
+	   let lv_a, lv_b = Common.split_list_at lv f in
+	   let lt1_a, lt1_b = Common.split_list_at lt1 f in
+	   lt1_a, `D (`MapN (lv_b, [lt1_b,d1]))
+	 else (* f >= n *)
+	   let lt2, fd2 = row_of_data (f-n) d1 in
+	   lt1 @ lt2, fd2
       | `MapN _ -> assert false
   in
   let lv, _c, _f, data = aux shape results.bindings in
