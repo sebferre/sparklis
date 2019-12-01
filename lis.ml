@@ -417,83 +417,92 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
 (* use of dependencies between vars to structure query results *)
     
 type results_shape =
+  | Unit
   | Concat of results_shape list (* INV: at least 2 elements *)
   | Map of Rdf.var * results_shape
-  | Unit
+  | Descr of Rdf.term * results_shape
 
 let rec string_of_results_shape = function
+  | Unit -> "[]"
   | Concat lsh ->
      String.concat " " (List.map (fun sh -> "< " ^ string_of_results_shape sh ^ " >") lsh)
-  | Map (x,Unit) -> x
-  | Map (x,sh) -> x ^ ", " ^ string_of_results_shape sh
-  | Unit -> "[]"
+  | Map (x,Unit) -> "?" ^ x
+  | Map (x,sh) -> "?" ^ x ^ ", " ^ string_of_results_shape sh
+  | Descr (t,sh) -> Rdf.string_of_term t ^ ", " ^ string_of_results_shape sh
       
 module FMDeps =
   Find_merge.Set
-    (struct type t = Rdf.var let compare = Pervasives.compare end)
+    (struct type t = Rdf.term let compare = Pervasives.compare end)
 	     
 let results_shape_of_deps
       (deps : Lisql2sparql.deps)
       (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
       (lx : Rdf.var list) : results_shape =
-  let xdeps = (* converting dependencies from terms to variables *)
-    List.map
-      (fun dep -> Common.mapfilter (function Rdf.Var x -> Some x |_ -> None) dep)
-      deps in
-  let fm_of_xdeps xdeps =
+  let fm_of_deps deps =
     List.fold_left
-      (fun fm xdep ->
-       match xdep with
+      (fun fm dep ->
+       match dep with
        | [] -> fm
-       | x::_ -> snd (FMDeps.merge xdep fm))
-      FMDeps.empty xdeps in
-  let rec shape_of_xdeps xdeps lx : results_shape =
+       | x::_ -> snd (FMDeps.merge dep fm))
+      FMDeps.empty deps in
+  let rec shape_of_deps deps lx : results_shape =
     match lx with
     | [] -> Unit
     | x1::lxr ->
-       let fm = fm_of_xdeps xdeps in
-       match list_shape_of_fm fm x1 lxr xdeps with
+       let fm = fm_of_deps deps in
+       match list_shape_of_fm fm x1 lxr deps with
        | [] -> Unit
        | [sh] -> sh
        | lsh -> Concat lsh
-  and list_shape_of_fm fm x1 lxr xdeps =
-    let root1, _fm = FMDeps.find_root x1 fm in
+  and list_shape_of_fm fm x1 lxr deps =
+    let t1 = Rdf.Var x1 in
+    let terms_with_t1 = FMDeps.merged_with t1 fm in
     let lx1, lxr =
       List.partition
-	(fun x -> fst (FMDeps.find_root x fm) = root1)
+	(fun x -> List.mem (Rdf.Var x) terms_with_t1)
 	lxr in
-    let xdeps1, xdepsr =
+    let deps1, depsr =
       List.partition
 	(function
 	  | [] -> false
-	  | x::_ -> fst (FMDeps.find_root x fm) = root1)
-	xdeps in
-    let xdeps1 = (* removing x1 from dependencies *)
+	  | t::_ -> List.mem t terms_with_t1)
+	deps in
+    let deps1 = (* removing x1 and concrete terms from dependencies *)
       List.map
-	(fun xdep1 -> List.filter ((<>) x1) xdep1)
-	xdeps1 in
-    let shape1 = Map (x1, shape_of_xdeps xdeps1 lx1) in
+	(fun dep1 ->
+	 List.filter
+	   (fun t -> t <> t1 && Rdf.term_is_var t)
+	   dep1)
+	deps1 in
+    let shape1 =
+      let sh = Map (x1, shape_of_deps deps1 lx1) in
+      List.fold_left (* incorporating associated terms in shape *)
+	(fun sh t ->
+	 match t with
+	 | Rdf.Var _ -> sh
+	 | _ -> Descr (t,sh))
+	sh terms_with_t1 in
     let lshaper =
       match lxr with
       | [] -> []
-      | x2::lxr -> list_shape_of_fm fm x2 lxr xdepsr in
+      | x2::lxr -> list_shape_of_fm fm x2 lxr depsr in
     shape1::lshaper
   in
   let lx =
     List.filter
       (fun x -> not (List.exists (fun (_,(vlat,vlong)) -> x=vlat || x=vlong) geolocs))
       lx in
-  shape_of_xdeps xdeps lx
-  
+  shape_of_deps deps lx
+
 type shape_data =
   [ `Unit
   | `Concat of shape_data list
-  | `MapN of Rdf.var list * (Rdf.term option list * shape_data) list ]
+  | `MapN of [`KeyVar | `KeyTerm] * Rdf.var option list * (Rdf.term option list * shape_data) list ]
     
 let shape_data_of_results
       (shape : results_shape)
       (results : Sparql_endpoint.results)
-      (k : Rdf.var list -> shape_data -> unit) : unit =
+      (k : Rdf.var option list -> shape_data -> unit) : unit =
   (* [f] stands for 'functional depth' *)
   let open Sparql_endpoint in
   let var_index = results.vars in (* assoc var -> binding index *)
@@ -502,6 +511,7 @@ let shape_data_of_results
     | [d] -> d
     | ld -> `Concat ld in
   let rec aux shape bindings =
+    (* result: var list, solution count, functional depth, shape_data *)
     match shape with
     | Unit -> [], 1, 0, `Unit
     | Concat lsh ->
@@ -510,11 +520,13 @@ let shape_data_of_results
 	   (fun sh (lv,c,f,ld) ->
 	    let lvi, ci, fi, di = aux sh bindings in
 	    let f = if fi = List.length lvi then fi+f else fi in
-	    lvi@lv, c*ci, f, di::ld)
+	    lvi@lv, ci*c, f, di::ld)
 	   lsh ([],1,0,[]) in
        lv, c, f, `Concat ld
     | Map (v,sh) ->
-       let i = try List.assoc v var_index with Not_found -> assert false in
+       let i =
+	 try List.assoc v var_index
+	 with Not_found -> assert false in
        let rank = ref 0 in
        let ht = Hashtbl.create 201 in
        bindings
@@ -527,27 +539,36 @@ let shape_data_of_results
 	       ref_t_bindings := binding::!ref_t_bindings
 	     with Not_found ->
 	       Hashtbl.add ht t_opt (!rank, ref [binding]));
-       let lv, c, f1, rank_rows =
+       let lv1, c, f1, rank_rows =
 	 Hashtbl.fold
 	   (fun t_opt (first_rank,ref_t_bindings) (lv,c,f1,rank_rows) ->
 	    let lvi, ci, fi, di = aux sh (List.rev !ref_t_bindings) in (* all [lvi] are the same *)
 	    enqueue_term_opt t_opt;
-	    v::lvi, c+ci, min fi f1, (first_rank,[t_opt],di)::rank_rows)
+	    lvi, c+ci, min fi f1, (first_rank,t_opt,di)::rank_rows)
 	   ht ([],0,max_int,[]) in
+       let lv = Some v::lv1 in
+       let f = if List.length rank_rows = 1 then 1+f1 else 0 in
        let ranked_rows = List.sort Pervasives.compare rank_rows in
-       let d =
-	 let lv_n, _ = Common.split_list_at lv (1+f1) in
-	 let rows =
-	   List.map
-	     (fun (_,lt,di) ->
-	      let lt1, fd1 = row_of_data f1 di in
-	      match fd1 with
-	      | `D d1 -> lt @ lt1, d1
-	      | `F f1 -> assert false)
-	     ranked_rows in
-	 `MapN (lv_n, rows) in
-       let f = if List.length ranked_rows = 1 then 1+f1 else 0 in
+       (* TODO : optimize when f=0 and f=1 *)
+       let d = mapn_of_rows `KeyVar lv f1 ranked_rows in
        lv, c, f, d
+    | Descr (t,sh) ->
+       let lv1, c1, f1, d1 = aux sh bindings in
+       enqueue_term t;
+       let lv, c, f, ranked_rows = None::lv1, c1, 1+f1, [(1, Some t, d1)] in
+       let d = mapn_of_rows `KeyTerm lv f1 ranked_rows in
+       lv, c, f, d
+  and mapn_of_rows key lv f1 ranked_rows : shape_data =
+    let lv_a, _ = Common.split_list_at lv (1+f1) in
+    let rows =
+      List.map
+	(fun (_,t_opt,di) ->
+	 let lt_a, fd_b = row_of_data f1 di in
+	 match fd_b with
+	 | `D d_b -> t_opt :: lt_a, d_b
+	 | `F _ -> assert false)
+	ranked_rows in
+    `MapN (key, lv_a, rows)
   and row_of_data (f : int) (d : shape_data) : Rdf.term option list * [`F of int | `D of shape_data] =
     if f = 0
     then [], `D d
@@ -562,13 +583,13 @@ let shape_data_of_results
 	   | `F f1 ->
 	      let lt2, fd2 = row_of_data f1 (make_concat ldi) in
 	      lt1 @ lt2, fd2 )
-      | `MapN (lv,[lt1,d1]) ->
+      | `MapN (key,lv,[lt1,d1]) ->
 	 let n = List.length lv in
 	 if f < n
 	 then
 	   let lv_a, lv_b = Common.split_list_at lv f in
 	   let lt1_a, lt1_b = Common.split_list_at lt1 f in
-	   lt1_a, `D (`MapN (lv_b, [lt1_b,d1]))
+	   lt1_a, `D (`MapN (`KeyVar, lv_b, [lt1_b,d1]))
 	 else (* f >= n *)
 	   let lt2, fd2 = row_of_data (f-n) d1 in
 	   lt1 @ lt2, fd2

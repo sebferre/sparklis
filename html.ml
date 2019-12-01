@@ -763,60 +763,65 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
   Buffer.contents buf
 
 
-let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.var list) shape_data counts =
+let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.var option list) shape_data counts =
   let open Sparql_endpoint in
   let grammar = Lisql2nl.config_lang#grammar in
   let id_labelling = state#id_labelling in
   let var_html_th =
     List.map2
-      (fun v count ->
-       let id = id_labelling#get_var_id v in
-       v,
-       (if focus_var = Some v
-	then "<th class=\"header highlighted\">"
-	else "<th id=\"" ^ focus_key_of_id id
-	     ^ "\" class=\"header\" title=\""
-	     ^ grammar#tooltip_header_set_focus ^ "\">")
-       ^ html_of_nl_xml
-	   state
-	   (Lisql2nl.xml_ng_id ~isolated:true grammar ~id_labelling id)
-       ^ ( match count with
-	   | Some (n, partial) ->
-	      let key = state#dico_counts#add id in
-	      html_freq ~id:key
-			?classe:(if partial then Some "partial-count" else None)
-			?title:(if partial then Some grammar#tooltip_header_exact_count else None)
-			~unit:`Entities
-			~partial
-			n
-	   | None -> "" )
-       ^ "</th>")	 
+      (fun v_opt count ->
+       match v_opt with
+       | None -> v_opt, "<th class=\"header\"></th>"
+       | Some v ->
+	 let id = id_labelling#get_var_id v in
+	 v_opt,
+	 (if focus_var = Some v
+	  then "<th class=\"header highlighted\">"
+	  else "<th id=\"" ^ focus_key_of_id id
+	       ^ "\" class=\"header\" title=\""
+	       ^ grammar#tooltip_header_set_focus ^ "\">")
+	 ^ html_of_nl_xml
+	     state
+	     (Lisql2nl.xml_ng_id ~isolated:true grammar ~id_labelling id)
+	 ^ ( match count with
+	     | Some (n, partial) ->
+		let key = state#dico_counts#add id in
+		html_freq ~id:key
+			  ?classe:(if partial then Some "partial-count" else None)
+			  ?title:(if partial then Some grammar#tooltip_header_exact_count else None)
+			  ~unit:`Entities
+			  ~partial
+			  n
+	     | None -> "" )
+	 ^ "</th>")	 
       lv counts in
   let buf = Buffer.create 1000 in
   let add_string str : unit = Buffer.add_string buf str in
   let add_term_opt =
     let cpt = ref 0 in
-    fun v t_opt ->
+    fun v_opt t_opt ->
     match t_opt with
     | None -> add_string "?"
     | Some t ->
-       let rank = incr cpt; !cpt in
-       let column = id_labelling#get_var_id v in
-       add_string (html_cell state ~view:NestedTable ~rank ~column t) in
+       let rank, column =
+	 match v_opt with
+	 | None -> None, None
+	 | Some v -> incr cpt; Some !cpt, Some (id_labelling#get_var_id v) in
+       add_string (html_cell state ~view:NestedTable ?rank ?column t) in
   let rec aux ~root = function
     | `Unit -> ()
     | `Concat ld ->
        List.iter
 	 (fun d -> aux ~root d)
 	 ld;
-    | `MapN (lv,rows) ->
+    | `MapN (key,lv,rows) ->
        add_string "<div class=\"table-responsive nested-table\">";
        add_string "<table class=\"table table-bordered table-condensed\">";
        (* headers *)
        add_string "<tr>";
-       if root then add_string "<th></th>";
+       if root && key=`KeyVar then add_string "<th></th>";
        List.iter
-	 (fun v -> add_string (try List.assoc v var_html_th with _ -> assert false))
+	 (fun v_opt -> add_string (try List.assoc v_opt var_html_th with _ -> assert false))
 	 lv;
        add_string "</tr>";
        (* rows *)
@@ -824,16 +829,16 @@ let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.
        List.iter
 	 (fun (lt,d) ->
 	  add_string "<tr>";
-	  if root then (
+	  if root && key=`KeyVar then (
 	    incr cpt;
 	    add_string "<td>";
 	    add_string (string_of_int !cpt);
 	    add_string "</td>"
 	  );
 	  List.iter2
-	    (fun v t_opt ->
+	    (fun v_opt t_opt ->
 	     add_string "<td>";
-	     add_term_opt v t_opt;
+	     add_term_opt v_opt t_opt;
 	     add_string "</td>")
 	    lv lt;
 	  ( match d with

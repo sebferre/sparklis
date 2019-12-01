@@ -333,6 +333,7 @@ type deps = Rdf.term list list (* each dependency corresponds to a hyper-edge ov
 type deps_p1 = Rdf.term -> deps
 type deps_pn = Rdf.term list -> deps
 type deps_s1 = deps_p1 -> deps
+type deps_s2 = deps_p1 -> deps_p1 -> deps
 type deps_sn = deps_pn -> deps
 
 type sparql_p1 = Sparql.term -> Sparql.formula
@@ -863,9 +864,9 @@ and form_sn state : annot elt_sn -> deps_sn * sparql_sn = function
       (fun p -> Sparql.formula_not (q p))
 and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = function
   | Det (annot,det,rel_opt) ->
-     let t, qu = form_s2 state det in
+     let qu_deps, qu = form_s2 state det in
      let d1_deps, d1 = form_p1_opt state rel_opt in
-     (fun d -> d t @ d1_deps t),
+     (fun d -> qu_deps d1_deps d),
      (if ignore_top && is_top_s2 det && is_top_p1_opt rel_opt
       then (fun d -> Sparql.True)
       else (fun d -> qu d1 d))
@@ -912,22 +913,22 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = 
     state#set_relax false;
     q
 *)
-and form_s2 state : elt_s2 -> Rdf.term * sparql_s2 = function
+and form_s2 state : elt_s2 -> deps_s2 * sparql_s2 = function
   | Term term ->
      let t = Sparql.term term in
-     term,
+     (fun d1 d2 -> d1 term),
      (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = form_head state head in
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
     let t = (Sparql.var v :> Sparql.term) in
-    Rdf.Var v,
+    (fun d1 d2 -> let t = Rdf.Var v in d1 t @ d2 t),
     (fun d1 d2 -> state#add_var v; qhead t (Sparql.formula_and (d2 t) (d1 t))) (* YES: d2 - d1 *)
   | The id ->
     let v = state#id_labelling#get_id_var id in
     let t = (Sparql.var v :> Sparql.term) in
-    Rdf.Var v,
+    (fun d1 d2 -> let t = Rdf.Var v in d1 t @ d2 t),
     (fun d1 d2 -> Sparql.formula_and (d2 t) (d1 t)) (* YES: d2 - s1 *)
 and form_head state : elt_head -> (Sparql.term -> Sparql.formula -> Sparql.formula) = function
   | Thing ->

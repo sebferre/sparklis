@@ -474,7 +474,7 @@ object (self)
       let tables_handler elt_table =
 	(* common handlers between table and nested-table *)
 	stop_links_propagation_from elt_table;
-	jquery_all_from elt_table ".header" (onclick (fun elt_foc ev ->
+	jquery_all_from elt_table ".header[id]" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
 	    try
 	      let key = to_string (elt_foc##id) in
@@ -490,7 +490,7 @@ object (self)
 			  elt##innerHTML <- string (string_of_int n);
 			  elt##className <- string "frequency-entities"
 		       | None -> ())));
-	jquery_all_from elt_table ".cell" (onclick (fun elt ev ->
+	jquery_all_from elt_table ".cell[id]" (onclick (fun elt ev ->
 	  navigation#update_focus ~push_in_history:true (fun current_focus ->
 	    let key = to_string (elt##id) in
 	    let _view, _rank, id, term = html_state#dico_results#get key in
@@ -533,8 +533,8 @@ object (self)
 	  (fun lv shape_data ->
 	   let counts =
 	     match lv with (* only on first column *)
-	     | v::lv1 -> lis#estimate_count_var v :: List.map (fun _ -> None) lv1
-	     | [] -> [] in
+	     | Some v::lv1 -> lis#estimate_count_var v :: List.map (fun _ -> None) lv1
+	     | _ -> List.map (fun _ -> None) lv in
 	   let partial = lis#partial_results in
 	   jquery_enable_all "#nav-results-trees";
 	   jquery_set_innerHTML "#trees"
