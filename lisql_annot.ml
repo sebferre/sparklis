@@ -140,19 +140,21 @@ let focus_pos_down = function
 
 module Ids = Set.Make(struct type t=id let compare=Pervasives.compare end)
 
-type annot_ids = { all : Ids.t; defs : Ids.t; dims : Ids.t; refs : Ids.t }
-  (* all : all defined ids, suspended or nor
+type annot_ids = { seq : id list; all : Ids.t; defs : Ids.t; dims : Ids.t; refs : Ids.t }
+  (* seq : all defined ids, in syntactic ordering 
+     all : all defined ids, suspended or not
      defs : all defined ids, except suspended ones
      dims : all ids that together define a key over answers 
      refs : all referenced ids *)
 
-let empty_ids = { all = Ids.empty; defs = Ids.empty; dims = Ids.empty; refs = Ids.empty }
-let union_ids ids1 ids2 =
-  { all = Ids.union ids1.all ids2.all;
+let empty_ids = { seq = []; all = Ids.empty; defs = Ids.empty; dims = Ids.empty; refs = Ids.empty }
+let concat_ids ids1 ids2 =
+  { seq = ids1.seq @ ids2.seq;
+    all = Ids.union ids1.all ids2.all;
     defs = Ids.union ids1.defs ids2.defs;
     dims = Ids.union ids1.dims ids2.dims;
     refs = Ids.union ids1.refs ids2.refs }
-let list_union_ids lids = List.fold_left union_ids empty_ids lids
+let list_concat_ids lids = List.fold_right concat_ids lids empty_ids
 
 type sid = int (* sentence id, position in seq list *)
 type view =
@@ -271,7 +273,7 @@ let rec top_sid_in_view sid = function
 let join_views = function
   | [] -> Unit
   | [v] -> v
-  | lv -> let ids = list_union_ids (List.map view_ids lv) in
+  | lv -> let ids = list_concat_ids (List.map view_ids lv) in
 	  let ids = (* removing locally aggregated ids from defs and dims *)
 	    List.fold_left
 	      (fun ids ->
@@ -432,7 +434,7 @@ let view_of_list_focus focus_id_opt a_x a_ll_rr =
 
 let ids_an_id ~inactive id =
   let defs = if inactive then Ids.empty else Ids.singleton id in
-  { empty_ids with all = Ids.singleton id; defs = defs; dims = defs }
+  { empty_ids with seq = [id]; all = Ids.singleton id; defs = defs; dims = defs }
     
 let ids_elt_s2 ~inactive = function
   | Term _ -> empty_ids
@@ -443,66 +445,81 @@ let rec annot_elt_p1 pos f ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtP1 (f,ctx)) in
   let pos_down = focus_pos_down pos in
   match f with
-  | Is (_,np) -> let a1, a_np = annot_elt_s1 pos_down np (IsX ctx) in
-		 let a = annot ~ids:a1#ids () in
-		 a, Is (a, a_np)
+  | Is (_,np) ->
+     let a1, a_np = annot_elt_s1 pos_down np (IsX ctx) in
+     let a = annot ~ids:a1#ids () in
+     a, Is (a, a_np)
   | Pred (_,arg,pred,cp) ->
      let a1, a_cp = annot_elt_sn pos_down cp (PredX (arg,pred,ctx)) in
      let a = annot ~ids:a1#ids () in
      a, Pred (a, arg, pred, a_cp)
-  | Type (_,c) -> let a = annot () in
-		  a, Type (a, c)
-  | Rel(_,p,m,np) -> let a1, a_np = annot_elt_s1 pos_down np (RelX (p,m,ctx)) in
-		     let a = annot ~ids:a1#ids () in
-		     a, Rel (a, p, m, a_np)
+  | Type (_,c) ->
+     let a = annot () in
+     a, Type (a, c)
+  | Rel(_,p,m,np) ->
+     let a1, a_np = annot_elt_s1 pos_down np (RelX (p,m,ctx)) in
+     let a = annot ~ids:a1#ids () in
+     a, Rel (a, p, m, a_np)
   | Hier (_,id,pred,args,argo,x) ->
      let ids_hier = ids_an_id ~inactive:false id in
      let a1, a_x = annot_elt_s1 pos_down x (HierX (id,pred,args,argo,ctx)) in
-     let ids = union_ids ids_hier a1#ids in
+     let ids = concat_ids ids_hier a1#ids in
      let a = annot ~ids () in
      a, Hier (a, id, pred, args, argo, a_x)
-  | LatLong (_,ll,id1,id2) -> let a = annot ~ids:(union_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
-				      a, LatLong (a, ll, id1, id2)
-  | Triple (_,arg,np1,np2) -> let a1, a_np1 = annot_elt_s1 pos_down np1 (TripleX1 (arg,np2,ctx)) in
-			      let a2, a_np2 = annot_elt_s1 pos_down np2 (TripleX2 (arg,np1,ctx)) in
-			      let a = annot ~ids:(union_ids a1#ids a2#ids) () in
-			      a, Triple (a, arg, a_np1, a_np2)
-  | Search (_,c) -> let a = annot () in
-		    a, Search (a, c)
-  | Filter (_,c) -> let a = annot () in
-		    a, Filter (a, c)
-  | And (_,lr) -> let la, lax =
-		    List.split (List.map
-				  (fun (x,ll_rr) -> annot_elt_p1 pos_down x (AndX (ll_rr,ctx)))
-				  (ctx_of_list lr)) in
-		  let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
-		  a, And (a, lax)
-  | Or (_,lr) -> let la, lax =
-		   List.split (List.map
-				 (fun (x,ll_rr) -> annot_elt_p1 pos_down x (OrX (ll_rr,ctx)))
-				 (ctx_of_list lr)) in
-		 let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
-		 a, Or (a, lax)
-  | Maybe (_,x) -> let a1, a_x = annot_elt_p1 pos_down x (MaybeX ctx) in
-		   let a = annot ~ids:a1#ids () in
-		   a, Maybe (a, a_x)
-  | Not (_,x) -> let a1, a_x = annot_elt_p1 pos_down x (NotX ctx) in
-		 let a = annot ~ids:{a1#ids with defs=Ids.empty; dims=Ids.empty} () in
-		 a, Not (a, a_x)
-  | In (_,npg,x) -> let a1, a_npg = annot_elt_s1 pos_down npg (InGraphX (x,ctx)) in
-		    let a2, a_x = annot_elt_p1 pos_down x (InX (npg,ctx)) in
-		    let a = annot ~ids:(union_ids a1#ids a2#ids) () in
-		    a, In (a, a_npg, a_x)
-  | InWhichThereIs (_,np) -> let a1, a_np = annot_elt_s1 pos_down np (InWhichThereIsX ctx) in
-			     let a = annot ~ids:a1#ids () in
-			     a, InWhichThereIs (a, a_np)
-  | IsThere _ -> let a = annot () in
-		 a, IsThere a
+  | LatLong (_,ll,id1,id2) ->
+     let a = annot ~ids:(concat_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
+     a, LatLong (a, ll, id1, id2)
+  | Triple (_,arg,np1,np2) ->
+     let a1, a_np1 = annot_elt_s1 pos_down np1 (TripleX1 (arg,np2,ctx)) in
+     let a2, a_np2 = annot_elt_s1 pos_down np2 (TripleX2 (arg,np1,ctx)) in
+     let a = annot ~ids:(concat_ids a1#ids a2#ids) () in
+     a, Triple (a, arg, a_np1, a_np2)
+  | Search (_,c) ->
+     let a = annot () in
+     a, Search (a, c)
+  | Filter (_,c) ->
+     let a = annot () in
+     a, Filter (a, c)
+  | And (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_p1 pos_down x (AndX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
+     a, And (a, lax)
+  | Or (_,lr) ->
+     let la, lax =
+       List.split (List.map
+		     (fun (x,ll_rr) -> annot_elt_p1 pos_down x (OrX (ll_rr,ctx)))
+		     (ctx_of_list lr)) in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
+     a, Or (a, lax)
+  | Maybe (_,x) ->
+     let a1, a_x = annot_elt_p1 pos_down x (MaybeX ctx) in
+     let a = annot ~ids:a1#ids () in
+     a, Maybe (a, a_x)
+  | Not (_,x) ->
+     let a1, a_x = annot_elt_p1 pos_down x (NotX ctx) in
+     let a = annot ~ids:{a1#ids with defs=Ids.empty; dims=Ids.empty} () in
+     a, Not (a, a_x)
+  | In (_,npg,x) ->
+     let a1, a_npg = annot_elt_s1 pos_down npg (InGraphX (x,ctx)) in
+     let a2, a_x = annot_elt_p1 pos_down x (InX (npg,ctx)) in
+     let a = annot ~ids:(concat_ids a1#ids a2#ids) () in
+     a, In (a, a_npg, a_x)
+  | InWhichThereIs (_,np) ->
+     let a1, a_np = annot_elt_s1 pos_down np (InWhichThereIsX ctx) in
+     let a = annot ~ids:a1#ids () in
+     a, InWhichThereIs (a, a_np)
+  | IsThere _ ->
+     let a = annot () in
+     a, IsThere a
 and annot_elt_p1_opt pos rel_opt ctx =
   match rel_opt with
   | None -> empty_ids, None
-  | Some rel -> let a, a_rel = annot_elt_p1 pos rel ctx in
-		a#ids, Some a_rel
+  | Some rel ->
+     let a, a_rel = annot_elt_p1 pos rel ctx in
+     a#ids, Some a_rel
 and annot_elt_sn pos cp ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtSn (cp,ctx)) in
   let pos_down = focus_pos_down pos in
@@ -513,21 +530,21 @@ and annot_elt_sn pos cp ctx =
   | CCons (_,arg,np,cp) ->
      let a1, a_np = annot_elt_s1 pos_down np (CConsX1 (arg,cp,ctx)) in
      let a2, a_cp = annot_elt_sn pos_down cp (CConsX2 (arg,np,ctx)) in
-     let a = annot ~ids:(union_ids a1#ids a2#ids) () in
+     let a = annot ~ids:(concat_ids a1#ids a2#ids) () in
      a, CCons (a, arg, a_np, a_cp)
   | CAnd (_,lr) ->
      let la, lax =
        List.split (List.map
 		     (fun (x,ll_rr) -> annot_elt_sn pos_down x (CAndX (ll_rr,ctx)))
 		     (ctx_of_list lr)) in
-     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
      a, CAnd (a, lax)
   | COr (_,lr) ->
      let la, lax =
        List.split (List.map
 		     (fun (x,ll_rr) -> annot_elt_sn pos_down x (COrX (ll_rr,ctx)))
 		     (ctx_of_list lr)) in
-     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
      a, COr (a, lax)
   | CMaybe (_,x) ->
      let a1, a_x = annot_elt_sn pos_down x (CMaybeX ctx) in
@@ -546,13 +563,13 @@ and annot_elt_s1 pos np ctx =
        let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det rel_opt ctx || is_hierarchy_ctx_s1 ctx in
        ids_elt_s2 ~inactive det in
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (DetThatX (det,ctx)) in
-     let a = annot ~ids:(union_ids ids_det ids_rel) () in
+     let a = annot ~ids:(concat_ids ids_det ids_rel) () in
      a, Det (a, det, a_rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,x) ->
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
      let a1, a_x = annot_elt_s1 pos_down x (AnAggregX (id,modif,g,rel_opt,ctx)) in
-     let ids_aggreg = { empty_ids with all = Ids.singleton id; defs = Ids.singleton id } in
-     let ids = list_union_ids [ids_aggreg; ids_rel; a1#ids] in
+     let ids_aggreg = { empty_ids with seq = [id]; all = Ids.singleton id; defs = Ids.singleton id } in
+     let ids = list_concat_ids [ids_aggreg; ids_rel; a1#ids] in
      let ids =
        match id_of_s1 x with
        | None -> assert false
@@ -564,14 +581,14 @@ and annot_elt_s1 pos np ctx =
        List.split (List.map
 		     (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NAndX (ll_rr,ctx)))
 		     (ctx_of_list lr)) in
-     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
      a, NAnd (a, lax)
   | NOr (_,lr) ->
      let la, lax =
        List.split (List.map
 		     (fun (x,ll_rr) -> annot_elt_s1 pos_down x (NOrX (ll_rr,ctx)))
 		     (ctx_of_list lr)) in
-     let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+     let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
 		  a, NOr (a, lax)
   | NMaybe (_,x) ->
      let a1, a_x = annot_elt_s1 pos_down x (NMaybeX ctx) in
@@ -591,7 +608,8 @@ and annot_elt_aggreg pos aggreg ctx =
      a, ForEachResult a
   | ForEach (_,id,modif,rel_opt,id2) ->
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (ForEachThatX (id,modif,id2,ctx)) in
-     let ids = {all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
+     (* TODO: what about defined ids in rel_opt *)
+     let ids = {seq = id::ids_rel.seq; all = Ids.singleton id; defs = Ids.singleton id; dims = Ids.singleton id2; refs = Ids.add id2 ids_rel.refs} in
      let a = annot ~ids () in
      a, ForEach (a, id, modif, a_rel_opt, id2)
   | ForTerm (_,t,id2) ->
@@ -599,7 +617,8 @@ and annot_elt_aggreg pos aggreg ctx =
      a, ForTerm (a, t, id2)
   | TheAggreg (_,id,modif,g,rel_opt,id2) ->
      let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (TheAggregThatX (id,modif,g,id2,ctx)) in
-     let ids = {all = Ids.add id ids_rel.all;
+     let ids = {seq = id::ids_rel.seq;
+		all = Ids.add id ids_rel.all;
 		defs = Ids.add id ids_rel.defs;
 		dims = ids_rel.dims;
 		refs = Ids.add id2 ids_rel.refs} in
@@ -609,12 +628,15 @@ and annot_elt_expr pos expr ctx =
   let annot = new annot ~focus_pos:pos ~focus:(AtExpr (expr,ctx)) in
   let pos_down = focus_pos_down pos in
   match expr with
-  | Undef _ -> let a = annot ~ids:empty_ids ~defined:false () in
-	       a, Undef a
-  | Const (_,t) -> let a = annot ~ids:empty_ids ~defined:true () in
-		   a, Const (a, t)
-  | Var (_,id) -> let a = annot ~ids:{empty_ids with refs = Ids.singleton id} ~defined:true () in (* we assume 'id' is a valid reference *)
-		  a, Var (a, id)
+  | Undef _ ->
+     let a = annot ~ids:empty_ids ~defined:false () in
+     a, Undef a
+  | Const (_,t) ->
+     let a = annot ~ids:empty_ids ~defined:true () in
+     a, Const (a, t)
+  | Var (_,id) ->
+     let a = annot ~ids:{empty_ids with refs = Ids.singleton id} ~defined:true () in (* we assume 'id' is a valid reference *)
+     a, Var (a, id)
   | Apply (_,func,args) ->
     let la, l_a_arg =
       List.split (List.map
@@ -623,7 +645,7 @@ and annot_elt_expr pos expr ctx =
 		      a, (conv_opt,a_arg_expr))
 		    (ctx_of_list args)) in
     let a = annot
-      ~ids:(list_union_ids (List.map (fun a -> a#ids) la))
+      ~ids:(list_concat_ids (List.map (fun a -> a#ids) la))
       ~defined:(List.for_all (fun a -> a#defined) la) () in
     a, Apply (a, func, l_a_arg)
   | Choice (_,le) ->
@@ -632,7 +654,7 @@ and annot_elt_expr pos expr ctx =
 		    (fun (expr,ll_rr) -> annot_elt_expr pos_down expr (ChoiceX (ll_rr, ctx)))
 		    (ctx_of_list le)) in
     let a = annot
-      ~ids:(list_union_ids (List.map (fun a -> a#ids) la))
+      ~ids:(list_concat_ids (List.map (fun a -> a#ids) la))
       ~defined:(List.exists (fun a -> a#defined) la) () in
     a, Choice (a, l_a_expr)
 and annot_elt_s pos s ctx =
@@ -648,18 +670,18 @@ and annot_elt_s pos s ctx =
       List.split (List.map
 		    (fun (x,ll_rr) -> annot_elt_aggreg pos_down x (SAggregX (ll_rr,ctx)))
 		    (ctx_of_list aggregs)) in
-    let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) () in
+    let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) () in
     a, SAggreg (a, l_a_aggreg)
   | SExpr (_,name,id,modif,expr,rel_opt) ->
     let a1, a_expr = annot_elt_expr pos_down expr (SExprX (name,id,modif,rel_opt,ctx)) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt pos_down rel_opt (SExprThatX (name,id,modif,expr,ctx)) in
-    let ids = union_ids a1#ids ids_rel in
-    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
+    let ids = concat_ids a1#ids ids_rel in
+    let a = annot ~ids:{ids with seq = id::ids.seq; all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
     a, SExpr (a, name, id, modif, a_expr, a_rel_opt)
   | SFilter (_,id,expr) ->
     let a1, a_expr = annot_elt_expr pos_down expr (SFilterX (id,ctx)) in
     let ids = a1#ids in
-    let a = annot ~ids:{ids with all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
+    let a = annot ~ids:{ids with seq = id::ids.seq; all = Ids.add id ids.all; defs = if a1#defined then Ids.add id ids.defs else ids.defs} () in
     a, SFilter (a, id, a_expr)
   | Seq (_,lr) ->
     let a_lr =
@@ -672,7 +694,7 @@ and annot_elt_s pos s ctx =
     | `Unchanged ->
       let seq_view = view_of_list a_lr in
       let la, lar = List.split a_lr in
-      let a = annot ~ids:(list_union_ids (List.map (fun a -> a#ids) la)) ~seq_view () in
+      let a = annot ~ids:(list_concat_ids (List.map (fun a -> a#ids) la)) ~seq_view () in
       a, Seq (a, lar)
   
 let rec annot_ctx_p1 fd (a1,a_x) x = function
@@ -688,7 +710,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     let ids_det =
       let inactive = is_s1_as_p1_ctx_s1 ctx || is_unconstrained_det det (Some x) ctx || is_hierarchy_ctx_s1 ctx in
       ids_elt_s2 ~inactive det in
-    let ids = union_ids ids_det a1#ids in
+    let ids = concat_ids ids_det a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
     annot_ctx_s1 fd (a, Det (a, det, Some a_x)) f ctx
   | AnAggregThatX (id,modif,g,np,ctx) ->
@@ -697,8 +719,8 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#resolve_focus_graph (`Named (`Id id));
     let f = AnAggreg ((),id,modif,g,Some x,np) in
     let a2, a_np = annot_elt_s1 (`Aside false) np (AnAggregX (id,modif,g,Some x,ctx)) in
-    let ids_aggreg = { empty_ids with all = Ids.singleton id; defs = Ids.singleton id } in
-    let ids = list_union_ids [ids_aggreg; a1#ids; a2#ids] in
+    let ids_aggreg = { empty_ids with seq = [id]; all = Ids.singleton id; defs = Ids.singleton id } in
+    let ids = list_concat_ids [ids_aggreg; a1#ids; a2#ids] in
     let ids =
       match id_of_s1 np with
       | None -> assert false
@@ -710,7 +732,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#resolve_focus_graph (`Named (`Id id));
     let f = ForEach ((),id,modif,Some x,id2) in
     let ids = a1#ids in
-    let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = Ids.add id2 ids.dims; refs = Ids.add id2 ids.refs} in
+    let ids = {seq = id::ids.seq; all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = Ids.add id2 ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtAggreg (f,ctx)) ~ids () in
     annot_ctx_aggreg fd (a, ForEach (a, id, modif, Some a_x, id2)) f ctx
   | TheAggregThatX (id,modif,g,id2,ctx) ->
@@ -719,7 +741,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#resolve_focus_graph (`Named (`Id id));
     let f = TheAggreg ((),id,modif,g,Some x,id2) in
     let ids = a1#ids in
-    let ids = {all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = ids.dims; refs = Ids.add id2 ids.refs} in
+    let ids = {seq = id::ids.seq; all = Ids.add id ids.all; defs = Ids.add id ids.defs; dims = ids.dims; refs = Ids.add id2 ids.refs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtAggreg (f,ctx)) ~ids () in
     annot_ctx_aggreg fd (a, TheAggreg (a, id, modif, g, Some a_x, id2)) f ctx
   | SExprThatX (name,id,modif,expr,ctx) ->
@@ -728,8 +750,8 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#resolve_focus_graph (`Named (`Id id));
     let f = SExpr ((), name, id, modif, expr, Some x) in
     let a2, a_expr = annot_elt_expr (`Aside false) expr (SExprX (name,id,modif,Some x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
-    let ids = {ids with all = Ids.add id ids.all; defs = if a2#defined then Ids.add id ids.defs else ids.defs} in
+    let ids = concat_ids a2#ids a1#ids in
+    let ids = {ids with seq = id::ids.seq; all = Ids.add id ids.all; defs = if a2#defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, SExpr (a, name, id, modif, a_expr, Some a_x)) f ctx
   | AndX (ll_rr,ctx) ->
@@ -740,7 +762,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_p1 (`Aside false) x2 (AndX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+    let ids = list_concat_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, And (a, lar)) f ctx
   | OrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
@@ -751,7 +773,10 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_p1 (`Aside true) x2 (OrX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = union_ids a1#ids { empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
+    let ids =
+      { a1#ids with
+	seq = List.concat (List.map (fun a -> a#ids.seq) la);
+	all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
     (* ids of alternatives are no more visible as defs/dims/refs *)
     let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, Or (a, lar)) f ctx
@@ -769,7 +794,7 @@ let rec annot_ctx_p1 fd (a1,a_x) x = function
     fd#define_focus_graph (focus_graph_s1 npg);
     let f = In ((),npg,x) in
     let a2, a_npg = annot_elt_s1 (`Aside false) npg (InGraphX (x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
+    let ids = concat_ids a2#ids a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, In (a,a_npg,a_x)) f ctx
 and annot_ctx_sn fd (a1,a_x) x = function
@@ -781,7 +806,7 @@ and annot_ctx_sn fd (a1,a_x) x = function
   | CConsX2 (arg,np,ctx) ->
      let f = CCons ((),arg,np,x) in
      let a2, a_np = annot_elt_s1 (`Aside false) np (CConsX1 (arg,x,ctx)) in
-     let ids = union_ids a1#ids a2#ids in
+     let ids = concat_ids a2#ids a1#ids in
      let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
      annot_ctx_sn fd (a, CCons (a, arg, a_np, a_x)) f ctx
   | CAndX (ll_rr,ctx) ->
@@ -792,7 +817,7 @@ and annot_ctx_sn fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_sn (`Aside false) x2 (CAndX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+    let ids = list_concat_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
     annot_ctx_sn fd (a, CAnd (a, lar)) f ctx
   | COrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
@@ -803,7 +828,10 @@ and annot_ctx_sn fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_sn (`Aside true) x2 (COrX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
+    let ids =
+      { a1#ids with
+	seq = List.concat (List.map (fun a -> a#ids.seq) la);
+	all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
     let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtSn (f,ctx)) ~ids () in
     annot_ctx_sn fd (a, COr (a, lar)) f ctx
   | CMaybeX ctx ->
@@ -825,7 +853,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
   | CConsX1 (arg,cp,ctx) ->
      let f = CCons ((),arg,x,cp) in
      let a2, a_cp = annot_elt_sn (`Aside false) cp (CConsX2 (arg,x,ctx)) in
-     let ids = union_ids a1#ids a2#ids in
+     let ids = concat_ids a1#ids a2#ids in
      let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtSn (f,ctx)) ~ids () in
      annot_ctx_sn fd (a, CCons (a, arg, a_x, a_cp)) f ctx
   | RelX (p,modif,ctx) ->
@@ -838,14 +866,14 @@ and annot_ctx_s1 fd (a1,a_x) x = function
     fd#define_focus_term `Undefined;
     let f = Triple ((),arg,x,np2) in
     let a2, a_np2 = annot_elt_s1 (`Aside false) np2 (TripleX2 (arg,x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
+    let ids = concat_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, Triple (a, arg, a_x, a_np2)) f ctx
   | TripleX2 (arg,np1,ctx) ->
     fd#define_focus_term `Undefined;
     let f = Triple ((),arg,np1,x) in
     let a2, a_np1 = annot_elt_s1 (`Aside false) np1 (TripleX1 (arg,x,ctx)) in
-    let ids = union_ids a2#ids a1#ids in
+    let ids = concat_ids a2#ids a1#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, Triple (a, arg, a_np1, a_x)) f ctx
   | ReturnX ctx ->
@@ -858,7 +886,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
      fd#define_focus_term `Undefined;
      let f = Hier ((),id,pred,args,argo,x) in
      let ids_hier = ids_an_id ~inactive:false id in
-     let ids = union_ids ids_hier a1#ids in
+     let ids = concat_ids ids_hier a1#ids in
      let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
      annot_ctx_p1 fd (a, Hier (a, id, pred, args, argo, a_x)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
@@ -875,7 +903,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_s1 (`Aside false) x2 (NAndX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+    let ids = list_concat_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
     annot_ctx_s1 fd (a, NAnd (a, lar)) f ctx
   | NOrX ((ll,rr as ll_rr),ctx) -> (* alternative branches are suspended *)
@@ -886,7 +914,10 @@ and annot_ctx_s1 fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_s1 (`Aside true) x2 (NOrX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
+    let ids =
+      { a1#ids with
+	seq = List.concat (List.map (fun a -> a#ids.seq) la);
+	all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
     let a = new annot ~focus_pos:(`Above (true, Some (List.length ll))) ~focus:(AtS1 (f,ctx)) ~ids () in
     annot_ctx_s1 fd (a, NOr (a, lar)) f ctx
   | NMaybeX ctx ->
@@ -902,7 +933,7 @@ and annot_ctx_s1 fd (a1,a_x) x = function
   | InGraphX (x2,ctx) ->
     let f = In ((),x,x2) in
     let a2, a_x2 = annot_elt_p1 (`Aside false) x2 (InX (x,ctx)) in
-    let ids = union_ids a1#ids a2#ids in
+    let ids = concat_ids a1#ids a2#ids in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
     annot_ctx_p1 fd (a, In (a,a_x,a_x2)) f ctx
   | InWhichThereIsX ctx ->
@@ -938,7 +969,7 @@ and annot_ctx_aggreg fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_aggreg (`Aside false) x2 (SAggregX (ll_rr2,ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) la_aggreg) in
+    let ids = list_concat_ids (List.map (fun a -> a#ids) la_aggreg) in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, SAggreg (a, lar_aggreg)) f ctx
 and annot_ctx_expr defined fd (a1,a_x) x = function
@@ -948,8 +979,8 @@ and annot_ctx_expr defined fd (a1,a_x) x = function
     fd#set_no_incr;
     let f = SExpr ((),name,id,modif,x,rel_opt) in
     let ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside false) rel_opt (SExprThatX (name,id,modif,x,ctx)) in
-    let ids = union_ids a1#ids ids_rel in
-    let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
+    let ids = concat_ids a1#ids ids_rel in
+    let ids = {ids with seq = id::ids.seq; all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, SExpr (a, name, id, modif, a_x, a_rel_opt)) f ctx
   | SFilterX (id,ctx) ->
@@ -957,7 +988,7 @@ and annot_ctx_expr defined fd (a1,a_x) x = function
     fd#set_no_incr;
     let f = SFilter ((),id,x) in
     let ids = a1#ids in
-    let ids = {ids with all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
+    let ids = {ids with seq = id::ids.seq; all = Ids.add id ids.all; defs = if defined then Ids.add id ids.defs else ids.defs} in
     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids () in
     annot_ctx_s fd (a, SFilter (a, id, a_x)) f ctx
   | ApplyX (func,ll_rr,conv_opt,ctx) ->
@@ -970,7 +1001,7 @@ and annot_ctx_expr defined fd (a1,a_x) x = function
 		let a2, a_x2 = annot_elt_expr (`Aside true) x2 (ApplyX (func, ll_rr2, conv_opt2, ctx)) in
 		a2, (conv_opt2,a_x2))
 	      (ctx_of_ctx_list (conv_opt,x) ll_rr))) in
-    let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+    let ids = list_concat_ids (List.map (fun a -> a#ids) la) in
     let a = new annot ~focus_pos:(`Above (true, Some (1 + List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
     annot_ctx_expr defined fd (a, Apply (a, func, lar)) f ctx
   | ChoiceX (ll_rr,ctx) ->
@@ -981,7 +1012,10 @@ and annot_ctx_expr defined fd (a1,a_x) x = function
 	   (map_ctx_list
 	      (fun (x2,ll_rr2) -> annot_elt_expr (`Aside true) x2 (ChoiceX (ll_rr2, ctx)))
 	      (ctx_of_ctx_list x ll_rr))) in
-    let ids = union_ids a1#ids {empty_ids with all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la} in
+    let ids =
+      { a1#ids with
+	seq = List.concat (List.map (fun a -> a#ids.seq) la);
+	all = List.fold_left (fun all a -> Ids.union all a#ids.all) Ids.empty la } in
     let a = new annot ~focus_pos:(`Above (true, Some (List.length (fst ll_rr)))) ~focus:(AtExpr (f,ctx)) ~ids ~defined () in
     annot_ctx_expr defined fd (a, Choice (a, lar)) f ctx
 and annot_ctx_s fd (a1,a_x) x = function
@@ -1006,7 +1040,7 @@ and annot_ctx_s fd (a1,a_x) x = function
     | `Unchanged ->
       let seq_view = view_of_list_focus (focus_term_id fd#term) (a1,a_x) a_ll_rr in
       let la, lar = List.split (list_of_ctx (a1,a_x) a_ll_rr) in
-      let ids = list_union_ids (List.map (fun a -> a#ids) la) in
+      let ids = list_concat_ids (List.map (fun a -> a#ids) la) in
       let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS (f,ctx)) ~ids ~seq_view () in
       annot_ctx_s fd (a, Seq (a, lar)) f ctx
 

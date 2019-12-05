@@ -1016,7 +1016,6 @@ and form_view state (lr : annot elt_s list) (v : view) : deps * Sparql.view =
     | Join (_,lv) -> lv in
   form_view_list state lr [] Sparql.empty_view lv
 and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.view) : view list -> deps * Sparql.view =
-  let ids2vars ids = List.map state#id_labelling#get_id_var ids in
   function
   | [] -> deps, view
   | Unit::lv -> form_view_list state lr deps view lv
@@ -1024,7 +1023,10 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
     ( match List.nth lr sid with
     | Return (annot,np) ->
       let ids = annot#ids in
-      let lx = ids2vars (Ids.elements ids.defs) in
+      let lx =
+	ids.seq
+	|> List.filter (fun id -> Ids.mem id ids.defs)
+	|> List.map state#id_labelling#get_id_var in
       let q_deps, q = form_s1 state np in
       let form = q (fun t -> Sparql.True) in
       let deps = q_deps (fun x -> []) @ deps in
