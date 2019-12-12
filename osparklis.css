@@ -281,7 +281,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 
 .nested-table {
     float:left;
-    margin-right:5px;
+    margin-right:10px;
 }
 
 #div-next-nested-table {

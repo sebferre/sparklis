@@ -815,22 +815,29 @@ let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.
 	 (fun d -> aux ~root d)
 	 ld;
     | `MapN (key,lv,rows) ->
+       let has_head = List.exists (fun v_opt -> v_opt <> None) lv in
        add_string "<div class=\"table-responsive nested-table\">";
        add_string "<table class=\"table table-bordered table-condensed\">";
        (* headers *)
-       add_string "<tr>";
-       if root && key=`KeyVar then add_string "<th></th>";
-       List.iter
-	 (fun v_opt -> add_string (try List.assoc v_opt var_html_th with _ -> assert false))
-	 lv;
-       add_string "</tr>";
+       let nb_cols = ref 0 in
+       if has_head then (
+	 add_string "<thead><tr>";
+	 if root && key=`KeyVar then (incr nb_cols; add_string "<th></th>");
+	 List.iter
+	   (fun v_opt ->
+	    incr nb_cols;
+	    add_string (try List.assoc v_opt var_html_th with _ -> assert false))
+	   lv;
+	 add_string "</tr></thead>"
+       );
        (* rows *)
        let cpt = ref 0 in
+       add_string "<tbody>";
        List.iter
 	 (fun (lt,d) ->
+	  incr cpt;
 	  add_string "<tr>";
 	  if root && key=`KeyVar then (
-	    incr cpt;
 	    add_string "<td>";
 	    add_string (string_of_int !cpt);
 	    add_string "</td>"
@@ -850,6 +857,7 @@ let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.
 	  );
 	  add_string "</tr>")
 	 rows;
+       add_string "</tbody>";
        add_string "</table>";
        add_string "</div>"
   in
