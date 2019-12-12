@@ -275,7 +275,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 .simple-table {
 }
 
-#trees {
+#nested-table {
     padding-top: 5px;
 }
 

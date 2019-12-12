@@ -455,13 +455,13 @@ object (self)
   method private refresh_extension =
     let open Sparql_endpoint in
     if lis#results_dim = 0 then (
+	jquery_disable_all "#nav-results-nested-table";
+	jquery_set_innerHTML "#nested-table" "";
 	jquery_disable_all "#nav-results-table";
 	jquery_set_innerHTML "#list-results" "";
 	jquery_set_innerHTML "#count-results"
 			     (let grammar = Lisql2nl.config_lang#grammar in
 			      grammar#no ^ " " ^ fst grammar#result_results);
-	jquery_disable_all "#nav-results-trees";
-	jquery_set_innerHTML "#trees" "";
 	jquery_disable_all "#nav-results-map";
 	jquery_set_innerHTML "#map" "No geolocalized data";
 	jquery_disable_all "#nav-results-slideshow";
@@ -497,6 +497,19 @@ object (self)
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus)))
       in
+      (* nested table *)
+      jquery "#nested-table" (fun elt_table ->
+	lis#results_shape_data
+	  (fun lv shape_data ->
+	   let counts =
+	     match lv with (* only on first column *)
+	     | Some v::lv1 -> lis#estimate_count_var v :: List.map (fun _ -> None) lv1
+	     | _ -> List.map (fun _ -> None) lv in
+	   let partial = lis#partial_results in
+	   jquery_enable_all "#nav-results-nested-table";
+	   jquery_set_innerHTML "#nested-table"
+	     (Html.html_trees html_state ~partial ~focus_var lv shape_data counts);
+	   tables_handler elt_table));
       (* table of results *)
       jquery "#list-results" (fun elt_results ->
 	lis#results_page offset limit (fun results_page ->
@@ -527,19 +540,6 @@ object (self)
 		   s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
 		     " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
 	  tables_handler elt_results));
-      (* nested table *)
-      jquery "#trees" (fun elt_table ->
-	lis#results_shape_data
-	  (fun lv shape_data ->
-	   let counts =
-	     match lv with (* only on first column *)
-	     | Some v::lv1 -> lis#estimate_count_var v :: List.map (fun _ -> None) lv1
-	     | _ -> List.map (fun _ -> None) lv in
-	   let partial = lis#partial_results in
-	   jquery_enable_all "#nav-results-trees";
-	   jquery_set_innerHTML "#trees"
-	     (Html.html_trees html_state ~partial ~focus_var lv shape_data counts);
-	   tables_handler elt_table));
       (* slideshow of results *)
       lis#results_slides
 	(function
