@@ -947,11 +947,11 @@ and form_dim state : annot elt_aggreg -> deps * Sparql.projection option * Rdf.v
     state#set_modif v modif;
     let d_deps, d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
-    [Rdf.Var v; Rdf.Var v2] :: d_deps (Rdf.Var v2),
+    (*[Rdf.Var v; Rdf.Var v2] ::*) d_deps (Rdf.Var v),
     Some (`Expr (Sparql.var v2 :> Sparql.expr), v), Some v2, (d (Sparql.var v2 :> Sparql.term))
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
-    [[t; Rdf.Var v2]],
+    [] (*[[t; Rdf.Var v2]]*),
     None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
   | _ -> assert false
 and form_aggreg state : annot elt_aggreg -> deps * Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
@@ -962,7 +962,7 @@ and form_aggreg state : annot elt_aggreg -> deps * Sparql.projection * Rdf.var *
     let v2 = state#id_labelling#get_id_var id2 in
     let sparql_g = sparql_aggreg g in
     let t_v2 = (Sparql.var v2 :> Sparql.term) in
-    [Rdf.Var v; Rdf.Var v2] :: d_deps (Rdf.Var v2),
+    (*[Rdf.Var v; Rdf.Var v2] ::*) d_deps (Rdf.Var v),
     (`Aggreg (sparql_g, t_v2), v), v2, Sparql.expr_of_formula (d (Sparql.term_aggreg sparql_g t_v2))
   | _ -> assert false
 and form_expr_list state : annot elt_expr -> Rdf.var list * Sparql.expr list = function (* non-deterministic semantics *)
@@ -1080,15 +1080,26 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
       let ldeps1, lx2 =
 	List.split
 	  (List.map (fun (deps_aggreg,_,x2,_) -> deps_aggreg, x2) l_aggregs) in
-      let deps = List.fold_left (@) deps ldeps1 in
+      let vars_dims =
+	let sq = view () in (* TODO: avoid this spurious computation *)
+	sq.Sparql.projections
+	|> List.map snd (* projected variables in view *)
+	|> List.filter (fun x -> not (List.mem x lx2)) in
+      let deps =
+	List.fold_left
+	  (fun deps (deps_aggreg,proj,_,_) ->
+	   let new_dep = List.map (fun v -> Rdf.Var v) (snd proj :: vars_dims) in
+	   new_dep :: deps_aggreg @ deps)
+	   (* dependency between each aggregate and all dimensions *)
+	  deps l_aggregs in
       let projections_aggregs = List.map (fun (_,proj,_,_) -> proj) l_aggregs in
       let havings_aggregs = List.map (fun (_,_,_,hav) -> hav) l_aggregs in
       let view =
 	(fun ?limit () ->
 	  let sq = view ?limit () in
 	  { sq with
-	    Sparql.projections = List.filter (fun (_,x) -> not (List.mem x lx2)) sq.Sparql.projections @ projections_aggregs;
-	    groupings = List.filter (fun x -> not (List.mem x lx2)) sq.Sparql.groupings;
+	    Sparql.projections = List.filter (fun (_,x) -> List.mem x vars_dims) sq.Sparql.projections @ projections_aggregs;
+	    groupings = List.filter (fun x -> List.mem x vars_dims) sq.Sparql.groupings;
 	    having = Sparql.log_and (sq.Sparql.having :: havings_aggregs) }) in
       form_view_list state lr deps view lv
     | _ -> assert false )
@@ -1101,16 +1112,21 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
       let aggregs = List.filter is_aggreg dims_aggregs in
       let l_dims = List.map (form_dim state) dims in
       let l_aggregs = List.map (form_aggreg state) aggregs in
-      let deps, projections_dims =
+      let deps, projections_dims, vars_dims =
 	List.fold_right
-	  (fun (deps_dim,proj_opt,_,_) (deps,lproj) ->
-	   deps_dim@deps,
-	   (match proj_opt with None -> lproj | Some proj -> proj::lproj))
-	  l_dims (deps,[]) in
+	  (fun (deps_dim,proj_opt,_,_) (deps,lproj,lv) ->
+	   let deps = deps_dim@deps in
+	   match proj_opt with
+	   | None -> deps, lproj, lv
+	   | Some proj -> deps, proj::lproj, snd proj :: lv)
+	  l_dims (deps,[],[]) in
       let deps, projections_aggregs =
 	List.fold_right
 	  (fun (deps_aggreg,proj,_,_) (deps,lproj) ->
-	   deps_aggreg@deps, proj::lproj)
+	   let new_dep = List.map (fun v -> Rdf.Var v) (snd proj :: vars_dims) in
+	   let deps = new_dep :: deps_aggreg @ deps in
+	   (* dependency between each aggregate and all dimensions *)
+	   deps, proj::lproj)
 	  l_aggregs (deps,[]) in
       let projections = projections_dims @ projections_aggregs in
       let groupings_dims =
