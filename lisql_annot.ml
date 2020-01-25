@@ -897,9 +897,8 @@ and annot_ctx_s1 fd (a1,a_x) x = function
      annot_ctx_p1 fd (a, Hier (a, id, pred, args, argo, a_x)) f ctx
   | SimX (id,pred,args,argo,rank,ctx) ->
      let f = Sim ((),id,x,pred,args,argo,rank) in
-     let ids_sim = ids_an_id ~inactive:false id in
-     let ids = concat_ids ids_sim a1#ids in
-     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtS1 (f,ctx)) ~ids () in
+     let ids = a1#ids in
+     let a = new annot ~focus_pos:(`Above (true,Some 0)) ~focus:(AtS1 (f,ctx)) ~ids () in
      annot_ctx_s1 fd (a, Sim (a, id, a_x, pred, args, argo, rank)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in

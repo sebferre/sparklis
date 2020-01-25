@@ -799,12 +799,15 @@ and form_s1_as_p1 state : annot elt_s1 -> deps_p1 * sparql_p1 = function
       | _ -> assert false )
   | Sim (annot,id,np,pred,args,argo,rank) ->
      let d_deps, d = form_s1_as_p1 state np in
-     let vy = state#id_labelling#get_id_var id in
-     let y = (Sparql.var vy :> Sparql.term) in
-     let ty = Rdf.Var vy in
-     let sim = form_sim state pred args argo rank in
-     (fun x -> d_deps ty @ [[ty; x]]),
-     (fun x -> Sparql.formula_and (d y) (sim y x))
+     if annot#is_susp_focus
+     then d_deps, d
+     else
+       let vy = state#id_labelling#get_id_var id in
+       let y = (Sparql.var vy :> Sparql.term) in
+       let ty = Rdf.Var vy in
+       let sim = form_sim state pred args argo rank in
+       (fun x -> d_deps ty @ [[ty; x]]),
+       (fun x -> Sparql.formula_and (d y) (sim y x))
   | NAnd (annot,lr) ->
      let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_s1_as_p1 state elt) lr) in
      (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
@@ -898,7 +901,7 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = 
       | _ -> assert false )
   | Sim (annot,id,np,pred,args,argo,rank) ->
      let q_deps, q = form_s1 ~ignore_top state np in
-     if is_top_s1 np
+     if annot#is_susp_focus || is_top_s1 np
      then q_deps, q
      else
        let vx = state#id_labelling#get_id_var id in

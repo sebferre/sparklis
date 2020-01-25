@@ -102,10 +102,10 @@ and nl_np =
   | `QuOneOf of qu * word list
   | `Expr of adj * Grammar.func_syntax * np list * rel
   | `And of np list
-  | `Or of np list (* (* the optional int indicates that the disjunction is in the context of the i-th element *) *)
+  | `Or of np list
   | `Choice of adj * np list * rel
-  | `Maybe of np (* (* the bool indicates whether negation is suspended *) *)
-  | `Not of np ] (* (* the bool indicates whether negation is suspended *) *)
+  | `Maybe of np
+  | `Not of np ]
 and ng = nl_ng annotated
 and nl_ng =
   [ `That of word * rel
@@ -681,7 +681,7 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
 let ng_of_id ~id_labelling id : ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
-let np_of_sim grammar pred args argo rank = (* TODO: use args, argo, rank *)
+let np_of_sim grammar annot_opt pred args argo rank = (* TODO: use args, argo, rank *)
   let w, synt = word_syntagm_of_pred grammar pred in
   let nl_pred =
     match synt with
@@ -689,7 +689,16 @@ let np_of_sim grammar pred args argo rank = (* TODO: use args, argo, rank *)
     | `InvNoun -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`HasProp (w, X `This, [])))))))
     | `TransVerb -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`VT (w, X `This, [])))))))
     | `TransAdj -> `Qu (`A, `Nil, X (`That (`Thing, X (`Ing (w, X `This))))) in
-  X nl_pred
+  match annot_opt with
+  | None -> X nl_pred
+  | Some annot ->
+     let annot_sim =
+       new Lisql_annot.annot
+	   ~focus_pos:(if annot#is_susp_focus
+		       then `Aside true
+		       else Lisql_annot.focus_pos_down annot#focus_pos)
+	   ?focus:annot#focus () in
+     A (annot_sim, nl_pred)
     
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
@@ -801,7 +810,7 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
   | Sim (annot,id,np,pred,args,argo,rank) ->
      A (annot,
 	`Or [np_of_elt_s1 grammar ~id_labelling np;
-	     np_of_sim grammar pred args argo rank])
+	     np_of_sim grammar (Some annot) pred args argo rank])
   | NAnd (annot,lr) -> A (annot, `And (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
@@ -1596,7 +1605,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      then Word (`Prop ("", "...")) :: xml
      else xml
   | IncrSim (pred,args,argo) ->
-     Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar pred args argo 1)
+     Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar None pred args argo 1)
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []
