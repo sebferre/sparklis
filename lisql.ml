@@ -1459,6 +1459,8 @@ let rec insert_elt_s1 elt focus : (focus * delta) option =
        else insert_elt_p1 (Is ((), elt)) focus
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
        Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx), DeltaNil)
+    | AtS1 (Sim _, ctx) ->
+       Some (at_s1 elt ctx, DeltaNil)
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
     | AtP1 _
     | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
