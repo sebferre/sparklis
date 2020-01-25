@@ -194,6 +194,7 @@ and print_sn = function
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
+  | Sim (_,id,np,pred,args,argo,rank) -> print_nary "Sim" [print_id id; print_s1 np; print_pred pred; print_arg args; print_arg argo; print_int rank]
   | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
   | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
@@ -287,6 +288,7 @@ let parse_bin ~version f ps1 ps2 = parser [< 'Ident id when id = f; 'Kwd "(" ?? 
 let parse_ter ~version f ps1 ps2 ps3 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing (" ; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/3"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/3"; x3 = ps3 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3
 let parse_quad ~version f ps1 ps2 ps3 ps4 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/4"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/4"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/4"; x4 = ps4 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4
 let parse_quin ~version f ps1 ps2 ps3 ps4 ps5 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/5"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/5"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/5"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/5"; x5 = ps5 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5
+let parse_sex ~version f ps1 ps2 ps3 ps4 ps5 ps6 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/7"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/7"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/7"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/7"; x5 = ps5 ~version; 'Kwd "," ?? "missing , 5/7"; x6 = ps6 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5, x6
 let parse_sept ~version f ps1 ps2 ps3 ps4 ps5 ps6 ps7 = parser [< 'Ident id when id = f; 'Kwd "(" ?? "missing ("; x1 = ps1 ~version; 'Kwd "," ?? "missing , 1/7"; x2 = ps2 ~version; 'Kwd "," ?? "missing , 2/7"; x3 = ps3 ~version; 'Kwd "," ?? "missing , 3/7"; x4 = ps4 ~version; 'Kwd "," ?? "missing , 4/7"; x5 = ps5 ~version; 'Kwd "," ?? "missing , 5/7"; x6 = ps6 ~version; 'Kwd "," ?? "missing , 6/7"; x7 = ps7 ~version; 'Kwd ")" ?? "missing )" >] -> x1, x2, x3, x4, x5, x6, x7
 
 let parse_opt ps ~version = parser
@@ -393,6 +395,7 @@ and parse_sn ~version = parser
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
+  | [< id, np, pred, args, argo, rank = parse_sex ~version "Sim" parse_id parse_s1 parse_pred parse_arg parse_arg parse_int >] -> Sim ((),id,np,pred,args,argo,rank)
   | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)

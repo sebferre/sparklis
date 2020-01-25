@@ -114,6 +114,7 @@ and 'a elt_sn = (* predicate complements *)
 and 'a elt_s1 =
   | Det of 'a * elt_s2 * 'a elt_p1 option
   | AnAggreg of 'a * id * modif_s2 * aggreg * 'a elt_p1 option * 'a elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
+  | Sim of 'a * id * 'a elt_s1 * pred * arg * arg * int (* positive *)
   | NAnd of 'a * 'a elt_s1 list
   | NOr of 'a * 'a elt_s1 list
   | NMaybe of 'a * 'a elt_s1
@@ -203,6 +204,7 @@ and ctx_s1 =
   | TripleX2 of arg * unit elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX of ctx_s
   | HierX of id * pred * arg * arg * ctx_p1
+  | SimX of id * pred * arg * arg * int * ctx_s1
   | AnAggregX of id * modif_s2 * aggreg * unit elt_p1 option * ctx_s1
   | NAndX of unit elt_s1 ctx_list * ctx_s1
   | NOrX of unit elt_s1 ctx_list * ctx_s1
@@ -286,6 +288,7 @@ and is_s1_as_p1_ctx_s1 = function
   | TripleX2 _ -> false
   | ReturnX _ -> false
   | HierX _ -> false
+  | SimX (_,_,_,_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | AnAggregX _ -> false
   | NAndX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | NOrX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
@@ -317,6 +320,7 @@ and is_unconstrained_elt_p1 = function
 and is_unconstrained_elt_s1_as_p1 = function
   | Det (_,det,rel_opt) -> is_unconstrained_elt_s2 det && is_unconstrained_elt_p1_opt rel_opt
   | AnAggreg _ -> false
+  | Sim (_,_,np,_,_,_,_) -> is_unconstrained_elt_s1_as_p1 np
   | NAnd (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
   | NOr (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
   | NMaybe (_,x) -> is_unconstrained_elt_s1_as_p1 x
@@ -334,6 +338,7 @@ let rec is_unconstrained_ctx_s1 = function
   | TripleX2 _ -> false
   | ReturnX _ -> true
   | HierX _ -> false
+  | SimX (_,_,_,_,_,ctx) -> is_unconstrained_ctx_s1 ctx
   | AnAggregX _ -> false
   | NAndX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
   | NOrX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
@@ -383,6 +388,7 @@ let rec hierarchy_of_ctx_s1 = function
   | TripleX2 _ -> None
   | ReturnX _ -> None
   | HierX (id,pred,args,argo,_) -> Some (id,pred,args,argo)
+  | SimX (_,_,_,_,_,ctx) -> hierarchy_of_ctx_s1 ctx
   | AnAggregX _ -> None
   | NAndX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
   | NOrX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
@@ -402,6 +408,7 @@ let id_of_s2 = function
 let id_of_s1 = function
   | Det (_,det,_) -> id_of_s2 det
   | AnAggreg (_,id,_,_,_,_) -> Some id
+  | Sim (_,id,_,_,_,_,_) -> Some id
   | _ -> None
 let id_of_sn = function
   | CCons (_,_,np,_) -> id_of_s1 np
@@ -518,6 +525,7 @@ and annot_sn = function
 and annot_s1 = function
   | Det (a,det,rel_opt) -> a
   | AnAggreg (a,id,modif,g,rel_opt,np) -> a
+  | Sim (a,id,np,pred,arg1,arg2,rank) -> a
   | NAnd (a,lr) -> a
   | NOr (a,lr) -> a
   | NMaybe (a,f) -> a
@@ -577,6 +585,7 @@ and elt_s_path_of_ctx_s1 path (f : unit elt_s1) = function
   | TripleX2 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::RIGHT::path) (Triple ((),arg,np,f)) ctx
   | ReturnX ctx -> elt_s_path_of_ctx_s (DOWN::path) (Return ((),f)) ctx
   | HierX (id,pred,args,argo,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Hier ((),id,pred,args,argo,f)) ctx
+  | SimX (id,pred,args,argo,rank,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path) (Sim ((),id,f,pred,args,argo,rank)) ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
   | NAndX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NAnd ((),list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NOr ((),list_of_ctx f ll_rr)) ctx
@@ -655,6 +664,7 @@ and focus_of_path_s1 (ctx : ctx_s1) : path * unit elt_s1 -> focus = function
   | DOWN::path, Det (_, det, Some rel) -> focus_of_path_p1 (DetThatX (det, ctx)) (path,rel)
   | DOWN::RIGHT::path, AnAggreg (_, id, modif, g, rel_opt, np) -> focus_of_path_s1 (AnAggregX (id,modif,g,rel_opt,ctx)) (path,np)
   | DOWN::path, AnAggreg (_, id, modif, g, Some rel, np) -> focus_of_path_p1 (AnAggregThatX (id, modif, g, np, ctx)) (path,rel)
+  | DOWN::path, Sim (_,id,np,pred,args,argo,rank) -> focus_of_path_s1 (SimX (id,pred,args,argo,rank,ctx)) (path,np)
   | DOWN::path, NAnd (_,lr) ->
      let path, ll_rr, x = list_focus_of_path_list path lr in
      focus_of_path_s1 (NAndX (ll_rr, ctx)) (path,x)
@@ -737,6 +747,7 @@ let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
   | Det (_, det, rel_opt) -> down_p1_opt (DetThatX (det, ctx)) rel_opt
   | AnAggreg (_, id, modif, g, Some rel, np) -> down_p1_opt (AnAggregThatX (id,modif,g,np,ctx)) (Some rel)
   | AnAggreg (_, id, modif, g, None, np) -> Some (AtS1 (np, AnAggregX (id, modif, g, None, ctx)))
+  | Sim (_,id,np,pred,args,argo,rank) -> Some (AtS1 (np, SimX (id,pred,args,argo,rank,ctx)))
   | NAnd (_,[]) -> None
   | NAnd (_,x::rr) -> Some (AtS1 (x, NAndX (([],rr),ctx)))
   | NOr (_,[]) -> None
@@ -798,6 +809,7 @@ let rec up_s1 f = function
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
   | ReturnX ctx -> Some (AtS (Return ((),f), ctx))
   | HierX (id,pred,args,argo,ctx) -> Some (AtP1 (Hier ((),id,pred,args,argo,f),ctx))
+  | SimX (id,pred,args,argo,rank,ctx) -> Some (AtS1 (Sim ((),id,f,pred,args,argo,rank),ctx))
   | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, rel_opt, f), ctx))
   | NAndX (ll_rr,ctx) -> up_s1 (NAnd ((), list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr ((), list_of_ctx f ll_rr), ctx))
@@ -853,6 +865,7 @@ let right_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | TripleX2 _ -> None
   | ReturnX _ -> None
   | HierX _ -> None
+  | SimX _ -> None
   | AnAggregX _ -> None
   | NAndX ((ll,[]),ctx) -> None
   | NAndX ((ll,x::rr),ctx) -> Some (AtS1 (x, NAndX ((f::ll,rr),ctx)))
@@ -915,6 +928,7 @@ let left_s1 (f : unit elt_s1) : ctx_s1 -> focus option = function
   | TripleX2 (arg,np,ctx) -> Some (AtS1 (np, TripleX1 (arg,f,ctx)))
   | ReturnX _ -> None
   | HierX _ -> None
+  | SimX _ -> None
   | AnAggregX (id, modif, g, None, ctx) -> None
   | AnAggregX (id, modif, g, Some rel, ctx) -> Some (AtP1 (rel, AnAggregThatX (id, modif, g, f, ctx)))
   | NAndX (([],rr),ctx) -> None
@@ -1086,6 +1100,10 @@ and copy_s1 (np : unit elt_s1) : unit elt_s1 * id_map =
      let rel_opt', map1 = copy_p1_opt rel_opt in
      let np', map2 = copy_s1 np in
      AnAggreg (a, id', modif,g, rel_opt', np'), (id,id')::map1@map2
+  | Sim (a,id,np,pred,args,argo,rank) ->
+     let id' = factory#new_id in
+     let np', map1 = copy_s1 np in
+     Sim (a,id',np',pred,args,argo,rank), map1
   | NAnd (a,lr) ->
      let lr', map = copy_list copy_s1 lr in
      NAnd (a, lr'), map
@@ -1202,6 +1220,7 @@ type increment =
   | IncrHierarchy of bool (* trans_rel *)
   (* trans_rel: to indicate that relation in context can be made transitive *)
   (* inv: to indicate whether to display inversed hierarchies *)
+  | IncrSim of pred * arg * arg (* predicate, source/target roles *)
   | IncrAnd
   | IncrDuplicate
   | IncrOr
@@ -1597,6 +1616,16 @@ let rec toggle_hierarchy trans_rel focus =
      toggle_hierarchy_on np pred args argo ctx
   | _ -> None
 
+let insert_sim pred args argo = function
+  | AtS1 (Sim (_,id,np,pred0,args0,argo0,rank),ctx) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtS1 (Sim ((),id,np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+  | AtS1 (np,SimX (id,pred0,args0,argo0,rank,ctx)) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtS1 (Sim ((),id,np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+  | AtS1 (np,ctx) ->
+     let id = factory#new_id in
+     Some (AtS1 (Sim ((),id,np,pred,args,argo,1),ctx), DeltaNil)
+  | _ -> None
+	   
 let insert_constr constr focus =
   match focus with
   | AtS1 (f, ReturnX _) when is_top_s1 f ->
@@ -2087,6 +2116,7 @@ let insert_increment (incr : increment) (focus : focus) : (focus * delta) option
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrHierarchy trans_rel -> toggle_hierarchy trans_rel focus
+    | IncrSim (pred,args,argo) -> insert_sim pred args argo focus
     | IncrAnything -> insert_anything focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
@@ -2166,6 +2196,10 @@ and delete_elt_sn_list = function
 and delete_elt_s1 : unit elt_s1 -> unit elt_s1 * delta_ids = function
   | Det ((), An (id,_,_), _) ->
      Det ((), An (id, factory#top_modif, Thing), None), []
+  | Sim ((),id,np,pred,args,argo,rank) ->
+     if rank <= 1
+     then np, [id]
+     else Sim ((),id,np,pred,args,argo,rank-1), []
   | _ ->
      let np, id = factory#top_s1 in
      np, [id]
@@ -2177,22 +2211,27 @@ and delete_elt_s : unit elt_s -> unit elt_s * delta_ids = function
      let s, id = factory#top_s in
      s, [id]
 		   
-let rec delete_ctx_p1 : ctx_p1 -> (focus * delta) option = function
-  | DetThatX (det,ctx) -> Some (AtS1 (Det ((),det,None), ctx), DeltaNil)
-  | AnAggregThatX (id,modif,g,np,ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx), DeltaNil)
-  | ForEachThatX (id,modif,id2,ctx) -> Some (AtAggreg (ForEach ((), id,modif,None,id2), ctx), DeltaNil)
-  | TheAggregThatX (id,modif,g,id2,ctx) -> Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx), DeltaNil)
-  | SExprThatX (name,id,modif,expr,ctx) -> Some (AtS (SExpr ((), name, id, modif, expr, None), ctx), DeltaNil)
+let rec delete_ctx_p1 : ctx_p1 -> focus option * delta_ids = function
+  | DetThatX (det,ctx) ->
+     Some (AtS1 (Det ((),det,None), ctx)), []
+  | AnAggregThatX (id,modif,g,np,ctx) ->
+     Some (AtS1 (AnAggreg ((), id, modif, g, None, np), ctx)), []
+  | ForEachThatX (id,modif,id2,ctx) ->
+     Some (AtAggreg (ForEach ((), id,modif,None,id2), ctx)), []
+  | TheAggregThatX (id,modif,g,id2,ctx) ->
+     Some (AtAggreg (TheAggreg ((), id,modif,g,None,id2), ctx)), []
+  | SExprThatX (name,id,modif,expr,ctx) ->
+     Some (AtS (SExpr ((), name, id, modif, expr, None), ctx)), []
   | AndX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
-      | `Single elt -> Some (AtP1 (elt, ctx), DeltaNil)
-      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, AndX ((ll2,rr2),ctx)), DeltaNil) )
+      | `Single elt -> Some (AtP1 (elt, ctx)), []
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, AndX ((ll2,rr2),ctx))), [] )
   | OrX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
       | `Empty -> delete_ctx_p1 ctx
-      | `Single elt -> Some (AtP1 (elt, ctx), DeltaNil)
-      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx)), DeltaNil) )
+      | `Single elt -> Some (AtP1 (elt, ctx)), []
+      | `List (elt,ll2,rr2) -> Some (AtP1 (elt, OrX ((ll2, rr2), ctx))), [] )
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
   | InX (npg,ctx) -> delete_ctx_p1 ctx
@@ -2210,16 +2249,16 @@ and delete_ctx_sn (is_top,f,ids) ctx =
     | CAndX (ll_rr,ctx2) ->
        ( match delete_list ll_rr with
 	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2), delta_ids ids)
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2)), delta_ids ids) )
+	 | `Single elt -> Some (AtSn (elt, ctx2)), ids
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))), ids )
     | COrX (ll_rr,ctx2) ->
        ( match delete_list ll_rr with
 	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2), delta_ids ids)
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2)), delta_ids ids) )
-    | CMaybeX ctx2 -> Some (at_sn f ctx2, delta_ids ids)
-    | CNotX ctx2 -> Some (at_sn f ctx2, delta_ids ids)
-  else Some (at_sn f ctx, delta_ids ids)
+	 | `Single elt -> Some (AtSn (elt, ctx2)), ids
+	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))), ids )
+    | CMaybeX ctx2 -> Some (at_sn f ctx2), ids
+    | CNotX ctx2 -> Some (at_sn f ctx2), ids
+  else Some (at_sn f ctx), ids
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2
@@ -2230,23 +2269,33 @@ and delete_ctx_s1 f_opt ctx =
 	| None -> delete_ctx_p1 ctx2
 	| Some f ->
 	   let np, ids = delete_elt_s1 f in
-	   Some (AtS1 (np, ctx), delta_ids ids) )
+	   Some (AtS1 (np, ctx)), ids )
     | ReturnX ctx2 ->
       ( match f_opt with
 	| None -> delete_ctx_s None ctx2
 	| Some f ->
 	   let np, ids = delete_elt_s1 f in
-	   Some (AtS1 (np, ctx), delta_ids ids) )
+	   Some (AtS1 (np, ctx)), ids )
     | HierX (id,pred,args,argo,ctx2) ->
        ( match f_opt with
-	 | None -> delete_ctx_p1 ctx2
+	 | None ->
+	    let foc_opt, ids = delete_ctx_p1 ctx2 in
+	    foc_opt, id::ids
 	 | Some f ->
 	    let np, ids = delete_elt_s1 f in
-	    Some (AtS1 (np, ctx), delta_ids ids) )
+	    Some (AtS1 (np, ctx)), id::ids )
+    | SimX (id,pred,args,argo,rank,ctx2) ->
+       ( match f_opt with
+	 | None ->
+	    let foc_opt, ids = delete_ctx_s1 None ctx2 in
+	    foc_opt, id::ids
+	 | Some f ->
+	    let np, ids = delete_elt_s1 f in
+	    Some (AtS1 (np,ctx)), id::ids )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
     | CConsX1 (arg,cp,ctx2) ->
        ( match arg, f_opt with
-	 | Q _, None -> Some (at_sn cp ctx2, DeltaNil)
+	 | Q _, None -> Some (at_sn cp ctx2), []
 	 | (S|P|O), None -> (* those args cannot be removed *)
 	    delete_ctx_sn
 	      (let np, id = factory#top_s1 in
@@ -2255,36 +2304,36 @@ and delete_ctx_s1 f_opt ctx =
 	      ctx2
 	 | _, Some f ->
 	    let np, ids = delete_elt_s1 f in
-	    Some (AtS1 (np, ctx), delta_ids ids) )
+	    Some (AtS1 (np, ctx)), ids )
     | NAndX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
-	| `Single elt -> Some (AtS1 (elt, ctx2), DeltaNil)
-	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NAndX ((ll2,rr2),ctx2)), DeltaNil) )
+	| `Single elt -> Some (AtS1 (elt, ctx2)), []
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NAndX ((ll2,rr2),ctx2))), [] )
     | NOrX (ll_rr,ctx2) ->
       ( match delete_list ll_rr with
 	| `Empty -> delete_ctx_s1 None ctx2
-	| `Single elt -> Some (AtS1 (elt, ctx2), DeltaNil)
-	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2)),DeltaNil) )
+	| `Single elt -> Some (AtS1 (elt, ctx2)), []
+	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2))), [] )
     | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
     | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
     | InGraphX (_,ctx2) ->
       ( match f_opt with
       | None -> delete_ctx_p1 ctx2
       | Some f -> let np, ids = delete_elt_s1 f in
-		  Some (AtS1 (np, ctx), delta_ids ids) )
+		  Some (AtS1 (np, ctx)), ids )
     | InWhichThereIsX ctx2 ->
       ( match f_opt with
       | None -> delete_ctx_p1 ctx2
       | Some f -> let np, ids = delete_elt_s1 f in
-		  Some (AtS1 (np, ctx), delta_ids ids) )
+		  Some (AtS1 (np, ctx)), ids )
 and delete_ctx_aggreg ctx =
   match ctx with
   | SAggregX (ll_rr,ctx) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_s None ctx
-    | `Single elt -> Some (AtAggreg (elt, SAggregX (([],[]),ctx)), DeltaNil)
-    | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX ((ll2,rr2), ctx)), DeltaNil) )
+    | `Single elt -> Some (AtAggreg (elt, SAggregX (([],[]),ctx))), []
+    | `List (elt,ll2,rr2) -> Some (AtAggreg (elt, SAggregX ((ll2,rr2), ctx))), [] )
 and delete_ctx_expr f_opt ctx =
   match ctx with
   | SExprX (name,id,modif,rel_opt,ctx2) -> delete_ctx_s None ctx2
@@ -2292,43 +2341,52 @@ and delete_ctx_expr f_opt ctx =
   | ApplyX (func,ll_rr,conv_opt,ctx2) ->
     ( match f_opt with
     | None -> delete_ctx_expr (Some (Apply ((), func, list_of_ctx (None, factory#top_expr) ll_rr))) ctx2
-    | Some _ -> Some (AtExpr (factory#top_expr, apply_conv_ctx_expr None ctx), DeltaNil) ) (* forgetting conversion *)
+    | Some _ -> Some (AtExpr (factory#top_expr, apply_conv_ctx_expr None ctx)), [] ) (* forgetting conversion *)
   | ChoiceX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_expr None ctx2
-    | `Single elt -> Some (AtExpr (elt, ctx2), DeltaNil)
-    | `List (elt,ll2,rr2) -> Some (AtExpr (elt, ChoiceX ((ll2,rr2),ctx2)), DeltaNil) )
+    | `Single elt -> Some (AtExpr (elt, ctx2)), []
+    | `List (elt,ll2,rr2) -> Some (AtExpr (elt, ChoiceX ((ll2,rr2),ctx2))), [] )
 and delete_ctx_s f_opt ctx =
   match ctx with
   | Root ->
      ( match f_opt with
-       | None -> None
-       | Some f ->
+       | None -> None, []
+       | Some f -> (* TODO: ugly to switch between (foc * delta) option and foc option * delta_ids *)
 	  let s, ids = delete_elt_s f in
-	  focus_opt_moves [down_focus]
-			  (Some (AtS (s, Root), delta_ids ids)) )
+	  let foc_opt = focus_opt_moves [down_focus]
+					(Some (AtS (s, Root), DeltaIds ids)) in
+	  match foc_opt with
+	  | None -> None, []
+	  | Some (foc, DeltaIds ids) -> Some foc, ids
+	  | _ -> assert false )
   | SeqX (ll_rr,ctx2) ->
     ( match delete_list ll_rr with
     | `Empty -> delete_ctx_s None ctx2
-    | `Single elt -> Some (AtS (elt,ctx2), DeltaNil)
-    | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2)), DeltaNil) )
+    | `Single elt -> Some (AtS (elt,ctx2)), []
+    | `List (elt,ll2,rr2) -> Some (AtS (elt, SeqX ((ll2,rr2),ctx2))), [] )
 
 let delete_focus focus =
-  let new_focus_opt =
+  let new_focus_opt, ids =
     match focus with
     | AtP1 (_, ctx) -> delete_ctx_p1 ctx
     | AtSn (f, ctx) -> delete_ctx_sn (delete_elt_sn_is_top f) ctx
     | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx
     | AtAggreg (ForTerm (_,t,id2), ctx) ->
        let dim, id = factory#top_dim_foreach id2 in
-       Some (AtAggreg (dim, ctx), delta_ids [id])
+       Some (AtAggreg (dim, ctx)), [id]
     | AtAggreg (f, ctx) -> delete_ctx_aggreg ctx
     | AtExpr (f, ctx) -> delete_ctx_expr (if is_top_expr f then None else Some f) ctx
     | AtS (f, ctx) -> delete_ctx_s (if is_top_s f then None else Some f) ctx in
-  match new_focus_opt with
+  let new_focus_ids_opt =
+    match new_focus_opt with
+    | None -> None
+    | Some foc -> Some (foc, delta_ids ids) in
+  match new_focus_ids_opt with
   | Some (AtSn (CNil (), _), _) ->
-     focus_opt_moves [up_focus] new_focus_opt
-  | _ -> new_focus_opt
+     focus_opt_moves [up_focus] new_focus_ids_opt
+  | _ -> new_focus_ids_opt
+  
 
 (* goto to query *)
 

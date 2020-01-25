@@ -13,6 +13,8 @@ object (self)
   val mutable roots : 'a list = []
   val mutable leaves : 'a list = []
 
+  method mem (elt : 'a) : bool =
+    Hashtbl.mem h elt
   method add (elt, info : 'a * 'b) : unit =
     assert (not organized);
     Hashtbl.add h elt (info, ref [], ref [])
@@ -1352,8 +1354,13 @@ object (self)
 	      if Some incr = hierarchy_focus_as_incr_opt then
 		trans_rel := true;
 	      ( match incr with
-		| Lisql.IncrRel (_,Lisql.Fwd) -> fwd_prop := true
-		| Lisql.IncrRel (_,Lisql.Bwd) -> bwd_prop := true
+		| Lisql.IncrRel (p,ori) ->
+		   ( match ori with
+		     | Lisql.Fwd -> fwd_prop := true
+		     | Lisql.Bwd -> bwd_prop := true );
+		   let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
+		   if incr_index#mem inv_incr then
+		     incr_index#add (Lisql.(IncrSim(Prop p,S,O)), freq_opt)
 		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
@@ -1374,6 +1381,17 @@ object (self)
 	      incr_index#add (incr, freq_opt);
 	      if Some incr = hierarchy_focus_as_incr_opt then
 		trans_rel := true;
+	      ( match incr with
+		| Lisql.IncrPred ((Lisql.S | Lisql.O as arg),pred) ->
+		   let inv_arg =
+		     match arg with
+		     | Lisql.S -> Lisql.O
+		     | Lisql.O -> Lisql.S
+		     | _ -> assert false in
+		   let inv_incr = Lisql.IncrPred (inv_arg,pred) in
+		   if incr_index#mem inv_incr then
+		     incr_index#add (Lisql.(IncrSim(pred,S,O)), freq_opt)
+		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
 		| None -> () );

@@ -63,6 +63,7 @@ object (self)
   method virtual everything : string
   method virtual nothing : string
   method virtual for_ : string
+  method virtual this : string
 
   method virtual n_th : int -> string
 
@@ -193,6 +194,7 @@ object
   method everything = "everything"
   method nothing = "nothing"
   method for_ = "for"
+  method this = "this"
   method choice = "choice"
   method between = "between"
 
@@ -395,6 +397,7 @@ object
   method everything = "tout"
   method nothing = "rien"
   method for_ = "pour"
+  method this = "ceci"
   method choice = "choix"
   method between = "entre"
 
@@ -596,6 +599,7 @@ object
   method everything = "todo"
   method nothing = "nada"
   method for_ = "para"
+  method this = "este"
   method choice = "elección"
   method between = "entre"
 
@@ -798,6 +802,7 @@ object
   method everything = "alles"
   method nothing = "niets"
   method for_ = "voor"
+  method this = "dit"
   method choice = "keuze"
   method between = "tussen"
 

@@ -95,6 +95,7 @@ and np = nl_np annotated
 and nl_np =
   [ `Void
   | `PN of word * rel
+  | `This
   | `TheFactThat of s
   | `Label of ng_label * word option
   | `Qu of qu * adj * ng
@@ -300,6 +301,7 @@ let word_of_incr grammar = function
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
   | IncrHierarchy trans_rel -> `Op grammar#in_
+  | IncrSim (pred,args,argo) -> fst (word_syntagm_of_pred grammar pred)
   | IncrAnything -> `Op grammar#anything
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
@@ -490,6 +492,11 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
       | None -> assert false in
     let ls_g = labelling_aggreg_op grammar g id in
     ls_np, (id, `Labels ls_g) :: lab_np
+  | Sim (_,id,np,pred,args,argo,rank) -> (* similar to 'np or a pred' *)
+     let ls_np, lab_np = labelling_s1 ~as_p1 grammar ~labels np in
+     let v = var_of_pred pred in
+     let w, synt = word_syntagm_of_pred grammar pred in
+     ls_np, (id, `Labels [(v, `Word w)]) :: lab_np (* TODO: improve *)
   | NAnd (_, lr) ->
     let lss, labs = List.split (List.map (labelling_s1 ~as_p1 grammar ~labels) lr) in
     List.concat lss, List.concat labs
@@ -674,6 +681,16 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
 let ng_of_id ~id_labelling id : ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
+let np_of_sim grammar pred args argo rank = (* TODO: use args, argo, rank *)
+  let w, synt = word_syntagm_of_pred grammar pred in
+  let nl_pred =
+    match synt with
+    | `Noun -> `Qu (`A, `Nil, X (`That (w, X `Nil)))
+    | `InvNoun -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`HasProp (w, X `This, [])))))))
+    | `TransVerb -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`VT (w, X `This, [])))))))
+    | `TransAdj -> `Qu (`A, `Nil, X (`That (`Thing, X (`Ing (w, X `This))))) in
+  X nl_pred
+    
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
   let qu_aggreg, noun, adj_opt, noun_word, adj_word_opt = aggreg_syntax grammar g in
@@ -687,7 +704,7 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel
   match annot_opt with
   | None -> X nl
   | Some annot -> A (annot,nl)
-
+		    
 (*    
 let syntax_of_func grammar (func : func)
     : [ `Infix of string | `Noun of string | `Const of string ] =
@@ -781,6 +798,10 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
       `A modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_elt_s1 grammar ~id_labelling np)
+  | Sim (annot,id,np,pred,args,argo,rank) ->
+     A (annot,
+	`Or [np_of_elt_s1 grammar ~id_labelling np;
+	     np_of_sim grammar pred args argo rank])
   | NAnd (annot,lr) -> A (annot, `And (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
@@ -967,6 +988,7 @@ and map_np transf np =
     ( function
     | `Void -> `Void
     | `PN (w,rel) -> `PN (w, map_rel transf rel)
+    | `This -> `This
     | `TheFactThat (s) -> `TheFactThat (map_s transf s)
     | `Label (l,w_opt) -> `Label (l,w_opt)
     | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
@@ -1262,6 +1284,7 @@ and xml_np grammar ~id_labelling np =
     ( fun annot_opt -> function
     | `Void -> []
     | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
+    | `This -> [Kwd grammar#this]
     | `TheFactThat (s) -> Kwd grammar#the_fact_that :: xml_s grammar ~id_labelling s
     | `Label (l,w_opt) -> xml_np_label grammar ~id_labelling l @ (match w_opt with None -> [] | Some w -> [Word w])
     | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
@@ -1572,6 +1595,8 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      if trans_rel
      then Word (`Prop ("", "...")) :: xml
      else xml
+  | IncrSim (pred,args,argo) ->
+     Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar pred args argo 1)
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []
