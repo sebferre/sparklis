@@ -253,10 +253,14 @@ let html_audio url =
    Your browser does not support this audio format.\
    </audio>"
 
-let html_glyphicon name = "<span class=\"glyphicon glyphicon-" ^ name ^ "\"></span>"
+let html_small html = "<small>" ^ html ^ "</small>"
+						   
+let html_glyphicon ?title name =
+  html_span ~classe:("glyphicon glyphicon-" ^ name) ?title ""
 
 let html_open_new_window ~height uri =
-  html_a uri (html_img ~classe:"open-new-window" ~height ~alt:"Open" ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "icon-open-new-window.png")
+  html_a uri
+	 (html_glyphicon ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "new-window")
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
 let html_uri ~classe uri s = html_span ~classe ~title:uri (escapeHTML s)
@@ -326,7 +330,6 @@ let html_freq ?id ?classe ?title ~unit ~partial value =
     )
 
 let html_delete ?id ~title () =
-  (*html_img ?id ~height:16 ~alt:"Delete" ~title "icon-delete.png"*)
   html_span ?id ~title (html_glyphicon "remove")
 
 let html_focus_dropdown =
