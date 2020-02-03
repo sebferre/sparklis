@@ -9,16 +9,7 @@ open XmlHttpRequest
 open Jsutils
 
 let sparql_ns = "http://www.w3.org/2005/sparql-results#"
-
-(* control of Sparklis instance domain *)
-let valid_domain =
-  let dom = Dom_html.document##domain in
-  let s = to_string dom in
-  let n = String.length s in
-  n = 0 (* localhost *)
-  || n >= 9 && s.[n-1]='r' && s.[n-2]='f' && s.[n-3]='.' && s.[n-4]='a' && s.[n-5]='s' && s.[n-6]='i' && s.[n-7]='r' && s.[n-8]='i' && s.[n-9]='.' (* *.irisa.fr, obfuscated  *)
-  || n >= 12 && s.[n-1]='m' && s.[n-2]='o' && s.[n-3]='c' && s.[n-4]='.' && s.[n-5]='s' && s.[n-6]='y' && s.[n-7]='l' && s.[n-8]='e' && s.[n-9]='k' && s.[n-10]='s' && s.[n-11]='a' && s.[n-12]='.' (* *.askelys.com, obfuscated *)
-
+		     
 (* endpoint-specific aspects *)
 
 let uri_of_id (id : string) : Rdf.uri option =
@@ -303,10 +294,10 @@ let cache =
 object
   val ht : (string * string, string * results) Hashtbl.t = Hashtbl.create 101
   method replace endpoint sparql responseText_results =
-    if valid_domain && config_caching#value
+    if config_caching#value
     then Hashtbl.replace ht (endpoint,sparql) responseText_results
   method lookup endpoint sparql =
-    if valid_domain && config_caching#value
+    if config_caching#value
     then try Some (Hashtbl.find ht (endpoint,sparql)) with _ -> None
     else None
   method clear = Hashtbl.clear ht
@@ -332,8 +323,7 @@ let cache_eval (endpoint : string) (sparql : string) : results option =
 let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
-  if not valid_domain && Random.int 10 <> 0 (* if not a valid Sparklis instance, randomly failing most queries *)
-     || sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
+ if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
  then k1 empty_results
  else
   let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
