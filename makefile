@@ -31,6 +31,17 @@ install-dev:
 	cp examples.html /local/ferre/web/ferre/sparklis-dev
 	cp release_notes.html /local/ferre/web/ferre/sparklis-dev
 
+pack: osparklis.js
+	rm -f package/*
+	cp osparklis.html package/index.html
+	cp osparklis.css package/
+	cp osparklis.js package/
+	cp *.png package/
+	cp *.jpg package/
+	cp examples.html package/
+	cp release_notes.html package/
+	zip sparklis-package.zip package/*
+
 clean:
 	rm -f *.cm[ioax]
 
