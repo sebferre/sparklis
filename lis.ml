@@ -15,6 +15,11 @@ object (self)
 
   method mem (elt : 'a) : bool =
     Hashtbl.mem h elt
+  method get (elt : 'a) : 'b option =
+    try
+      let v, _, _ = Hashtbl.find h elt in
+      Some v
+    with Not_found -> None
   method add (elt, info : 'a * 'b) : unit =
     assert (not organized);
     Hashtbl.add h elt (info, ref [], ref [])
@@ -1359,8 +1364,15 @@ object (self)
 		     | Lisql.Fwd -> fwd_prop := true
 		     | Lisql.Bwd -> bwd_prop := true );
 		   let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
-		   if incr_index#mem inv_incr then
-		     incr_index#add (Lisql.(IncrSim(Prop p,S,O)), freq_opt)
+		   ( match incr_index#get inv_incr with
+		    | None -> ()
+		    | Some inv_freq_opt ->
+		       let merged_freq_opt =
+			 match freq_opt, inv_freq_opt with
+			 | None, _
+			 | _, None -> None
+			 | Some f1, Some f2 -> Some {f1 with value = min f1.value f2.value} in
+		       incr_index#add (Lisql.(IncrSim(Prop p,S,O)), merged_freq_opt))
 		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)

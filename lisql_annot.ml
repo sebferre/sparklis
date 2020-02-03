@@ -579,7 +579,7 @@ and annot_elt_s1 pos np ctx =
   | Sim (_,id,np,pred,args,argo,rank) ->
      let ids_sim = ids_an_id ~inactive:false id in
      let a1, a_np = annot_elt_s1 pos_down np (SimX (id,pred,args,argo,rank,ctx)) in
-     let ids = concat_ids ids_sim a1#ids in
+     let ids = concat_ids a1#ids ids_sim in
      let a = annot ~ids () in
      a, Sim (a,id,a_np,pred,args,argo,rank)
   | NAnd (_,lr) ->
