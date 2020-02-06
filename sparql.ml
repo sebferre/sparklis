@@ -231,8 +231,11 @@ let path_alt (lp : _ any_pred list) : pred =
   | _ -> "(" ^< concat "|" lp ^> ")"
 let path_transitive (p : _ any_pred) : pred = "(" ^< p ^> ")*"
 let path_inverse (p : _ any_pred) : pred = "^(" ^< p ^> ")"
-let path_interv (p : _ any_pred) (min : int) (max : int) : pred = "(" ^< p ^> ("){" ^ string_of_int min ^ "," ^ string_of_int max ^ "}")
-								   
+let path_interv (p : _ any_pred) (min : int) (max : int) : pred =
+  "(" ^< p ^> (if min=0 && max=1
+	       then ")?"
+	       else "){" ^ string_of_int min ^ "," ^ string_of_int max ^ "}")
+					   
 let empty : pattern = sparql ""
 let something (s : _ any_term) : pattern =
   if Rdf.config_wikidata_mode#value
