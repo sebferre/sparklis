@@ -686,9 +686,9 @@ let np_of_sim grammar annot_opt pred args argo rank = (* TODO: use args, argo, r
   let nl_pred =
     match synt with
     | `Noun -> `Qu (`A, `Nil, X (`That (w, X `Nil)))
-    | `InvNoun -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`HasProp (w, X `This, [])))))))
-    | `TransVerb -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`VT (w, X `This, [])))))))
-    | `TransAdj -> `Qu (`A, `Nil, X (`That (`Thing, X (`Ing (w, X `This))))) in
+    | `InvNoun -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), [])))))))))
+    | `TransVerb -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`VT_CP (w, X `Nil)))))))))
+    | `TransAdj -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsAdjCP (w, X `Nil))))))))) in
   match annot_opt with
   | None -> X nl_pred
   | Some annot ->
