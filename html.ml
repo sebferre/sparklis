@@ -544,7 +544,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
       | IncrLatLong _ -> 4, Some grammar#tooltip_geolocation
       | IncrRel _ -> 4, None
       | IncrPred _ -> 4, None
-      | IncrSim _ -> 4, None (* TODO: tooltip *)
+      | IncrSim _ -> 5, None (* TODO: tooltip *)
       | IncrTriple _ -> 7, None
       | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
       (* term increments *)

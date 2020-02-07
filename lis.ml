@@ -1367,12 +1367,12 @@ object (self)
 		   ( match incr_index#get inv_incr with
 		    | None -> ()
 		    | Some inv_freq_opt ->
-		       let merged_freq_opt =
-			 match freq_opt, inv_freq_opt with
-			 | None, _
-			 | _, None -> None
-			 | Some f1, Some f2 -> Some {f1 with value = min f1.value f2.value} in
-		       incr_index#add (Lisql.(IncrSim(Prop p,S,O)), merged_freq_opt))
+		       let fwd_freq_opt, bwd_freq_opt =
+			 match ori with
+			 | Lisql.Fwd -> freq_opt, inv_freq_opt
+			 | Lisql.Bwd -> inv_freq_opt, freq_opt in
+		       incr_index#add (Lisql.(IncrSim(Prop p,S,O)), fwd_freq_opt);
+		       incr_index#add (Lisql.(IncrSim(Prop p,O,S)), bwd_freq_opt))
 		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)

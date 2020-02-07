@@ -34,6 +34,7 @@ object (self)
   method virtual which : string
   method virtual hierarchy : string
   method virtual in_ : string
+  method virtual rank : string
 
   method virtual and_ : string
   method virtual or_ : string
@@ -167,6 +168,7 @@ object
   method which = "which"
   method hierarchy = "(hierarchy)"
   method in_ = "in"
+  method rank = "rank"
 
   method and_ = "and"
   method or_ = "or"
@@ -370,6 +372,7 @@ object
   method which = "lequel"
   method hierarchy = "(hiérarchie)"
   method in_ = "dans"
+  method rank = "rang"
 
   method and_ = "et"
   method or_ = "ou"
@@ -572,6 +575,7 @@ object
   method which = "el/la cual"
   method hierarchy = "(jerarquía)"
   method in_ = "en"
+  method rank = "rango"
 
   method and_ = "y"
   method or_ = "o"
@@ -775,6 +779,7 @@ object
   method which = "welke"
   method hierarchy = "(hiërarchie)"
   method in_ = "in"
+  method rank = "rang"
 
   method and_ = "en"
   method or_ = "of"

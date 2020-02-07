@@ -131,7 +131,7 @@ and nl_rel =
   | `AtWhichNoun of word * s
   (*  | `Of of np *)
   | `PP of pp list
-  | `Ing of word * np
+  | `Ing of word * np * pp list
   | `InWhich of s
   | `And of rel list
   | `Or of rel list
@@ -681,14 +681,27 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
 let ng_of_id ~id_labelling id : ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
-let np_of_sim grammar annot_opt pred args argo rank = (* TODO: use args, argo, rank *)
+let np_of_sim grammar annot_opt pred args argo rank : np =
   let w, synt = word_syntagm_of_pred grammar pred in
+  let nl_rank =
+    `AtNoun (`Op grammar#rank, X (`PN (`TypedLiteral (string_of_int rank, Rdf.xsd_integer), X `Nil))) in
   let nl_pred =
-    match synt with
-    | `Noun -> `Qu (`A, `Nil, X (`That (w, X `Nil)))
-    | `InvNoun -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), [])))))))))
-    | `TransVerb -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`VT_CP (w, X `Nil)))))))))
-    | `TransAdj -> `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsAdjCP (w, X `Nil))))))))) in
+    match synt, args, argo with
+    | `Noun, S, O
+    | `InvNoun, O, S ->
+       `Qu (`A, `Nil, X (`That (w, X (if rank=1 then `Nil else `PP [nl_rank]))))
+    | `InvNoun, S, O
+    | `Noun, O, S ->
+       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=1 then [] else [nl_rank])))))))))
+    | `TransVerb, S, O ->
+       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`VT (w, X `Void, if rank=1 then [] else [nl_rank])))))))))
+    | `TransVerb, O, S ->
+       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`VT (w, X `This, if rank=1 then [] else [nl_rank])))))))
+    | `TransAdj, S, O ->
+       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsAdjCP (w, X (if rank=1 then `Nil else `Cons (nl_rank, X `Nil)))))))))))
+    | `TransAdj, O, S ->
+       `Qu (`A, `Nil, X (`That (`Thing, X (`Ing (w, X `This, if rank=1 then [] else [nl_rank])))))
+    | _ -> failwith "Lisql2nl.np_of_sim: Invalid args/argo" in
   match annot_opt with
   | None -> X nl_pred
   | Some annot ->
@@ -788,8 +801,8 @@ and vp_of_constr grammar annot = function
   | HigherThan pat -> A (annot, `IsPP (`Prep (`Op grammar#higher_or_equal_to, np_of_literal pat)))
   | LowerThan pat -> A (annot, `IsPP (`Prep (`Op grammar#lower_or_equal_to, np_of_literal pat)))
   | Between (pat1,pat2) -> A (annot, `IsPP (`PrepBin (`Op grammar#interval_between, np_of_literal pat1, `Op grammar#interval_and, np_of_literal pat2)))
-  | HasLang pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#language, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
-  | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)))))))), []))
+  | HasLang pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#language, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)), [])))))), []))
+  | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)), [])))))), []))
   | ExternalSearch (s,_) -> vp_of_search grammar annot s
 and vp_of_search grammar annot = function
   | `Wikidata kwds
@@ -887,7 +900,7 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> s = function
     let np =
       if name=""
       then np_expr
-      else X (`PN (`Func name, X (`Ing (`Op "=", np_expr)))) in
+      else X (`PN (`Func name, X (`Ing (`Op "=", np_expr, [])))) in
     A (annot, `Return np)
   | SFilter (annot,id,expr) ->
     let s = s_of_elt_expr grammar ~id_labelling expr in
@@ -1036,7 +1049,7 @@ and map_rel transf rel =
     | `AtWhichNoun (w,s) -> `AtWhichNoun (w, map_s transf s)
     (*    | `Of np -> `Of (map_np transf np) *)
     | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
-    | `Ing (w,np) -> `Ing (w, map_np transf np)
+    | `Ing (w,np,lpp) -> `Ing (w, map_np transf np, List.map (map_pp transf) lpp)
     | `InWhich (s) -> `InWhich (map_s transf s)
     | `And lr -> `And (List.map (map_rel transf) lr)
     | `Or lr -> `Or (List.map (map_rel transf) lr)
@@ -1379,7 +1392,7 @@ and xml_rel grammar ~id_labelling = function
       | `AtWhichNoun (w,s) -> Kwd grammar#with_ :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
       | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
-      | `Ing (w,np) -> Word w :: xml_np grammar ~id_labelling np
+      | `Ing (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
       | `InWhich s -> xml_in_which grammar ~id_labelling s
       | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
