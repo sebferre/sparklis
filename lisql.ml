@@ -1651,7 +1651,7 @@ let rec insert_something_that_is = function
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_something_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) ->
      Some (AtS1 (np,ctx), DeltaNil) (* TODO: removed ids *)
-  | AtS1 (np,ctx) when id_of_s1 np = None ->
+  | AtS1 ((Sim _ | NOr _ | NNot _ as np), ctx) ->
      let det, id = factory#top_s2 in
      Some (AtS1 (Det ((), det, Some (Is ((), np))), ctx), delta_ids [id])
   | _ -> None
