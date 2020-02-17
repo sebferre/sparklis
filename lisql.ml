@@ -93,6 +93,7 @@ type 'a elt_p1 =
   | Type of 'a * Rdf.uri
   | Rel of 'a * Rdf.uri * modif_p2 * 'a elt_s1
   | Hier of 'a * id * pred * arg * arg (*Rdf.uri * modif_p2*) * 'a elt_s1
+  | Sim of 'a * 'a elt_s1 * pred * arg * arg * int (* rank, positive *)
   | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | LatLong of 'a * latlong * id * id (* specialization of two Rel to get latitude and longitude *)
   | Search of 'a * constr
@@ -114,7 +115,6 @@ and 'a elt_sn = (* predicate complements *)
 and 'a elt_s1 =
   | Det of 'a * elt_s2 * 'a elt_p1 option
   | AnAggreg of 'a * id * modif_s2 * aggreg * 'a elt_p1 option * 'a elt_s1 (* aggregation: elt_s1 must be a Det or a AnAggreg *)
-  | Sim of 'a * id * 'a elt_s1 * pred * arg * arg * int (* positive *)
   | NAnd of 'a * 'a elt_s1 list
   | NOr of 'a * 'a elt_s1 list
   | NMaybe of 'a * 'a elt_s1
@@ -204,7 +204,7 @@ and ctx_s1 =
   | TripleX2 of arg * unit elt_s1 * ctx_p1 (* context on second S1 arg *)
   | ReturnX of ctx_s
   | HierX of id * pred * arg * arg * ctx_p1
-  | SimX of id * pred * arg * arg * int * ctx_s1
+  | SimX of pred * arg * arg * int * ctx_p1
   | AnAggregX of id * modif_s2 * aggreg * unit elt_p1 option * ctx_s1
   | NAndX of unit elt_s1 ctx_list * ctx_s1
   | NOrX of unit elt_s1 ctx_list * ctx_s1
@@ -288,7 +288,7 @@ and is_s1_as_p1_ctx_s1 = function
   | TripleX2 _ -> false
   | ReturnX _ -> false
   | HierX _ -> false
-  | SimX (_,_,_,_,_,ctx) -> is_s1_as_p1_ctx_s1 ctx
+  | SimX (_,_,_,_,ctx) -> false
   | AnAggregX _ -> false
   | NAndX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
   | NOrX (_,ctx) -> is_s1_as_p1_ctx_s1 ctx
@@ -306,6 +306,7 @@ and is_unconstrained_elt_p1 = function
   | Type _ -> false
   | Rel _ -> false
   | Hier _ -> false
+  | Sim _ -> false
   | Triple _ -> false
   | LatLong _ -> false
   | Search _ -> false
@@ -320,7 +321,6 @@ and is_unconstrained_elt_p1 = function
 and is_unconstrained_elt_s1_as_p1 = function
   | Det (_,det,rel_opt) -> is_unconstrained_elt_s2 det && is_unconstrained_elt_p1_opt rel_opt
   | AnAggreg _ -> false
-  | Sim (_,_,np,_,_,_,_) -> is_unconstrained_elt_s1_as_p1 np
   | NAnd (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
   | NOr (_,l) -> List.for_all is_unconstrained_elt_s1_as_p1 l
   | NMaybe (_,x) -> is_unconstrained_elt_s1_as_p1 x
@@ -338,7 +338,7 @@ let rec is_unconstrained_ctx_s1 = function
   | TripleX2 _ -> false
   | ReturnX _ -> true
   | HierX _ -> false
-  | SimX (_,_,_,_,_,ctx) -> is_unconstrained_ctx_s1 ctx
+  | SimX _ -> false
   | AnAggregX _ -> false
   | NAndX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
   | NOrX (ll_rr,ctx) -> is_unconstrained_ctx_s1 ctx
@@ -380,7 +380,14 @@ let rec has_left_conjunct_ctx_s1 = function
   | NOrX (_,ctx) -> has_left_conjunct_ctx_s1 ctx
   | _ -> false
 			    
-let rec hierarchy_of_ctx_s1 = function
+let rec hierarchy_of_ctx_p1 = function
+  | DetThatX (_,ctx) -> hierarchy_of_ctx_s1 ctx
+  | AndX (_,ctx) -> hierarchy_of_ctx_p1 ctx
+  | OrX (_,ctx) -> hierarchy_of_ctx_p1 ctx
+  | MaybeX ctx -> hierarchy_of_ctx_p1 ctx
+  | NotX ctx -> hierarchy_of_ctx_p1 ctx
+  | _ -> None
+and hierarchy_of_ctx_s1 = function
   | IsX _ -> None
   | CConsX1 _ -> None
   | RelX _ -> None
@@ -388,7 +395,7 @@ let rec hierarchy_of_ctx_s1 = function
   | TripleX2 _ -> None
   | ReturnX _ -> None
   | HierX (id,pred,args,argo,_) -> Some (id,pred,args,argo)
-  | SimX (_,_,_,_,_,ctx) -> hierarchy_of_ctx_s1 ctx
+  | SimX (_,_,_,_,ctx) -> None
   | AnAggregX _ -> None
   | NAndX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
   | NOrX (ll_rr,ctx) -> hierarchy_of_ctx_s1 ctx
@@ -397,6 +404,7 @@ let rec hierarchy_of_ctx_s1 = function
   | InGraphX (f1,ctx) -> None
   | InWhichThereIsX ctx -> None
 let hierarchy_of_focus = function
+  | AtP1 (f,ctx) -> hierarchy_of_ctx_p1 ctx
   | AtS1 (np,ctx) -> hierarchy_of_ctx_s1 ctx
   | _ -> None
 let is_hierarchy_ctx_s1 ctx =
@@ -408,7 +416,6 @@ let id_of_s2 = function
 let id_of_s1 = function
   | Det (_,det,_) -> id_of_s2 det
   | AnAggreg (_,id,_,_,_,_) -> Some id
-  | Sim (_,id,_,_,_,_,_) -> Some id
   | _ -> None
 let id_of_sn = function
   | CCons (_,_,np,_) -> id_of_s1 np
@@ -478,6 +485,7 @@ let at_sn cp ctx =
 	       
 let at_s1 np ctx =
   match np, ctx with
+  | _, IsX (DetThatX (det,ctx2)) when is_top_s2 det -> AtS1 (np,ctx2)
   | NAnd (_,l), NAndX (ll_rr,ctx2) ->
      AtS1 (NAnd ((), list_of_list_ctx l ll_rr), ctx2)
   | NOr (_,l), NOrX (ll_rr,ctx2) ->
@@ -501,6 +509,7 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Type (a,c) -> a
   | Rel (a,p,modif,np) -> a
   | Hier (a,id,pred,args,argo,np) -> a
+  | Sim (a,np,pred,arg1,arg2,rank) -> a
   | Triple (a,arg,np1,np2) -> a
   | LatLong (a,ll,id1,id2) -> a
   | Search (a,constr) -> a
@@ -525,7 +534,6 @@ and annot_sn = function
 and annot_s1 = function
   | Det (a,det,rel_opt) -> a
   | AnAggreg (a,id,modif,g,rel_opt,np) -> a
-  | Sim (a,id,np,pred,arg1,arg2,rank) -> a
   | NAnd (a,lr) -> a
   | NOr (a,lr) -> a
   | NMaybe (a,f) -> a
@@ -585,7 +593,7 @@ and elt_s_path_of_ctx_s1 path (f : unit elt_s1) = function
   | TripleX2 (arg,np,ctx) -> elt_s_path_of_ctx_p1 (DOWN::RIGHT::path) (Triple ((),arg,np,f)) ctx
   | ReturnX ctx -> elt_s_path_of_ctx_s (DOWN::path) (Return ((),f)) ctx
   | HierX (id,pred,args,argo,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Hier ((),id,pred,args,argo,f)) ctx
-  | SimX (id,pred,args,argo,rank,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path) (Sim ((),id,f,pred,args,argo,rank)) ctx
+  | SimX (pred,args,argo,rank,ctx) -> elt_s_path_of_ctx_p1 (DOWN::path) (Sim ((),f,pred,args,argo,rank)) ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> elt_s_path_of_ctx_s1 (DOWN::RIGHT::path) (AnAggreg ((),id, modif, g, rel_opt, f)) ctx
   | NAndX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NAnd ((),list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> elt_s_path_of_ctx_s1 (DOWN::path_of_list_ctx ll_rr path) (NOr ((),list_of_ctx f ll_rr)) ctx
@@ -632,6 +640,7 @@ let rec focus_of_path_p1 (ctx : ctx_p1) : path * unit elt_p1 -> focus = function
   | DOWN::path, Pred (_,arg,pred,cp) -> focus_of_path_sn (PredX (arg,pred,ctx)) (path,cp)
   | DOWN::path, Rel (_,p,m,np) -> focus_of_path_s1 (RelX (p,m,ctx)) (path,np)
   | DOWN::path, Hier (_, id,pred,args,argo,np) -> focus_of_path_s1 (HierX (id,pred,args,argo,ctx)) (path,np)
+  | DOWN::path, Sim (_,np,pred,args,argo,rank) -> focus_of_path_s1 (SimX (pred,args,argo,rank,ctx)) (path,np)
   | DOWN::RIGHT::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX2 (arg,np1,ctx)) (path,np2)
   | DOWN::path, Triple (_,arg,np1,np2) -> focus_of_path_s1 (TripleX1 (arg,np2,ctx)) (path,np1)
   | DOWN::path, And (_,lr) ->
@@ -664,7 +673,6 @@ and focus_of_path_s1 (ctx : ctx_s1) : path * unit elt_s1 -> focus = function
   | DOWN::path, Det (_, det, Some rel) -> focus_of_path_p1 (DetThatX (det, ctx)) (path,rel)
   | DOWN::RIGHT::path, AnAggreg (_, id, modif, g, rel_opt, np) -> focus_of_path_s1 (AnAggregX (id,modif,g,rel_opt,ctx)) (path,np)
   | DOWN::path, AnAggreg (_, id, modif, g, Some rel, np) -> focus_of_path_p1 (AnAggregThatX (id, modif, g, np, ctx)) (path,rel)
-  | DOWN::path, Sim (_,id,np,pred,args,argo,rank) -> focus_of_path_s1 (SimX (id,pred,args,argo,rank,ctx)) (path,np)
   | DOWN::path, NAnd (_,lr) ->
      let path, ll_rr, x = list_focus_of_path_list path lr in
      focus_of_path_s1 (NAndX (ll_rr, ctx)) (path,x)
@@ -717,6 +725,7 @@ let down_p1 (ctx : ctx_p1) : unit elt_p1 -> focus option = function
   | Type _ -> None
   | Rel (_,p,m,np) -> Some (AtS1 (np, RelX (p,m,ctx)))
   | Hier (_, id,pred,args,argo,np) -> Some (AtS1 (np, HierX (id,pred,args,argo,ctx)))
+  | Sim (_,np,pred,args,argo,rank) -> Some (AtS1 (np, SimX (pred,args,argo,rank,ctx)))
   | Triple (_,arg,np1,np2) -> Some (AtS1 (np1, TripleX1 (arg,np2,ctx)))
   | LatLong _ -> None
   | Search _ -> None
@@ -747,7 +756,6 @@ let down_s1 (ctx : ctx_s1) : unit elt_s1 -> focus option = function
   | Det (_, det, rel_opt) -> down_p1_opt (DetThatX (det, ctx)) rel_opt
   | AnAggreg (_, id, modif, g, Some rel, np) -> down_p1_opt (AnAggregThatX (id,modif,g,np,ctx)) (Some rel)
   | AnAggreg (_, id, modif, g, None, np) -> Some (AtS1 (np, AnAggregX (id, modif, g, None, ctx)))
-  | Sim (_,id,np,pred,args,argo,rank) -> Some (AtS1 (np, SimX (id,pred,args,argo,rank,ctx)))
   | NAnd (_,[]) -> None
   | NAnd (_,x::rr) -> Some (AtS1 (x, NAndX (([],rr),ctx)))
   | NOr (_,[]) -> None
@@ -809,7 +817,7 @@ let rec up_s1 f = function
   | TripleX2 (arg,np,ctx) -> Some (AtP1 (Triple ((),arg,np,f), ctx))
   | ReturnX ctx -> Some (AtS (Return ((),f), ctx))
   | HierX (id,pred,args,argo,ctx) -> Some (AtP1 (Hier ((),id,pred,args,argo,f),ctx))
-  | SimX (id,pred,args,argo,rank,ctx) -> Some (AtS1 (Sim ((),id,f,pred,args,argo,rank),ctx))
+  | SimX (pred,args,argo,rank,ctx) -> Some (AtP1 (Sim ((),f,pred,args,argo,rank),ctx))
   | AnAggregX (id, modif, g, rel_opt, ctx) -> Some (AtS1 (AnAggreg ((), id, modif, g, rel_opt, f), ctx))
   | NAndX (ll_rr,ctx) -> up_s1 (NAnd ((), list_of_ctx f ll_rr)) ctx
   | NOrX (ll_rr,ctx) -> Some (AtS1 (NOr ((), list_of_ctx f ll_rr), ctx))
@@ -1035,6 +1043,9 @@ let rec copy_p1 (f : unit elt_p1) : unit elt_p1 * id_map =
      let id' = factory#new_id in
      let np', map = copy_s1 np in
      Hier (a, id', pred, args, argo, np'), (id,id')::map
+  | Sim (a,np,pred,args,argo,rank) ->
+     let np', map1 = copy_s1 np in
+     Sim (a,np',pred,args,argo,rank), map1
   | Triple (a,arg,np1,np2) ->
      let np1', map1 = copy_s1 np1 in
      let np2', map2 = copy_s1 np2 in
@@ -1100,10 +1111,6 @@ and copy_s1 (np : unit elt_s1) : unit elt_s1 * id_map =
      let rel_opt', map1 = copy_p1_opt rel_opt in
      let np', map2 = copy_s1 np in
      AnAggreg (a, id', modif,g, rel_opt', np'), (id,id')::map1@map2
-  | Sim (a,id,np,pred,args,argo,rank) ->
-     let id' = factory#new_id in
-     let np', map1 = copy_s1 np in
-     Sim (a,id',np',pred,args,argo,rank), map1
   | NAnd (a,lr) ->
      let lr', map = copy_list copy_s1 lr in
      NAnd (a, lr'), map
@@ -1459,8 +1466,8 @@ let rec insert_elt_s1 elt focus : (focus * delta) option =
        else insert_elt_p1 (Is ((), elt)) focus
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
        Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx), DeltaNil)
-    | AtS1 (Sim _, ctx) ->
-       Some (at_s1 elt ctx, DeltaNil)
+(*    | AtS1 (Sim _, ctx) ->
+       Some (at_s1 elt ctx, DeltaNil) *)
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
     | AtP1 _
     | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
@@ -1619,13 +1626,13 @@ let rec toggle_hierarchy trans_rel focus =
   | _ -> None
 
 let insert_sim pred args argo = function
-  | AtS1 (Sim (_,id,np,pred0,args0,argo0,rank),ctx) when pred0=pred && args0=args && argo0=argo ->
-     Some (AtS1 (Sim ((),id,np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
-  | AtS1 (np,SimX (id,pred0,args0,argo0,rank,ctx)) when pred0=pred && args0=args && argo0=argo ->
-     Some (AtS1 (Sim ((),id,np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+  | AtP1 (Sim (_,np,pred0,args0,argo0,rank),ctx) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtP1 (Sim ((),np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+  | AtS1 (np,SimX (pred0,args0,argo0,rank,ctx)) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtP1 (Sim ((),np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
   | AtS1 (np,ctx) ->
-     let id = factory#new_id in
-     Some (AtS1 (Sim ((),id,np,pred,args,argo,1),ctx), DeltaNil)
+     let det, id = factory#top_s2 in
+     Some (AtP1 (Sim ((),np,pred,args,argo,1), DetThatX (det,ctx)), DeltaIds [id])
   | _ -> None
 	   
 let insert_constr constr focus =
@@ -1651,7 +1658,7 @@ let rec insert_something_that_is = function
   | AtSn (CCons (_,arg,np,cp), ctx) -> insert_something_that_is (AtS1 (np, CConsX1 (arg,cp,ctx)))
   | AtS1 (Det (_, An (id,modif,Thing), Some (Is (_, np))), ctx) ->
      Some (AtS1 (np,ctx), DeltaNil) (* TODO: removed ids *)
-  | AtS1 ((Sim _ | NOr _ | NNot _ as np), ctx) ->
+  | AtS1 ((NOr _ | NNot _ as np), ctx) ->
      let det, id = factory#top_s2 in
      Some (AtS1 (Det ((), det, Some (Is ((), np))), ctx), delta_ids [id])
   | _ -> None
@@ -2198,10 +2205,6 @@ and delete_elt_sn_list = function
 and delete_elt_s1 : unit elt_s1 -> unit elt_s1 * delta_ids = function
   | Det ((), An (id,_,_), _) ->
      Det ((), An (id, factory#top_modif, Thing), None), []
-  | Sim ((),id,np,pred,args,argo,rank) ->
-     if rank <= 1
-     then np, [id]
-     else Sim ((),id,np,pred,args,argo,rank-1), []
   | _ ->
      let np, id = factory#top_s1 in
      np, [id]
@@ -2263,7 +2266,7 @@ and delete_ctx_sn (is_top,f,ids) ctx =
   else Some (at_sn f ctx), ids
 and delete_ctx_s1 f_opt ctx =
   match ctx with
-    | IsX ctx2
+    | IsX ctx2 -> delete_ctx_p1 ctx2
     | RelX (_,_,ctx2)
     | TripleX1 (_,_,ctx2)
     | TripleX2 (_,_,ctx2) ->
@@ -2286,14 +2289,14 @@ and delete_ctx_s1 f_opt ctx =
 	 | Some f ->
 	    let np, ids = delete_elt_s1 f in
 	    Some (AtS1 (np, ctx)), id::ids )
-    | SimX (id,pred,args,argo,rank,ctx2) ->
+    | SimX (pred,args,argo,rank,ctx2) ->
        ( match f_opt with
 	 | None ->
-	    let foc_opt, ids = delete_ctx_s1 None ctx2 in
-	    foc_opt, id::ids
+	    let foc_opt, ids = delete_ctx_p1 ctx2 in
+	    foc_opt, ids
 	 | Some f ->
 	    let np, ids = delete_elt_s1 f in
-	    Some (AtS1 (np,ctx)), id::ids )
+	    Some (AtS1 (np, ctx)), ids )
     | AnAggregX (id,modif,g,rel_opt,ctx2) -> delete_ctx_s1 f_opt ctx2
     | CConsX1 (arg,cp,ctx2) ->
        ( match arg, f_opt with
@@ -2371,6 +2374,10 @@ and delete_ctx_s f_opt ctx =
 let delete_focus focus =
   let new_focus_opt, ids =
     match focus with
+    | AtP1 (Sim (_,np,pred,args,argo,rank),ctx) ->
+       if rank <= 1
+       then Some (at_s1 np (IsX ctx)), []
+       else Some (AtP1 (Sim ((),np,pred,args,argo,rank-1),ctx)), []
     | AtP1 (_, ctx) -> delete_ctx_p1 ctx
     | AtSn (f, ctx) -> delete_ctx_sn (delete_elt_sn_is_top f) ctx
     | AtS1 (f, ctx) -> delete_ctx_s1 (if is_top_s1 f then None else Some f) ctx

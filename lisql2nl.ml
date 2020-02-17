@@ -397,6 +397,11 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
      let labels_id =
        List.map (fun (v,l) -> "hier_"^v, `Hierarchy l) labels in
      ls_np, (id, `Labels labels_id) :: lab_np
+  | Sim (_,np,pred,args,argo,rank) -> (* similar to 'np or a pred' *)
+     let _ls_np, lab_np = labelling_s1 ~as_p1:false grammar ~labels np in
+     let v = var_of_pred pred in
+     let w, synt = word_syntagm_of_pred grammar pred in
+     [(v, `Word w)], lab_np (* TODO: improve *)
   | LatLong (_,_ll,id1,id2) ->
     let ls_lat = List.map (fun (v,l) -> (v ^ "_lat", `Gen (l, `Op  grammar#latitude))) labels in
     let ls_long = List.map (fun (v,l) -> (v ^ "_long", `Gen (l, `Op grammar#longitude))) labels in 
@@ -492,11 +497,6 @@ and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labell
       | None -> assert false in
     let ls_g = labelling_aggreg_op grammar g id in
     ls_np, (id, `Labels ls_g) :: lab_np
-  | Sim (_,id,np,pred,args,argo,rank) -> (* similar to 'np or a pred' *)
-     let ls_np, lab_np = labelling_s1 ~as_p1 grammar ~labels np in
-     let v = var_of_pred pred in
-     let w, synt = word_syntagm_of_pred grammar pred in
-     ls_np, (id, `Labels [(v, `Word w)]) :: lab_np (* TODO: improve *)
   | NAnd (_, lr) ->
     let lss, labs = List.split (List.map (labelling_s1 ~as_p1 grammar ~labels) lr) in
     List.concat lss, List.concat labs
@@ -768,6 +768,12 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
     | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
   | Hier (annot, id, pred, args, argo, np) -> (* TODO: render pred, args, argo *)
      A (annot, `IsPP (`Prep (`Op grammar#in_, np_of_elt_s1 grammar ~id_labelling np)))
+  | Sim (annot,np,pred,args,argo,rank) ->
+     A (annot, `IsNP
+	 (X (
+	     `Or [np_of_elt_s1 grammar ~id_labelling np;
+		  np_of_sim grammar (Some annot) pred args argo rank]),
+	  []))
   | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
@@ -820,10 +826,6 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
       `A modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_elt_s1 grammar ~id_labelling np)
-  | Sim (annot,id,np,pred,args,argo,rank) ->
-     A (annot,
-	`Or [np_of_elt_s1 grammar ~id_labelling np;
-	     np_of_sim grammar (Some annot) pred args argo rank])
   | NAnd (annot,lr) -> A (annot, `And (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
   | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
@@ -1618,7 +1620,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      then Word (`Prop ("", "...")) :: xml
      else xml
   | IncrSim (pred,args,argo) ->
-     Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar None pred args argo 1)
+     Kwd grammar#is :: Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar None pred args argo 1)
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []

@@ -157,6 +157,7 @@ and print_p1 = function
   | Type (_,c) -> print_un "Type" (print_uri c)
   | Rel (_,p,m,np) -> print_ter "Rel" (print_uri p) (print_modif_p2 m) (print_s1 np)
   | Hier (_,id,pred,args,argo,np) -> print_nary "HierPred" [print_id id; print_pred pred; print_arg args; print_arg argo; print_s1 np]
+  | Sim (_,np,pred,args,argo,rank) -> print_nary "Sim" [print_s1 np; print_pred pred; print_arg args; print_arg argo; print_int rank]
   | Triple (_,arg,np1,np2) -> print_ter "Triple" (print_arg arg) (print_s1 np1) (print_s1 np2)
   | LatLong (_,ll,id1,id2) -> print_ter "LatLong3" (print_latlong ll) (print_id id1) (print_id id2)
   | Search (_,c) -> print_un "Search" (print_constr c)
@@ -194,7 +195,6 @@ and print_sn = function
 and print_s1 = function
   | Det (_,det,rel_opt) -> print_bin "Det" (print_s2 det) (print_opt print_p1 rel_opt)
   | AnAggreg (_,id,modif,g,rel_opt,np) -> print_nary "AnAggreg" [print_id id; print_modif modif; print_aggreg_op g; print_opt print_p1 rel_opt; print_s1 np]
-  | Sim (_,id,np,pred,args,argo,rank) -> print_nary "Sim" [print_id id; print_s1 np; print_pred pred; print_arg args; print_arg argo; print_int rank]
   | NAnd (_,lr) -> print_lr print_s1 "NAnd" lr
   | NOr (_,lr) -> print_lr print_s1 "NOr" lr
   | NMaybe (_,f) -> print_un "NMaybe" (print_s1 f)
@@ -351,6 +351,7 @@ and parse_p1 ~version = parser
        match ori with Fwd -> Prop p, S, O | Bwd -> Prop p, O, S in
      Hier ((),id,pred,args,argo,np)
   | [< id, pred, args, argo, np = parse_quin ~version "HierPred" parse_id parse_pred parse_arg parse_arg parse_s1 >] -> Hier ((),id,pred,args,argo,np)
+  | [< np, pred, args, argo, rank = parse_quin ~version "Sim" parse_s1 parse_pred parse_arg parse_arg parse_int >] -> Sim ((),np,pred,args,argo,rank)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
   | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_property parse_property parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
   | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)
@@ -395,7 +396,6 @@ and parse_sn ~version = parser
 and parse_s1 ~version = parser
   | [< det, rel_opt = parse_bin ~version "Det" parse_s2 (parse_opt parse_p1) >] -> Det ((), det, rel_opt)
   | [< id, modif, g, rel_opt, np = parse_quin ~version "AnAggreg" parse_id parse_modif parse_aggreg_op (parse_opt parse_p1) parse_s1 >] -> AnAggreg ((),id,modif,g,rel_opt,np)
-  | [< id, np, pred, args, argo, rank = parse_sex ~version "Sim" parse_id parse_s1 parse_pred parse_arg parse_arg parse_int >] -> Sim ((),id,np,pred,args,argo,rank)
   | [< lr = parse_lr parse_s1 ~version "NAnd" >] -> NAnd ((),lr)
   | [< lr = parse_lr parse_s1 ~version "NOr" >] -> NOr ((),lr)
   | [< f = parse_un ~version "NMaybe" parse_s1 >] -> NMaybe ((),f)

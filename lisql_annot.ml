@@ -466,6 +466,11 @@ let rec annot_elt_p1 pos f ctx =
      let ids = concat_ids ids_hier a1#ids in
      let a = annot ~ids () in
      a, Hier (a, id, pred, args, argo, a_x)
+  | Sim (_,np,pred,args,argo,rank) ->
+     let a1, a_np = annot_elt_s1 pos_down np (SimX (pred,args,argo,rank,ctx)) in
+     let ids = a1#ids in
+     let a = annot ~ids () in
+     a, Sim (a,a_np,pred,args,argo,rank)
   | LatLong (_,ll,id1,id2) ->
      let a = annot ~ids:(concat_ids (ids_an_id ~inactive:false id1) (ids_an_id ~inactive:false id2)) () in
      a, LatLong (a, ll, id1, id2)
@@ -576,12 +581,6 @@ and annot_elt_s1 pos np ctx =
        | Some id2 -> { ids with defs = Ids.remove id2 ids.defs; dims = Ids.remove id2 ids.dims; refs = Ids.add id2 ids.refs } in
      let a = annot ~ids () in
      a, AnAggreg (a, id, modif, g, a_rel_opt, a_x)
-  | Sim (_,id,np,pred,args,argo,rank) ->
-     let ids_sim = ids_an_id ~inactive:false id in
-     let a1, a_np = annot_elt_s1 pos_down np (SimX (id,pred,args,argo,rank,ctx)) in
-     let ids = concat_ids a1#ids ids_sim in
-     let a = annot ~ids () in
-     a, Sim (a,id,a_np,pred,args,argo,rank)
   | NAnd (_,lr) ->
      let la, lax =
        List.split (List.map
@@ -895,11 +894,11 @@ and annot_ctx_s1 fd (a1,a_x) x = function
      let ids = concat_ids ids_hier a1#ids in
      let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
      annot_ctx_p1 fd (a, Hier (a, id, pred, args, argo, a_x)) f ctx
-  | SimX (id,pred,args,argo,rank,ctx) ->
-     let f = Sim ((),id,x,pred,args,argo,rank) in
+  | SimX (pred,args,argo,rank,ctx) ->
+     let f = Sim ((),x,pred,args,argo,rank) in
      let ids = a1#ids in
-     let a = new annot ~focus_pos:(`Above (true,Some 0)) ~focus:(AtS1 (f,ctx)) ~ids () in
-     annot_ctx_s1 fd (a, Sim (a, id, a_x, pred, args, argo, rank)) f ctx
+     let a = new annot ~focus_pos:(`Above (false,None)) ~focus:(AtP1 (f,ctx)) ~ids () in
+     annot_ctx_p1 fd (a, Sim (a, a_x, pred, args, argo, rank)) f ctx
   | AnAggregX (id,modif,g,rel_opt,ctx) -> (* suspended *)
     let f = AnAggreg ((),id,modif,g,rel_opt,x) in
     let _ids_rel, a_rel_opt = annot_elt_p1_opt (`Aside true) rel_opt (AnAggregThatX (id,modif,g,x,ctx)) in
@@ -1087,8 +1086,6 @@ and annot_focus_aux (focus : focus) =
 	    | AnAggreg (_,id,_,g,_,_) ->
 	       fd#define_focus_term (`Id id);
 	       fd#set_no_incr
-	    | Sim (_,id,_,_,_,_,_) ->
-	       fd#define_focus_term (`Id id)
 	    | _ ->
 	       fd#define_focus_term `Undefined )
        | _ -> () );

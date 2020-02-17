@@ -408,12 +408,12 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
     | Focus (focus,xml) ->
       let id = state#add_focus focus in
       let xml =
-	if Lisql.hierarchy_of_focus focus <> None
-	then
-	  match xml with
-	  | Highlight xml1 :: xml2 -> Highlight (Kwd "▼" :: xml1) :: xml2
-	  | _ -> Kwd "▼" :: xml
-	else xml in
+	match focus with
+	| AtS1 (_,ctx) when Lisql.is_hierarchy_ctx_s1 ctx ->
+	   ( match xml with
+	     | Highlight xml1 :: xml2 -> Highlight (Kwd "▼" :: xml1) :: xml2
+	     | _ -> Kwd "▼" :: xml )
+	| _ -> xml in
       let html = html_of_nl_xml ~highlight state xml in
       html_span ~id ~classe:"focus" html
     | Highlight xml ->

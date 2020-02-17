@@ -712,6 +712,11 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
      (fun x ->
       state#add_var vy;
       Sparql.formula_and_list [q_np (fun z -> hier x z); hier x y])
+  | Sim (annot,np,pred,args,argo,rank) ->
+     let q_deps, q = form_s1 state np in
+     let sim = form_sim state pred args argo rank in
+     (fun x -> q_deps (fun y -> [[y; x]])),
+     (fun x -> q (fun y -> sim y x))
   | LatLong (annot,ll,id1,id2) ->
     let v1 = state#id_labelling#get_id_var id1 in
     let v2 = state#id_labelling#get_id_var id2 in
@@ -797,17 +802,6 @@ and form_s1_as_p1 state : annot elt_s1 -> deps_p1 * sparql_p1 = function
 	 form_aggreg_op state idg modifg g d id;
 	 form_s1_as_p1 state np
       | _ -> assert false )
-  | Sim (annot,id,np,pred,args,argo,rank) ->
-     let d_deps, d = form_s1_as_p1 state np in
-     if annot#is_susp_focus
-     then d_deps, d
-     else
-       let vy = state#id_labelling#get_id_var id in
-       let y = (Sparql.var vy :> Sparql.term) in
-       let ty = Rdf.Var vy in
-       let sim = form_sim state pred args argo rank in
-       (fun x -> d_deps ty @ [[ty; x]]),
-       (fun x -> Sparql.formula_and (d y) (sim y x))
   | NAnd (annot,lr) ->
      let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_s1_as_p1 state elt) lr) in
      (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),
@@ -899,17 +893,6 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = 
 	form_aggreg_op state idg modifg g d id;
 	form_s1 state np
       | _ -> assert false )
-  | Sim (annot,id,np,pred,args,argo,rank) ->
-     let q_deps, q = form_s1 ~ignore_top state np in
-     if annot#is_susp_focus || is_top_s1 np
-     then q_deps, q
-     else
-       let vx = state#id_labelling#get_id_var id in
-       let x = (Sparql.var vx :> Sparql.term) in
-       let tx = Rdf.Var vx in
-       let sim = form_sim state pred args argo rank in
-       (fun d_deps -> q_deps (fun y -> [[y; tx]]) @ d_deps tx),
-       (fun d -> Sparql.formula_and (q (fun y -> sim y x)) (d x))
   | NAnd (annot,lr) ->
      let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_s1 ~ignore_top state elt) lr) in
      (fun d -> List.concat (List.map (fun q_deps -> q_deps d) lr_q_deps)),
