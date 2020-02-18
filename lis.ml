@@ -1322,6 +1322,7 @@ object (self)
       let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
       let int_index_arg = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichArg.pattern_vars) results_arg in
       let incr_index = new incr_freq_tree_index term_hierarchy in
+      let incr_sim_ok = Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
       let trans_rel = ref false in
       let fwd_prop = ref false in
       let bwd_prop = ref false in
@@ -1363,16 +1364,18 @@ object (self)
 		   ( match ori with
 		     | Lisql.Fwd -> fwd_prop := true
 		     | Lisql.Bwd -> bwd_prop := true );
-		   let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
-		   ( match incr_index#get inv_incr with
-		    | None -> ()
-		    | Some inv_freq_opt ->
-		       let fwd_freq_opt, bwd_freq_opt =
-			 match ori with
-			 | Lisql.Fwd -> freq_opt, inv_freq_opt
-			 | Lisql.Bwd -> inv_freq_opt, freq_opt in
-		       incr_index#add (Lisql.(IncrSim(Prop p,S,O)), fwd_freq_opt);
-		       incr_index#add (Lisql.(IncrSim(Prop p,O,S)), bwd_freq_opt))
+		   if incr_sim_ok then (
+		     let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
+		     ( match incr_index#get inv_incr with
+		       | None -> ()
+		       | Some inv_freq_opt ->
+			  let fwd_freq_opt, bwd_freq_opt =
+			    match ori with
+			    | Lisql.Fwd -> freq_opt, inv_freq_opt
+			    | Lisql.Bwd -> inv_freq_opt, freq_opt in
+			  incr_index#add (Lisql.(IncrSim(Prop p,S,O)), fwd_freq_opt);
+			  incr_index#add (Lisql.(IncrSim(Prop p,O,S)), bwd_freq_opt))
+		   )
 		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
@@ -1395,14 +1398,24 @@ object (self)
 		trans_rel := true;
 	      ( match incr with
 		| Lisql.IncrPred ((Lisql.S | Lisql.O as arg),pred) ->
-		   let inv_arg =
-		     match arg with
-		     | Lisql.S -> Lisql.O
-		     | Lisql.O -> Lisql.S
-		     | _ -> assert false in
-		   let inv_incr = Lisql.IncrPred (inv_arg,pred) in
-		   if incr_index#mem inv_incr then
-		     incr_index#add (Lisql.(IncrSim(pred,S,O)), freq_opt)
+		   if incr_sim_ok then (
+		     let inv_arg =
+		       match arg with
+		       | Lisql.S -> Lisql.O
+		       | Lisql.O -> Lisql.S
+		       | _ -> assert false in
+		     let inv_incr = Lisql.IncrPred (inv_arg,pred) in
+		     ( match incr_index#get inv_incr with
+		       | None -> ()
+		       | Some inv_freq_opt ->
+			  let fwd_freq_opt, bwd_freq_opt =
+			    match arg with
+			    | Lisql.S -> freq_opt, inv_freq_opt
+			    | Lisql.O -> inv_freq_opt, freq_opt
+			    | _ -> assert false in
+			  incr_index#add (Lisql.(IncrSim(pred,S,O)), fwd_freq_opt);
+			  incr_index#add (Lisql.(IncrSim(pred,O,S)), bwd_freq_opt))
+		   )
 		| _ -> () );
 	      ( match Lisql.latlong_of_increment incr with
 		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
@@ -1633,6 +1646,7 @@ object (self)
 	  IncrSelection (`Aggreg, []) ::
 	    (*IncrThatIs ::*) (* unnecessary and confusing *)
 	    IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
+	    IncrSimRankIncr :: IncrSimRankDecr ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
 	    IncrIn ::
 	    IncrUnselect ::

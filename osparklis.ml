@@ -738,6 +738,7 @@ object (self)
       let open Lisql in
       function
       | IncrThatIs | IncrSomethingThatIs | IncrTriplify | IncrHierarchy _
+      | IncrSimRankIncr | IncrSimRankDecr
       | IncrAnd | IncrDuplicate | IncrOr | IncrChoice | IncrMaybe
       | IncrNot | IncrIn | IncrUnselect | IncrOrder _ -> true
       | _ -> false in

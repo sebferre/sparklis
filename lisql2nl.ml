@@ -302,6 +302,8 @@ let word_of_incr grammar = function
   | IncrTriplify -> `Relation
   | IncrHierarchy trans_rel -> `Op grammar#in_
   | IncrSim (pred,args,argo) -> fst (word_syntagm_of_pred grammar pred)
+  | IncrSimRankIncr -> `Op grammar#rank
+  | IncrSimRankDecr -> `Op grammar#rank
   | IncrAnything -> `Op grammar#anything
   | IncrThatIs -> `Op grammar#is
   | IncrSomethingThatIs -> `Op grammar#something
@@ -1617,6 +1619,8 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      let np = X (`Qu (`A, `Nil, X (`That (`Thing, X (`That vp))))) in
      let np = main_transf#np np in
      xml_np grammar ~id_labelling np
+  | IncrSimRankIncr -> Kwd grammar#with_ :: Word (`Op grammar#rank) :: Word (`Op "+ 1") :: []
+  | IncrSimRankDecr -> Kwd grammar#with_ :: Word (`Op grammar#rank) :: Word (`Op "- 1") :: []
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []

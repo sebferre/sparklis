@@ -1228,6 +1228,8 @@ type increment =
   (* trans_rel: to indicate that relation in context can be made transitive *)
   (* inv: to indicate whether to display inversed hierarchies *)
   | IncrSim of pred * arg * arg (* predicate, source/target roles *)
+  | IncrSimRankIncr
+  | IncrSimRankDecr
   | IncrAnd
   | IncrDuplicate
   | IncrOr
@@ -1626,15 +1628,34 @@ let rec toggle_hierarchy trans_rel focus =
   | _ -> None
 
 let insert_sim pred args argo = function
-  | AtP1 (Sim (_,np,pred0,args0,argo0,rank),ctx) when pred0=pred && args0=args && argo0=argo ->
-     Some (AtP1 (Sim ((),np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+(*  | AtP1 (Sim (_,np,pred0,args0,argo0,rank),ctx) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtP1 (Sim ((),np,pred0,args0,argo0,rank+1),ctx), DeltaNil) *)
   | AtS1 (np,SimX (pred0,args0,argo0,rank,ctx)) when pred0=pred && args0=args && argo0=argo ->
-     Some (AtP1 (Sim ((),np,pred0,args0,argo0,rank+1),ctx), DeltaNil)
+     Some (AtS1 (np, SimX (pred0,args0,argo0,rank+1,ctx)), DeltaNil)
+  | AtS1 (Det (_,det, Some (Sim (_,np,pred0,args0,argo0,rank))),ctx) when pred0=pred && args0=args && argo0=argo ->
+     Some (AtS1 (Det ((),det, Some (Sim ((),np,pred0,args0,argo0,rank+1))),ctx), DeltaNil)
   | AtS1 (np,ctx) ->
      let det, id = factory#top_s2 in
      Some (AtP1 (Sim ((),np,pred,args,argo,1), DetThatX (det,ctx)), DeltaIds [id])
   | _ -> None
-	   
+
+let change_sim_rank (f : int -> int option) = function
+  | AtP1 (Sim (_,np,pred,args,argo,rank),ctx) ->
+     ( match f rank with
+       | None -> Some (at_s1 np (IsX ctx), DeltaNil)
+       | Some rank -> Some (AtP1 (Sim ((),np,pred,args,argo,rank),ctx), DeltaNil) )
+  | AtS1 (np,SimX (pred,args,argo,rank,ctx)) ->
+     ( match f rank with
+       | None -> Some (at_s1 np (IsX ctx), DeltaNil)
+       | Some rank -> Some (AtP1 (Sim ((),np,pred,args,argo, rank),ctx), DeltaNil) )
+  | AtS1 (Det (_,det, Some (Sim (_,np,pred,args,argo,rank))),ctx) ->
+     ( match f rank with
+       | None -> Some (at_s1 np ctx, DeltaNil)
+       | Some rank -> Some (AtS1 (Det ((),det, Some (Sim ((),np,pred,args,argo,rank))), ctx), DeltaNil) )
+  | _ -> None
+let incr_sim_rank = change_sim_rank (fun rank -> Some (rank+1))
+let decr_sim_rank = change_sim_rank (fun rank -> if rank=1 then None else Some (rank-1))
+	  
 let insert_constr constr focus =
   match focus with
   | AtS1 (f, ReturnX _) when is_top_s1 f ->
@@ -2126,6 +2147,8 @@ let insert_increment (incr : increment) (focus : focus) : (focus * delta) option
     | IncrTriplify -> insert_triplify focus
     | IncrHierarchy trans_rel -> toggle_hierarchy trans_rel focus
     | IncrSim (pred,args,argo) -> insert_sim pred args argo focus
+    | IncrSimRankIncr -> incr_sim_rank focus
+    | IncrSimRankDecr -> decr_sim_rank focus
     | IncrAnything -> insert_anything focus
     | IncrThatIs -> insert_that_is focus
     | IncrSomethingThatIs -> insert_something_that_is focus
