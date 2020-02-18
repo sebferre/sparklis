@@ -1462,14 +1462,12 @@ let rec insert_elt_s1 elt focus : (focus * delta) option =
     | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
     | AtSn _ -> None
     | AtS1 (_,ctx) when is_hierarchy_ctx_s1 ctx -> Some (at_s1 elt ctx, DeltaNil)
-    | AtS1 ((Det _ as np), ctx) ->
-       if is_top_s1 np
+    | AtS1 ((Det _ as np), ctx) -> Some (at_s1 elt ctx, DeltaNil)
+       (*if is_top_s1 np
        then Some (at_s1 elt ctx, DeltaNil)
-       else insert_elt_p1 (Is ((), elt)) focus
+       else insert_elt_p1 (Is ((), elt)) focus *)
     | AtS1 (AnAggreg (_,id,modif,g,_,np), ctx) ->
        Some (AtS1 (AnAggreg ((), id, modif, g, Some (Is ((), elt)), np), ctx), DeltaNil)
-(*    | AtS1 (Sim _, ctx) ->
-       Some (at_s1 elt ctx, DeltaNil) *)
     | AtS1 (_,ctx) -> None (* no insertion of NPs on complex NPs *)
     | AtP1 _
     | AtAggreg _ -> insert_elt_p1 (Is ((), elt)) focus
