@@ -681,37 +681,30 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
 let ng_of_id ~id_labelling id : ng =
   X (`LabelThat (id_labelling#get_id_label id, top_rel))
 
-let np_of_sim grammar annot_opt pred args argo rank : np =
+let vp_of_sim grammar annot_opt (np : np) pred args argo rank : vp =
   let w, synt = word_syntagm_of_pred grammar pred in
   let nl_rank =
     `AtNoun (`Op grammar#rank, X (`PN (`TypedLiteral (string_of_int rank, Rdf.xsd_integer), X `Nil))) in
-  let nl_pred =
+  let nl_sim : nl_vp =
     match synt, args, argo with
     | `Noun, S, O
     | `InvNoun, O, S ->
-       `Qu (`A, `Nil, X (`That (w, X (if rank=1 then `Nil else `PP [nl_rank]))))
+       `IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, np, X (if rank=0 then `Nil else `PP [nl_rank]))))), [])
     | `InvNoun, S, O
     | `Noun, O, S ->
-       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=1 then [] else [nl_rank])))))))))
+       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=0 then [] else [nl_rank])))))))))), [])
     | `TransVerb, S, O ->
-       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`VT (w, X `Void, if rank=1 then [] else [nl_rank])))))))))
+       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`VT (w, X `Void, if rank=0 then [] else [nl_rank])))))))))), [])
     | `TransVerb, O, S ->
-       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`VT (w, X `This, if rank=1 then [] else [nl_rank])))))))
+       `VT (w, np, if rank=0 then [] else [nl_rank])
     | `TransAdj, S, O ->
-       `Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (X `This, X (`IsAdjCP (w, X (if rank=1 then `Nil else `Cons (nl_rank, X `Nil)))))))))))
+       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsAdjCP (w, X (if rank=0 then `Nil else `Cons (nl_rank, X `Nil)))))))))))), [])
     | `TransAdj, O, S ->
-       `Qu (`A, `Nil, X (`That (`Thing, X (`Ing (w, X `This, if rank=1 then [] else [nl_rank])))))
+       `IsAdjCP (w, X (`Cons (`Bare np, X (if rank=0 then `Nil else `Cons (nl_rank, X `Nil)))))
     | _ -> failwith "Lisql2nl.np_of_sim: Invalid args/argo" in
   match annot_opt with
-  | None -> X nl_pred
-  | Some annot ->
-     let annot_sim =
-       new Lisql_annot.annot
-	   ~focus_pos:(if annot#is_susp_focus
-		       then `Aside true
-		       else Lisql_annot.focus_pos_down annot#focus_pos)
-	   ?focus:annot#focus () in
-     A (annot_sim, nl_pred)
+  | None -> X nl_sim
+  | Some annot -> A (annot, nl_sim)
     
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
@@ -769,11 +762,9 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
   | Hier (annot, id, pred, args, argo, np) -> (* TODO: render pred, args, argo *)
      A (annot, `IsPP (`Prep (`Op grammar#in_, np_of_elt_s1 grammar ~id_labelling np)))
   | Sim (annot,np,pred,args,argo,rank) ->
-     A (annot, `IsNP
-	 (X (
-	     `Or [np_of_elt_s1 grammar ~id_labelling np;
-		  np_of_sim grammar (Some annot) pred args argo rank]),
-	  []))
+     vp_of_sim grammar (Some annot)
+	       (np_of_elt_s1 grammar ~id_labelling np)
+	       pred args argo rank
   | LatLong (annot,_ll,_id1,_id2) ->
     A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
   | Triple (annot,arg,np1,np2) ->
@@ -1114,6 +1105,8 @@ object (self)
   method np = function
   | A (a1, `Qu (_, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu (qu, `Nil, X ng)), []))))))))
     -> A (a1, `Qu (qu, adj, A (a2, ng)))
+  | X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`IsNP (np, [])))))))) ->
+     np
   | A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, `That (`Thing, X (`That (X (`IsNP (X (`Qu ((`A | `The), `Nil, X ng)), []))))))))))
     -> A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, ng)))))
   | A (a1, `QuOneOf (_, [w]))
@@ -1620,7 +1613,10 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      then Word (`Prop ("", "...")) :: xml
      else xml
   | IncrSim (pred,args,argo) ->
-     Kwd grammar#is :: Word focus_span :: Word (`Op grammar#or_) :: xml_np grammar ~id_labelling (np_of_sim grammar None pred args argo 1)
+     let vp = vp_of_sim grammar None (focus_span_np incr) pred args argo 1 in
+     let np = X (`Qu (`A, `Nil, X (`That (`Thing, X (`That vp))))) in
+     let np = main_transf#np np in
+     xml_np grammar ~id_labelling np
   | IncrAnything -> [Word (`Op grammar#anything)]
   | IncrThatIs -> Word focus_span :: xml_incr_coordinate grammar focus (Kwd grammar#relative_that :: Kwd grammar#is :: xml_ellipsis)
   | IncrSomethingThatIs -> Kwd grammar#something :: Kwd grammar#relative_that :: Kwd grammar#is :: Word focus_span :: []
