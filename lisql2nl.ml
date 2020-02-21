@@ -694,7 +694,8 @@ let vp_of_sim grammar annot_opt (np : np) pred args argo rank : vp =
        `IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, np, X (if rank=0 then `Nil else `PP [nl_rank]))))), [])
     | `InvNoun, S, O
     | `Noun, O, S ->
-       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=0 then [] else [nl_rank])))))))))), [])
+       `HasProp (w, np, if rank=0 then [] else [nl_rank])
+    (*       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=0 then [] else [nl_rank])))))))))), []) *)
     | `TransVerb, S, O ->
        `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`VT (w, X `Void, if rank=0 then [] else [nl_rank])))))))))), [])
     | `TransVerb, O, S ->
