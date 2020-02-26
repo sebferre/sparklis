@@ -344,28 +344,30 @@ type sparql_s2 = sparql_p1 -> sparql_p1 -> Sparql.formula
 type sparql_sn = sparql_pn -> Sparql.formula
 type sparql_b1 = sparql_p2 -> Sparql.formula
 type sparql_s = Sparql.formula
+
+type 'a formula_hook = 'a -> Sparql.formula -> Sparql.formula
 		  
 let get_arg (arg : arg) (l : (arg * _ Sparql.any_term) list) : Sparql.term =
   try List.assoc arg l
   with Not_found -> Sparql.bnode ""
 
-let make_pat ?(hook : (string -> Sparql.formula) option) (v : string) (pat : Sparql.pattern) : Sparql.pattern =
+let make_pat ?(hook : string formula_hook option) (v : string) (pat : Sparql.pattern) : Sparql.pattern =
   match hook with
   | None -> pat
   | Some h ->
      Sparql.pattern_of_formula
-       (Sparql.formula_and (h v) (Sparql.Pattern pat))
+       (h v (Sparql.Pattern pat))
 				 
 (* definitions to retrieve classes from focus *)
 module WhichClass =
   struct
     let pattern_vars = ["c"]
-    let intent_pattern ?(hook : (string -> Sparql.formula) option) () =
+    let intent_pattern ?(hook : string formula_hook option) () =
       make_pat ?hook "c"
 	       Sparql.(union
 			 [ rdf_type (var "c") (uri Rdf.rdfs_Class);
 			   rdf_type (var "c") (uri Rdf.owl_Class) ])
-    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
+    let pattern_of_term ?(hook : string formula_hook option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
@@ -388,13 +390,13 @@ module WhichProp =
 		"strstarts"
 		[expr_func "str" [var vp];
 		 (string "http://www.wikidata.org/prop/direct/P" :> expr)]))
-    let intent_pattern ?(hook : (string -> Sparql.formula) option) () =
+    let intent_pattern ?(hook : string formula_hook option) () =
       make_pat ?hook "p"
 	       Sparql.(union
 			 [ rdf_type (var "p") (uri Rdf.rdf_Property);
 			   rdf_type (var "p") (uri Rdf.owl_ObjectProperty);
 			   rdf_type (var "p") (uri Rdf.owl_DatatypeProperty) ])
-    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
+    let pattern_of_term ?(hook : string formula_hook option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
@@ -445,13 +447,13 @@ module WhichPred =
 		[ (uri Rdf.wikibase_claim :> pred), var pe;
 		  (uri Rdf.wikibase_statementProperty :> pred), var po ])
 	    
-    let intent_pattern ?(hook : (string -> Sparql.formula) option) () : Sparql.pattern =
+    let intent_pattern ?(hook : string formula_hook option) () : Sparql.pattern =
       if Rdf.config_wikidata_mode#value
       then make_pat ?hook "pe" (pattern_wikidata "pe" "po")
       else Sparql.(union [ make_pat ?hook "po" (pattern_SO "ps" "po");
 			   make_pat ?hook "pe" (pattern_EO "pe" "po") ])
 		 
-    let pattern_of_term ?(hook : (string -> Sparql.formula) option) (t_opt : Rdf.term option) : Sparql.pattern =
+    let pattern_of_term ?(hook : string formula_hook option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
 	| None -> true, Rdf.Bnode ""
@@ -633,7 +635,7 @@ module WhichArg =
   struct
     let pattern_vars = ["pq"]
 
-    let pattern_of_pred_args ?(hook : (string -> Sparql.formula) option) (pred : Lisql.pred) (args : (Lisql.arg * Rdf.term) list) : Sparql.pattern =
+    let pattern_of_pred_args ?(hook : string formula_hook option) (pred : Lisql.pred) (args : (Lisql.arg * Rdf.term) list) : Sparql.pattern =
       let filter_qualifier =
 	match pred with
 	| Class _ -> Sparql.empty
@@ -1185,7 +1187,9 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
   | Join (_,lv1)::lv -> form_view_list state lr deps view (lv1@lv)
 
     
-type template = ?hook:(Sparql.term -> Sparql.formula) -> froms:(Rdf.uri list) -> ?limit:int -> unit -> string
+type template = ?hook:(Sparql.term formula_hook) ->
+		froms:(Rdf.uri list) ->
+		?limit:int -> unit -> string
 
 (* auxiliary function factorizing [make_query] and [make_query_count] *)
 let make_query_formula (focus_term_opt : Rdf.term option) (view : Sparql.view) =
@@ -1200,10 +1204,11 @@ let make_query_formula (focus_term_opt : Rdf.term option) (view : Sparql.view) =
 	| _ -> sq_view
       else sq_view in
     let form_hook =
+      let view_form = sq_view.Sparql.formula in
       match focus_term_opt, hook with
       | Some (Rdf.Var v), Some f_hook ->
-	Sparql.formula_and (f_hook (Sparql.var v :> Sparql.term)) sq_view.Sparql.formula
-      | _ -> sq_view.Sparql.formula in
+	 f_hook (Sparql.var v :> Sparql.term) view_form
+      | _ -> view_form in
     sq_view, form_hook)
 
 let make_query state (focus_term_opt : Rdf.term option) (view : Sparql.view) : template =
@@ -1303,14 +1308,14 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
     match focus_term_opt with
     | Some t when fd#incr -> (* no increments for this focus term (expressions, aggregations) *)
       let tx = (Sparql.var x :> Sparql.term) in
-      Some (fun ?(hook=(fun tx -> Sparql.True)) ~froms ?limit () ->
+      Some (fun ?(hook=(fun tx form -> form)) ~froms ?limit () ->
 	let form_x = Sparql.Pattern (make_pattern t) in
 	let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph (Sparql.term tg) form_x in
 	let form_x =
 	  match focus_term_opt with
 	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ?limit view) form_x
 	  | _ -> form_x in
-	let form_x = Sparql.formula_and (hook tx) form_x in
+	let form_x = hook tx form_x in
 	let projections = List.map (fun x -> (`Bare,x)) lx in
 	(Sparql.select ~projections ~froms ?limit
 	   (Sparql.pattern_of_formula form_x) :> string))

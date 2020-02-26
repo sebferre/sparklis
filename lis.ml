@@ -776,7 +776,13 @@ object (self)
 	 | false, false -> `OnlyIRIs in
        let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
        let froms = Sparql_endpoint.config_default_graphs#froms in
-       let sparql = query ~hook:(fun tx -> Lisql2sparql.filter_constr_entity ft sparql_genvar tx term_constr) ~froms ~limit () in
+       let sparql = query
+		      ~hook:(fun tx form ->
+			     let form_constr = Lisql2sparql.filter_constr_entity ft sparql_genvar tx term_constr in
+			     if Lisql.hierarchy_of_focus focus = None (* TODO: improve this rough hack *)
+			     then Sparql.formula_and form_constr form
+			     else Sparql.formula_and form form_constr)
+		      ~froms ~limit () in
        sparql_opt <- Some sparql
 
   method sparql : string option = sparql_opt
@@ -1123,12 +1129,13 @@ object (self)
 	   Sparql.union (focus_graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
 	| _ -> gp
       in
-      let make_sparql lv (make_pattern : ?hook:(string -> Sparql.formula) -> unit -> Sparql.pattern) filter_constr config_max =
+      let make_sparql lv (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> unit -> Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
-	let hook v =
+	let hook v form =
 	  Sparql.formula_and_list
 	    [formula_concept_profile v;
-	     filter_constr sparql_genvar (Sparql.var v) constr] in
+	     filter_constr sparql_genvar (Sparql.var v) constr;
+	     form] in
 	let g_pat = graph_opt (make_pattern ~hook ()) in
 	Sparql.(select
 		  ~froms
@@ -1164,12 +1171,13 @@ object (self)
     let ajax_intent () =
       let sparql_genvar = new Lisql2sparql.genvar in
       let froms = Sparql_endpoint.config_schema_graphs#froms in
-      let make_sparql lv (make_pattern : ?hook:(string -> Sparql.formula) -> unit -> Sparql.pattern) filter_constr config_max =
+      let make_sparql lv (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> unit -> Sparql.pattern) filter_constr config_max =
 	let _ = assert (lv <> []) in
-	let hook v =
+	let hook v form =
 	  Sparql.formula_and_list
 	    [ formula_concept_profile v;
-	      filter_constr sparql_genvar (Sparql.var v) constr ] in
+	      filter_constr sparql_genvar (Sparql.var v) constr;
+	      form ] in
 	let pat = make_pattern ~hook () in
 	Sparql.(select
 		  ~froms
@@ -1466,10 +1474,12 @@ object (self)
 	| None -> ""
 	| Some query ->
 	   query
-	     ~hook:(fun tx -> Sparql.formula_and_list
-				[formula_concept_profile_term tx;
-				 filter_constr sparql_genvar tx constr;
-				 formula_hidden_URIs_term tx])
+	     ~hook:(fun tx form ->
+		    Sparql.formula_and_list
+		      [formula_concept_profile_term tx;
+		       filter_constr sparql_genvar tx constr;
+		       formula_hidden_URIs_term tx;
+		       form])
 	     ~froms ~limit:config_max#value () in
       let sparql_class = make_sparql
 		       s_sparql.Lisql2sparql.query_class_opt
@@ -1509,18 +1519,19 @@ object (self)
       let max_value_term = Some nb_samples_term in
       let partial = self#partial_results || nb_samples_term < focus_term_index#length in
       let unit = `Entities in
-      let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string -> Sparql.formula) -> Rdf.term list -> Sparql.pattern) =
+      let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> Rdf.term list -> Sparql.pattern) =
 	assert (lv <> []);
 	match samples with
 	| [] -> ""
 	| (key0, (_, graph_index0))::_ ->
 	  let projections = List.map (fun v -> `Bare, v) lv in
-	  let hook v =
+	  let hook v form =
 	    Sparql.formula_and_list
 	      [formula_concept_profile v;
-	       filter_constr sparql_genvar (Sparql.var v) constr] in
+	       filter_constr sparql_genvar (Sparql.var v) constr;
+	       form] in
 	  let gp =
-	    match hook "_" with
+	    match hook "_" Sparql.True with
 	    | Sparql.True -> (* when no constraint, use this to have a better sample of properties *)
 	       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
 		 match s_sparql.Lisql2sparql.focus_graph_opt with
