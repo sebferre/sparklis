@@ -384,16 +384,17 @@ object (self)
 	| _ -> permalink in
       Lwt.ignore_result
 	(Lwt.bind
-	   (XmlHttpRequest.perform_raw_url
-	      ~get_args:["access_token","076486ead5e4aa4576f9431d4d46d09ee87c78dc";
-			 "format","txt";
-			 "longUrl", permalink]
-	      "https://api-ssl.bitly.com/v3/shorten")
+	   (XmlHttpRequest.perform_raw
+	      ~headers:["Content-Type", "application/json";
+			"apikey", "4ac1772b3b4749748bec9ffc66044157"]
+	      ~get_args:["destination", permalink]
+	      ~response_type:XmlHttpRequest.JSON
+	      "https://api.rebrandly.com/v1/links/new")
 	   (fun http_frame ->
 	    let open XmlHttpRequest in
-	    if http_frame.code = 200
-	    then show http_frame.content
-	    else show permalink;
+	    Opt.case http_frame.content
+		     (fun () -> show permalink)
+		     (fun js -> show js##shortUrl);
 	    Lwt.return ()))
     else show permalink
 
