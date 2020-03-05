@@ -1634,7 +1634,7 @@ let insert_sim pred args argo = function
      Some (AtS1 (Det ((),det, Some (Sim ((),np,pred0,args0,argo0,rank+1))),ctx), DeltaNil)
   | AtS1 (np,ctx) ->
      let det, id = factory#top_s2 in
-     Some (AtP1 (Sim ((),np,pred,args,argo,1), DetThatX (det,ctx)), DeltaIds [id])
+     Some (AtS1 (Det ((), det, Some (Sim ((),np,pred,args,argo,1))),ctx), DeltaIds [id])
   | _ -> None
 
 let change_sim_rank (f : int -> int option) = function
