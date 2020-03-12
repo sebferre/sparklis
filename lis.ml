@@ -145,6 +145,7 @@ class incr_freq_tree_index th = [Lisql.increment, freq option] index ~parents:(i
 
 let config_intentional_init_concepts = new Config.boolean_input ~key:"intentional_init_concepts" ~input_selector:"#input-intentional-init-concepts" ~default:true ()
 let config_nary_relations = new Config.boolean_input ~key:"nary_relations" ~input_selector:"#input-nary-relations" ~default:false ()
+let config_incr_sim = new Config.boolean_input ~key:"incr_sim" ~input_selector:"#input-incr-sim" ~default:false ()
 let config_concept_profile = new Config.string_input ~key:"concept_profile" ~input_selector:"#input-concept-profile" ~default:"" ()
 let config_regexp_hidden_URIs = new Config.string_input ~key:"regexp_hidden_URIs" ~input_selector:"#input-regexp-hidden-uris" ~default:"^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)" ()
 let config_max_results = new Config.integer_input ~key:"max_results" ~input_selector:"#input-max-results" ~min:1 ~default:200 ()
@@ -1330,7 +1331,7 @@ object (self)
       let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
       let int_index_arg = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichArg.pattern_vars) results_arg in
       let incr_index = new incr_freq_tree_index term_hierarchy in
-      let incr_sim_ok = Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
+      let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
       let trans_rel = ref false in
       let fwd_prop = ref false in
       let bwd_prop = ref false in

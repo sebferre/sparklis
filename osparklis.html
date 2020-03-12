@@ -216,11 +216,11 @@
 		</a>
 	      </li>
 	      <li>
-		<a data-toggle="modal" data-target="#config-presentation-modal">
-		  <span class="texte lang-en">Presentation</span>
-		  <span class="texte lang-fr">Présentation</span>
-		  <span class="texte lang-es">Presentación</span>
-		  <span class="texte lang-nl">Presentatie</span>
+		<a data-toggle="modal" data-target="#config-advanced-modal">
+		  <span class="texte lang-en">Advanced features</span>
+		  <span class="texte lang-fr">Fonctionnalités avancées</span>
+		  <span class="texte lang-es">Características avanzadas</span>
+		  <span class="texte lang-nl">Geavanceerde functies</span>
 		</a>
 	      </li>
 	      <li>
@@ -798,15 +798,15 @@
   </div>
 </div>
 
-<div id="config-presentation-modal" class="modal fade" role="dialog">
+<div id="config-advanced-modal" class="modal fade" role="dialog">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
 	<strong>
-	  <span class="texte lang-en">Configure presentation</span>
-	  <span class="texte lang-fr">Configurer la présentation</span>
-	  <span class="texte lang-es">Configurar la presentación</span>
-	  <span class="texte lang-nl">Configureer presentatie</span>
+	  <span class="texte lang-en">Configure advanced features</span>
+	  <span class="texte lang-fr">Configurer les fonctionnalités avancées</span>
+	  <span class="texte lang-es">Configurar las características avanzadas</span>
+	  <span class="texte lang-nl">Configureer geavanceerde functies</span>
 	</strong>
       </div>
       <div class="modal-body">
@@ -837,6 +837,15 @@
 	      <span class="texte lang-es">Etiquetar conceptos y entidades con iconos de acuerdo con su valor de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Altura de los iconos </span>
 	      <span class="texte lang-nl">Label concepten en entiteiten met pictogrammen op basis van hun waarde van <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Pictogram hoogte </span>
 	      <input id="input-logo-height" type="number" value="20"> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-incr-sim" class="config-param">
+	      <input id="input-incr-sim" type="checkbox">
+	      <span class="texte lang-en">Show similarity suggestions (covers SPARQL optional paths)</span>
+	      <span class="texte lang-fr">Afficher les suggestions de similarité (couvre les chemins optionnels de SPARQL)</span>
+	      <span class="texte lang-es">Mostrar sugerencias de similitud (cubre los caminos opcionales de SPARQL)</span>
+	      <span class="texte lang-nl">Toon suggesties voor overeenkomsten (omvat SPARQL optionele paden)</span>
 	    </div>
 	  </li>
 	</ul>
