@@ -236,6 +236,9 @@ and print_constr = function
   | True -> print_atom "True"
   | MatchesAll lw -> print_list print_string "MatchesAll" lw
   | MatchesAny lw -> print_list print_string "MatchesAny" lw
+  | IsExactly w -> print_un "IsExactly" (print_string w)
+  | StartsWith w -> print_un "StartsWith" (print_string w)
+  | EndsWith w -> print_un "EndsWith" (print_string w)
   | After s -> print_un "After" (print_string s)
   | Before s -> print_un "Before" (print_string s)
   | FromTo (s1,s2) -> print_bin "FromTo" (print_string s1) (print_string s2)
@@ -458,6 +461,9 @@ and parse_constr ~version = parser
   | [< () = parse_atom ~version "True" >] -> True
   | [< lw = parse_list parse_string ~version "MatchesAll" >] -> MatchesAll lw
   | [< lw = parse_list parse_string ~version "MatchesAny" >] -> MatchesAny lw
+  | [< w = parse_un ~version "IsExactly" parse_string >] -> IsExactly w
+  | [< w = parse_un ~version "StartsWith" parse_string >] -> StartsWith w
+  | [< w = parse_un ~version "EndsWith" parse_string >] -> EndsWith w
   | [< s = parse_un ~version "After" parse_string >] -> After s
   | [< s = parse_un ~version "Before" parse_string >] -> Before s
   | [< s1, s2 = parse_bin ~version "FromTo" parse_string parse_string >] -> FromTo (s1,s2)

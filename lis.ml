@@ -1794,6 +1794,9 @@ object (self)
     let l_constr =
       [ MatchesAll ["..."; "..."];
 	MatchesAny ["..."; "..."];
+	IsExactly "...";
+	StartsWith "...";
+	EndsWith "...";
 	After "...";
 	Before "...";
 	FromTo ("...","...");
@@ -1828,7 +1831,10 @@ object (self)
     let open Lisql in
     let l_constr =
       [ MatchesAll ["..."; "..."];
-	MatchesAny ["..."; "..."] ] in
+	MatchesAny ["..."; "..."];
+	IsExactly "...";
+	StartsWith "...";
+	EndsWith "..." ] in
     if Rdf.config_wikidata_mode#value && focus_descr#unconstrained then
       ExternalSearch (`Wikidata ["..."], None) :: l_constr
     (*else if Lisql2sparql.config_fulltext_search#value = "text:query" then

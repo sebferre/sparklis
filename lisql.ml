@@ -18,6 +18,9 @@ type constr =
   | True
   | MatchesAll of string list
   | MatchesAny of string list
+  | IsExactly of string
+  | StartsWith of string
+  | EndsWith of string
   | After of string
   | Before of string
   | FromTo of string * string
@@ -36,6 +39,9 @@ let reset_constr : constr -> constr = function
   | True -> True
   | MatchesAll _ -> MatchesAll ["..."; "..."]
   | MatchesAny _ -> MatchesAny ["..."; "..."]
+  | IsExactly _ -> IsExactly "..."
+  | StartsWith _ -> StartsWith "..."
+  | EndsWith _ -> EndsWith "..."
   | After _ -> After "..."
   | Before _ -> Before "..."
   | FromTo _ -> FromTo ("...","...")
@@ -1658,7 +1664,8 @@ let insert_constr constr focus =
   match focus with
   | AtS1 (f, ReturnX _) when is_top_s1 f ->
      ( match constr with
-       | MatchesAll _ | MatchesAny _ | ExternalSearch _ -> insert_elt_p1 (Search ((),constr)) focus
+       | MatchesAll _ | MatchesAny _ | IsExactly _ | StartsWith _ | EndsWith _ | ExternalSearch _ ->
+	   insert_elt_p1 (Search ((),constr)) focus
        | _ -> None )
   | _ -> insert_elt_p1 (Filter ((),constr)) focus
 

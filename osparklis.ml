@@ -74,6 +74,9 @@ let norm_constr = (* normalizing for empty patterns "" *)
   function
   | MatchesAll [] -> True
   | MatchesAny [] -> True
+  | IsExactly "" -> True
+  | StartsWith "" -> True
+  | EndsWith "" -> True
   | After "" -> True
   | Before "" -> True
   | FromTo ("","") -> True
@@ -100,6 +103,9 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   | MatchesAny lpat ->
      let lre = List.map regexp_of_pat lpat in
      (fun s -> List.exists (fun re -> matches s re) lre)
+  | IsExactly pat -> (fun s -> s = pat)
+  | StartsWith pat -> (fun s -> Common.has_prefix s pat)
+  | EndsWith pat -> (fun s -> Common.has_suffix s pat)
   | After pat -> (fun s -> s >= pat)
   | Before pat -> (fun s -> s <= pat)
   | FromTo (pat1,pat2) -> (fun s -> pat1 <= s && s <= pat2)
@@ -150,6 +156,9 @@ let subsumed_constr constr1 constr2 : bool =
 	Common.has_prefix s1 s2
       ) ls2
     ) ls1
+  | IsExactly s1, IsExactly s2 -> s1 = s2
+  | StartsWith s1, StartsWith s2 -> Common.has_prefix s1 s2
+  | EndsWith s1, EndsWith s2 -> Common.has_suffix s1 s2
   | After s1, After s2 -> s2 <= s1
   | Before s1, Before s2 -> s1 <= s2
   | FromTo (s1a,s1b), FromTo (s2a,s2b) -> (s2a="" || s2a <= s1a) && (s2b="" || s1b <= s2b)

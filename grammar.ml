@@ -84,6 +84,9 @@ object (self)
   method virtual order_lowest : string
 
   method virtual matches : string
+  method virtual is_exactly : string
+  method virtual starts_with : string
+  method virtual ends_with : string
   method virtual after : string
   method virtual before : string
   method virtual interval_from : string
@@ -293,6 +296,9 @@ object
   method order_lowest = "lowest-to-highest"
 
   method matches = "matches"
+  method is_exactly = "is exactly"
+  method starts_with = "starts with"
+  method ends_with = "ends with"
   method after = "after"
   method before = "before"
   method interval_from = "from"
@@ -485,7 +491,7 @@ object
   | `IsLiteral -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "litéral"]
   | `IsNumeric -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "nombre"]
   | `StrStarts -> `Pattern [`Arg 1; `Func "commence par"; `Arg 2]
-  | `StrEnds -> `Pattern [`Arg 1; `Func "finit par"; `Arg 2]
+  | `StrEnds -> `Pattern [`Arg 1; `Func "termine par"; `Arg 2]
   | `Contains -> `Pattern [`Arg 1; `Func "contient"; `Arg 2]
   | `REGEX -> `Pattern [`Arg 1; `Func "matche la regexp"; `Arg 2]
   | `REGEX_i -> `Pattern [`Arg 1; `Func "matche la regexp (insensible à la casse)"; `Arg 2]
@@ -495,6 +501,9 @@ object
   method order_lowest = "en ordre croissant"
 
   method matches = "contient"
+  method is_exactly = "est exactement"
+  method starts_with = "commence par"
+  method ends_with = "termine par"
   method after = "après"
   method before = "avant"
   method interval_from = "de"
@@ -698,6 +707,9 @@ object
   method order_lowest = "en orden ascendente"
 
   method matches = "contiene"
+  method is_exactly = "es exactamente"
+  method starts_with = "comienza por"
+  method ends_with = "termina en"
   method after = "después"
   method before = "antes"
   method interval_from = "desde"
@@ -900,6 +912,9 @@ object
   method order_lowest = "laagste-naar-hoogste"
 
   method matches = "komt overeen"
+  method is_exactly = "is precies"
+  method starts_with = "begint met"
+  method ends_with = "eindigt met"
   method after = "na"
   method before = "voor"
   method interval_from = "van"

@@ -178,7 +178,10 @@ let constr_domains : constr -> datatype list = function
   (* constraints assimilated to one-argument functions with Bool results *)
   | True -> [`Term]
   | MatchesAll _
-  | MatchesAny _ -> [`IRI; `StringLiteral; `Date; `Time; `DateTime; `Duration]
+  | MatchesAny _
+  | IsExactly _
+  | StartsWith _
+  | EndsWith _ -> [`IRI; `StringLiteral; `Date; `Time; `DateTime; `Duration]
   | After _
   | Before _
   | FromTo _ -> [`IRI; `StringLiteral; `Date; `Time; `Duration]

@@ -104,6 +104,9 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
       | "true", _ -> True
       | "matchesAll", _ -> MatchesAll lpat
       | "matchesAny", _ -> MatchesAny lpat
+      | "isExactly", _ -> IsExactly pat
+      | "startsWith", _ -> StartsWith pat
+      | "endsWith", _ -> EndsWith pat
       | "after", [] -> After ""
       | "after", pat::_ -> After pat
       | "before", [] -> Before ""
@@ -198,6 +201,9 @@ let option_of_constr =
   | True -> "true"
   | MatchesAll _ -> "matchesAll"
   | MatchesAny _ -> "matchesAny"
+  | IsExactly _ -> "isExactly"
+  | StartsWith _ -> "startsWith"
+  | EndsWith _ -> "endsWith"
   | After _ -> "after"
   | Before _ -> "before"
   | FromTo _ -> "fromTo"
@@ -215,6 +221,9 @@ let pattern_of_constr =
   | True -> ""
   | MatchesAll lpat -> String.concat " " lpat
   | MatchesAny lpat -> String.concat " " lpat
+  | IsExactly pat -> pat
+  | StartsWith pat -> pat
+  | EndsWith pat -> pat
   | After pat -> pat
   | Before pat -> pat
   | FromTo (pat1,"") -> pat1

@@ -99,28 +99,47 @@ let sparql_order = function
 type filter_type = [`OnlyIRIs|`OnlyLiterals|`Mixed]
 type filter_context = [`Properties|`Terms] * filter_type * [`Bind|`Filter]
 
-let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) ~(op : [`All|`Any]) ~(kwds : string list) : bool * Sparql.formula =
+let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) ~(op : [`All|`Any|`Exact|`Start|`End]) ~(kwds : string list) : bool * Sparql.formula =
   let label_props, label_langs = label_properties_langs in
-  let log_op =
+  let kwd = match kwds with kwd::_ -> kwd | _ -> assert false in
+  let make_filter (e : Sparql.expr) : Sparql.formula =
     match op with
-    | `All -> Sparql.log_and
-    | `Any -> Sparql.log_or in
-  let make_filter (e : _ Sparql.any_expr) : Sparql.formula =
-    Sparql.Filter
-      (log_op
-	 (List.map
-	    (fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [e]) pat)
-	    kwds)) in
+    | (`All | `Any as op) ->
+       let log_op =
+	 match op with
+	 | `All -> Sparql.log_and
+	 | `Any -> Sparql.log_or in
+       Sparql.Filter
+	 (log_op
+	    (List.map
+	       (fun pat -> Sparql.expr_regex (Sparql.expr_func "str" [e]) pat)
+	       kwds))
+    | `Exact -> Sparql.(Filter (expr_comp "=" (Sparql.expr_func "str" [e]) (string kwd)))
+    | `Start -> Sparql.(Filter (expr_func "strstarts" [e; (string kwd :> Sparql.expr)]))
+    | `End -> Sparql.(Filter (expr_func "strends" [e; (string kwd :> Sparql.expr)]))
+  in
   let str_filter =
-    make_filter t in
+    make_filter (t :> Sparql.expr) in
   let label_filter_opt =
-    match config_fulltext_search#value, ctx with
-    | "text:query", _ ->
+    if label_props = []
+    then `Undefined
+    else
+      let open Sparql in
+      let term_l = (var (gv#new_var "constr_label") :> Sparql.term) in
+      `Filter (formula_and_list
+		 [ Pattern (triple t (path_alt (List.map uri label_props :> pred list)) term_l);
+		   (if label_langs = []
+		    then True
+		    else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs)));
+		   make_filter (term_l :> Sparql.expr) ]) in
+  let label_filter_opt =
+    match op, config_fulltext_search#value, ctx with
+    | (`All | `Any as op), "text:query", _  ->
        let lucene_query = Jsutils.lucene_query_of_kwds ~op kwds in
        if lucene_query = ""
        then `NoFilter
        else `Filter (Sparql.Pattern (Sparql.text_query t lucene_query))
-    | "bif:contains", (`Terms,`OnlyIRIs,`Bind) -> (* only efficient in this context; TODO: check *)
+    | (`All | `Any as op), "bif:contains", (`Terms,`OnlyIRIs,`Bind) -> (* only efficient in this context; TODO: check *)
        if label_props = []
        then `Undefined
        else
@@ -149,18 +168,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
 			(if label_langs = []
 			 then True
 			 else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs))) ])
-    | _ -> (* using REGEX *)
-       if label_props = []
-       then `Undefined
-       else
-	 let open Sparql in
-	 let term_l = var (gv#new_var "constr_label") in
-	 `Filter (formula_and_list
-		 [ Pattern (triple t (path_alt (List.map uri label_props :> pred list)) term_l);
-		   (if label_langs = []
-		    then True
-		    else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs)));
-		   make_filter term_l ])
+    | _ -> label_filter_opt (* using REGEX *)
   in
   let binding, f =
     match label_filter_opt with
@@ -183,6 +191,15 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
     | MatchesAny [] -> Sparql.True
     | MatchesAny lpat ->
        snd (filter_kwds_gen ctx gv ~label_properties_langs t ~op:`Any ~kwds:lpat)
+    | IsExactly "" -> Sparql.True
+    | IsExactly pat ->
+       snd (filter_kwds_gen ctx gv ~label_properties_langs t ~op:`Exact ~kwds:[pat])
+    | StartsWith "" -> Sparql.True
+    | StartsWith pat ->
+       snd (filter_kwds_gen ctx gv ~label_properties_langs t ~op:`Start ~kwds:[pat])
+    | EndsWith "" -> Sparql.True
+    | EndsWith pat ->
+       snd (filter_kwds_gen ctx gv ~label_properties_langs t ~op:`End ~kwds:[pat])
     | After pat ->
       Sparql.Filter (Sparql.expr_comp ">=" (Sparql.expr_func "str" [t]) (Sparql.string pat))
     | Before pat ->
@@ -230,6 +247,9 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) : Sp
   match c with
   | MatchesAll lpat when lpat<>[] -> aux_matches `All lpat
   | MatchesAny lpat when lpat<>[] -> aux_matches `Any lpat
+  | IsExactly pat when pat<>"" -> aux_matches `Exact [pat]
+  | StartsWith pat when pat<>"" -> aux_matches `Start [pat]
+  | EndsWith pat when pat<>"" -> aux_matches `End [pat]
   | ExternalSearch (_, Some lt) ->
      Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
   | _ -> Sparql.Pattern (Sparql.something t)
