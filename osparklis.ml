@@ -317,7 +317,7 @@ object (self)
       elt##style##display <-
 	string (if n_incr=0 then "none" else "block");
       jquery_from elt ".selection-count" (fun elt_count ->
-        elt_count##innerHTML <- string (string_of_int n_incr)))
+        set_innerHTML_fadeInOut elt_count (string_of_int n_incr)))
   method toggle (incr : Lisql.increment) : unit =
     let _ =
       if List.mem incr l_incr
@@ -408,19 +408,28 @@ object (self)
 	    Lwt.return ()))
     else show permalink
 
-  method private refresh_lisql =
+  method private refresh_lisql (k : unit -> unit) =
     jquery "#lisql" (fun elt ->
-      elt##innerHTML <- string (html_query html_state lis#query);
-      stop_links_propagation_from elt;
-      jquery_all_from elt ".focus" (onclick (fun elt_foc ev ->
-	Dom_html.stopPropagation ev;
-	navigation#update_focus ~push_in_history:false (fun _ ->
-	  let key = to_string (elt_foc##id) in
-	  Some (html_state#get_focus key, Lisql.DeltaNil))));
-      jquery_from elt "#delete-current-focus"
-	(onclick (fun elt_button ev ->
-	  Dom_html.stopPropagation ev;
-	  navigation#update_focus ~push_in_history:true Lisql.delete_focus)))
+      set_innerHTML_fadeInOut_then
+	elt
+	(html_query html_state lis#query)
+	(fun () ->		
+	 stop_links_propagation_from elt;
+	 jquery_all_from
+	   elt ".focus"
+	   (onclick (fun elt_foc ev ->
+		     Dom_html.stopPropagation ev;
+		     navigation#update_focus
+		       ~push_in_history:false
+		       (fun _ ->
+			let key = to_string (elt_foc##id) in
+			Some (html_state#get_focus key, Lisql.DeltaNil))));
+	 jquery_from
+	   elt "#delete-current-focus"
+	   (onclick (fun elt_button ev ->
+		     Dom_html.stopPropagation ev;
+		     navigation#update_focus ~push_in_history:true Lisql.delete_focus));
+	 k ()))
 
   method private refresh_focus =
     let html_focus_np, html_focus_ng =
@@ -440,10 +449,10 @@ object (self)
 	   html, html in
     jquery_all ".focus-np"
 	       (fun elt ->
-		elt##innerHTML <- string html_focus_np);
+		set_innerHTML_fadeInOut elt html_focus_np);
     jquery_all ".focus-ng"
 	       (fun elt ->
-		elt##innerHTML <- string html_focus_ng)
+		set_innerHTML_fadeInOut elt html_focus_ng)
 
   method private refresh_constrs term_constr property_constr =
     List.iter
@@ -467,16 +476,17 @@ object (self)
     let open Sparql_endpoint in
     if lis#results_dim = 0 then (
 	jquery_disable_all "#nav-results-nested-table";
-	jquery_set_innerHTML "#nested-table" "";
+	jquery_set_innerHTML_fadeInOut "#nested-table" "";
 	jquery_disable_all "#nav-results-table";
-	jquery_set_innerHTML "#list-results" "";
-	jquery_set_innerHTML "#count-results"
-			     (let grammar = Lisql2nl.config_lang#grammar in
-			      grammar#no ^ " " ^ fst grammar#result_results);
+	jquery_set_innerHTML_fadeInOut "#list-results" "";
+	jquery_set_innerHTML_fadeInOut
+	  "#count-results"
+	  (let grammar = Lisql2nl.config_lang#grammar in
+	   grammar#no ^ " " ^ fst grammar#result_results);
 	jquery_disable_all "#nav-results-map";
-	jquery_set_innerHTML "#map" "No geolocalized data";
+	jquery_set_innerHTML_fadeInOut "#map" "No geolocalized data";
 	jquery_disable_all "#nav-results-slideshow";
-	jquery_set_innerHTML "#carousel-slides" "No media" )
+	jquery_set_innerHTML_fadeInOut "#carousel-slides" "No media" )
     else begin
       let focus_var =
 	match lis#focus_term_opt with
@@ -518,9 +528,9 @@ object (self)
 	     | _ -> List.map (fun _ -> None) lv in
 	   let partial = lis#partial_results in
 	   jquery_enable_all "#nav-results-nested-table";
-	   jquery_set_innerHTML "#nested-table"
-	     (Html.html_trees html_state ~partial ~focus_var lv shape_data counts);
-	   tables_handler elt_table));
+	   jquery_set_innerHTML_fadeInOut_then "#nested-table"
+	     (Html.html_trees html_state ~partial ~focus_var lv shape_data counts)
+	     (fun () -> tables_handler elt_table)));
       (* table of results *)
       jquery "#list-results" (fun elt_results ->
 	lis#results_page offset limit (fun results_page ->
@@ -530,36 +540,36 @@ object (self)
 	      results_page.Sparql_endpoint.vars in
 	  jquery_enable_all "#nav-results-table";
 	  let partial = lis#partial_results in		       
-	  jquery_set_innerHTML "#list-results"
+	  jquery_set_innerHTML_fadeInOut_then "#list-results"
 	    (html_table_of_results html_state
 	       ~partial
 	       ~first_rank:(offset+1)
 	       ~focus_var
-	       results_page counts);
-	  jquery "#count-results" (fun elt ->
-	    elt##innerHTML <- string
-	      (let nb = lis#results_nb in
-	       let grammar = Lisql2nl.config_lang#grammar in
-	       let s_result, s_results = grammar#result_results in
-	       if nb = 0
-	       then grammar#no ^ " " ^ s_results
-	       else
-		 let a, b = offset+1, min nb (offset+limit) in
-		 if a = 1 && b = nb && not partial then
-		   string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
-		 else
-		   s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
-		     " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+")));
-	  tables_handler elt_results));
+	       results_page counts)
+	    (fun () ->
+	     jquery_set_innerHTML_fadeInOut "#count-results"
+	       (let nb = lis#results_nb in
+		let grammar = Lisql2nl.config_lang#grammar in
+		let s_result, s_results = grammar#result_results in
+		if nb = 0
+		then grammar#no ^ " " ^ s_results
+		else
+		  let a, b = offset+1, min nb (offset+limit) in
+		  if a = 1 && b = nb && not partial then
+		    string_of_int b ^ " " ^ (if b=1 then s_result else s_results)
+		  else
+		    s_results ^ " " ^ string_of_int a ^ " - " ^ string_of_int b ^
+		      " " ^ grammar#quantif_of ^ " " ^ string_of_int nb ^ (if not partial then "" else "+"));
+	     tables_handler elt_results)));
       (* slideshow of results *)
       lis#results_slides
 	(function
 	  | [] ->
 	     jquery_disable_all "#nav-results-slideshow";
-	     jquery_set_innerHTML "#carousel-slides" "No media"
+	     jquery_set_innerHTML_fadeInOut "#carousel-slides" "No media"
 	  | slides ->
 	     jquery_enable_all "#nav-results-slideshow";
-	     jquery_set_innerHTML
+	     jquery_set_innerHTML_fadeInOut
 	       "#carousel-slides"
 	       (Html.html_slides html_state slides));
       (* map of results *)
@@ -567,7 +577,7 @@ object (self)
 	  jquery "#map" (fun elt_map ->
 	    if geolocations = [] then begin
 		jquery_disable_all "#nav-results-map";
-		elt_map##innerHTML <- string "No geolocalized data"
+		set_innerHTML_fadeInOut elt_map "No geolocalized data"
 	      end
 	    else begin
 		jquery_enable_all "#nav-results-map";
@@ -655,27 +665,29 @@ object (self)
 		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in 
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
-	      elt_list##innerHTML <- string html_list;
-	      elt_list##scrollTop <- term_scroll;
-	      self#restore_expanded_terms;
-	      jquery_set_innerHTML "#count-terms"
-				   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
-	      term_selection#reset;			   
-	      stop_propagation_from elt_list "a, .term-input";
-	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
-	        apply_incr elt));
-	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		if to_bool ev##ctrlKey
-		then toggle_incr elt
-		else apply_incr elt));
-	      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
-		Opt.iter (elt##parentNode) (fun node ->
-		  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
-		    let incr_elt = Dom_html.element dom_elt in
-		    apply_incr incr_elt))));
-	      refreshing_terms <- false;
-	      let new_constr = term_constr in
-	      self#refresh_new_term_constr current_constr new_constr)))))))
+	      set_innerHTML_fadeInOut_then
+		elt_list html_list
+		(fun () ->
+		 elt_list##scrollTop <- term_scroll;
+		 jquery_set_innerHTML_fadeInOut
+		   "#count-terms"
+		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+		 self#restore_expanded_terms;
+		 term_selection#reset;			   
+		 stop_propagation_from elt_list "a, .term-input";
+		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		   if to_bool ev##ctrlKey
+		   then toggle_incr elt
+		   else apply_incr elt));
+		 jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
+		   Opt.iter (elt##parentNode) (fun node ->
+		     Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
+		       let incr_elt = Dom_html.element dom_elt in
+		       apply_incr incr_elt))));
+		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
+		 refreshing_terms <- false;
+		 let new_constr = term_constr in
+		 self#refresh_new_term_constr current_constr new_constr))))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments current_constr =
@@ -728,23 +740,25 @@ object (self)
 		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##innerHTML <- string html_sel;
-	      elt_list##innerHTML <- string html_list;
-	      elt_list##scrollTop <- property_scroll;
-	      self#restore_expanded_properties;
-	      jquery_set_innerHTML "#count-properties"
-				   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
-	      property_selection#reset;
-	      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
-		 apply_incr elt));
-	      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		 if to_bool ev##ctrlKey
-		 then toggle_incr elt
-		 else apply_incr elt));
-	      refreshing_properties <- false;
-	      let new_constr = property_constr in
-	      self#refresh_new_property_constr current_constr new_constr)))))))
+	      set_innerHTML_fadeInOut_then
+		elt_list html_list
+		(fun () ->
+		 elt_list##scrollTop <- property_scroll;
+		 self#restore_expanded_properties;
+		 jquery_set_innerHTML_fadeInOut
+		   "#count-properties"
+		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+		 property_selection#reset;
+		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
+		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		   if to_bool ev##ctrlKey
+		   then toggle_incr elt
+		   else apply_incr elt));
+		 refreshing_properties <- false;
+		 let new_constr = property_constr in
+		 self#refresh_new_property_constr current_constr new_constr))))))))
 
-  method private refresh_modifier_increments =
+  method private refresh_modifier_increments (mode : [`Dropdown|`List]) =
     let filter_dropdown_increment =
       let open Lisql in
       function
@@ -782,51 +796,57 @@ object (self)
 	 modifier_selection#toggle incr
       | _ -> ()
     in
-    jquery "#selection-modifiers-items" (fun elt_sel_items ->
-    jquery "#list-modifiers" (fun elt_list ->
-    jquery "#focus-dropdown-content" (fun elt_dropdown ->
-      let index = lis#index_modifiers in
-      let html_sel, html_list, count =
-	html_index
-	  ~filter:(fun incr -> not (filter_dropdown_increment incr))
-	  lis#focus html_state index
-	  ~inverse:false ~sort_by_frequency:false in
-      let _, html_drop, _ =
-	html_index
-	  ~filter:filter_dropdown_increment
-	  lis#focus html_state index
-	  ~inverse:false ~sort_by_frequency:false in
-      elt_dropdown##innerHTML <- string html_drop;
-      elt_sel_items##innerHTML <- string html_sel;
-      elt_list##innerHTML <- string html_list;
-      elt_list##scrollTop <- modifier_scroll;
-      jquery_set_innerHTML "#count-modifiers"
-			   (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
-      jquery "#focus-dropdown" (onclick (fun elt ev ->
-	Dom_html.stopPropagation ev;
-	jquery_toggle "#focus-dropdown-content"));
-      jquery "#focus-dropdown" (onhover (fun elt ev ->
-	Dom_html.stopPropagation ev;
-	jquery_show "#focus-dropdown-content"));
-      jquery "#focus-dropdown-content" (onhover_out (fun elt ev ->
-	Dom_html.stopPropagation ev;
-	jquery_hide "#focus-dropdown-content"));
-      modifier_selection#reset;
-      stop_propagation_from elt_list ".term-input";
-      jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
-	 apply_incr elt));
-      jquery_all_from elt_dropdown ".increment" (onclick (fun elt ev ->
-	Dom_html.stopPropagation ev;
-	apply_incr elt));
-      jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-	if to_bool ev##ctrlKey
-	then toggle_incr elt
-	else apply_incr elt));
-      jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
-	Opt.iter (elt##parentNode) (fun node ->
-	  Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
-	    let incr_elt = Dom_html.element dom_elt in
-	    apply_incr incr_elt)))))))
+    let index = lis#index_modifiers in
+    match mode with
+    | `Dropdown ->
+      jquery "#focus-dropdown-content" (fun elt_dropdown ->
+	let _, html_drop, _ =
+	  html_index
+	    ~filter:filter_dropdown_increment
+	    lis#focus html_state index
+	    ~inverse:false ~sort_by_frequency:false in
+	elt_dropdown##innerHTML <- string html_drop;
+	jquery "#focus-dropdown" (onclick (fun elt ev ->
+	  Dom_html.stopPropagation ev;
+	  jquery_toggle "#focus-dropdown-content"));
+	jquery "#focus-dropdown" (onhover (fun elt ev ->
+	  Dom_html.stopPropagation ev;
+	  jquery_show "#focus-dropdown-content"));
+        jquery "#focus-dropdown-content" (onhover_out (fun elt ev ->
+	  Dom_html.stopPropagation ev;
+	  jquery_hide "#focus-dropdown-content"));
+	jquery_all_from elt_dropdown ".increment" (onclick (fun elt ev ->
+	   Dom_html.stopPropagation ev;
+	   apply_incr elt)))
+    | `List ->
+      jquery "#selection-modifiers-items" (fun elt_sel_items ->
+      jquery "#list-modifiers" (fun elt_list ->
+        let html_sel, html_list, count =
+	  html_index
+	    ~filter:(fun incr -> not (filter_dropdown_increment incr))
+	    lis#focus html_state index
+	    ~inverse:false ~sort_by_frequency:false in
+	elt_sel_items##innerHTML <- string html_sel;
+	set_innerHTML_fadeInOut_then
+	  elt_list html_list
+	  (fun () ->
+	   elt_list##scrollTop <- modifier_scroll;
+	   jquery_set_innerHTML_fadeInOut
+	     "#count-modifiers"
+	     (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+	   modifier_selection#reset;
+	   stop_propagation_from elt_list ".term-input";
+	   jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
+	     apply_incr elt));
+	   jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+	     if to_bool ev##ctrlKey
+	     then toggle_incr elt
+	     else apply_incr elt));
+	   jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
+	     Opt.iter (elt##parentNode) (fun node ->
+	       Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
+	         let incr_elt = Dom_html.element dom_elt in
+		 apply_incr incr_elt)))))))
 
   method private refresh_sparql =
     function
@@ -842,7 +862,9 @@ object (self)
     Dom_html.document##documentElement##scrollTop <- document_scroll;
     jquery_input "#sparql-endpoint-input"
 		 (fun input -> input##value <- string lis#endpoint);
-    self#refresh_lisql;
+    self#refresh_lisql
+      (fun () ->
+       self#refresh_modifier_increments `Dropdown);
     jquery "#increments" (fun elt_incrs ->
       jquery "#list-results" (fun elt_res ->
 	let term_constr = term_constr in (* BECAUSE state term_constr can change any time *)
@@ -857,9 +879,9 @@ object (self)
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
 	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
-	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
-	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
-	      self#refresh_modifier_increments;
+	      jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
+	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
+	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
 	      self#refresh_term_increments term_constr;
 	      self#refresh_focus (* after increments, because they have `FocusName words *)
@@ -867,7 +889,7 @@ object (self)
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
 	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
-	      self#refresh_modifier_increments;
+	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
 	      self#refresh_term_increments term_constr;
 	      self#refresh_focus)))
@@ -883,14 +905,14 @@ object (self)
 	  (function
 	  | None ->
 	      self#refresh_extension;
-	      jquery_all ".list-incrs" (fun elt -> elt##innerHTML <- string "");
-	      jquery_all ".count-incrs" (fun elt -> elt##innerHTML <- string "---");
-	      self#refresh_modifier_increments;
+	      jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
+	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
+	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
 	      self#refresh_term_increments term_constr
 	  | Some sparql ->
 	      self#refresh_extension;
-	      self#refresh_modifier_increments;
+	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
 	      self#refresh_term_increments term_constr)))
 
@@ -1121,7 +1143,7 @@ object (self)
     present#abort_all_ajax;
     present#save_ui_state;
     config#set_endpoint url;
-    jquery_set_innerHTML "#sparql-endpoint-title" dummy_title;
+    jquery_set_innerHTML_fadeInOut "#sparql-endpoint-title" dummy_title;
     let focus, delta = Lisql.factory#reset; Lisql.home_focus () in
     firebug ("delta = " ^ string_of_delta delta);
     let p = present#new_place url focus in
@@ -1383,7 +1405,7 @@ let _ =
 	     "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr/mondial/sparql"]
       with _ -> endpoint in
     config#init endpoint args;
-    jquery_set_innerHTML "#sparql-endpoint-title" title;
+    jquery_set_innerHTML_fadeInOut "#sparql-endpoint-title" title;
     (* defining focus and navigation history *)
     let arg_query =
       try List.assoc "sparklis-query" args

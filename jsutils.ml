@@ -13,6 +13,24 @@ let prompt msg text = Dom_html.window##prompt(string msg, string text)
 
 let firebug msg = Firebug.console##log(string msg)
 
+let timeout (dur : float) (k : unit -> unit) : unit =
+  ignore (Dom_html.window##setTimeout(wrap_callback k, dur))
+
+let set_innerHTML elt s = elt##innerHTML <- string s
+						   
+let set_innerHTML_fadeInOut_then elt (s : string) (k : unit -> unit) : unit =
+  if not (to_bool elt##hasAttribute(string "transition")) then
+    elt##setAttribute(string "transition", string "opacity .2s linear");
+  elt##style##opacity <- def (string "0.3");
+  timeout 200. (* 200ms should match the transition-duration on [elt] *)
+	  (fun () ->
+	   elt##innerHTML <- string s;
+	   elt##style##opacity <- def (string "1");
+	   k ())
+let set_innerHTML_fadeInOut elt s =
+  set_innerHTML_fadeInOut_then elt s (fun () -> ())
+
+						  
 let jquery_from (root : #Dom_html.nodeSelector Js.t) s k =
   Opt.iter (root##querySelector(string s)) (fun elt ->
     k elt)
@@ -44,6 +62,10 @@ let jquery_get_innerHTML sel =
   !res
 let jquery_set_innerHTML sel html =
   jquery sel (fun elt -> elt##innerHTML <- string html)
+let jquery_set_innerHTML_fadeInOut sel html =
+  jquery sel (fun elt -> set_innerHTML_fadeInOut elt html)
+let jquery_set_innerHTML_fadeInOut_then sel html k =
+  jquery sel (fun elt -> set_innerHTML_fadeInOut_then elt html k)
 let jquery_toggle_innerHTML sel (s1 : string) (s2 : string) : string =
   let new_s = ref "" in
   jquery sel (fun elt ->

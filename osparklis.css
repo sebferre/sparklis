@@ -91,6 +91,7 @@ select {
 }
 
 .focus {
+    cursor:pointer;
 }
 
 .highlighted {
@@ -147,6 +148,9 @@ select {
 
 .select-sorting-incrs {
     padding: 0px 5px;
+}
+
+#lisql {
 }
 
 #focus-dropdown {
@@ -218,6 +222,11 @@ select {
     vertical-align:top;
     line-height:100%;
     white-space:normal;
+    transition:all 0.2s ease;
+}
+
+.increment:hover {
+    background-color:#a0f0a0;
 }
 
 .frequency-results, .frequency-entities {
@@ -294,8 +303,16 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
     cursor:pointer;
 }
 
+.header[id]:hover {
+    background-color:#a0f0a0;
+}
+
 .cell[id] {
     cursor:pointer;
+}
+
+.cell[id]:hover {
+    background-color:#a0f0a0;
 }
 
 table {
