@@ -1176,7 +1176,7 @@ and node =
   | Enum of string * xml list (* separator: eg. commas *)
   | Quote of string * xml * string (* quoted xml *)
   | Coord of xml * xml list (* coordination: eg. 'and' *)
-  | Focus of focus * xml
+  | Focus of bool * focus * xml (* bool for is_current_focus *)
   | Highlight of xml
   | Suspended of xml
   | DeleteCurrentFocus
@@ -1193,7 +1193,7 @@ and xml_node_text_content grammar = function
   | Enum (sep, xs) -> String.concat sep (List.map (xml_text_content grammar) xs)
   | Quote (left, x, right) -> left ^ xml_text_content grammar x ^ right
   | Coord (xsep,xs) -> String.concat (" " ^ xml_text_content grammar xsep ^ " ") (List.map (xml_text_content grammar) xs)
-  | Focus (foc,x) -> xml_text_content grammar x
+  | Focus (curr,foc,x) -> xml_text_content grammar x
   | Highlight x -> xml_text_content grammar x
   | Suspended x -> xml_text_content grammar x
   | DeleteCurrentFocus -> ""
@@ -1214,7 +1214,7 @@ and xml_node_label_prune ~quoted node =
     then xml_label_prune ~quoted x
     else [Quote (left, xml_label_prune ~quoted:true x, right)]
   | Coord (xsep, xs) -> [Coord (xml_label_prune ~quoted xsep, List.map (xml_label_prune ~quoted) xs)]
-  | Focus (foc, x) -> xml_label_prune ~quoted x
+  | Focus (curr, foc, x) -> xml_label_prune ~quoted x
   | Highlight x -> xml_label_prune ~quoted x
   | Suspended x -> [Suspended (xml_label_prune ~quoted x)]
   | DeleteCurrentFocus
@@ -1272,13 +1272,13 @@ let xml_focus annot xml =
   | None -> xml
   | Some focus ->
      let pos = annot#focus_pos in
-     let xml =
+     let current_focus, xml =
        match pos with
-       | `At -> [Highlight (xml @ [DeleteCurrentFocus])]
-       | `Below -> [Highlight xml]
-       | `Aside true -> [Suspended xml]
-       | _ -> xml in
-     [Focus (focus, xml)]
+       | `At -> true, [Highlight (xml @ [DeleteCurrentFocus])]
+       | `Below -> false, [Highlight xml]
+       | `Aside true -> false, [Suspended xml]
+       | _ -> false, xml in
+     [Focus (current_focus, focus, xml)]
 
 let xml_annotated x_annot f =
   match x_annot with

@@ -323,7 +323,7 @@ let html_logos uri =
        logo_urls)
 				
 let html_word = function
-  | `Thing -> Lisql2nl.config_lang#grammar#thing
+  | `Thing -> html_span Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) ->
@@ -374,8 +374,8 @@ let html_delete ?id ~title () =
 
 let html_focus_dropdown =
   html_span ~id:"focus-dropdown"
-	    (html_glyphicon "menu-hamburger" ^
-	       "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>")
+	    (html_glyphicon "menu-hamburger") (* ^
+	       "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>") *)
 	 
 let append_node_to_xml node xml =
   List.rev (node :: List.rev xml)
@@ -391,30 +391,32 @@ let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) :
     html_of_nl_xml ~highlight state (Enum (sep, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
   | Coord (coord,lxml) :: DeleteCurrentFocus :: xml ->
     html_of_nl_xml ~highlight state (Coord (coord, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
-  | Focus (foc,xml1) :: DeleteCurrentFocus :: xml ->
-    html_of_nl_xml ~highlight state (Focus (foc, append_node_to_xml DeleteCurrentFocus xml1) :: xml)
+  | Focus (curr,foc,xml1) :: DeleteCurrentFocus :: xml ->
+    html_of_nl_xml ~highlight state (Focus (curr, foc, append_node_to_xml DeleteCurrentFocus xml1) :: xml)
   | Highlight xml1 :: DeleteCurrentFocus :: xml ->
     html_of_nl_xml ~highlight state (Highlight (append_node_to_xml DeleteCurrentFocus xml1) :: xml)
-  | Focus (foc1, xml1) :: Focus (foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (foc1, xml1 @ xml2) :: xml)
+  | Focus (curr1, foc1, xml1) :: Focus (curr2, foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (curr1||curr2, foc1, xml1 @ xml2) :: xml)
   | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
   | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
   | [] -> ""
 and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
-    | Kwd s -> s
+    | Kwd s -> html_span s
     | Word w -> html_word w
     | Input dt -> html_input dt
     | Selection xml_selop -> html_of_nl_xml ~highlight state xml_selop
     | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
-    | Enum (sep,lxml) -> String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml)
-    | Quote (left, xml, right) -> left ^ html_of_nl_xml ~highlight state xml ^ right
+    | Enum (sep,lxml) -> html_span (String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml))
+    | Quote (left, xml, right) -> html_span (left ^ html_of_nl_xml ~highlight state xml ^ right)
     | Coord (coord,lxml) ->
       "<ul class=\"coordination\"><li>"
-      ^ String.concat ("</li><li> " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
-	(List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml)
+      ^ String.concat ("</li><li>" ^ html_span (" " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " ")))
+		      (List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml)
       ^ "</li></ul>"
-    | Focus (focus,xml) ->
+(*      String.concat (" " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
+	(List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml) *)
+    | Focus (curr,focus,xml) ->
       let id = state#add_focus focus in
       let xml =
 	match focus with
@@ -424,7 +426,7 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
 	     | _ -> Kwd "▼" :: xml )
 	| _ -> xml in
       let html = html_of_nl_xml ~highlight state xml in
-      html_span ~id ~classe:"focus" html
+      html_span ~id ~classe:(if curr then "focus highlighted" else "focus") html
     | Highlight xml ->
        html_highlight true
 	 (html_of_nl_xml ~highlight:true state xml)
@@ -451,6 +453,7 @@ let html_query (state : state) (query : annot elt_s) : string =
        Lisql2nl.config_lang#grammar
        ~id_labelling:state#id_labelling
        query)
+  ^ "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>"
 
 let html_id_np (state : state) (id : int) : string =
   html_of_nl_xml state

@@ -409,6 +409,8 @@ object (self)
     else show permalink
 
   method private refresh_lisql (k : unit -> unit) =
+    let str_highlighted = string "highlighted" in
+    let str_prehighlighted = string "prehighlighted" in
     jquery "#lisql" (fun elt ->
       set_innerHTML_fadeInOut_then
 	elt
@@ -417,13 +419,30 @@ object (self)
 	 stop_links_propagation_from elt;
 	 jquery_all_from
 	   elt ".focus"
-	   (onclick (fun elt_foc ev ->
-		     Dom_html.stopPropagation ev;
-		     navigation#update_focus
-		       ~push_in_history:false
-		       (fun _ ->
-			let key = to_string (elt_foc##id) in
-			Some (html_state#get_focus key, Lisql.DeltaNil))));
+	   (fun elt_foc ->
+	    elt_foc |>
+	      onhover (fun elt_foc ev ->
+		       Dom_html.stopPropagation ev;
+		       if not (to_bool elt_foc##classList##contains(str_highlighted)) then ( (* not the current focus *)
+			 elt_foc##classList##add(str_prehighlighted);
+			 jquery_all_from
+			   elt_foc "span"
+			   (fun elt -> elt##classList##add(str_prehighlighted))));
+	    elt_foc |>
+	      onhover_out (fun elt_foc ev ->
+			   Dom_html.stopPropagation ev;
+			   elt_foc##classList##remove(str_prehighlighted);
+			   jquery_all_from
+			     elt_foc "span"
+			     (fun elt -> elt##classList##remove(str_prehighlighted)));
+	    elt_foc |>
+	      onclick (fun elt_foc ev ->
+		       Dom_html.stopPropagation ev;
+		       navigation#update_focus
+			 ~push_in_history:false
+			 (fun _ ->
+			  let key = to_string (elt_foc##id) in
+			  Some (html_state#get_focus key, Lisql.DeltaNil))));
 	 jquery_from
 	   elt "#delete-current-focus"
 	   (onclick (fun elt_button ev ->
@@ -809,14 +828,9 @@ object (self)
 	jquery "#focus-dropdown" (onclick (fun elt ev ->
 	  Dom_html.stopPropagation ev;
 	  jquery_toggle "#focus-dropdown-content"));
-	jquery "#focus-dropdown" (onhover (fun elt ev ->
-	  Dom_html.stopPropagation ev;
-	  jquery_show "#focus-dropdown-content"));
-        jquery "#focus-dropdown-content" (onhover_out (fun elt ev ->
-	  Dom_html.stopPropagation ev;
-	  jquery_hide "#focus-dropdown-content"));
 	jquery_all_from elt_dropdown ".increment" (onclick (fun elt ev ->
 	   Dom_html.stopPropagation ev;
+	   jquery_hide "#focus-dropdown-content";
 	   apply_incr elt)))
     | `List ->
       jquery "#selection-modifiers-items" (fun elt_sel_items ->

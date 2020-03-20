@@ -86,6 +86,13 @@ select {
     color:darkred;
 }
 
+.highlighted {
+    background-color:#a0f0a0;
+}
+.prehighlighted {
+    background-color:#f0f0a0;
+}
+
 #sparql-endpoint-input {
     width:300px;
 }
@@ -93,9 +100,8 @@ select {
 .focus {
     cursor:pointer;
 }
-
-.highlighted {
-    background-color:#a0f0a0;
+#lisql span {
+    transition:background-color 0.9s ease;
 }
 
 .suspended {
@@ -126,7 +132,7 @@ select {
 }
 
 .selected-incr {
-    background-color:#a0f0a0;
+    background-color:#f0f0a0;
 }
 
 .incr-box .panel-body {
@@ -157,9 +163,7 @@ select {
     position: relative;
     display: inline;
 }
-/* #focus-dropdown:hover #focus-dropdown-content {
-  display: block;
-} */
+
 #focus-dropdown-content {
   display: none;
   position: absolute;
@@ -222,11 +226,11 @@ select {
     vertical-align:top;
     line-height:100%;
     white-space:normal;
-    transition:all 0.2s ease;
+    transition:all 0.3s ease;
 }
 
 .increment:hover {
-    background-color:#a0f0a0;
+    background-color:#f0f0a0;
 }
 
 .frequency-results, .frequency-entities {
@@ -301,18 +305,20 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 
 .header[id] {
     cursor:pointer;
+    transition:all 0.3s ease;
 }
 
 .header[id]:hover {
-    background-color:#a0f0a0;
+    background-color:#f0f0a0;
 }
 
 .cell[id] {
     cursor:pointer;
+    transition:all 0.3s ease;
 }
 
 .cell[id]:hover {
-    background-color:#a0f0a0;
+    background-color:#f0f0a0;
 }
 
 table {
