@@ -97,11 +97,9 @@ select {
     width:300px;
 }
 
-.focus {
+#lisql .focus span {
     cursor:pointer;
-}
-#lisql span {
-    transition:background-color 0.9s ease;
+    transition:background-color 0.6s ease;
 }
 
 .suspended {
@@ -225,7 +223,7 @@ select {
     vertical-align:top;
     line-height:100%;
     white-space:normal;
-    transition:all 0.3s ease;
+    transition:all 0.2s ease;
 }
 
 .increment:hover {
@@ -304,7 +302,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 
 .header[id] {
     cursor:pointer;
-    transition:all 0.3s ease;
+    transition:all 0.2s ease;
 }
 
 .header[id]:hover {
@@ -313,7 +311,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 
 .cell[id] {
     cursor:pointer;
-    transition:all 0.3s ease;
+    transition:all 0.2s ease;
 }
 
 .cell[id]:hover {
