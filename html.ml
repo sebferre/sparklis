@@ -374,8 +374,8 @@ let html_delete ?id ~title () =
 
 let html_focus_dropdown =
   html_span ~id:"focus-dropdown"
-	    (html_glyphicon "menu-hamburger") (* ^
-	       "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>") *)
+	    (html_glyphicon "menu-hamburger")
+  ^ "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>"
 	 
 let append_node_to_xml node xml =
   List.rev (node :: List.rev xml)
@@ -453,7 +453,6 @@ let html_query (state : state) (query : annot elt_s) : string =
        Lisql2nl.config_lang#grammar
        ~id_labelling:state#id_labelling
        query)
-  ^ "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>"
 
 let html_id_np (state : state) (id : int) : string =
   html_of_nl_xml state
@@ -615,7 +614,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
  end
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(inverse : bool) ~(sort_by_frequency : bool): string * string * int =
+let html_index ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(inverse : bool) ~(sort_by_frequency : bool): string * string * int =
   let grammar = Lisql2nl.config_lang#grammar in
   let sort_node_list nodes =
     List.sort
@@ -631,7 +630,7 @@ let html_index ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state 
 	   Buffer.add_string buf_sel html end
        else begin
 	 let check_id = collapse_of_key key in
-	 Buffer.add_string buf_tree "<li class=\"col-xs-11\">";
+	 Buffer.add_string buf_tree (if dropdown then "<li>" else "<li class=\"col-xs-11\">");
 	 if children = [] then begin
 	     Buffer.add_string buf_tree "<label style=\"visibility:hidden;\">►&nbsp;</label>";
 	     Buffer.add_string buf_tree html

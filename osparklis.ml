@@ -423,7 +423,8 @@ object (self)
 	    elt_foc |>
 	      onhover (fun elt_foc ev ->
 		       Dom_html.stopPropagation ev;
-		       if not (to_bool elt_foc##classList##contains(str_highlighted)) then ( (* not the current focus *)
+		       if not (to_bool elt_foc##classList##contains(str_highlighted)) (* not the current focus *)
+			  && not (jquery_shown "#focus-dropdown-content") then (
 			 elt_foc##classList##add(str_prehighlighted);
 			 jquery_all_from
 			   elt_foc "span"
@@ -821,7 +822,7 @@ object (self)
       jquery "#focus-dropdown-content" (fun elt_dropdown ->
 	let _, html_drop, _ =
 	  html_index
-	    ~filter:filter_dropdown_increment
+	    ~dropdown:true ~filter:filter_dropdown_increment
 	    lis#focus html_state index
 	    ~inverse:false ~sort_by_frequency:false in
 	elt_dropdown##innerHTML <- string html_drop;
@@ -837,7 +838,7 @@ object (self)
       jquery "#list-modifiers" (fun elt_list ->
         let html_sel, html_list, count =
 	  html_index
-	    ~filter:(fun incr -> not (filter_dropdown_increment incr))
+	    ~dropdown:false ~filter:(fun incr -> not (filter_dropdown_increment incr))
 	    lis#focus html_state index
 	    ~inverse:false ~sort_by_frequency:false in
 	elt_sel_items##innerHTML <- string html_sel;

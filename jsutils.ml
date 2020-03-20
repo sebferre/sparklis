@@ -73,6 +73,10 @@ let jquery_toggle_innerHTML sel (s1 : string) (s2 : string) : string =
     elt##innerHTML <- string !new_s);
   !new_s
 
+let jquery_shown sel =
+  let res = ref false in
+  jquery sel (fun elt -> res := (to_string elt##style##display = "block"));
+  !res
 let jquery_show sel = jquery sel (fun elt -> elt##style##display <- string "block")
 let jquery_hide sel = jquery sel (fun elt -> elt##style##display <- string "none")
 let jquery_toggle sel = jquery sel (fun elt ->

@@ -1,5 +1,5 @@
 /*
-  Copyright 2013-2017 Sébastien Ferré, IRISA, Université de Rennes 1
+  Copyright 2013-2020 Sébastien Ferré, IRISA, Université de Rennes 1
 
   This file is part of Sparklis.
 */
@@ -160,18 +160,17 @@ select {
 }
 
 #focus-dropdown {
-    position: relative;
-    display: inline;
 }
 
 #focus-dropdown-content {
   display: none;
   position: absolute;
+  left:200px;
   z-index: 1;
   background-color: #f9f9f9;
-  min-width: 300px;
-  box-shadow: 0px 8px 16px 0px #a0f0a0; /* rgba(0,0,0,0.2); */
-  padding: 10px 0px;
+  /*min-width: 100px;*/
+  box-shadow: 0px 8px 16px 0px #a0f0a0;
+  padding: 10px 15px 10px 0px;
 }
 #focus-dropdown-content ul {
     list-style-type: none;
@@ -179,10 +178,10 @@ select {
     line-height: 90%; // avoids wasted space between items
 }
 #focus-dropdown-content li {
-    width: 95%;
+    /*width: 95%;*/
     margin-left: 0px;
     margin-right: 0px;
-    margin-top:8px;
+    margin-top:5px;
     margin-bottom: 0px;
     padding-left: 0px;
     padding-right: 0px;
