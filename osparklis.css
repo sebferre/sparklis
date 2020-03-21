@@ -4,6 +4,14 @@
   This file is part of Sparklis.
 */
 
+/* NOT supported by Internet Explorer
+:root {
+    --color-highlight:#a0f0a0;
+    --color-prehighlight:#f8f880;
+    --color-selection:#f8f840;
+} 
+*/
+
 head, body, input, textarea, select {
     font-family: Tahoma, Geneva, sans-serif;
     font-size: 16px;
@@ -87,10 +95,10 @@ select {
 }
 
 .highlighted {
-    background-color:#a0f0a0;
+    background-color:#a0f0a0; /* --color-highlight */
 }
 .prehighlighted {
-    background-color:#f0f0a0;
+    background-color:#f8f880; /* --color-prehighlight */
 }
 
 #sparql-endpoint-input {
@@ -122,7 +130,7 @@ select {
 }
 
 .selection-incrs {
-    background-color:#f0f0a0;
+    background-color:#f8f840; /* --color-selection */
     padding:8px;
 }
 
@@ -130,7 +138,7 @@ select {
 }
 
 .selected-incr {
-    background-color:#f0f0a0;
+    background-color:#f8f840; /* --color-selection */
 }
 
 .incr-box .panel-body {
@@ -167,7 +175,7 @@ select {
   z-index: 1;
   background-color: #f9f9f9;
   /*min-width: 100px;*/
-  box-shadow: 0px 8px 16px 0px #a0f0a0;
+  box-shadow: 0px 8px 16px 0px #a0f0a0; /* --color-highlight */
   padding: 10px 15px 10px 0px;
 }
 #focus-dropdown-content ul {
@@ -226,8 +234,8 @@ select {
     transition:all 0.2s ease;
 }
 
-.increment:hover {
-    background-color:#f0f0a0;
+.increment:hover:not(.selected-incr) {
+    background-color:#f8f880; /* --color-prehighlight */
 }
 
 .frequency-results, .frequency-entities {
@@ -306,7 +314,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 }
 
 .header[id]:hover {
-    background-color:#f0f0a0;
+    background-color:#f8f880; /* --color-prehighlight */
 }
 
 .cell[id] {
@@ -315,7 +323,7 @@ input.input-inverse:checked ~ .label-checked { display:inline; margin:0px; }
 }
 
 .cell[id]:hover {
-    background-color:#f0f0a0;
+    background-color:#f8f880; /* --color-prehighlight */
 }
 
 table {
