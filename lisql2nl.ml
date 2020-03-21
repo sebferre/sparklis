@@ -157,6 +157,7 @@ and nl_vp =
   | `Or of vp list (* the optional int indicates that the disjunction is in the context of the i-th element *)
   | `Maybe of vp (* the bool indicates whether negation is suspended *)
   | `Not of vp (* the bool indicates whether negation is suspended *)
+  | `EpsilonHead of vp
   | `In of np * vp
   | `Ellipsis ]
 and cp = nl_cp annotated
@@ -1075,6 +1076,7 @@ and map_vp transf vp =
     | `Or lr -> `Or (List.map (map_vp transf) lr)
     | `Maybe vp -> `Maybe (map_vp transf vp)
     | `Not vp -> `Not (map_vp transf vp)
+    | `EpsilonHead vp -> `EpsilonHead (map_vp transf vp)
     | `In (npg,vp) -> `In (map_np transf npg, map_vp transf vp)
     | `Ellipsis -> `Ellipsis )
 and map_cp transf cp =
@@ -1132,8 +1134,7 @@ object (self)
   | A (a1, `That (X (`HasProp (p,np,lpp)))) ->
     ( match np with
     | A (a2, `Qu (`A, `Nil, X (`That (`Thing, X (`That vp)))))
-      -> let vp = match vp with X nl -> A (a2, nl) | A (a3,nl) -> A (a3,nl) in
-	 A (a1, `Whose (A (a2, `That (p, X (`PP lpp))), vp))
+      -> A (a1, `Whose (X (`That (p, X (`PP lpp))), A (a2, `EpsilonHead vp)))
     | A (a2, `Qu (qu, adj, X (`That (`Thing, rel))))
       -> A (a1, `That (X (`HasProp (p,np,lpp)))) (* simplification at VP level *)
     | A (a2, `Qu (qu, adj, X (`Aggreg (susp, ngg, A (a3, `That (`Thing, rel2))))))
@@ -1258,6 +1259,7 @@ let xml_maybe grammar annot_opt xml =
 let xml_not grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
+let xml_epsilon_head xml = Kwd "•" :: xml
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
@@ -1423,6 +1425,7 @@ and xml_vp grammar ~id_labelling = function
       | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
       | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar ~id_labelling vp)
       | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
+      | `EpsilonHead vp -> xml_epsilon_head (xml_vp grammar ~id_labelling vp)
       | `In (npg,vp) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_vp grammar ~id_labelling vp)
       | `Ellipsis -> xml_ellipsis )
 and xml_in_which grammar ~id_labelling s =
