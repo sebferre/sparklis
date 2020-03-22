@@ -151,7 +151,7 @@ select {
 }
 
 .panel-footer {
-    padding: 10px 5px;
+    padding: 10px 5px 5px 5px;
 }
 
 .buttons-incrs {
@@ -160,6 +160,7 @@ select {
 
 .select-sorting-incrs {
     padding: 0px 5px;
+    height:30px;
 }
 
 #lisql {
