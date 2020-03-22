@@ -313,11 +313,9 @@ object (self)
   method get = List.rev l_incr
   method private refresh =
     let n_incr = List.length l_incr in
-    jquery sel_selection (fun elt ->
-      elt##style##display <-
-	string (if n_incr=0 then "none" else "block");
-      jquery_from elt ".selection-count" (fun elt_count ->
-        set_innerHTML_fadeInOut elt_count (string_of_int n_incr)))
+    jquery_set_innerHTML_fadeInOut
+      (sel_selection ^ " .selection-count")
+      (string_of_int n_incr)
   method toggle (incr : Lisql.increment) : unit =
     let _ =
       if List.mem incr l_incr
@@ -329,7 +327,11 @@ object (self)
     self#refresh
 end
 
-class place (endpoint : string) (foc : Lisql.focus) =
+let term_selection = new increment_selection "#selection-terms"
+let property_selection = new increment_selection "#selection-properties"
+let modifier_selection = new increment_selection "#selection-modifiers"
+
+  class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable lis = new Lis.place endpoint foc
   method lis = lis
@@ -348,10 +350,6 @@ object (self)
   val mutable modifier_constr = Lisql.True
   method modifier_constr = modifier_constr
   method set_modifier_constr c = modifier_constr <- c
-						 
-  val term_selection = new increment_selection "#selection-terms"
-  val property_selection = new increment_selection "#selection-properties"
-  val modifier_selection = new increment_selection "#selection-modifiers"
 				  
   (* UI state *)
   val mutable document_scroll = 0
@@ -694,10 +692,11 @@ object (self)
 		   "#count-terms"
 		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
 		 self#restore_expanded_terms;
-		 term_selection#reset;			   
+		 term_selection#reset;
+		 jquery_hide "#selection-terms";
 		 stop_propagation_from elt_list "a, .term-input";
 		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		   if to_bool ev##ctrlKey
+		   if jquery_shown "#selection-terms" (*to_bool ev##ctrlKey*)
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
@@ -770,9 +769,10 @@ object (self)
 		   "#count-properties"
 		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 		 property_selection#reset;
+		 jquery_hide "#selection-properties";
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
 		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-		   if to_bool ev##ctrlKey
+		   if jquery_shown "#selection-properties" (* to_bool ev##ctrlKey *)
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 refreshing_properties <- false;
@@ -835,6 +835,7 @@ object (self)
 	   jquery_hide "#focus-dropdown-content";
 	   apply_incr elt)))
     | `List ->
+      jquery "#selection-modifiers-button" (fun elt_sel_button ->
       jquery "#selection-modifiers-items" (fun elt_sel_items ->
       jquery "#list-modifiers" (fun elt_list ->
         let html_sel, html_list, count =
@@ -843,6 +844,9 @@ object (self)
 	    lis#focus html_state index
 	    ~inverse:false ~sort_by_frequency:false in
 	elt_sel_items##innerHTML <- string html_sel;
+	if html_sel = "" (* disable multi-selection button if no sel item *)
+	then elt_sel_button##classList##add(string "disabled")
+	else elt_sel_button##classList##remove(string "disabled");
 	set_innerHTML_fadeInOut_then
 	  elt_list html_list
 	  (fun () ->
@@ -851,18 +855,19 @@ object (self)
 	     "#count-modifiers"
 	     (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
 	   modifier_selection#reset;
+	   jquery_hide "#selection-modifiers";
 	   stop_propagation_from elt_list ".term-input";
 	   jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 	     apply_incr elt));
 	   jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
-	     if to_bool ev##ctrlKey
+	     if jquery_shown "#selection-modifiers" (* to_bool ev##ctrlKey *)
 	     then toggle_incr elt
 	     else apply_incr elt));
 	   jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
 	     Opt.iter (elt##parentNode) (fun node ->
 	       Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 	         let incr_elt = Dom_html.element dom_elt in
-		 apply_incr incr_elt)))))))
+		 apply_incr incr_elt))))))))
 
   method private refresh_sparql =
     function
@@ -1336,6 +1341,23 @@ let initialize endpoint focus =
 	 history#present#set_modifier_constr new_constr;
 	 history#present#refresh_new_modifier_constr current_constr new_constr))];
 
+    List.iter
+      (fun (sel_selection_button, sel_selection, sel_increments, incr_selection) ->
+       jquery sel_selection_button
+	      (onclick
+		 (fun elt ev ->
+		  if jquery_shown sel_selection
+		  then (
+		    jquery_hide sel_selection;
+		    jquery_all (sel_increments ^ " .selected-incr")
+			       (fun elt -> elt##classList##remove(string "selected-incr"));
+		    incr_selection#reset)
+		  else
+		    jquery_show sel_selection)))
+      ["#selection-terms-button", "#selection-terms", "#list-terms", term_selection;
+       "#selection-properties-button", "#selection-properties", "#list-properties", property_selection;
+       "#selection-modifiers-button", "#selection-modifiers", "#list-modifiers", modifier_selection];
+    
     List.iter
       (fun (sel_btn,sel_list_incrs,checked) ->
        jquery sel_btn

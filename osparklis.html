@@ -1077,13 +1077,23 @@
 		  </div>
 		</div>
 
+		<button id="selection-properties-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		  <span class="texte lang-en">multi-selection</span>
+		  <span class="texte lang-fr">multi-sélection</span>
+		  <span class="texte lang-es">multiselección</span>
+		  <span class="texte lang-nl">multi-selectie</span>
+		</button>
 		<div id="selection-properties" class="selection-incrs" style="display:none">
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
 		  <span class="selection-count"></span> 
-		  <span class="texte lang-en">selected items</span>
-		  <span class="texte lang-fr">éléments sélectionnés</span>
-		  <span class="texte lang-es">artículos seleccionados</span>
-		  <span class="texte lang-nl">geselecteerde items</span>
-		  <span id="selection-properties-items">...and...  ...or...</span>
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">artículos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
+		  <span id="selection-properties-items"></span>
 		</div>
 		<div id="list-properties" class="list-incrs css-treeview">
 		</div>
@@ -1091,7 +1101,7 @@
 	      <div class="panel-footer">
 		<div class="container-fluid">
 		  <div class="row">
-		    <div class="col-xs-3 btn-group buttons-incrs">
+		    <div class="col-xs-4 btn-group buttons-incrs">
 		      <span class="tooltiped btn btn-default btn-sm">
 			<span class="tooltip lang-en">Turn the hierarchy upside-down</span>
 			<span class="tooltip lang-fr">Retourner la hiérarchie à l'envers</span>
@@ -1124,7 +1134,7 @@
 			-->
 		      </select>
 		    </div>
-		    <div id="count-properties" class="col-xs-4 count-incrs pull-right">
+		    <div id="count-properties" class="col-xs-3 count-incrs pull-right">
 		      <span class="texte lang-en">No concept</span>
 		      <span class="texte lang-fr">Aucun concept</span>
 		      <span class="texte lang-es">Ningún concepto</span>
@@ -1171,23 +1181,39 @@
 		      <option value="hasDatatype">has datatype</option>
 		      -->
 		    </select></div>
-		  <div class="tooltiped col-xs-7 no-padding"><span class="tooltip lang-en">Input keywords to filter entities</span><span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span><span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span><span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span><input id="pattern-terms" class="pattern-incrs form-control" type="text"></div>
+		  <div class="tooltiped col-xs-7 no-padding">
+		    <span class="tooltip lang-en">Input keywords to filter entities</span>
+		    <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span>
+		    <span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span>
+		    <span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span>
+		    <input id="pattern-terms" class="pattern-incrs form-control" type="text">
+		  </div>
 		  <div class="tooltiped col-xs-1 no-padding">
 		    <span class="tooltip lang-en">Click this button to insert this filter at the query focus</span>
 		    <span class="tooltip lang-fr">Cliquer ce bouton pour insérer ce filtre au focus de la requête</span>
 		    <span class="tooltip lang-es">Haga clic en este botón para insertar este filtro en el foco de consulta</span>
 		    <span class="tooltip lang-nl">Klik op deze knop om dit filter toe te voegen aan de focus van de query</span>
-		    <button id="button-terms" class="btn btn-primary">
+		    <button id="button-terms" class="btn btn-block btn-primary">
 		      <span class="glyphicon glyphicon-ok"></span>
 		    </button>
 		  </div>
 		</div>
+		<button id="selection-terms-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		  <span class="texte lang-en">multi-selection</span>
+		  <span class="texte lang-fr">multi-sélection</span>
+		  <span class="texte lang-es">multiselección</span>
+		  <span class="texte lang-nl">multi-selectie</span>
+		</button>
 		<div id="selection-terms" class="selection-incrs" style="display:none">
-		  &nbsp;<span class="selection-count"></span> 
-		  <span class="texte lang-en">selected items</span>
-		  <span class="texte lang-fr">éléments sélectionnés</span>
-		  <span class="texte lang-es">artículos seleccionados</span>
-		  <span class="texte lang-nl">geselecteerde items</span>
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
+		  <span class="selection-count"></span> 
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">artículos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
 		  <span id="selection-terms-items"></span>
 		</div>		
 		<div id="list-terms" class="list-incrs css-treeview">
@@ -1196,7 +1222,7 @@
 	      <div class="panel-footer">
 		<div class="container-fluid">
 		  <div class="row">
-		    <div class="col-xs-3 btn-group buttons-incrs">
+		    <div class="col-xs-4 btn-group buttons-incrs">
 		      <span class="tooltiped btn btn-default btn-sm">
 			<span class="tooltip lang-en">Turn the hierarchy upside-down</span>
 			<span class="tooltip lang-fr">Retourner la hiérarchie à l'envers</span>
@@ -1229,7 +1255,7 @@
 			-->
 		      </select>
 		    </div>
-		    <div id="count-terms" class="col-xs-4 count-incrs pull-right">
+		    <div id="count-terms" class="col-xs-3 count-incrs pull-right">
 		      <span class="texte lang-en">No entity</span>
 		      <span class="texte lang-fr">Aucune entité</span>
 		      <span class="texte lang-es">Ninguna entidad</span>
@@ -1269,12 +1295,22 @@
 		    <input id="pattern-modifiers" class="pattern-incrs form-control" type="text">
 		  </div>
 		</div>		
+		<button id="selection-modifiers-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		  <span class="texte lang-en">multi-selection</span>
+		  <span class="texte lang-fr">multi-sélection</span>
+		  <span class="texte lang-es">multiselección</span>
+		  <span class="texte lang-nl">multi-selectie</span>
+		</button>
 		<div id="selection-modifiers" class="selection-incrs" style="display:none">
-		  &nbsp;<span class="selection-count"></span> 
-		  <span class="texte lang-en">selected items</span>
-		  <span class="texte lang-fr">éléments sélectionnés</span>
-		  <span class="texte lang-es">artículos seleccionados</span>
-		  <span class="texte lang-nl">geselecteerde items</span>
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
+		  <span class="selection-count"></span> 
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">artículos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
 		  <span id="selection-modifiers-items"></span>
 		</div>				
 		<div id="list-modifiers" class="list-incrs css-treeview">

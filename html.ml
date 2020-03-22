@@ -604,7 +604,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
   let is_selection_incr, html =
     match incr with
     | IncrSelection _ ->
-       true, "<button id=\"" ^ key ^ "\" class=\"btn btn-default selection-increment\">" ^ html ^ "</button> "
+       true, "<button id=\"" ^ key ^ "\" class=\"btn btn-default btn-sm selection-increment\">" ^ html ^ "</button> "
     | _ ->
        let classe =
 	 if filterable then "increment filterable-increment"

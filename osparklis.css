@@ -131,7 +131,7 @@ select {
 
 .selection-incrs {
     background-color:#f8f840; /* --color-selection */
-    padding:8px;
+    padding:4px;
 }
 
 .selection-increment {
@@ -163,6 +163,7 @@ select {
 }
 
 #lisql {
+    font-weight:bold;
 }
 
 #focus-dropdown {
@@ -207,7 +208,7 @@ select {
     line-height:90%; // avoids wasted space between items
 }
 .list-incrs.css-treeview > ul {
-    padding-top: 8px;
+    padding-top: 0px;
 }
 .list-incrs.css-treeview ul ul {
     width: 100%;
@@ -255,6 +256,7 @@ select {
 
 .count-incrs {
     padding: 5px 5px;
+    font-size:14px;
     text-align:right;
 }
 
