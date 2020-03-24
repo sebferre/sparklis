@@ -382,6 +382,14 @@ and subquery =
     having : expr;
     limit : int option }
 
+let formula_is_binding = function
+  | Pattern _ -> true
+  | Subquery _ -> true
+  | Filter _ -> false
+  | True -> false
+  | False -> false
+  | Or _ -> true
+    
 let formula_term_in_term_list (t : _ any_term) (lt : _ any_term list) : formula =
   let s_t = (t : _ sparql :> string) in
   if s_t<>"" && s_t.[0]='?'

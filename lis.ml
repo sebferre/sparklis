@@ -974,7 +974,7 @@ object (self)
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
     let sparql_term =
       "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr) :> string) ^
+	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity `OnlyIRIs sparql_genvar (Sparql.var "term") constr) :> string) ^
 	filter_hidden_URIs "term" ^
 	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
