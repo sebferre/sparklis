@@ -10,6 +10,8 @@ open Common
 
 (* LISQL constraints *)
 
+type filter_type = [`OnlyIRIs|`OnlyLiterals|`Mixed]
+
 type search =
   [ `Wikidata of string list
   | `TextQuery of string list ]
@@ -102,8 +104,8 @@ type 'a elt_p1 =
   | Sim of 'a * 'a elt_s1 * pred * arg * arg * int (* rank, positive *)
   | Triple of 'a * arg * 'a elt_s1 * 'a elt_s1 (* abstraction arg + other S1 arguments in order: S, P, O *)
   | LatLong of 'a * latlong * id * id (* specialization of two Rel to get latitude and longitude *)
-  | Search of 'a * constr
-  | Filter of 'a * constr
+  | Search of 'a * constr (* `OnlyIRIs *)
+  | Filter of 'a * constr * filter_type
   | And of 'a * 'a elt_p1 list
   | Or of 'a * 'a elt_p1 list
   | Maybe of 'a * 'a elt_p1
@@ -519,7 +521,7 @@ let rec annot_p1 : 'a elt_p1 -> 'a = function
   | Triple (a,arg,np1,np2) -> a
   | LatLong (a,ll,id1,id2) -> a
   | Search (a,constr) -> a
-  | Filter (a,constr) -> a
+  | Filter (a,constr,ft) -> a
   | And (a,lr) -> a
   | Or (a,lr) -> a
   | Maybe (a,f) -> a
@@ -1660,14 +1662,14 @@ let change_sim_rank (f : int -> int option) = function
 let incr_sim_rank = change_sim_rank (fun rank -> Some (rank+1))
 let decr_sim_rank = change_sim_rank (fun rank -> if rank=1 then None else Some (rank-1))
 	  
-let insert_constr constr focus =
+let insert_constr constr ft focus =
   match focus with
   | AtS1 (f, ReturnX _) when is_top_s1 f ->
      ( match constr with
        | MatchesAll _ | MatchesAny _ | IsExactly _ | StartsWith _ | EndsWith _ | ExternalSearch _ ->
 	   insert_elt_p1 (Search ((),constr)) focus
        | _ -> None )
-  | _ -> insert_elt_p1 (Filter ((),constr)) focus
+  | _ -> insert_elt_p1 (Filter ((),constr,ft)) focus
 
 let rec insert_that_is = function
   (*  | AtS1 (f, IsX ctx) when is_top_s1 f -> None *)

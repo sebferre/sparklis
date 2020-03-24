@@ -96,8 +96,7 @@ let sparql_order = function
   | Lowest conv_opt -> Some (Sparql.ASC (sparql_converter conv_opt))
   | Highest conv_opt -> Some (Sparql.DESC (sparql_converter conv_opt))
 
-type filter_type = [`OnlyIRIs|`OnlyLiterals|`Mixed]
-type filter_context = [`Properties|`Terms] * filter_type * [`Bind|`Filter]
+type filter_context = [`Properties|`Terms] * Lisql.filter_type * [`Bind|`Filter]
 
 let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) ~(op : [`All|`Any|`Exact|`Start|`End]) ~(kwds : string list) : Sparql.formula =
   let label_props, label_langs = label_properties_langs in
@@ -232,11 +231,11 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
     | ExternalSearch (_, Some lt) ->
        Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
 
-let filter_constr_entity (ft : filter_type) gv t c = filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
+let filter_constr_entity gv t c (ft : Lisql.filter_type) = filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
 let filter_constr_class gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_class_lexicon#properties_langs t c
 let filter_constr_property gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_property_lexicon#properties_langs t c
 
-let search_constr_entity (ft : filter_type) (gv : genvar) (t : _ Sparql.any_term) (c : constr) : Sparql.formula =
+let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft : Lisql.filter_type) : Sparql.formula =
   let label_properties_langs = Lexicon.config_entity_lexicon#properties_langs in
   let f = filter_constr_gen (`Terms,ft,`Bind) gv
 			    ~label_properties_langs
@@ -745,10 +744,10 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
   | Search (annot,c) ->
      (fun x -> []),
-     (fun x -> search_constr_entity `OnlyIRIs state#genvar x c)
-  | Filter (annot,c) ->
+     (fun x -> search_constr_entity state#genvar x c `OnlyIRIs)
+  | Filter (annot,c,ft) ->
      (fun x -> []),
-     (fun x -> filter_constr_entity `Mixed state#genvar x c) (* TODO: how to refine `Mixed when `OnlyIRIs or `OnlyLiterals ? *)
+     (fun x -> filter_constr_entity state#genvar x c ft)
   | And (annot,lr) ->
      let lr_d_deps, lr_d = List.split (List.map (fun elt -> form_p1 state elt) lr) in
      (fun x -> List.concat (List.map (fun d_deps -> d_deps x) lr_d_deps)),

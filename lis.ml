@@ -760,26 +760,28 @@ object (self)
   val mutable focus_pred_args_index : (Rdf.term list, Rdf.term) nested_int_index = new nested_int_index (* used when some focus-pred-args *)
   val mutable some_focus_term_is_blank : bool = false
 
+  method filter_type : Lisql.filter_type =
+    let has_IRI =
+      Lisql_type.(check_input_constraint focus_type_constraints.input_constr `IRI) in
+    let has_Literal =
+      Lisql_type.(check_input_constraint focus_type_constraints.input_constr `String) in
+    match has_IRI, has_Literal with
+    | true, true -> `Mixed
+    | true, false -> `OnlyIRIs
+    | false, true -> `OnlyLiterals
+    | false, false -> `OnlyIRIs
+						  
   method define_sparql term_constr ~limit =
     match s_sparql.Lisql2sparql.query_opt with
     | None ->
        sparql_opt <- None
     | Some query ->
-       let ft : Lisql2sparql.filter_type =
-	 let has_IRI =
-	   Lisql_type.(check_input_constraint focus_type_constraints.input_constr `IRI) in
-	 let has_Literal =
-	   Lisql_type.(check_input_constraint focus_type_constraints.input_constr `String) in
-	 match has_IRI, has_Literal with
-	 | true, true -> `Mixed
-	 | true, false -> `OnlyIRIs
-	 | false, true -> `OnlyLiterals
-	 | false, false -> `OnlyIRIs in
+       let ft = self#filter_type in
        let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
        let froms = Sparql_endpoint.config_default_graphs#froms in
        let sparql = query
 		      ~hook:(fun tx form ->
-			     let form_constr = Lisql2sparql.filter_constr_entity ft sparql_genvar tx term_constr in
+			     let form_constr = Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr ft in
 			     if Lisql.hierarchy_of_focus focus = None (* TODO: improve this rough hack *)
 			     then Sparql.formula_and form_constr form
 			     else Sparql.formula_and form form_constr)
@@ -974,7 +976,7 @@ object (self)
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
     let sparql_term =
       "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity `OnlyIRIs sparql_genvar (Sparql.var "term") constr) :> string) ^
+	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs) :> string) ^
 	filter_hidden_URIs "term" ^
 	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)

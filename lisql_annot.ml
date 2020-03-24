@@ -482,9 +482,9 @@ let rec annot_elt_p1 pos f ctx =
   | Search (_,c) ->
      let a = annot () in
      a, Search (a, c)
-  | Filter (_,c) ->
+  | Filter (_,c,ft) ->
      let a = annot () in
-     a, Filter (a, c)
+     a, Filter (a, c, ft)
   | And (_,lr) ->
      let la, lax =
        List.split (List.map

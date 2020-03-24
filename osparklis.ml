@@ -331,7 +331,7 @@ let term_selection = new increment_selection "#selection-terms"
 let property_selection = new increment_selection "#selection-properties"
 let modifier_selection = new increment_selection "#selection-modifiers"
 
-  class place (endpoint : string) (foc : Lisql.focus) =
+class place (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable lis = new Lis.place endpoint foc
   method lis = lis
@@ -1285,13 +1285,15 @@ let initialize endpoint focus =
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
-	   let constr = norm_constr history#present#term_constr in
+	   let present = history#present in
+	   let constr = norm_constr present#term_constr in
 	   if constr = Lisql.True
 	   then
 	     Jsutils.alert "Empty filter"
 	   else
-	     history#update_focus ~push_in_history:true
-				  (Lisql.insert_constr constr)))));
+	     history#update_focus
+	       ~push_in_history:true
+	       (Lisql.insert_constr constr present#lis#filter_type)))));
 
     List.iter
       (fun (getting_constr, input_changed,

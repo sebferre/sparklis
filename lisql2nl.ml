@@ -783,7 +783,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
        A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (`Relation, top_rel)))), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)]))
     | _ -> assert false )
   | Search (annot,c) -> vp_of_constr grammar annot c
-  | Filter (annot,c) -> vp_of_constr grammar annot c
+  | Filter (annot,c,ft) -> vp_of_constr grammar annot c
   | And (annot,lr) -> A (annot, `And (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
   | Or (annot,lr) -> A (annot, `Or (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
   | Maybe (annot,x) -> A (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
