@@ -230,7 +230,7 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
     | ExternalSearch (_, None) -> Sparql.True
     | ExternalSearch (_, Some lt) ->
        Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
-
+					
 let filter_constr_entity gv t c (ft : Lisql.filter_type) = filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
 let filter_constr_class gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_class_lexicon#properties_langs t c
 let filter_constr_property gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_property_lexicon#properties_langs t c
@@ -243,7 +243,7 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft 
   if Sparql.formula_is_binding f
   then f
   else Sparql.(formula_and (Pattern (something t)) f)
-
+	      
 let triple_arg arg x y z =
   Sparql.Pattern
     ( match arg with

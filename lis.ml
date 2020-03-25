@@ -770,7 +770,7 @@ object (self)
     | true, false -> `OnlyIRIs
     | false, true -> `OnlyLiterals
     | false, false -> `OnlyIRIs
-						  
+
   method define_sparql term_constr ~limit =
     match s_sparql.Lisql2sparql.query_opt with
     | None ->
@@ -952,9 +952,10 @@ object (self)
 	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method private ajax_index_terms_init constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method private ajax_index_terms_init ?(freq0 = false) constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
+      let value = if freq0 then 0 else 1 in
       let max_value = None in
       let partial = results_term.Sparql_endpoint.length = config_max_results#value in
       let unit = `Results in
@@ -963,7 +964,7 @@ object (self)
 	(fun t ->
 	 enqueue_term t;
 	 (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
-	 incr_index#add (Lisql.IncrTerm t, Some { value=1; max_value; partial; unit }))
+	 incr_index#add (Lisql.IncrTerm t, Some { value; max_value; partial; unit }))
 	list_term;
       (* synchronizing hierarchies and lexicons and continuing *)
       sync_terms (* datatypes and entities *)
@@ -988,6 +989,9 @@ object (self)
       k ~partial:false (Some (new incr_freq_index))
     else if focus_descr#unconstrained then
       self#ajax_index_terms_init constr elt k
+    else if constr <> Lisql.True
+	    && focus_term_index#is_empty && not (Lisql.is_undef_expr_focus focus) then (* typically, when no match for query+constr, then show constr match with freq=0 *)
+      self#ajax_index_terms_init ~freq0:true constr elt k
     else begin
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
@@ -1066,7 +1070,7 @@ object (self)
 	    k ~partial (Some incr_index)))
       end
 
-  method private ajax_index_properties_init constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method private ajax_index_properties_init ?(freq0=false) constr elt (k : partial:bool -> incr_freq_index option -> unit) =
     let process results_class results_prop results_pred =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -1087,7 +1091,7 @@ object (self)
 		Lexicon.enqueue_class uri
 	     | _ -> ())
 	   lt;
-	 let freq = { value=count; max_value; partial=partial_class; unit } in
+	 let freq = { value=(if freq0 then 0 else count); max_value; partial=partial_class; unit } in
 	 Lisql2sparql.WhichClass.increments_of_terms ~init:true lt |>
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
@@ -1100,7 +1104,7 @@ object (self)
 		Lexicon.enqueue_property uri
 	     | _ -> ())
 	   lt;
-	 let freq = { value=count; max_value; partial=partial_prop; unit } in
+	 let freq = { value=(if freq0 then 0 else count); max_value; partial=partial_prop; unit } in
 	 Lisql2sparql.WhichProp.increments_of_terms ~init:true lt |>
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
@@ -1112,7 +1116,7 @@ object (self)
 		Ontology.enqueue_pred p;
 		Lexicon.enqueue_property p
 	     | _ -> ()) lt;
-	 let freq = { value=count; max_value; partial=partial_pred; unit } in
+	 let freq = { value=(if freq0 then 0 else count); max_value; partial=partial_pred; unit } in
 	 Lisql2sparql.WhichPred.increments_of_terms ~init:true lt |>
 	   List.iter
 	     (fun incr ->
@@ -1229,7 +1233,7 @@ object (self)
 		Lexicon.enqueue_class uri
 	     | _ -> ())
 	   lt;
-	 let freq = { value=count; max_value; partial=false; unit } in
+	 let freq = { value=(if freq0 then 0 else count); max_value; partial=false; unit } in
 	 Lisql2sparql.WhichClass.increments_of_terms ~init:true lt |>
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
@@ -1237,7 +1241,7 @@ object (self)
 	Lexicon.sync_concepts (fun () ->
 	  k ~partial (Some incr_index))) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
-      let freq = { value=1; max_value=None; partial=true; unit=`Entities } in
+      let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=`Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       let open Sparql_endpoint in
       ( match results_class.bindings with
@@ -1332,6 +1336,13 @@ object (self)
       let int_index_prop = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichProp.pattern_vars) results_prop in
       let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
       let int_index_arg = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichArg.pattern_vars) results_arg in
+      if constr <> Lisql.True
+	 && int_index_class#is_empty
+	 && int_index_prop#is_empty
+	 && int_index_pred#is_empty
+	 && int_index_arg#is_empty
+      then self#ajax_index_properties_init ~freq0:true constr elt k
+      else (
       let incr_index = new incr_freq_tree_index term_hierarchy in
       let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
       let trans_rel = ref false in
@@ -1463,7 +1474,7 @@ object (self)
 	[Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
-	  k ~partial (Some incr_index)))
+	  k ~partial (Some incr_index))))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1635,8 +1646,9 @@ object (self)
 			Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
       Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	(function
-	| [results_class; results_prop; results_pred; results_arg] -> process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
-	| _ -> assert false)
+	  | [results_class; results_prop; results_pred; results_arg] ->
+	     process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
+	  | _ -> assert false)
 	(fun _ -> ajax_intent ())
     in
     if focus_term_index#is_empty then
