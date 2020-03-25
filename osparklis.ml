@@ -695,7 +695,7 @@ object (self)
 		 term_selection#reset;
 		 jquery_hide "#selection-terms";
 		 stop_propagation_from elt_list "a, .term-input";
-		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
 		   if jquery_shown "#selection-terms" (*to_bool ev##ctrlKey*)
 		   then toggle_incr elt
 		   else apply_incr elt));
@@ -771,7 +771,7 @@ object (self)
 		 property_selection#reset;
 		 jquery_hide "#selection-properties";
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
-		 jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
 		   if jquery_shown "#selection-properties" (* to_bool ev##ctrlKey *)
 		   then toggle_incr elt
 		   else apply_incr elt));
@@ -830,7 +830,7 @@ object (self)
 	jquery "#focus-dropdown" (onclick (fun elt ev ->
 	  Dom_html.stopPropagation ev;
 	  jquery_toggle "#focus-dropdown-content"));
-	jquery_all_from elt_dropdown ".increment" (onclick (fun elt ev ->
+	jquery_all_from elt_dropdown ".valid-increment" (onclick (fun elt ev ->
 	   Dom_html.stopPropagation ev;
 	   jquery_hide "#focus-dropdown-content";
 	   apply_incr elt)))
@@ -859,7 +859,7 @@ object (self)
 	   stop_propagation_from elt_list ".term-input";
 	   jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 	     apply_incr elt));
-	   jquery_all_from elt_list ".increment" (onclick (fun elt ev ->
+	   jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
 	     if jquery_shown "#selection-modifiers" (* to_bool ev##ctrlKey *)
 	     then toggle_incr elt
 	     else apply_incr elt));

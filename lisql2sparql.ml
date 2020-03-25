@@ -240,9 +240,20 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft 
   let f = filter_constr_gen (`Terms,ft,`Bind) gv
 			    ~label_properties_langs
 			    t c in
-  if Sparql.formula_is_binding f
-  then f
-  else Sparql.(formula_and (Pattern (something t)) f)
+  let open Sparql in
+  let binding_pat =
+    match Lisql.constr_filter_type c with
+    | `OnlyIRIs -> something t
+    | `OnlyLiterals -> triple (bnode "") (var (gv#new_var "p")) t
+    | `Mixed -> union [something t;
+		       triple (bnode "") (var (gv#new_var "p")) t] in
+  match f with
+  | Pattern _ -> f
+  | Subquery _ -> f
+  | Filter expr -> Pattern (join [binding_pat; filter expr])
+  | True -> True
+  | False -> False
+  | Or (pat,expr) -> Pattern (union [pat; join [binding_pat; filter expr]])
 	      
 let triple_arg arg x y z =
   Sparql.Pattern

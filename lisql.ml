@@ -33,6 +33,23 @@ type constr =
   | HasDatatype of string
   | ExternalSearch of search * Rdf.term list option (* search service and query, results (None means no constraint, Some lt means one of lt *)
 
+let constr_filter_type : constr -> filter_type = function
+  | True -> `Mixed
+  | MatchesAll _
+  | MatchesAny _
+  | IsExactly _
+  | StartsWith _
+  | EndsWith _ -> `Mixed
+  | After _
+  | Before _
+  | FromTo _
+  | HigherThan _
+  | LowerThan _
+  | Between _
+  | HasLang _
+  | HasDatatype _ -> `OnlyLiterals
+  | ExternalSearch _ -> `OnlyIRIs
+					
 let reset_search = function
   | `Wikidata _ -> `Wikidata ["..."]
   | `TextQuery _ -> `TextQuery ["..."]

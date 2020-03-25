@@ -977,9 +977,10 @@ object (self)
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
     let sparql_term =
       "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs) :> string) ^
+	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr (if freq0 then `Mixed else `OnlyIRIs)) :> string) ^
 	filter_hidden_URIs "term" ^
-	" FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
+	  " FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
+    Jsutils.firebug sparql_term;
     Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
       (fun code -> k ~partial:true None)
@@ -1654,7 +1655,7 @@ object (self)
     if focus_term_index#is_empty then
       if some_focus_term_is_blank then ajax_intent ()
       else if not focus_pred_args_index#is_empty then ajax_extent ()
-      else self#ajax_index_properties_init constr elt k
+      else self#ajax_index_properties_init ~freq0:true constr elt k
     else
       if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
       then ajax_intent ()

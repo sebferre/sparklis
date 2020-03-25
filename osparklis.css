@@ -228,15 +228,21 @@ select {
 }
 
 .increment {
-    cursor:pointer;
     display:inline-block;
     vertical-align:top;
     line-height:100%;
     white-space:normal;
+}
+.valid-increment {
+    cursor:pointer;
     transition:all 0.2s ease;
 }
-
-.increment:hover:not(.selected-incr) {
+.invalid-increment {
+    cursor:not-allowed;
+    text-decoration:line-through;
+    opacity:0.5;
+}
+.valid-increment:hover:not(.selected-incr) {
     background-color:#f8f880; /* --color-prehighlight */
 }
 

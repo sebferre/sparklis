@@ -357,7 +357,7 @@ let html_input dt =
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
 let html_freq ?id ?classe ?title ~unit ~partial value =
-  if value = 1
+  if value <= 1
   then ""
   else
     let classe_prefix = match classe with None -> "" | Some c -> c ^ " " in 
@@ -606,9 +606,15 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
     | IncrSelection _ ->
        true, "<button id=\"" ^ key ^ "\" class=\"btn btn-default btn-sm selection-increment\">" ^ html ^ "</button> "
     | _ ->
+       let classe = "increment" in
        let classe =
-	 if filterable then "increment filterable-increment"
-	 else "increment" in
+	 match freq_opt with
+	 | Some {Lis.value=0} -> classe ^ " invalid-increment"
+	 | _ -> classe ^ " valid-increment" in
+       let classe =
+	 if filterable
+	 then classe ^ " filterable-increment"
+	 else classe in
        false, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq) in
   Some (sort_data, key, is_selection_incr, html)
  end
