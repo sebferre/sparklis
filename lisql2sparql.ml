@@ -242,7 +242,7 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft 
 			    t c in
   let open Sparql in
   let binding_pat =
-    match Lisql.constr_filter_type c with
+    match ft with
     | `OnlyIRIs -> something t
     | `OnlyLiterals -> triple (bnode "") (var (gv#new_var "p")) t
     | `Mixed -> union [something t;
