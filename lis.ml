@@ -989,8 +989,7 @@ object (self)
       k ~partial:false (Some (new incr_freq_index))
     else if focus_descr#unconstrained then
       self#ajax_index_terms_init constr elt k
-    else if constr <> Lisql.True
-	    && focus_term_index#is_empty && not (Lisql.is_undef_expr_focus focus) then (* typically, when no match for query+constr, then show constr match with freq=0 *)
+    else if focus_term_index#is_empty && not (Lisql.is_undef_expr_focus focus) then (* typically, when no match for query+constr, then show constr match with freq=0 *)
       self#ajax_index_terms_init ~freq0:true constr elt k
     else begin
       let max_value = None (*Some self#results_nb*) in

@@ -251,7 +251,7 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft 
   | Pattern _ -> f
   | Subquery _ -> f
   | Filter expr -> Pattern (join [binding_pat; filter expr])
-  | True -> True
+  | True -> Pattern binding_pat
   | False -> False
   | Or (pat,expr) -> Pattern (union [pat; join [binding_pat; filter expr]])
 	      
