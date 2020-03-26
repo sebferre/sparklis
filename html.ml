@@ -400,7 +400,7 @@ let rec html_of_nl_xml ?(controls="") ?(highlight=false) (state : state) (xml : 
      html_of_nl_xml ~highlight state (Focus (curr1||curr2, foc1, xml1 @ xml2) :: xml)
   | Highlight xml1 :: Highlight xml2 :: xml ->
      html_of_nl_xml ~controls ~highlight state (Highlight (xml1 @ xml2) :: xml) *)
-  | [] -> ""
+  | [] -> controls (* should not happen *)
   | [node] ->
      html_of_nl_node ~controls ~highlight state node
   | node :: xml ->
