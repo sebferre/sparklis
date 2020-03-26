@@ -500,8 +500,12 @@ and property_range_of_ctx_p1 = function
   | _ -> None
  *)
 	     
-let at_sn cp ctx =
+let rec at_sn cp ctx =
   match cp, ctx with
+  | CCons (_, arg, NAnd (_,l), cp), _ ->
+     at_sn (CAnd ((), List.map (fun np -> CCons ((),arg,np,cp)) l)) ctx
+  | CCons (_, arg, NOr (_,l), cp), _ ->
+     at_sn (COr ((), List.map (fun np -> CCons ((),arg,np,cp)) l)) ctx
   | CAnd (_,l), CAndX (ll_rr,ctx2) ->
      AtSn (CAnd ((), list_of_list_ctx l ll_rr), ctx2)
   | COr (_,l), COrX (ll_rr,ctx2) ->
@@ -1484,7 +1488,8 @@ let rec insert_elt_p1 ?(elt_ids = []) (elt : unit elt_p1) : focus -> (focus * de
 let rec insert_elt_s1 elt focus : (focus * delta) option =
   let focus2_opt =
     match focus with
-    | AtSn (CCons (_,arg,np,cp), ctx) -> insert_elt_s1 elt (AtS1 (np, CConsX1 (arg,cp,ctx)))
+    | AtSn (CCons (_,arg,_np,cp), ctx) -> Some (at_sn (CCons ((),arg,elt,CNil ())) ctx, DeltaNil)
+    (*       insert_elt_s1 elt (AtS1 (np, CConsX1 (arg,cp,ctx))) *)
     | AtSn _ -> None
     | AtS1 (_,ctx) when is_hierarchy_ctx_s1 ctx -> Some (at_s1 elt ctx, DeltaNil)
     | AtS1 ((Det _ as _np), ctx) -> Some (at_s1 elt ctx, DeltaNil)

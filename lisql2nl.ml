@@ -1256,7 +1256,7 @@ let xml_maybe grammar annot_opt xml =
 let xml_not grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
-let xml_epsilon_head xml = Kwd "•" :: xml
+let xml_epsilon_head xml = (*Kwd "•"*) Kwd "⚬" :: xml
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
@@ -1440,7 +1440,7 @@ and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_
 and xml_cp grammar ~id_labelling cp =
   xml_annotated cp
     (fun annot_opt -> function
-    | `Nil -> []
+    | `Nil -> xml_epsilon_head []
     | `Cons (pp,cp) -> xml_pp grammar ~id_labelling pp @ xml_cp grammar ~id_labelling cp
     | `And lr -> xml_and grammar (List.map (xml_cp grammar ~id_labelling) lr)
     | `Or lr -> xml_or grammar annot_opt (List.map (xml_cp grammar ~id_labelling) lr)
@@ -1449,7 +1449,7 @@ and xml_cp grammar ~id_labelling cp =
 and xml_pp_list grammar ~id_labelling lpp =
   List.concat (List.map (xml_pp grammar ~id_labelling) lpp)
 and xml_pp grammar ~id_labelling = function
-  | `Bare np -> xml_np grammar ~id_labelling np
+  | `Bare np -> xml_epsilon_head (xml_np grammar ~id_labelling np)
   | `Prep (w,np) -> Word w :: xml_np grammar ~id_labelling np
   | `AtNoun (w,np) -> Kwd grammar#with_ :: Word w :: xml_np grammar ~id_labelling np
   | `At np -> Kwd grammar#with_ :: xml_np grammar ~id_labelling np
