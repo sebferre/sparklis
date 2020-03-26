@@ -409,6 +409,7 @@ let rec html_of_nl_xml ?(controls="") ?(highlight=false) (state : state) (xml : 
 and html_of_nl_node ~(controls : string) ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
+    | Epsilon -> html_span (*"•"*) "⚬" ^ controls
     | Kwd s -> html_span s ^ controls
     | Word w -> html_word w ^ controls
     | Input dt -> html_input dt ^ controls

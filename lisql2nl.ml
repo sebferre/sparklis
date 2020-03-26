@@ -1169,6 +1169,7 @@ end
 
 type xml = node list
 and node =
+  | Epsilon
   | Kwd of string
   | Word of word
   | Input of input_type
@@ -1185,6 +1186,7 @@ and node =
 let rec xml_text_content grammar l =
   String.concat " " (List.map (xml_node_text_content grammar) l)
 and xml_node_text_content grammar = function
+  | Epsilon -> ""
   | Kwd s -> s
   | Word w -> word_text_content grammar w
   | Input typ -> ""
@@ -1198,10 +1200,12 @@ and xml_node_text_content grammar = function
   | Suspended x -> xml_text_content grammar x
   | DeleteIncr -> ""
 
+(* removing from XML: focus, highlight, quotes if quoted=true *)
 let rec xml_label_prune ~quoted l =
   List.concat (List.map (xml_node_label_prune ~quoted) l)
 and xml_node_label_prune ~quoted node =
   match node with
+  | Epsilon -> []
   | Kwd _
   | Word _
   | Input _
@@ -1256,7 +1260,7 @@ let xml_maybe grammar annot_opt xml =
 let xml_not grammar annot_opt xml =
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
   xml_suspended susp [Word (`Op grammar#not_)] @ xml
-let xml_epsilon_head xml = (*Kwd "•"*) Kwd "⚬" :: xml
+let xml_epsilon_head xml = Epsilon :: xml
 let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
@@ -1510,7 +1514,8 @@ let xml_incr_coordinate grammar focus xml = xml
 
 let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
   let focus_span = focus_span incr in
-  match incr with
+  xml_label_prune ~quoted:false
+  ( match incr with
   | IncrSelection (selop,_) ->
      [Selection (xml_selection_op grammar selop)]
   | IncrInput (_,typ) ->
@@ -1663,7 +1668,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
 	    (fun i -> if i=pos then focus_span_np incr else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
-  | IncrName name -> [Input `String; Word (`Op "="); Word focus_span]
+  | IncrName name -> [Input `String; Word (`Op "="); Word focus_span])
 
 		       
 (* main verbalization functions *)
