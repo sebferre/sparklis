@@ -33,6 +33,12 @@ let take_rest n l =
   let rev_t, r = aux (n,[],l) in
   List.rev rev_t, r
 
+let rec map_last (f : bool -> 'a -> 'b) (l : 'a list) : 'b list =
+  match l with
+  | [] -> []
+  | [x] -> [f true x]
+  | x::r -> f false x :: map_last f r
+		    
 let rec bin_list n l =
   if l = []
   then []

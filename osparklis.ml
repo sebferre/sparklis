@@ -422,7 +422,7 @@ object (self)
 	      onhover (fun elt_foc ev ->
 		       Dom_html.stopPropagation ev;
 		       if not (to_bool elt_foc##classList##contains(str_highlighted)) (* not the current focus *)
-			  && Opt.case (ev##target) (fun () -> true) (fun target -> to_string target##tagName = "SPAN")
+			  && Opt.case (ev##target) (fun () -> true) (fun target -> to_string target##tagName = "SPAN") (* to avoid hover on empty area *)
 			  && not (jquery_shown "#focus-dropdown-content") then (
 			 elt_foc##classList##add(str_prehighlighted);
 			 jquery_all_from

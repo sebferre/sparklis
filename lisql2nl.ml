@@ -1180,7 +1180,6 @@ and node =
   | Focus of bool * focus * xml (* bool for is_current_focus *)
   | Highlight of xml
   | Suspended of xml
-  | DeleteCurrentFocus
   | DeleteIncr
 
 let rec xml_text_content grammar l =
@@ -1197,7 +1196,6 @@ and xml_node_text_content grammar = function
   | Focus (curr,foc,x) -> xml_text_content grammar x
   | Highlight x -> xml_text_content grammar x
   | Suspended x -> xml_text_content grammar x
-  | DeleteCurrentFocus -> ""
   | DeleteIncr -> ""
 
 let rec xml_label_prune ~quoted l =
@@ -1218,7 +1216,6 @@ and xml_node_label_prune ~quoted node =
   | Focus (curr, foc, x) -> xml_label_prune ~quoted x
   | Highlight x -> xml_label_prune ~quoted x
   | Suspended x -> [Suspended (xml_label_prune ~quoted x)]
-  | DeleteCurrentFocus
   | DeleteIncr -> [node]
 
 
@@ -1276,7 +1273,7 @@ let xml_focus annot xml =
      let pos = annot#focus_pos in
      let current_focus, xml =
        match pos with
-       | `At -> true, [Highlight (xml @ [DeleteCurrentFocus])]
+       | `At -> true, [Highlight xml]
        | `Below -> false, [Highlight xml]
        | `Aside true -> false, [Suspended xml]
        | _ -> false, xml in

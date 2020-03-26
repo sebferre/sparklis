@@ -376,7 +376,15 @@ let html_focus_dropdown =
   html_span ~id:"focus-dropdown"
 	    (html_glyphicon "menu-hamburger")
   ^ "<div id=\"focus-dropdown-content\" style=\"display:none\"></div>"
-	 
+
+let html_focus_controls () =
+  " "
+  ^ html_delete
+      ~id:"delete-current-focus"
+      ~title:Lisql2nl.config_lang#grammar#tooltip_delete_current_focus
+      ()
+  ^ html_focus_dropdown
+      
 let append_node_to_xml node xml =
   List.rev (node :: List.rev xml)
 let append_node_to_xml_list node lxml =
@@ -384,35 +392,49 @@ let append_node_to_xml_list node lxml =
   | [] -> [[node]]
   | last::rest -> List.rev (append_node_to_xml node last :: rest)
     
-let rec html_of_nl_xml ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
+let rec html_of_nl_xml ?(controls="") ?(highlight=false) (state : state) (xml : Lisql2nl.xml) : string =
   let open Lisql2nl in
   match xml with
-  | Enum (sep,lxml) :: DeleteCurrentFocus :: xml ->
-    html_of_nl_xml ~highlight state (Enum (sep, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
-  | Coord (coord,lxml) :: DeleteCurrentFocus :: xml ->
-    html_of_nl_xml ~highlight state (Coord (coord, append_node_to_xml_list DeleteCurrentFocus lxml) :: xml)
-  | Focus (curr,foc,xml1) :: DeleteCurrentFocus :: xml ->
-    html_of_nl_xml ~highlight state (Focus (curr, foc, append_node_to_xml DeleteCurrentFocus xml1) :: xml)
-  | Highlight xml1 :: DeleteCurrentFocus :: xml ->
-    html_of_nl_xml ~highlight state (Highlight (append_node_to_xml DeleteCurrentFocus xml1) :: xml)
-  | Focus (curr1, foc1, xml1) :: Focus (curr2, foc2, xml2) :: xml when foc1 = foc2 -> html_of_nl_xml ~highlight state (Focus (curr1||curr2, foc1, xml1 @ xml2) :: xml)
-  | Highlight xml1 :: Highlight xml2 :: xml -> html_of_nl_xml ~highlight state (Highlight (xml1 @ xml2) :: xml)
-  | node :: xml -> html_of_nl_node ~highlight state node ^ (if xml=[] then "" else " " ^ html_of_nl_xml ~highlight state xml)
+(*  | Focus (curr1, foc1, xml1) :: Focus (curr2, foc2, xml2) :: xml
+       when (foc1 = foc2) ->
+     html_of_nl_xml ~highlight state (Focus (curr1||curr2, foc1, xml1 @ xml2) :: xml)
+  | Highlight xml1 :: Highlight xml2 :: xml ->
+     html_of_nl_xml ~controls ~highlight state (Highlight (xml1 @ xml2) :: xml) *)
   | [] -> ""
-and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
+  | [node] ->
+     html_of_nl_node ~controls ~highlight state node
+  | node :: xml ->
+     html_of_nl_node ~controls:"" ~highlight state node
+     ^ " " ^ html_of_nl_xml ~controls ~highlight state xml
+and html_of_nl_node ~(controls : string) ?(highlight=false) (state : state) : Lisql2nl.node -> string = 
   let open Lisql2nl in
   function
-    | Kwd s -> html_span s
-    | Word w -> html_word w
-    | Input dt -> html_input dt
-    | Selection xml_selop -> html_of_nl_xml ~highlight state xml_selop
-    | Suffix (xml,suf) -> html_of_nl_xml ~highlight state xml ^ suf
-    | Enum (sep,lxml) -> html_span (String.concat sep (List.map (html_of_nl_xml ~highlight state) lxml))
-    | Quote (left, xml, right) -> html_span (left ^ html_of_nl_xml ~highlight state xml ^ right)
+    | Kwd s -> html_span s ^ controls
+    | Word w -> html_word w ^ controls
+    | Input dt -> html_input dt ^ controls
+    | Selection xml_selop -> html_of_nl_xml ~controls ~highlight state xml_selop
+    | Suffix (xml,suf) -> html_span (html_of_nl_xml ~controls:"" ~highlight state xml ^ suf) ^ controls
+    | Enum (sep,lxml) ->
+       html_span
+	 (String.concat
+	    sep
+	    (Common.map_last
+	       (fun last xml ->
+		html_of_nl_xml
+		  ~controls:(if last then controls else "")
+		  ~highlight state xml)
+	       lxml))
+    | Quote (left, xml, right) -> html_span (left ^ html_of_nl_xml ~controls:"" ~highlight state xml ^ right) ^ controls
     | Coord (coord,lxml) ->
       "<ul class=\"coordination\"><li>"
       ^ String.concat ("</li><li>" ^ html_span (" " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " ")))
-		      (List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml)
+		      (Common.map_last
+			 (fun last xml ->
+			  html_highlight highlight
+					 (html_of_nl_xml
+					    ~controls:(if last then controls else "")
+					    ~highlight state xml))
+			 lxml)
       ^ "</li></ul>"
 (*      String.concat (" " ^ html_highlight highlight (html_of_nl_xml ~highlight state coord ^ " "))
 	(List.map (fun xml -> html_highlight highlight (html_of_nl_xml ~highlight state xml)) lxml) *)
@@ -425,18 +447,20 @@ and html_of_nl_node ?(highlight=false) (state : state) : Lisql2nl.node -> string
 	     | Highlight xml1 :: xml2 -> Highlight (Kwd "▼" :: xml1) :: xml2
 	     | _ -> Kwd "▼" :: xml )
 	| _ -> xml in
-      let html = html_of_nl_xml ~highlight state xml in
+      let html =
+	let controls =
+	  if curr
+	  then html_focus_controls ()
+	  else controls in
+	html_of_nl_xml ~controls ~highlight state xml in
       html_span ~id ~classe:(if curr then "focus highlighted" else "focus") html
     | Highlight xml ->
        html_highlight true
-	 (html_of_nl_xml ~highlight:true state xml)
+	 (html_of_nl_xml ~controls ~highlight:true state xml)
     | Suspended xml ->
-      html_span ~classe:"suspended" (html_of_nl_xml ~highlight state xml)
-    | DeleteCurrentFocus ->
-       html_delete ~id:"delete-current-focus" ~title:Lisql2nl.config_lang#grammar#tooltip_delete_current_focus () ^
-	 html_focus_dropdown
+      html_span ~classe:"suspended" (html_of_nl_xml ~controls ~highlight state xml)
     | DeleteIncr ->
-      html_delete ~title:Lisql2nl.config_lang#grammar#tooltip_remove_element_at_focus ()
+      html_delete ~title:Lisql2nl.config_lang#grammar#tooltip_remove_element_at_focus () ^ controls
 and html_highlight h xml =
   if h
   then html_span ~classe:"highlighted" xml
