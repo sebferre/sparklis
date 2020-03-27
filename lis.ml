@@ -1122,6 +1122,11 @@ object (self)
 	      incr_index#add (incr, Some freq);
 	      Lisql2sparql.WhichPred.increments_hidden_by_increment ~init:true incr |>
 		List.iter incr_index#remove));
+      (* adding other increments *)
+      if not freq0 then (
+	incr_index#add (Lisql.IncrTriple Lisql.S, None);
+	incr_index#add (Lisql.IncrTriple Lisql.O, None)
+      );
       Ontology.sync_concepts (fun () ->
 	Lexicon.sync_concepts (fun () ->
 	    k ~partial (Some incr_index)))
