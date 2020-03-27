@@ -2220,7 +2220,7 @@ let delete_list = function
 
 let rec delete_elt_sn_is_top cp =
   let cp', ids = delete_elt_sn cp in
-  (cp = cp'), cp', ids
+  (if cp = cp' then None else Some cp'), ids
 and delete_elt_sn : unit elt_sn -> unit elt_sn * delta_ids = function
   | CNil () -> CNil (), []
   | CCons ((), Q _, _, cp) -> delete_elt_sn cp
@@ -2228,6 +2228,13 @@ and delete_elt_sn : unit elt_sn -> unit elt_sn * delta_ids = function
      let np, ids1 = delete_elt_s1 np in
      let cp, ids2 = delete_elt_sn cp in
      CCons ((), arg, np, cp), ids1@ids2
+  | CAnd ((), []) -> assert false
+  | CAnd ((), cp::_) -> delete_elt_sn cp
+  | COr ((), []) -> assert false
+  | COr ((), cp::_) -> delete_elt_sn cp
+  | CMaybe ((),cp) -> delete_elt_sn cp
+  | CNot ((),cp) -> delete_elt_sn cp
+(*
   | CAnd ((), l) ->
      ( match delete_elt_sn_list l with
        | [], ids -> CNil (), ids
@@ -2254,6 +2261,7 @@ and delete_elt_sn_list = function
      ( match cp' with
      | CNil () -> l', ids1@ids2
      | cp' -> cp'::l', ids1@ids2 )
+ *)
 and delete_elt_s1 : unit elt_s1 -> unit elt_s1 * delta_ids = function
   | Det ((), An (id,_,_), _) ->
      Det ((), An (id, factory#top_modif, Thing), None), []
@@ -2292,30 +2300,31 @@ let rec delete_ctx_p1 : ctx_p1 -> focus option * delta_ids = function
   | MaybeX ctx -> delete_ctx_p1 ctx
   | NotX ctx -> delete_ctx_p1 ctx
   | InX (npg,ctx) -> delete_ctx_p1 ctx
-and delete_ctx_sn (is_top,f,ids) ctx =
-  if is_top
-  then
-    match ctx with
-    | PredX (arg,pred,ctx2) -> delete_ctx_p1 ctx2
-    | CConsX2 (arg,np,ctx2) ->
-       delete_ctx_sn
-	 (let is_top2, f2, ids2 =
-	    delete_elt_sn_is_top (CCons ((),arg,np,f)) in
-	  is_top2, f2, ids@ids2)
-	 ctx2
-    | CAndX (ll_rr,ctx2) ->
-       ( match delete_list ll_rr with
-	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2)), ids
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))), ids )
-    | COrX (ll_rr,ctx2) ->
-       ( match delete_list ll_rr with
-	 | `Empty -> delete_ctx_sn (is_top,f,ids) ctx2 (* should not happen *)
-	 | `Single elt -> Some (AtSn (elt, ctx2)), ids
-	 | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))), ids )
-    | CMaybeX ctx2 -> Some (at_sn f ctx2), ids
-    | CNotX ctx2 -> Some (at_sn f ctx2), ids
-  else Some (at_sn f ctx), ids
+and delete_ctx_sn (f_opt,ids) ctx =
+  match ctx with
+  | PredX (arg,pred,ctx2) ->
+     ( match f_opt with
+       | None -> delete_ctx_p1 ctx2
+       | Some f -> Some (at_sn f ctx), ids )
+  | CConsX2 (arg,np,ctx2) ->
+     ( match f_opt with
+       | None ->
+	  let f2_opt, ids2 =
+	    delete_elt_sn_is_top (CCons ((),arg,np, CNil ())) in	    
+	  delete_ctx_sn (f2_opt,ids@ids2) ctx2
+       | Some f -> Some (at_sn f ctx), ids )
+  | CAndX (ll_rr,ctx2) ->
+     ( match delete_list ll_rr with
+       | `Empty -> delete_ctx_sn (None,ids) ctx2
+       | `Single elt -> Some (AtSn (elt, ctx2)), ids
+       | `List (elt,ll2,rr2) -> Some (AtSn (elt, CAndX ((ll2,rr2),ctx2))), ids )
+  | COrX (ll_rr,ctx2) ->
+     ( match delete_list ll_rr with
+       | `Empty -> delete_ctx_sn (None,ids) ctx2
+       | `Single elt -> Some (AtSn (elt, ctx2)), ids
+       | `List (elt,ll2,rr2) -> Some (AtSn (elt, COrX ((ll2,rr2),ctx2))), ids )
+  | CMaybeX ctx2 -> delete_ctx_sn (f_opt,ids) ctx2
+  | CNotX ctx2 -> delete_ctx_sn (f_opt,ids) ctx2
 and delete_ctx_s1 f_opt ctx =
   match ctx with
     | IsX ctx2 -> delete_ctx_p1 ctx2
@@ -2356,8 +2365,8 @@ and delete_ctx_s1 f_opt ctx =
 	 | (S|P|O), None -> (* those args cannot be removed *)
 	    delete_ctx_sn
 	      (let np, id = factory#top_s1 in
-	       let is_top2, f2, ids = delete_elt_sn_is_top (CCons ((),arg,np,cp)) in
-	       is_top2, f2, id::ids)
+	       let f2_opt, ids = delete_elt_sn_is_top (CCons ((),arg,np,cp)) in
+	       f2_opt, id::ids)
 	      ctx2
 	 | _, Some f ->
 	    let np, ids = delete_elt_s1 f in
