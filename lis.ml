@@ -463,8 +463,14 @@ let results_shape_of_deps
        | [sh] -> sh
        | lsh -> Concat lsh
   and list_shape_of_fm fm x1 lxr deps =
-    let t1 = Rdf.Var x1 in
-    let terms_with_t1 = FMDeps.merged_with t1 fm in
+    let tx1 = Rdf.Var x1 in
+    let terms_with_t1 = FMDeps.merged_with tx1 fm in
+    let lxr, t1 =
+      try x1::lxr,
+	  List.find (* priority to terms as key *)
+	    (fun t -> not (Rdf.term_is_var t))
+	    terms_with_t1
+      with Not_found -> lxr, tx1 in
     let lx1, lxr =
       List.partition
 	(fun x -> List.mem (Rdf.Var x) terms_with_t1)
@@ -475,21 +481,17 @@ let results_shape_of_deps
 	  | [] -> false
 	  | t::_ -> List.mem t terms_with_t1)
 	deps in
-    let deps1 = (* removing x1 and concrete terms from dependencies *)
+    let deps1 = (* removing t1 from dependencies *)
       List.map
 	(fun dep1 ->
 	 List.filter
-	   (fun t -> t <> t1 && Rdf.term_is_var t)
+	   (fun t -> t <> t1 (*&& Rdf.term_is_var t*))
 	   dep1)
 	deps1 in
     let shape1 =
-      let sh = Map (x1, shape_of_deps deps1 lx1) in
-      List.fold_left (* incorporating associated terms in shape *)
-	(fun sh t ->
-	 match t with
-	 | Rdf.Var _ -> sh
-	 | _ -> Descr (t,sh))
-	sh terms_with_t1 in
+      match t1 with
+      | Rdf.Var x1 -> Map (x1, shape_of_deps deps1 lx1)
+      | _ -> Descr (t1, shape_of_deps deps1 lx1) in
     let lshaper =
       match lxr with
       | [] -> []
