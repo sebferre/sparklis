@@ -356,6 +356,16 @@ type deps_s1 = deps_p1 -> deps
 type deps_s2 = deps_p1 -> deps_p1 -> deps
 type deps_sn = deps_pn -> deps
 
+let string_of_deps deps =
+  String.concat ""
+		(List.map
+		   (fun dep ->
+		    "("
+		    ^ String.concat " "
+				    (List.map Rdf.string_of_term dep)
+		    ^ ")")
+		   deps)
+		
 type sparql_p1 = Sparql.term -> Sparql.formula
 type sparql_p2 = Sparql.term -> Sparql.term -> Sparql.formula
 type sparql_pn = (arg * Sparql.term) list -> Sparql.formula
@@ -913,8 +923,8 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = 
       | AnAggreg (_, id, _, _, _, _) ->
 	 let _d_deps, d = form_p1_opt state relg_opt in
 	form_aggreg_op state idg modifg g d id;
-	form_s1 state np
-      | _ -> assert false )
+	form_s1 state np 
+     | _ -> assert false )
   | NAnd (annot,lr) ->
      let lr_q_deps, lr_q = List.split (List.map (fun elt -> form_s1 ~ignore_top state elt) lr) in
      (fun d -> List.concat (List.map (fun q_deps -> q_deps d) lr_q_deps)),
@@ -950,7 +960,7 @@ and form_s1 ?(ignore_top = false) state : annot elt_s1 -> deps_s1 * sparql_s1 = 
 and form_s2 state : elt_s2 -> deps_s2 * sparql_s2 = function
   | Term term ->
      let t = Sparql.term term in
-     (fun d1 d2 -> d1 term),
+     (fun d1 d2 -> d1 term @ d2 term),
      (fun d1 d2 -> Sparql.formula_and (d1 t) (d2 t))
   | An (id, modif, head) ->
     let qhead = form_head state head in

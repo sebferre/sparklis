@@ -446,14 +446,44 @@ let results_shape_of_deps
       (deps : Lisql2sparql.deps)
       (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
       (lx : Rdf.var list) : results_shape =
-  let fm_of_deps deps =
+  let deps =
+    let rec transform_dep = function
+      (* return dep made of variables only, and in-order term-var dependencies *)
+      (* term-var deps allow to insert Desc (term, ...) above the var *)
+      | [] -> [], []
+      | [t] ->
+	 if Rdf.term_is_var t
+	 then [t], []
+	 else [], []
+      | t1::(t2::r2 as r1) ->
+	 let dep_xs1, deps_tx1 = transform_dep r1 in
+	 if Rdf.term_is_var t1
+	 then t1::dep_xs1, deps_tx1
+	 else (* t1 is not a var *)
+	   if Rdf.term_is_var t2
+	   then dep_xs1, [t1;t2]::deps_tx1 (* adding [term;var] dep *)
+	   else dep_xs1, deps_tx1
+    in
     List.fold_left
-      (fun fm dep ->
-       match dep with
-       | [] -> fm
-       | x::_ -> snd (FMDeps.merge dep fm))
-      FMDeps.empty deps in
+      (fun deps dep ->
+       let dep_xs, deps_tx = transform_dep dep in
+       if dep_xs = []
+       then deps
+       else dep_xs :: deps_tx @ deps)
+      [] deps in
+  let lx = (* excluding geolocation variables *)
+    List.filter
+      (fun x -> not (List.exists (fun (_,(vlat,vlong)) -> x=vlat || x=vlong) geolocs))
+      lx in
   let rec shape_of_deps deps lx : results_shape =
+    let fm_of_deps deps =
+      List.fold_left
+	(fun fm dep ->
+	 match dep with
+	 | [] -> fm
+	 | _ -> snd (FMDeps.merge dep fm))
+	FMDeps.empty deps
+    in
     match lx with
     | [] -> Unit
     | x1::lxr ->
@@ -465,12 +495,20 @@ let results_shape_of_deps
   and list_shape_of_fm fm x1 lxr deps =
     let tx1 = Rdf.Var x1 in
     let terms_with_t1 = FMDeps.merged_with tx1 fm in
-    let lxr, t1 =
-      try x1::lxr,
-	  List.find (* priority to terms as key *)
-	    (fun t -> not (Rdf.term_is_var t))
-	    terms_with_t1
-      with Not_found -> lxr, tx1 in
+    let t1 = (* looking for an adjacent non-var term of tx1, if any *)
+      List.fold_left
+	(fun res dep ->
+	 if List.mem tx1 dep
+	 then
+	   List.fold_right
+	     (fun t res2 ->
+	      if t = tx1 then res (* ignoring terms after tx1 in dep *)
+	      else if Rdf.term_is_var t then res2 (* ignoring other terms *)
+	      else t)
+	     dep res
+	 else res)
+	tx1 deps in
+    let lxr = if t1 = tx1 then lxr else x1::lxr in
     let lx1, lxr =
       List.partition
 	(fun x -> List.mem (Rdf.Var x) terms_with_t1)
@@ -485,7 +523,7 @@ let results_shape_of_deps
       List.map
 	(fun dep1 ->
 	 List.filter
-	   (fun t -> t <> t1 (*&& Rdf.term_is_var t*))
+	   (fun t -> t <> t1)
 	   dep1)
 	deps1 in
     let shape1 =
@@ -498,10 +536,6 @@ let results_shape_of_deps
       | x2::lxr -> list_shape_of_fm fm x2 lxr depsr in
     shape1::lshaper
   in
-  let lx =
-    List.filter
-      (fun x -> not (List.exists (fun (_,(vlat,vlong)) -> x=vlat || x=vlong) geolocs))
-      lx in
   shape_of_deps deps lx
 
 type shape_data =
@@ -565,7 +599,7 @@ let shape_data_of_results
     | Descr (t,sh) ->
        let lv1, c1, f1, d1 = aux sh bindings in
        enqueue_term t;
-       let lv, c, f, ranked_rows = None::lv1, c1, 1+f1, [(1, Some t, d1)] in
+       let lv, c, f, ranked_rows = None::lv1, c1, 0 (*1+f1*), [(1, Some t, d1)] in
        let d = mapn_of_rows `KeyTerm lv f1 ranked_rows in
        lv, c, f, d
   and mapn_of_rows key lv f1 ranked_rows : shape_data =
@@ -845,6 +879,7 @@ object (self)
 			       s_sparql.Lisql2sparql.deps
 			       s_sparql.Lisql2sparql.state#geolocs
 			       (Sparql_endpoint.results_vars res);
+	    Jsutils.firebug ("DEPS: " ^ Lisql2sparql.string_of_deps s_sparql.Lisql2sparql.deps);
 	    Jsutils.firebug ("SHAPE: " ^ string_of_results_shape results_shape);
 	    results_typing <- Lisql_type.of_sparql_results res;
 	    focus_type_constraints <-
