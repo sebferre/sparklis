@@ -984,19 +984,25 @@ and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let v = state#id_labelling#get_id_var id in
   state#set_aggreg v (vg, g, (d (Sparql.var vg :> Sparql.term)));
   state#set_modif vg modifg
-and form_dim state : annot elt_aggreg -> deps * Sparql.projection option * Rdf.var option (* group by var *) * Sparql.formula (* relative *) = function
+and form_dim state
+    : annot elt_aggreg ->
+      deps * Rdf.term option (* non-var term in dim *)
+      * Sparql.projection option * Rdf.var option (* group by var *)
+      * Sparql.formula (* relative *) = function
   | ForEachResult annot -> assert false
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let v = state#id_labelling#get_id_var id in
     state#set_modif v modif;
     let d_deps, d = form_p1_opt state rel_opt in
     let v2 = state#id_labelling#get_id_var id2 in
-    (*[Rdf.Var v; Rdf.Var v2] ::*) d_deps (Rdf.Var v),
-    Some (`Expr (Sparql.var v2 :> Sparql.expr), v), Some v2, (d (Sparql.var v2 :> Sparql.term))
+    d_deps (Rdf.Var v), None,
+    Some (`Expr (Sparql.var v2 :> Sparql.expr), v), Some v2,
+    (d (Sparql.var v2 :> Sparql.term))
   | ForTerm (annot,t,id2) ->
     let v2 = state#id_labelling#get_id_var id2 in
-    [] (*[[t; Rdf.Var v2]]*),
-    None, None, Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
+    [], Some t,
+    None, None,
+    Sparql.Filter (Sparql.expr_comp "=" (Sparql.var v2) (Sparql.term t))
   | _ -> assert false
 and form_aggreg state : annot elt_aggreg -> deps * Sparql.projection * Rdf.var * Sparql.expr (* having expr *) = function
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
@@ -1132,7 +1138,7 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
       let deps =
 	List.fold_left
 	  (fun deps (deps_aggreg,proj,_,_) ->
-	   let new_dep = List.map (fun v -> Rdf.Var v) (snd proj :: vars_dims) in
+	   let new_dep = List.map (fun v -> Rdf.Var v) (vars_dims @ [snd proj]) in
 	   new_dep :: deps_aggreg @ deps)
 	   (* dependency between each aggregate and all dimensions *)
 	  deps l_aggregs in
@@ -1156,18 +1162,21 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
       let aggregs = List.filter is_aggreg dims_aggregs in
       let l_dims = List.map (form_dim state) dims in
       let l_aggregs = List.map (form_aggreg state) aggregs in
-      let deps, projections_dims, vars_dims =
+      let deps, terms_dims, projections_dims, vars_dims =
 	List.fold_right
-	  (fun (deps_dim,proj_opt,_,_) (deps,lproj,lv) ->
+	  (fun (deps_dim,term_opt,proj_opt,_,_) (deps,lt,lproj,lv) ->
 	   let deps = deps_dim@deps in
-	   match proj_opt with
-	   | None -> deps, lproj, lv
-	   | Some proj -> deps, proj::lproj, snd proj :: lv)
-	  l_dims (deps,[],[]) in
+	   let lt = match term_opt with None -> lt | Some t -> t::lt in
+	   let lproj, lv =
+	     match proj_opt with
+	     | None -> lproj, lv
+	     | Some proj -> proj::lproj, snd proj :: lv in
+	   deps,lt,lproj,lv)
+	  l_dims (deps,[],[],[]) in
       let deps, projections_aggregs =
 	List.fold_right
 	  (fun (deps_aggreg,proj,_,_) (deps,lproj) ->
-	   let new_dep = List.map (fun v -> Rdf.Var v) (snd proj :: vars_dims) in
+	   let new_dep = terms_dims @ List.map (fun v -> Rdf.Var v) (vars_dims @ [snd proj]) in
 	   let deps = new_dep :: deps_aggreg @ deps in
 	   (* dependency between each aggregate and all dimensions *)
 	   deps, proj::lproj)
@@ -1175,10 +1184,10 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
       let projections = projections_dims @ projections_aggregs in
       let groupings_dims =
 	List.fold_right
-	  (fun (_,_,group_opt,_) res ->
+	  (fun (_,_,_,group_opt,_) res ->
 	   match group_opt with None -> res | Some group -> group::res)
 	  l_dims [] in
-      let lf_dims = List.map (fun (_,_,_,hav) -> hav) l_dims in
+      let lf_dims = List.map (fun (_,_,_,_,hav) -> hav) l_dims in
       let havings_aggregs = List.map (fun (_,_,_,hav) -> hav) l_aggregs in
       let view_aggreg =
 	(fun ?limit () ->
@@ -1191,7 +1200,7 @@ and form_view_list state (lr : annot elt_s list) (deps : deps) (view : Sparql.vi
 	    then Sparql.Subquery
 	      (Sparql.make_subquery
 		 ~projections:(List.fold_right
-				 (fun (_,_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
+				 (fun (_,_,_,v2_opt,_) res -> match v2_opt with None -> res | Some v2 -> (`Bare,v2)::res) l_dims
 				 (List.map (fun (_,_,v2,_) -> (`Bare,v2)) l_aggregs))
 		 ~groupings:[]
 		 ~having:Sparql.log_true
