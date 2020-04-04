@@ -183,6 +183,8 @@ let sparql_relations =
 							     
 (* configuration *)
 
+open Js_of_ocaml
+       
 open Js
 open Jsutils
 
@@ -200,10 +202,10 @@ object (self)
   val mutable current_relation = inactive_relation
 
   method private get_on input =
-    to_bool input##checked
+    to_bool input##.checked
   method private set_on on =
     if current_on <> on then begin
-      jquery_input input_selector (fun input -> input##checked <- bool on);
+      jquery_input input_selector (fun input -> input##.checked := bool on);
       current_on <- on;
       self#define_relation;
       self#changed

@@ -138,7 +138,7 @@ let focus_pos_down = function
     
 (* annotations *)
 
-module Ids = Set.Make(struct type t=id let compare=Pervasives.compare end)
+module Ids = Set.Make(struct type t=id let compare=Stdlib.compare end)
 
 type annot_ids = { seq : id list; all : Ids.t; defs : Ids.t; dims : Ids.t; refs : Ids.t }
   (* seq : all defined ids, in syntactic ordering 

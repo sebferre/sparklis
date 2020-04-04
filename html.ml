@@ -3,8 +3,9 @@
 
   This file is part of Sparklis.
 *)
-
+open Js_of_ocaml
 open Js
+       
 open Jsutils
 open Lisql
 open Lisql_annot
@@ -95,8 +96,8 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
   (* calls [k] on [None] if the new contraint is not different from [current_constr] *)
   (* BEWARE: call [norm_constr] on result for any semantic use *)
   let open Lisql in
-  let op = to_string (select##value) in
-  let pat = to_string (input##value) in
+  let op = to_string select##.value in
+  let pat = to_string input##.value in
   let lpat = List.filter ((<>) "") (Regexp.split (Regexp.regexp "[ ]+") pat) in
   try
     let new_constr =
@@ -140,7 +141,7 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
       | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
       | "text:query", _ -> ExternalSearch (`TextQuery lpat, None)
       | _ -> True (* in case of undefined option *) in
-    input##style##color <- string "black";
+    input##.style##.color := string "black";
     match new_constr with
     | ExternalSearch (new_s,_) ->
        ( match current_constr with
@@ -192,7 +193,7 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
        then k None
        else k (Some new_constr)
   with Invalid_argument _msg ->
-    input##style##color <- string "red";
+    input##.style##.color := string "red";
     k None
     
 let option_of_constr =
@@ -500,13 +501,13 @@ type compare_incr_data = (float * int) option * int * [`Words of string list | `
 let compare_incr ~(use_freq : bool) (pf1_opt,r1,d1 : compare_incr_data) (pf2_opt,r2,d2 : compare_incr_data) : int =
   let compare3 () = (* sort according to data *)
     match d1, d2 with
-    | `Number f1, `Number f2 -> Pervasives.compare f1 f2
+    | `Number f1, `Number f2 -> Stdlib.compare f1 f2
     | `Number _, `Words _ -> 1 (* words before numbers *)
     | `Words _, `Number _ -> -1
     | `Words lw1, `Words lw2 ->
        if List.for_all (fun w1 -> List.mem w1 lw2) lw1 then -1
        else if List.for_all (fun w2 -> List.mem w2 lw1) lw2 then 1
-       else Pervasives.compare lw1 lw2 in
+       else Stdlib.compare lw1 lw2 in
   let compare2 () = (* sort by rank *)
     if r1 < r2 then -1
     else if r1 > r2 then 1

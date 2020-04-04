@@ -4,6 +4,9 @@
   This file is part of Sparklis.
 *)
 
+open Js_of_ocaml
+open Js_of_ocaml_lwt
+       
 open Js
 open XmlHttpRequest
 open Jsutils
@@ -43,14 +46,14 @@ module Xml = (* CAUTION: some specifics to SPARQL results *)
 struct
   let lookup_prefix (elt : Dom.element t) (ns : string) : string =
     let prefix = ref "" in
-    let node_map = elt##attributes in
-    for i = 0 to node_map##length - 1 do
-      Opt.iter (node_map##item(i))
+    let node_map = elt##.attributes in
+    for i = 0 to node_map##.length - 1 do
+      Opt.iter (node_map##item i)
 	(fun a ->
-	  let value = to_string a##value in
+	  let value = to_string a##.value in
 	  if value = sparql_ns
 	  then
-	    let name = to_string a##name in
+	    let name = to_string a##.name in
 	    try
 	      let pre = String.sub name 6 (String.length name - 6) in (* 6 = length "xmlns:" *)
 	      prefix := pre ^ ":"
@@ -59,8 +62,8 @@ struct
     !prefix
 
   let get (elt : Dom.element t) (tag : string) : Dom.element t =
-    let nodelist = elt##getElementsByTagName(string tag) in
-    Opt.get (nodelist##item(0))
+    let nodelist = elt##getElementsByTagName (string tag) in
+    Opt.get (nodelist##item 0)
       (fun () -> failwith ("Sparql_endpoint.Xml.get: missing tag " ^ tag))
 
   let find (elt : Dom.element t) (tag : string) : Dom.element t option =
@@ -68,17 +71,17 @@ struct
     with _ -> None
 
   let find_all (elt : Dom.element t) (tag : string) : Dom.element t list =
-    let nodelist = elt##getElementsByTagName(string tag) in
-    let l = nodelist##length in
+    let nodelist = elt##getElementsByTagName (string tag) in
+    let l = nodelist##.length in
     let res = ref [] in
     for i = l-1 downto 0 do
-      Opt.iter (nodelist##item(i))
+      Opt.iter (nodelist##item i)
 	(fun e -> res := e::!res)
     done;
     !res
 
   let get_attribute (elt : Dom.element t) (attr : string) : string =
-    Opt.case (elt##getAttribute(string attr))
+    Opt.case (elt##getAttribute (string attr))
       (fun () -> failwith ("Sparql_endpoint.Xml.get_attribute: missing attribute " ^ attr))
       (fun js -> to_string js)
 
@@ -87,12 +90,12 @@ struct
     with _ -> None
 
   let get_text (elt : Dom.element t) : string =
-    Opt.case (elt##firstChild)
+    Opt.case elt##.firstChild
       (fun () -> "")
       (fun node ->
-	if node##nodeType = Dom.TEXT
+	if node##.nodeType = Dom.TEXT
 	then
-	  Opt.case (node##nodeValue)
+	  Opt.case node##.nodeValue
 	    (fun () -> "")
 	    (fun s -> String.trim (to_string s))
 	else "")
@@ -100,7 +103,7 @@ end
 
 let results_of_xml (doc_xml : Dom.element Dom.document t) =
   try
-    let elt_xml : Dom.element t = doc_xml##documentElement in
+    let elt_xml : Dom.element t = doc_xml##.documentElement in
     let prefix = Xml.lookup_prefix elt_xml sparql_ns in
     match Xml.find elt_xml (prefix ^ "boolean") with
     | Some elt_boolean ->
@@ -245,11 +248,11 @@ let results_of_json s_json =
 (* HTTP Requests to SPARQL endpoints *)
 
 let start_progress elt =  (* setting progress cursor on 'elt' *)
-  elt##style##cursor <- string "progress";
-  elt##style##opacity <- def (string "0.7")
+  elt##.style##.cursor := string "progress";
+  elt##.style##.opacity := def (string "0.7")
 let end_progress elt = (* removing progress cursor on 'elt' *)
-  elt##style##cursor <- string "default";
-  elt##style##opacity <- def (string "1")
+  elt##.style##.cursor := string "default";
+  elt##.style##.opacity := def (string "1")
 
 class ajax_pool =
 object
@@ -272,8 +275,8 @@ object
   method abort_all =
     List.iter
       (fun req ->
-	req##onreadystatechange <- (Js.wrap_callback (fun _ -> ()));
-	req##abort())
+	req##.onreadystatechange := (Js.wrap_callback (fun _ -> ()));
+	req##abort)
       reqs;
     reqs <- [];
     List.iter end_progress elts;
@@ -337,7 +340,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
 	  (List.map
 	     (function
              | name,`String s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s)))
-             | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string (s##name)))))
+             | name,`File s -> ((Url.urlencode name) ^ "=" ^ (Url.urlencode (to_string s##.name))))
 	     l) in
       let fields : (string * Form.form_elt) list =
 	[("query", `String (string prologue_sparql))] in
@@ -347,15 +350,15 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
       if config_method_get#value
       then begin
 	let query_url = real_endpoint ^ "?" ^ encode_fields fields in
-	req##_open (Js.string "GET", Js.string query_url, Js._true);
+	req##_open (Js.string "GET") (Js.string query_url) Js._true;
 	Unsafe.set req (string "withCredentials") (bool config_withCredentials#value);
-	req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml")
+	req##setRequestHeader (Js.string "Accept") (Js.string "application/sparql-results+xml")
       end
       else begin
-	req##_open (Js.string "POST", Js.string real_endpoint, Js._true);
+	req##_open (Js.string "POST") (Js.string real_endpoint) Js._true;
 	Unsafe.set req (string "withCredentials") (bool config_withCredentials#value);
-	req##setRequestHeader (Js.string "Content-type", Js.string "application/x-www-form-urlencoded");
-	req##setRequestHeader (Js.string "Accept", Js.string "application/sparql-results+xml")
+	req##setRequestHeader (Js.string "Content-type") (Js.string "application/x-www-form-urlencoded");
+	req##setRequestHeader (Js.string "Accept") (Js.string "application/sparql-results+xml")
       end;
   (*
     let headers s =
@@ -365,9 +368,9 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
     (fun v -> Some (Js.to_string v)) in  
   *)
       let do_check_headers () = () in
-      req##onreadystatechange <- Js.wrap_callback
+      req##.onreadystatechange := Js.wrap_callback
 	(fun _ ->
-	  (match req##readyState with
+	  (match req##.readyState with
         (* IE doesn't have the same semantics for HEADERS_RECEIVED.
            so we wait til LOADING to check headers. See:
            http://msdn.microsoft.com/en-us/library/ms534361(v=vs.85).aspx *)
@@ -378,7 +381,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
 	      pool#remove_req req;
 	      List.iter pool#remove_elt elts;
 	      do_check_headers ();
-	      let code = req##status in
+	      let code = req##.status in
 	  (* Firebug.console##log(string ("HTTP code: " ^ string_of_int code)); *)
 	  (* Firebug.console##log(req##statusText); *)
 	      ( match code / 100 with
@@ -386,19 +389,22 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
 		  (* Firebug.console##log(req##responseText); *)
 	      (*	let results = results_of_json xhr.content in *)
 		  let results_opt =
-                    match Js.Opt.to_option (req##responseXML) with
+                    match Js.Opt.to_option req##.responseXML with
                       | None -> None
                       | Some doc ->
-			if (Js.some doc##documentElement) == Js.null
+			if (Js.some doc##.documentElement) == Js.null
 			then None
-			else begin
-			  let response_text = to_string req##responseText in
-			  if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
-			  Some (response_text, results_of_xml doc)
-			end in
+			else (
+			  match Js.Opt.to_option req##.responseText with
+			  | None -> None
+			  | Some txt ->
+			     let response_text = to_string txt in
+			     if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
+			     Some (response_text, results_of_xml doc)
+			) in
 		  ( match results_opt with
 		    | None ->
-		      Firebug.console##log(string "No XML content");
+		      Firebug.console##log (string "No XML content");
 		      k0 code
 		    | Some (response_text, results) ->
 		      if fail_on_empty_results && results.length = 0
@@ -436,8 +442,8 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
             | _ -> ()));
       List.iter start_progress elts;
       if config_method_get#value
-      then req##send(Js.null)
-      else req##send(Js.some (string (encode_fields fields)))
+      then req##send Js.null
+      else req##send (Js.some (string (encode_fields fields)))
 
 let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpoint sparql_list k1 k0 =
   match sparql_list with

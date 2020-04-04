@@ -6,6 +6,8 @@
 
 open Lisql
 open Lisql_annot
+
+open Js_of_ocaml
 open Js
 open Jsutils
 

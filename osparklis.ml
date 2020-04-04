@@ -4,6 +4,8 @@
   This file is part of Sparklis.
 *)
 
+open Js_of_ocaml
+open Js_of_ocaml_lwt
 open Js
 open Jsutils
 open Html
@@ -402,7 +404,7 @@ object (self)
 	    let open XmlHttpRequest in
 	    Opt.case http_frame.content
 		     (fun () -> show permalink)
-		     (fun js -> show js##shortUrl);
+		     (fun js -> show js##.shortUrl);
 	    Lwt.return ()))
     else show permalink
 
@@ -421,27 +423,27 @@ object (self)
 	    elt_foc |>
 	      onhover (fun elt_foc ev ->
 		       Dom_html.stopPropagation ev;
-		       if not (to_bool elt_foc##classList##contains(str_highlighted)) (* not the current focus *)
-			  && Opt.case (ev##target) (fun () -> true) (fun target -> to_string target##tagName = "SPAN") (* to avoid hover on empty area *)
+		       if not (to_bool (elt_foc##.classList##contains (str_highlighted))) (* not the current focus *)
+			  && Opt.case ev##.target (fun () -> true) (fun target -> to_string target##.tagName = "SPAN") (* to avoid hover on empty area *)
 			  && not (jquery_shown "#focus-dropdown-content") then (
-			 elt_foc##classList##add(str_prehighlighted);
+			 elt_foc##.classList##add (str_prehighlighted);
 			 jquery_all_from
 			   elt_foc "span"
-			   (fun elt -> elt##classList##add(str_prehighlighted))));
+			   (fun elt -> elt##.classList##add (str_prehighlighted))));
 	    elt_foc |>
 	      onhover_out (fun elt_foc ev ->
 			   Dom_html.stopPropagation ev;
-			   elt_foc##classList##remove(str_prehighlighted);
+			   elt_foc##.classList##remove (str_prehighlighted);
 			   jquery_all_from
 			     elt_foc "span"
-			     (fun elt -> elt##classList##remove(str_prehighlighted)));
+			     (fun elt -> elt##.classList##remove (str_prehighlighted)));
 	    elt_foc |>
 	      onclick (fun elt_foc ev ->
 		       Dom_html.stopPropagation ev;
 		       navigation#update_focus
 			 ~push_in_history:false
 			 (fun _ ->
-			  let key = to_string (elt_foc##id) in
+			  let key = to_string elt_foc##.id in
 			  Some (html_state#get_focus key, Lisql.DeltaNil))));
 	 jquery_from
 	   elt "#delete-current-focus"
@@ -481,12 +483,12 @@ object (self)
 	    let l_constr = get_list_constraints constr in
 	    let html_select_options =
 	      html_list_constr html_state l_constr in
-	    select##innerHTML <- string html_select_options;
+	    select##.innerHTML := string html_select_options;
 	    let op = Html.option_of_constr constr in
 	    let pat = Html.pattern_of_constr constr in
-	    select##value <- string op;
-	    if select##selectedIndex < 0 then select##selectedIndex <- 0;
-	    input##value <- string pat)))
+	    select##.value := string op;
+	    if select##.selectedIndex < 0 then select##.selectedIndex := 0;
+	    input##.value := string pat)))
       [("#select-terms", "#pattern-terms", term_constr, lis#list_term_constraints);
        ("#select-properties", "#pattern-properties", property_constr, lis#list_property_constraints);
        ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [], lis#list_modifier_constraints)]
@@ -517,22 +519,22 @@ object (self)
 	jquery_all_from elt_table ".header[id]" (onclick (fun elt_foc ev ->
 	  navigation#update_focus ~push_in_history:false (fun _ ->
 	    try
-	      let key = to_string (elt_foc##id) in
+	      let key = to_string elt_foc##.id in
 	      Some (html_state#get_focus key, Lisql.DeltaNil)
 	    with _ -> None)));
 	jquery_all_from elt_table ".partial-count" (onclick (fun elt ev ->
 	  Dom_html.stopPropagation ev;
-	  let key = to_string elt##id in
+	  let key = to_string elt##.id in
 	  let id = html_state#dico_counts#get key in
 	  lis#ajax_count_id id [elt]
 	    ~k_count:(function
 		       | Some n ->
-			  elt##innerHTML <- string (string_of_int n);
-			  elt##className <- string "frequency-entities"
+			  elt##.innerHTML := string (string_of_int n);
+			  elt##.className := string "frequency-entities"
 		       | None -> ())));
 	jquery_all_from elt_table ".cell[id]" (onclick (fun elt ev ->
 	  navigation#update_focus ~push_in_history:true (fun current_focus ->
-	    let key = to_string (elt##id) in
+	    let key = to_string elt##.id in
 	    let _view, _rank, id, term = html_state#dico_results#get key in
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus)))
@@ -631,7 +633,7 @@ object (self)
   val mutable refreshing_terms = false (* says whether a recomputation of term increments is ongoing *)
   method private refresh_term_increments current_constr =
     let get_incr_opt elt =
-      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr = html_state#dico_incrs#get (to_string elt##.id) in
       (* retrieving input value for input increments *)
       match incr with
       | Lisql.IncrSelection (selop,_) ->
@@ -644,7 +646,7 @@ object (self)
 	 jquery_input_from
 	   elt
 	   ".term-input"
-	   (fun input -> ref_s := to_string input##value);
+	   (fun input -> ref_s := to_string input##.value);
 	 let s = !ref_s in
 	 if check_input s dt
 	 then Some (Lisql.IncrInput (s,dt))
@@ -677,17 +679,17 @@ object (self)
 	       let new_constr = term_constr in
 	       self#refresh_new_term_constr current_constr new_constr
 	    | Some index ->
-	      input_inverse##checked <- bool inverse_terms;
-	      sel_sorting##value <- string sorting_terms;
+	      input_inverse##.checked := bool inverse_terms;
+	      sel_sorting##.value := string sorting_terms;
 	      let html_sel, html_list, count =
-		let inverse = to_bool input_inverse##checked in
-		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in 
+		let inverse = to_bool input_inverse##.checked in
+		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in 
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
-	      elt_sel_items##innerHTML <- string html_sel;
+	      elt_sel_items##.innerHTML := string html_sel;
 	      set_innerHTML_fadeInOut_then
 		elt_list html_list
 		(fun () ->
-		 elt_list##scrollTop <- term_scroll;
+		 elt_list##.scrollTop := term_scroll;
 		 jquery_set_innerHTML_fadeInOut
 		   "#count-terms"
 		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
@@ -696,11 +698,11 @@ object (self)
 		 jquery_hide "#selection-terms";
 		 stop_propagation_from elt_list "a, .term-input";
 		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-		   if jquery_shown "#selection-terms" (*to_bool ev##ctrlKey*)
+		   if jquery_shown "#selection-terms" (*to_bool ev##.ctrlKey*)
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
-		   Opt.iter (elt##parentNode) (fun node ->
+		   Opt.iter elt##.parentNode (fun node ->
 		     Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 		       let incr_elt = Dom_html.element dom_elt in
 		       apply_incr incr_elt))));
@@ -712,7 +714,7 @@ object (self)
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments current_constr =
     let get_incr_opt elt =
-      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr = html_state#dico_incrs#get (to_string elt##.id) in
       (* retrieving selected increments for selection *)
       match incr with
       | Lisql.IncrSelection (selop,_) ->
@@ -753,17 +755,17 @@ object (self)
 	       let new_constr = property_constr in
 	       self#refresh_new_property_constr current_constr new_constr    
 	    | Some index ->
-	      input_inverse##checked <- bool inverse_properties;
-	      sel_sorting##value <- string sorting_properties;
+	      input_inverse##.checked := bool inverse_properties;
+	      sel_sorting##.value := string sorting_properties;
 	      let html_sel, html_list, count =
-		let inverse = to_bool input_inverse##checked in
-		let sort_by_frequency = to_string sel_sorting##value = sorting_frequency in
+		let inverse = to_bool input_inverse##.checked in
+		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
-	      elt_sel_items##innerHTML <- string html_sel;
+	      elt_sel_items##.innerHTML := string html_sel;
 	      set_innerHTML_fadeInOut_then
 		elt_list html_list
 		(fun () ->
-		 elt_list##scrollTop <- property_scroll;
+		 elt_list##.scrollTop := property_scroll;
 		 self#restore_expanded_properties;
 		 jquery_set_innerHTML_fadeInOut
 		   "#count-properties"
@@ -772,7 +774,7 @@ object (self)
 		 jquery_hide "#selection-properties";
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
 		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-		   if jquery_shown "#selection-properties" (* to_bool ev##ctrlKey *)
+		   if jquery_shown "#selection-properties" (* to_bool ev##.ctrlKey *)
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 refreshing_properties <- false;
@@ -789,12 +791,12 @@ object (self)
       | IncrNot | IncrIn | IncrUnselect | IncrOrder _ -> true
       | _ -> false in
     let get_incr_opt elt =
-      let incr = html_state#dico_incrs#get (to_string (elt##id)) in
+      let incr = html_state#dico_incrs#get (to_string elt##.id) in
       match incr with
       | Lisql.IncrName name ->
 	 let ref_name = ref name in
 	 jquery_input_from elt ".term-input" (fun input ->
-	    ref_name := to_string input##value);
+	    ref_name := to_string input##.value);
 	 let name = !ref_name in
 	 Some (Lisql.IncrName name)
       | Lisql.IncrSelection (selop,_) ->
@@ -826,7 +828,7 @@ object (self)
 	    ~dropdown:true ~filter:filter_dropdown_increment
 	    lis#focus html_state index
 	    ~inverse:false ~sort_by_frequency:false in
-	elt_dropdown##innerHTML <- string html_drop;
+	elt_dropdown##.innerHTML := string html_drop;
 	jquery "#focus-dropdown" (onclick (fun elt ev ->
 	  Dom_html.stopPropagation ev;
 	  jquery_toggle "#focus-dropdown-content"));
@@ -843,14 +845,14 @@ object (self)
 	    ~dropdown:false ~filter:(fun incr -> not (filter_dropdown_increment incr))
 	    lis#focus html_state index
 	    ~inverse:false ~sort_by_frequency:false in
-	elt_sel_items##innerHTML <- string html_sel;
+	elt_sel_items##.innerHTML := string html_sel;
 	if html_sel = "" (* disable multi-selection button if no sel item *)
-	then elt_sel_button##classList##add(string "disabled")
-	else elt_sel_button##classList##remove(string "disabled");
+	then elt_sel_button##.classList##add (string "disabled")
+	else elt_sel_button##.classList##remove (string "disabled");
 	set_innerHTML_fadeInOut_then
 	  elt_list html_list
 	  (fun () ->
-	   elt_list##scrollTop <- modifier_scroll;
+	   elt_list##.scrollTop := modifier_scroll;
 	   jquery_set_innerHTML_fadeInOut
 	     "#count-modifiers"
 	     (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
@@ -860,11 +862,11 @@ object (self)
 	   jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 	     apply_incr elt));
 	   jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-	     if jquery_shown "#selection-modifiers" (* to_bool ev##ctrlKey *)
+	     if jquery_shown "#selection-modifiers" (* to_bool ev##.ctrlKey *)
 	     then toggle_incr elt
 	     else apply_incr elt));
 	   jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
-	     Opt.iter (elt##parentNode) (fun node ->
+	     Opt.iter elt##.parentNode (fun node ->
 	       Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 	         let incr_elt = Dom_html.element dom_elt in
 		 apply_incr incr_elt))))))))
@@ -878,11 +880,11 @@ object (self)
        Jsutils.yasgui#set_query sparql_with_prefixes
 	   
   method refresh =
-    Dom_html.window##history##replaceState(Js.null, string "", Js.some (string permalink));
-    Dom_html.document##body##scrollTop <- document_scroll;
-    Dom_html.document##documentElement##scrollTop <- document_scroll;
+    Dom_html.window##.history##replaceState Js.null (string "") (Js.some (string permalink));
+    Dom_html.document##.body##.scrollTop := document_scroll;
+    Dom_html.document##.documentElement##.scrollTop := document_scroll;
     jquery_input "#sparql-endpoint-input"
-		 (fun input -> input##value <- string lis#endpoint);
+		 (fun input -> input##.value := string lis#endpoint);
     self#refresh_lisql
       (fun () ->
        self#refresh_modifier_increments `Dropdown);
@@ -896,10 +898,10 @@ object (self)
 	  (function
 	  | None ->
 	      (*Jsutils.yasgui#set_response "";
-	      elt_res##style##display <- string "none";*)
+	      elt_res##.style##.display := string "none";*)
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
-	      (*jquery_input "#pattern-terms" (fun input -> input##disabled <- bool true);*)
+	      (*jquery_input "#pattern-terms" (fun input -> input##.disabled := bool true);*)
 	      jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
 	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
 	      self#refresh_modifier_increments `List;
@@ -909,7 +911,7 @@ object (self)
 	  | Some sparql ->
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
-	      jquery_input "#pattern-terms" (fun input -> input##disabled <- bool false);
+	      jquery_input "#pattern-terms" (fun input -> input##.disabled := bool false);
 	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
 	      self#refresh_term_increments term_constr;
@@ -954,22 +956,22 @@ object (self)
 	  match constr with
 	  | Lisql.HasLang _
 	  | Lisql.HasDatatype _ ->
-	     to_string elt_incr##innerHTML (* TODO: extract proper lang/datatype part *)
+	     to_string elt_incr##.innerHTML (* TODO: extract proper lang/datatype part *)
 	  | _ ->
 	     if on_modifiers = Some true
 	     then
 	       let str =
-		 Opt.case (elt_incr##textContent)
-			  (fun () -> to_string elt_incr##innerHTML)
+		 Opt.case elt_incr##.textContent
+			  (fun () -> to_string elt_incr##.innerHTML)
 			  (fun s -> to_string s) in
 	       replace_symbol_by_ascii str
 	     else
-	       Opt.case (elt_incr##querySelector(string ".function, .classURI, .propURI, .naryURI, .URI, .Literal, .nodeID, .modifier"))
-			(fun () -> to_string elt_incr##innerHTML)
-			(fun elt -> to_string elt##innerHTML) in
+	       Opt.case (elt_incr##querySelector (string ".function, .classURI, .propURI, .naryURI, .URI, .Literal, .nodeID, .modifier"))
+			(fun () -> to_string elt_incr##.innerHTML)
+			(fun elt -> to_string elt##.innerHTML) in
 	if matcher str
-	then begin elt_li##style##display <- string "list-item"; there_is_match := true end
-	else elt_li##style##display <- string "none"))
+	then begin elt_li##.style##.display := string "list-item"; there_is_match := true end
+	else elt_li##.style##.display := string "none"))
 
   method is_home =
     Lisql.is_home_focus lis#focus
@@ -1065,15 +1067,15 @@ object (self)
   method save_ui_state =
     document_scroll <-
       max
-	Dom_html.document##body##scrollTop
-	Dom_html.document##documentElement##scrollTop;
-    jquery "#list-properties" (fun elt -> property_scroll <- elt##scrollTop);
-    jquery "#list-terms" (fun elt -> term_scroll <- elt##scrollTop);
-    jquery "#list-modifiers" (fun elt -> modifier_scroll <- elt##scrollTop);
-    jquery_input "#input-inverse-terms" (fun input -> inverse_terms <- to_bool input##checked);
-    jquery_input "#input-inverse-properties" (fun input -> inverse_properties <- to_bool input##checked);
-    jquery_select "#select-sorting-terms" (fun select -> sorting_terms <- to_string select##value);
-    jquery_select "#select-sorting-properties" (fun select -> sorting_properties <- to_string select##value);
+	Dom_html.document##.body##.scrollTop
+	Dom_html.document##.documentElement##.scrollTop;
+    jquery "#list-properties" (fun elt -> property_scroll <- elt##.scrollTop);
+    jquery "#list-terms" (fun elt -> term_scroll <- elt##.scrollTop);
+    jquery "#list-modifiers" (fun elt -> modifier_scroll <- elt##.scrollTop);
+    jquery_input "#input-inverse-terms" (fun input -> inverse_terms <- to_bool input##.checked);
+    jquery_input "#input-inverse-properties" (fun input -> inverse_properties <- to_bool input##.checked);
+    jquery_select "#select-sorting-terms" (fun select -> sorting_terms <- to_string select##.value);
+    jquery_select "#select-sorting-properties" (fun select -> sorting_properties <- to_string select##.value);
     self#save_expanded_terms;
     self#save_expanded_properties
   method save_expanded_terms =
@@ -1093,7 +1095,7 @@ object (self)
 		  expanded_properties <- incr :: expanded_properties
 		with _ -> ())
   method private increment_of_elt elt =
-    let id = to_string elt##id in
+    let id = to_string elt##.id in
     let key = Html.key_of_collapse id in
     html_state#dico_incrs#get key
 
@@ -1110,7 +1112,7 @@ object (self)
 	  let id = Html.collapse_of_key key in
 	  jquery_input ("#" ^ id)
 		       (fun input ->
-			input##checked <- bool true)
+			input##.checked := bool true)
        | None -> ())
       expanded
 
@@ -1224,13 +1226,13 @@ let translate () =
   (* getting current language *)
   let lang = Lisql2nl.config_lang#value in
   (* translating visible textual elements *)
-  jquery_all ".texte" (fun elt -> elt##style##display <- string "none");
-  jquery_all (".texte.lang-" ^ lang) (fun elt -> elt##style##display <- string "inline");
+  jquery_all ".texte" (fun elt -> elt##.style##.display := string "none");
+  jquery_all (".texte.lang-" ^ lang) (fun elt -> elt##.style##.display := string "inline");
   (* translating tooltips *)
   let tooltip_lang_selector = ".tooltip.lang-" ^ lang in
   jquery_all ".tooltiped" (fun elt ->
     jquery_from elt tooltip_lang_selector (fun elt2 ->
-      elt##title <- elt2##innerHTML));
+      elt##.title := elt2##.innerHTML));
 (* translating sorting options *)
   let options = Html.html_list_sorting () in
   jquery_set_innerHTML "#select-sorting-terms" options;
@@ -1246,17 +1248,17 @@ let initialize endpoint focus =
   jquery "#button-refresh" (onclick (fun elt ev -> history#refresh));
   jquery "#sparql-endpoint-button" (onclick (fun elt ev ->
      jquery_input "#sparql-endpoint-input" (fun input ->
-        let url = to_string (input##value) in
+        let url = to_string input##.value in
 	history#change_endpoint url)));
     jquery_input "#sparql-endpoint-input" (onenter (fun input ev ->
       jquery_click "#sparql-endpoint-button"));
     (*jquery "#config-control" (onclick (fun elt ev ->
       jquery "#config-panel" (fun panel ->
 	let dis =
-	  if to_string panel##style##display = "none"
+	  if to_string panel##.style##.display = "none"
 	  then "block"
 	  else "none" in
-	panel##style##display <- string dis;
+	panel##.style##.display := string dis;
 	if dis = "none" then
 	  config#if_has_changed
 	    ~translate
@@ -1302,7 +1304,7 @@ let initialize endpoint focus =
 	jquery_select sel_select (fun select ->
 	  jquery_input sel_input (fun input ->
 	    let handler ~oninput input ev =
-	      if oninput = config_auto_filtering#value || input##value##length = 0 then
+	      if oninput = config_auto_filtering#value || input##.value##.length = 0 then
 		if !getting_constr
 		then input_changed := true
 		else
@@ -1352,7 +1354,7 @@ let initialize endpoint focus =
 		  then (
 		    jquery_hide sel_selection;
 		    jquery_all (sel_increments ^ " .selected-incr")
-			       (fun elt -> elt##classList##remove(string "selected-incr"));
+			       (fun elt -> elt##.classList##remove (string "selected-incr"));
 		    incr_selection#reset)
 		  else
 		    jquery_show sel_selection)))
@@ -1370,7 +1372,7 @@ let initialize endpoint focus =
 		    (fun elt ->
 		     Opt.iter
 		       (Dom_html.CoerceTo.input elt)
-		       (fun input -> input##checked <- bool checked)))))
+		       (fun input -> input##.checked := bool checked)))))
       ["#button-expand-properties", "#list-properties", true;
        "#button-collapse-properties", "#list-properties", false;
        "#button-expand-terms", "#list-terms", true;
@@ -1398,7 +1400,7 @@ let initialize endpoint focus =
     jquery "#next-results" (onclick (fun elt ev -> history#present#page_down));
     jquery_select "#limit-results" (fun select -> select |> onchange (fun select ev ->
         firebug "changed limit-results";
-	let limit = int_of_string (to_string (select##value)) in
+	let limit = int_of_string (to_string select##.value) in
 	history#present#set_limit limit));
     jquery "#next-nested-table" (onclick (fun elt ev -> history#present#more_results));
     (* to force redraw of Google Map when changing BS tab *)
@@ -1422,10 +1424,10 @@ let initialize endpoint focus =
 
 (* main *)
 let _ =
-  Firebug.console##log(string "Starting Sparklis");
+  Jsutils.firebug "Starting Sparklis";
   if logging_on () then
     Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
-  Dom_html.window##onload <- Dom.handler (fun ev ->
+  Dom_html.window##.onload := Dom.handler (fun ev ->
    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
     (* initializing YASGUI and other libs *)
     Jsutils.yasgui#init;

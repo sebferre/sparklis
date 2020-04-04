@@ -55,7 +55,7 @@ let list_to_set l =
   aux [] l
 
 let equal_lists_as_sets l1 l2 =
-  List.sort Pervasives.compare l1 = List.sort Pervasives.compare l2
+  List.sort Stdlib.compare l1 = List.sort Stdlib.compare l2
     
 let unobfuscate_string s = (* symmetric, to be used for obfuscation *)
   String.map
@@ -94,25 +94,25 @@ let uncamel (s : string) : string =
   let lower = Array.init n (fun i -> 'a' <= s.[i] && s.[i] <= 'z') in
   let upper = Array.init n (fun i -> 'A' <= s.[i] && s.[i] <= 'Z') in
   let s2 = Bytes.create (2*n) in
-  Bytes.set s2 0 (if upper.(0) && 1 <= n-1 && not lower.(1) then s.[0] else Char.lowercase s.[0]);
+  Bytes.set s2 0 (if upper.(0) && 1 <= n-1 && not lower.(1) then s.[0] else Char.lowercase_ascii s.[0]);
   let j = ref 1 in
   for i = 1 to n-1 do
     if lower.(i-1) && upper.(i) then begin
       Bytes.set s2 !j ' ';
       incr j;
-      Bytes.set s2 !j (if i+1 <= n-1 && not lower.(i+1) then s.[i] else Char.lowercase s.[i]);
+      Bytes.set s2 !j (if i+1 <= n-1 && not lower.(i+1) then s.[i] else Char.lowercase_ascii s.[i]);
       incr j end
     else if upper.(i-1) && upper.(i) && i+1 <= n-1 && lower.(i+1) then begin
       Bytes.set s2 !j ' ';
       incr j;
-      Bytes.set s2 !j (Char.lowercase s.[i]);
+      Bytes.set s2 !j (Char.lowercase_ascii s.[i]);
       incr j end
     else begin
       Bytes.set s2 !j s.[i];
       incr j
     end
   done;
-  Bytes.sub s2 0 !j
+  Bytes.sub_string s2 0 !j
 
 let mapfilter (f : 'a -> 'b option) (l : 'a list) : 'b list =
   List.fold_right

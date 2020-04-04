@@ -4,6 +4,7 @@
   This file is part of Sparklis.
 *)
 
+open Js_of_ocaml
 open Js
 
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
@@ -351,7 +352,7 @@ let index_of_results_varterm_list_count (keys_vt : Rdf.term list) (var_count : R
       results.bindings;
     index
   with Not_found ->
-    Firebug.console##log(string ("index_of_results_varterm_list_count: missing variables"));
+    Jsutils.firebug "index_of_results_varterm_list_count: missing variables";
     index
 
 (* extraction of the extension and indexes *)
@@ -418,7 +419,7 @@ let list_of_results_column (var : Rdf.var) results : Rdf.term list =
 	  | Some t -> t::res)
       [] results.bindings
   with Not_found ->
-    Firebug.console##log(string ("list_of_results_column: missing variable " ^ var));
+    Jsutils.firebug ("list_of_results_column: missing variable " ^ var);
     []
 
 
@@ -440,7 +441,7 @@ let rec string_of_results_shape = function
       
 module FMDeps =
   Find_merge.Set
-    (struct type t = Rdf.term let compare = Pervasives.compare end)
+    (struct type t = Rdf.term let compare = Stdlib.compare end)
 	     
 let results_shape_of_deps
       (deps : Lisql2sparql.deps)
@@ -592,7 +593,7 @@ let shape_data_of_results
 	   ht ([],0,max_int,[]) in
        let lv = Some v::lv1 in
        let f = if List.length rank_rows = 1 then 1+f1 else 0 in
-       let ranked_rows = List.sort Pervasives.compare rank_rows in
+       let ranked_rows = List.sort Stdlib.compare rank_rows in
        (* TODO : optimize when f=0 and f=1 *)
        let d = mapn_of_rows `KeyVar lv f1 ranked_rows in
        lv, c, f, d
@@ -1185,13 +1186,13 @@ object (self)
 	     filter_constr sparql_genvar (Sparql.var v) constr;
 	     form] in
 	let g_pat = graph_opt (make_pattern ~hook ()) in
-	Sparql.(select
+	Sparql.((select
 		  ~froms
 		  ~distinct:true
 		  ~projections:(List.map (fun v -> `Bare, v) lv)
 		  ~limit:config_max#value
 		  (join (g_pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
-	:> string) in
+	:> string)) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
 			   (fun ?hook () -> Lisql2sparql.WhichClass.pattern_of_term ?hook None)
@@ -1227,13 +1228,13 @@ object (self)
 	      filter_constr sparql_genvar (Sparql.var v) constr;
 	      form ] in
 	let pat = make_pattern ~hook () in
-	Sparql.(select
+	Sparql.((select
 		  ~froms
 		  ~distinct:true
 		  ~projections:(List.map (fun v -> `Bare, v) lv)
 		  ~limit:config_max#value
 		  (join (pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
-		:> string) in
+		:> string)) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
 			   (fun ?hook () -> Lisql2sparql.WhichClass.intent_pattern ?hook ())
@@ -1640,10 +1641,10 @@ object (self)
 			    ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
 			    ~limit:(config_max#value * min 10 nb_samples)
 			    (join [pat_values; pat_incr]))) in
-	  Sparql.(select
+	  Sparql.((select
 		    ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
 		    (join (gp :: List.map (fun v -> pattern_hidden_URIs v) lv))
-		  :> string)
+		  :> string))
       in
       let sparql_class =
 	make_sparql (nb_samples_term, samples_term)

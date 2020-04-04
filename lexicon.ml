@@ -4,6 +4,8 @@
   This file is part of Sparklis.
 *)
 
+open Js_of_ocaml
+
 (* URI lexicon definitions *)
 
 class virtual ['a] lexicon = [Rdf.uri,'a] Cache.cache
@@ -151,7 +153,7 @@ let sparql_lexicon
 			     (fun property ->
 			      join [ triple (v_u :> term) (uri property :> pred) (v_l :> term);
 				     bind (uri property :> expr) v_p ])
-			     pref_properties);
+			     pref_properties)
 			:: (if pref_languages = []
 			    then [] (* no language constraint *)
 			    else [filter
@@ -286,16 +288,16 @@ object (self)
   val mutable current_lexicon = default_lexicon
 
   method private get_select_property_lang select input lang_input =
-    let sel = to_string select##value in
-    let property = if sel = other then to_string (input##value) else sel in
-    let lang = to_string (lang_input##value) in
+    let sel = to_string select##.value in
+    let property = if sel = other then to_string input##.value else sel in
+    let lang = to_string lang_input##.value in
     sel, property, lang
 
   method private set_select_property_lang s p l =
     if current_property <> p || current_lang <> l then begin
-      jquery_select select_selector (fun select -> select##value <- string s);
-      jquery_input input_selector (fun input -> input##value <- string (if s = other then p else ""));
-      jquery_input lang_input_selector (fun input -> input##value <- string l);
+      jquery_select select_selector (fun select -> select##.value := string s);
+      jquery_input input_selector (fun input -> input##.value := string (if s = other then p else ""));
+      jquery_input lang_input_selector (fun input -> input##.value := string l);
       current_select <- s;
       current_property <- p;
       current_lang <- l;
@@ -369,7 +371,7 @@ object (self)
 	jquery_input lang_input_selector (fun lang_input ->
 	  (* default values from HTML *)
 	  let s, p, l = self#get_select_property_lang select input lang_input in
-	  if s <> other then input##style##display <- string "none";
+	  if s <> other then input##.style##.display := string "none";
 	  init_select <- s;
 	  init_property <- p;
 	  init_lang <- l;
@@ -383,12 +385,12 @@ object (self)
 	  config_graphs#on_change (fun () -> self#change_lexicon select input lang_input);
 	  onchange
 	    (fun _ ev ->
-	      if to_string select##value <> other
+	      if to_string select##.value <> other
 	      then begin
-		input##style##display <- string "none";
+		input##.style##.display := string "none";
 		self#change_lexicon select input lang_input end
 	      else
-		input##style##display <- string "inline")
+		input##.style##.display := string "inline")
 	    select;
 	  oninput (fun _ ev -> self#change_lexicon select input lang_input) input;
 	  oninput (fun _ ev -> self#change_lexicon select input lang_input) lang_input)))

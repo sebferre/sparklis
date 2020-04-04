@@ -4,6 +4,8 @@
   This file is part of Sparklis.
 *)
 
+open Js_of_ocaml
+       
 open Js
 open Jsutils
 
@@ -33,7 +35,7 @@ object (self)
 
   method set_value (v : bool) : unit =
     if v <> current_v then begin
-      jquery_input input_selector (fun input -> input##checked <- bool v);
+      jquery_input input_selector (fun input -> input##.checked := bool v);
       current_v <- v;
       self#changed
     end
@@ -49,11 +51,11 @@ object (self)
 
   method init =
     jquery_input input_selector (fun input ->
-      init_v <- to_bool input##checked; (* default value from HTML *)
+      init_v <- to_bool input##.checked; (* default value from HTML *)
       current_v <- init_v;
       onclick
 	(fun input ev ->
-	  let v = to_bool input##checked in
+	  let v = to_bool input##.checked in
 	  if v <> current_v then begin
 	    current_v <- v;
 	    self#changed
@@ -70,7 +72,7 @@ object (self)
 
   method private set_input (v : int) : unit =
     if v <> current_v then begin
-      jquery_input input_selector (fun input -> input##value <- string (string_of_int v));
+      jquery_input input_selector (fun input -> input##.value := string (string_of_int v));
       current_v <- v;
       self#changed
     end
@@ -92,18 +94,18 @@ object (self)
 	(fun input ev ->
 	  match integer_of_input ?min ?max input with
 	    | Some v ->
-	      input##style##color <- string "black";
+	      input##.style##.color := string "black";
 	      if current_v <> v then begin
 		current_v <- v;
 		self#changed
 	      end
 	    | None ->
-	      input##style##color <- string "red")
+	      input##.style##.color := string "red")
 	input;
       onchange
 	(fun input ev ->
-	  input##value <- string (string_of_int current_v);
-	  input##style##color <- string "black")
+	  input##.value := string (string_of_int current_v);
+	  input##.style##.color := string "black")
 	input)
   method reset = self#set_input init_v
 end
@@ -118,7 +120,7 @@ object (self)
 
   method private set_input (v : string) : unit =
     if v <> current_v then begin
-      jquery_input input_selector (fun input -> input##value <- string v);
+      jquery_input input_selector (fun input -> input##.value := string v);
       current_v <- v;
       self#changed
     end
@@ -134,11 +136,11 @@ object (self)
 
   method init =
     jquery_input input_selector (fun input ->
-      init_v <- to_string input##value; (* default value from HTML *)
+      init_v <- to_string input##.value; (* default value from HTML *)
       current_v <- init_v;
       oninput
 	(fun input ev ->
-	  let v = to_string input##value in
+	  let v = to_string input##.value in
 	  if current_v <> v then begin
 	    current_v <- v;
 	    self#changed
@@ -156,7 +158,7 @@ object (self)
   method private set_select (v : string) : unit =
     if v <> current_v then begin
       jquery_select select_selector
-		    (fun select -> select##value <- string v);
+		    (fun select -> select##.value := string v);
       current_v <- v;
       self#changed
     end
@@ -172,11 +174,11 @@ object (self)
 
   method init =
     jquery_select select_selector (fun select ->
-      init_v <- to_string select##value; (* default value from HTML *)
+      init_v <- to_string select##.value; (* default value from HTML *)
       current_v <- init_v;
       onchange
 	(fun select ev ->
-	  let v = to_string select##value in
+	  let v = to_string select##.value in
 	  if current_v <> v then begin
 	    current_v <- v;
 	    self#changed

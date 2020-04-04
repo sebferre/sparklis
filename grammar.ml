@@ -146,7 +146,7 @@ end
 let english =
   let starts_with_vowel following =
     try
-      let c = Char.lowercase following.[0] in
+      let c = Char.lowercase_ascii following.[0] in
       c = 'a' || c = 'e' || c = 'i' || c = 'o' (* || c = 'u' : 'u' is more often pronounced [y] *)
     with _ -> false in
 object

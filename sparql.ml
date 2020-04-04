@@ -4,6 +4,8 @@
   This file is part of Sparklis.
 *)
 
+module Regexp = Js_of_ocaml.Regexp
+
 module S : (* private use of strings to represent SPARQL strings *)
 sig
   type +'a sparql = private string
