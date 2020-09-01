@@ -77,10 +77,7 @@ type ng_label =
   | `Hierarchy of ng_label
   | `Nth of int * ng_label ]
     
-type 'b annotated = X of 'b | A of annot * 'b
-    
-type s = nl_s annotated
-and nl_s =
+type s =
   [ `Return of np
   | `ThereIs of np
   | `ThereIs_That of np * s
@@ -92,9 +89,9 @@ and nl_s =
   | `And of s list
   | `Or of s list
   | `Not of s
-  | `Maybe of s ]
-and np = nl_np annotated
-and nl_np =
+  | `Maybe of s
+  | `Focus of annot * s ]
+and np =
   [ `Void
   | `PN of word * rel
   | `This
@@ -107,13 +104,14 @@ and nl_np =
   | `Or of np list
   | `Choice of adj * np list * rel
   | `Maybe of np
-  | `Not of np ]
-and ng = nl_ng annotated
-and nl_ng =
+  | `Not of np
+  | `Focus of annot * np ]
+and ng =
   [ `That of word * rel
   | `LabelThat of ng_label * rel
   | `OfThat of word * np * rel
-  | `Aggreg of bool * ng_aggreg * ng ] (* the bool indicates suspension *)
+  | `Aggreg of bool * ng_aggreg * ng (* the bool indicates suspension *)
+  | `Focus of annot * ng ]
 and qu = [ `A | `Any of bool | `The | `Every | `Each | `All | `One | `No of bool ]
 and adj =
   [ `Nil
@@ -123,8 +121,7 @@ and adj =
 and ng_aggreg =
   [ `AdjThat of word * rel
   | `NounThatOf of word * rel ]
-and rel = nl_rel annotated
-and nl_rel =
+and rel =
   [ `Nil
   | `That of vp
   | `ThatS of s
@@ -140,9 +137,9 @@ and nl_rel =
   | `Maybe of rel
   | `Not of rel
   | `In of np * rel
-  | `Ellipsis ]
-and vp = nl_vp annotated
-and nl_vp =
+  | `Ellipsis
+  | `Focus of annot * rel ]
+and vp =
   [ `IsNP of np * pp list
   | `IsPP of pp
   | `IsTheNounCP of word * cp
@@ -161,15 +158,16 @@ and nl_vp =
   | `Not of vp (* the bool indicates whether negation is suspended *)
   | `EpsilonHead of vp
   | `In of np * vp
-  | `Ellipsis ]
-and cp = nl_cp annotated
-and nl_cp =
+  | `Ellipsis
+  | `Focus of annot * vp ]
+and cp =
   [ `Nil
   | `Cons of pp * cp
   | `And of cp list
   | `Or of cp list
   | `Not of cp
-  | `Maybe of cp ]
+  | `Maybe of cp
+  | `Focus of annot * cp ]
 and pp =
   [ `Bare of np
   | `Prep of word * np
@@ -178,33 +176,29 @@ and pp =
   | `PrepBin of word * np * word * np ]
 
 let top_adj : adj = `Nil
-let top_rel : rel = X `Nil
-let top_np : np = X (`Qu (`A, `Nil, X (`That (`Thing, top_rel))))
-let top_expr : np = X (`PN (`Undefined, top_rel))
-let top_s : s = X (`Return top_np)
+let top_rel : rel = `Nil
+let top_np : np = `Qu (`A, `Nil, `That (`Thing, top_rel))
+let top_expr : np = `PN (`Undefined, top_rel)
+let top_s : s = `Return top_np
 
 let focus_span (incr : Lisql.increment) : word = `FocusSpan incr
-let focus_span_np (incr : Lisql.increment) : np = X (`PN (`FocusSpan incr, top_rel))
+let focus_span_np (incr : Lisql.increment) : np = `PN (`FocusSpan incr, top_rel)
 let focus_name : word = `FocusName
-let focus_name_ng : ng = X (`That (`FocusName, top_rel))
-let undefined_np : np = X (`PN (`Undefined, top_rel))
+let focus_name_ng : ng = `That (`FocusName, top_rel)
+let undefined_np : np = `PN (`Undefined, top_rel)
 
-let np_of_word w : np = X (`PN (w, top_rel))
+let np_of_word w : np = `PN (w, top_rel)
 let np_of_literal l : np = np_of_word (`Literal l)
 
 let nl_and = function
   | [] -> assert false
   | [x] -> x
-  | l -> X (`And l)
+  | l -> `And l
 
-let nl_is : np -> nl_vp = fun np -> `IsNP (np, [])
-let is np = X (nl_is np)
-let nl_something : rel -> nl_np = fun rel -> `Qu (`A, `Nil, X (`That (`Thing, rel)))
-let something rel = X (nl_something rel)
-let nl_that : vp -> nl_rel = fun vp -> `That vp
-let that vp = X (nl_that vp)
-let nl_there_is : np -> nl_s = fun np -> `ThereIs np
-let there_is np = X (nl_there_is np)
+let nl_is : np -> vp = fun np -> `IsNP (np, [])
+let nl_something : rel -> np = fun rel -> `Qu (`A, `Nil, `That (`Thing, rel))
+let nl_that : vp -> rel = fun vp -> `That vp
+let nl_there_is : np -> s = fun np -> `ThereIs np
 	   
 (* verbalization of terms, classes, properties *)
 
@@ -670,10 +664,10 @@ let rec head_of_modif grammar annot_opt nn rel (modif : modif_s2) : np =
 	  | None -> false
 	  | Some annot -> annot#is_at_focus),
 	snd (qu_adj_of_order grammar `A order) in
-  let nl = `Qu (qu, adj, X (`That (nn, rel))) in
+  let nl = `Qu (qu, adj, `That (nn, rel)) in
   match annot_opt with
-  | None -> X nl
-  | Some annot -> A (annot,nl)
+  | None -> nl
+  | Some annot -> `Focus (annot,nl)
 and qu_adj_of_modif grammar annot_opt qu modif : qu * adj =
   match modif with
     | Select, order -> qu_adj_of_order grammar qu order
@@ -684,33 +678,33 @@ and qu_adj_of_order grammar qu : order -> qu * adj = function
   | Lowest _ -> `The, `Order (`Op grammar#order_lowest)
 
 let ng_of_id ~id_labelling id : ng =
-  X (`LabelThat (id_labelling#get_id_label id, top_rel))
+  `LabelThat (id_labelling#get_id_label id, top_rel)
 
 let vp_of_sim grammar annot_opt (np : np) pred args argo rank : vp =
   let w, synt = word_syntagm_of_pred grammar pred in
   let nl_rank =
-    `AtNoun (`Op grammar#rank, X (`PN (`TypedLiteral (string_of_int rank, Rdf.xsd_integer), X `Nil))) in
-  let nl_sim : nl_vp =
+    `AtNoun (`Op grammar#rank, `PN (`TypedLiteral (string_of_int rank, Rdf.xsd_integer), `Nil)) in
+  let nl_sim : vp =
     match synt, args, argo with
     | `Noun, S, O
     | `InvNoun, O, S ->
-       `IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, np, X (if rank=0 then `Nil else `PP [nl_rank]))))), [])
+       `IsNP (`Qu (`A, `Nil, `OfThat (w, np, if rank=0 then `Nil else `PP [nl_rank])), [])
     | `InvNoun, S, O
     | `Noun, O, S ->
        `HasProp (w, np, if rank=0 then [] else [nl_rank])
     (*       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsNP (X (`Qu (`A, `Nil, X (`OfThat (w, X `Void, X `Nil)))), if rank=0 then [] else [nl_rank])))))))))), []) *)
     | `TransVerb, S, O ->
-       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`VT (w, X `Void, if rank=0 then [] else [nl_rank])))))))))), [])
+       `IsNP (`Qu (`A, `Nil, `That (`Thing, `That (`Subject (np, `VT (w, `Void, if rank=0 then [] else [nl_rank]))))), [])
     | `TransVerb, O, S ->
        `VT (w, np, if rank=0 then [] else [nl_rank])
     | `TransAdj, S, O ->
-       `IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`Subject (np, X (`IsAdjCP (w, X (if rank=0 then `Nil else `Cons (nl_rank, X `Nil)))))))))))), [])
+       `IsNP (`Qu (`A, `Nil, `That (`Thing, `That (`Subject (np, `IsAdjCP (w, if rank=0 then `Nil else `Cons (nl_rank, `Nil)))))), [])
     | `TransAdj, O, S ->
-       `IsAdjCP (w, X (`Cons (`Bare np, X (if rank=0 then `Nil else `Cons (nl_rank, X `Nil)))))
+       `IsAdjCP (w, `Cons (`Bare np, if rank=0 then `Nil else `Cons (nl_rank, `Nil)))
     | _ -> failwith "Lisql2nl.np_of_sim: Invalid args/argo" in
   match annot_opt with
-  | None -> X nl_sim
-  | Some annot -> A (annot, nl_sim)
+  | None -> nl_sim
+  | Some annot -> `Focus (annot, nl_sim)
     
 let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel) (ng : ng) =
   let qu, adj = qu_adj_of_modif grammar annot_opt qu modif in
@@ -721,10 +715,10 @@ let np_of_aggreg grammar annot_opt qu (modif : modif_s2) (g : aggreg) (rel : rel
     | None -> `NounThatOf (noun_word, rel) in
   let qu = if qu = `The then (qu_aggreg :> qu) else qu in (* the sample of --> a sample of *)
   let susp = match annot_opt with None -> false | Some annot -> annot#is_susp_focus in
-  let nl = `Qu (qu, adj, X (`Aggreg (susp, ng_aggreg, ng))) in
+  let nl = `Qu (qu, adj, `Aggreg (susp, ng_aggreg, ng)) in
   match annot_opt with
-  | None -> X nl
-  | Some annot -> A (annot,nl)
+  | None -> nl
+  | Some annot -> `Focus (annot,nl)
 		    
 (*    
 let syntax_of_func grammar (func : func)
@@ -740,83 +734,83 @@ let syntax_of_func grammar (func : func)
 let np_of_apply grammar annot_opt adj func (np_args : np list) (rel : rel) : np =
   let nl = `Expr (adj, grammar#func_syntax func, np_args, rel) in
   match annot_opt with
-  | None -> X nl
-  | Some annot -> A (annot, nl)
+  | None -> nl
+  | Some annot -> `Focus (annot, nl)
 
 		       
 let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
-  | IsThere annot -> A (annot, `Ellipsis)
-  | Is (annot,np) -> A (annot, `IsNP (np_of_elt_s1 grammar ~id_labelling np, []))
-  | Pred (annot,arg,pred,cp) -> A (annot, nl_vp_of_arg_pred grammar ~id_labelling arg pred cp)
-  | Type (annot,c) -> A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (word_of_class c, top_rel)))), []))
+  | IsThere annot -> `Focus (annot, `Ellipsis)
+  | Is (annot,np) -> `Focus (annot, `IsNP (np_of_elt_s1 grammar ~id_labelling np, []))
+  | Pred (annot,arg,pred,cp) -> `Focus (annot, nl_vp_of_arg_pred grammar ~id_labelling arg pred cp)
+  | Type (annot,c) -> `Focus (annot, `IsNP (`Qu (`A, `Nil, `That (word_of_class c, top_rel)), []))
   | Rel (annot,p,Fwd,np) ->
     let word, synt = word_syntagm_of_property grammar p in
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
-    | `Noun -> A (annot, `HasProp (word, np, []))
-    | `InvNoun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
-    | `TransVerb -> A (annot, `VT (word, np, []))
-    | `TransAdj -> A (annot, `IsPP (`Prep (word, np))) )
+    | `Noun -> `Focus (annot, `HasProp (word, np, []))
+    | `InvNoun -> `Focus (annot, `IsNP (`Qu (`The, `Nil, `OfThat (word, np, top_rel)), []))
+    | `TransVerb -> `Focus (annot, `VT (word, np, []))
+    | `TransAdj -> `Focus (annot, `IsPP (`Prep (word, np))) )
   | Rel (annot,p,Bwd,np) ->
     let word, synt = word_syntagm_of_property grammar p in
     let np = np_of_elt_s1 grammar ~id_labelling np in
     ( match synt with
-    | `Noun -> A (annot, `IsNP (X (`Qu (`The, `Nil, X (`OfThat (word, np, top_rel)))), []))
-    | `InvNoun -> A (annot, `HasProp (word, np, []))
-    | `TransVerb -> A (annot, `Subject (np, X (`VT (word, X `Void, []))))
-    | `TransAdj -> A (annot, `Subject (np, X (`IsPP (`Prep (word, X `Void))))) )
+    | `Noun -> `Focus (annot, `IsNP (`Qu (`The, `Nil, `OfThat (word, np, top_rel)), []))
+    | `InvNoun -> `Focus (annot, `HasProp (word, np, []))
+    | `TransVerb -> `Focus (annot, `Subject (np, `VT (word, `Void, [])))
+    | `TransAdj -> `Focus (annot, `Subject (np, `IsPP (`Prep (word, `Void)))) )
   | Hier (annot, id, pred, args, argo, np) -> (* TODO: render pred, args, argo *)
-     A (annot, `IsPP (`Prep (`Op grammar#in_, np_of_elt_s1 grammar ~id_labelling np)))
+     `Focus (annot, `IsPP (`Prep (`Op grammar#in_, np_of_elt_s1 grammar ~id_labelling np)))
   | Sim (annot,np,pred,args,argo,rank) ->
      vp_of_sim grammar (Some annot)
 	       (np_of_elt_s1 grammar ~id_labelling np)
 	       pred args argo rank
   | LatLong (annot,_ll,_id1,_id2) ->
-    A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#geolocation, X `Nil)))), []))
+    `Focus (annot, `Has (`Qu (`A, `Nil, `That (`Op grammar#geolocation, `Nil)), []))
   | Triple (annot,arg,np1,np2) ->
     let np1 = np_of_elt_s1 grammar ~id_labelling np1 in
     let np2 = np_of_elt_s1 grammar ~id_labelling np2 in
     ( match arg with
     | S -> (* has relation npp to npo / has property npp with value npo / has p npo *)
-      A (annot, `HasProp (`Relation, np1, [`Prep (`Op grammar#rel_to, np2)]))
+      `Focus (annot, `HasProp (`Relation, np1, [`Prep (`Op grammar#rel_to, np2)]))
     | O -> (* has relation npp from nps / is the value of npp of nps / is the p of nps *)
-      A (annot, `HasProp (`Relation, np2, [`Prep (`Op grammar#rel_from, np1)]))
+      `Focus (annot, `HasProp (`Relation, np2, [`Prep (`Op grammar#rel_from, np1)]))
     | P -> (* is a relation from nps to npo / is a property of nps with value npo *)
-       A (annot, `IsNP (X (`Qu (`A, `Nil, X (`That (`Relation, top_rel)))), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)]))
+       `Focus (annot, `IsNP (`Qu (`A, `Nil, `That (`Relation, top_rel)), [`Prep (`Op grammar#rel_from, np1); `Prep (`Op grammar#rel_to, np2)]))
     | _ -> assert false )
   | Search (annot,c) -> vp_of_constr grammar annot c
   | Filter (annot,c,ft) -> vp_of_constr grammar annot c
-  | And (annot,lr) -> A (annot, `And (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
-  | Or (annot,lr) -> A (annot, `Or (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
-  | Maybe (annot,x) -> A (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
-  | Not (annot,x) -> A (annot, `Not (vp_of_elt_p1 grammar ~id_labelling x))
-  | In (annot,npg,x) -> A (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, vp_of_elt_p1 grammar ~id_labelling x))
-  | InWhichThereIs (annot,np) -> A (annot, `IsInWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
+  | And (annot,lr) -> `Focus (annot, `And (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
+  | Or (annot,lr) -> `Focus (annot, `Or (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
+  | Maybe (annot,x) -> `Focus (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
+  | Not (annot,x) -> `Focus (annot, `Not (vp_of_elt_p1 grammar ~id_labelling x))
+  | In (annot,npg,x) -> `Focus (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, vp_of_elt_p1 grammar ~id_labelling x))
+  | InWhichThereIs (annot,np) -> `Focus (annot, `IsInWhich (`ThereIs (np_of_elt_s1 grammar ~id_labelling np)))
 and vp_of_constr grammar annot = function
-  | True -> A (annot, `Ellipsis)
+  | True -> `Focus (annot, `Ellipsis)
   | MatchesAll [pat]
-  | MatchesAny [pat] -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal pat, X `Nil)), []))
-  | MatchesAll lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat)), []))
-  | MatchesAny lpat -> A (annot, `VT (`Op grammar#matches, X (`QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat)), []))
-  | IsExactly pat -> A (annot, `VT (`Op grammar#is_exactly, X (`PN (`Literal pat, X `Nil)), []))
-  | StartsWith pat -> A (annot, `VT (`Op grammar#starts_with, X (`PN (`Literal pat, X `Nil)), []))
-  | EndsWith pat -> A (annot, `VT (`Op grammar#ends_with, X (`PN (`Literal pat, X `Nil)), []))
-  | After pat -> A (annot, `IsPP (`Prep (`Op grammar#after, np_of_literal pat)))
-  | Before pat -> A (annot, `IsPP (`Prep (`Op grammar#before, np_of_literal pat)))
-  | FromTo (pat1,pat2) -> A (annot, `IsPP (`PrepBin (`Op grammar#interval_from, np_of_literal pat1, `Op grammar#interval_to, np_of_literal pat2)))
-  | HigherThan pat -> A (annot, `IsPP (`Prep (`Op grammar#higher_or_equal_to, np_of_literal pat)))
-  | LowerThan pat -> A (annot, `IsPP (`Prep (`Op grammar#lower_or_equal_to, np_of_literal pat)))
-  | Between (pat1,pat2) -> A (annot, `IsPP (`PrepBin (`Op grammar#interval_between, np_of_literal pat1, `Op grammar#interval_and, np_of_literal pat2)))
-  | HasLang pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#language, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)), [])))))), []))
-  | HasDatatype pat -> A (annot, `Has (X (`Qu (`A, `Nil, X (`That (`Op grammar#datatype, X (`Ing (`Op grammar#matching, X (`PN (`Literal pat, top_rel)), [])))))), []))
+  | MatchesAny [pat] -> `Focus (annot, `VT (`Op grammar#matches, `PN (`Literal pat, `Nil), []))
+  | MatchesAll lpat -> `Focus (annot, `VT (`Op grammar#matches, `QuOneOf (`All, List.map (fun pat -> `Literal pat) lpat), []))
+  | MatchesAny lpat -> `Focus (annot, `VT (`Op grammar#matches, `QuOneOf (`One, List.map (fun pat -> `Literal pat) lpat), []))
+  | IsExactly pat -> `Focus (annot, `VT (`Op grammar#is_exactly, `PN (`Literal pat, `Nil), []))
+  | StartsWith pat -> `Focus (annot, `VT (`Op grammar#starts_with, `PN (`Literal pat, `Nil), []))
+  | EndsWith pat -> `Focus (annot, `VT (`Op grammar#ends_with, `PN (`Literal pat, `Nil), []))
+  | After pat -> `Focus (annot, `IsPP (`Prep (`Op grammar#after, np_of_literal pat)))
+  | Before pat -> `Focus (annot, `IsPP (`Prep (`Op grammar#before, np_of_literal pat)))
+  | FromTo (pat1,pat2) -> `Focus (annot, `IsPP (`PrepBin (`Op grammar#interval_from, np_of_literal pat1, `Op grammar#interval_to, np_of_literal pat2)))
+  | HigherThan pat -> `Focus (annot, `IsPP (`Prep (`Op grammar#higher_or_equal_to, np_of_literal pat)))
+  | LowerThan pat -> `Focus (annot, `IsPP (`Prep (`Op grammar#lower_or_equal_to, np_of_literal pat)))
+  | Between (pat1,pat2) -> `Focus (annot, `IsPP (`PrepBin (`Op grammar#interval_between, np_of_literal pat1, `Op grammar#interval_and, np_of_literal pat2)))
+  | HasLang pat -> `Focus (annot, `Has (`Qu (`A, `Nil, `That (`Op grammar#language, `Ing (`Op grammar#matching, `PN (`Literal pat, top_rel), []))), []))
+  | HasDatatype pat -> `Focus (annot, `Has (`Qu (`A, `Nil, `That (`Op grammar#datatype, `Ing (`Op grammar#matching, `PN (`Literal pat, top_rel), []))), []))
   | ExternalSearch (s,_) -> vp_of_search grammar annot s
 and vp_of_search grammar annot = function
   | `Wikidata kwds
-  | `TextQuery kwds -> A (annot, `VT (`Op grammar#matches, X (`PN (`Literal (String.concat " " kwds), X `Nil)), [])) (* TODO: make search kind explicit *)
+  | `TextQuery kwds -> `Focus (annot, `VT (`Op grammar#matches, `PN (`Literal (String.concat " " kwds), `Nil), [])) (* TODO: make search kind explicit *)
 and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
-  | Some (InWhichThereIs (annot,np)) -> A (annot, `InWhich (X (`ThereIs (np_of_elt_s1 grammar ~id_labelling np))))
-  | Some rel -> X (`That (vp_of_elt_p1 grammar ~id_labelling rel))
+  | Some (InWhichThereIs (annot,np)) -> `Focus (annot, `InWhich (`ThereIs (np_of_elt_s1 grammar ~id_labelling np)))
+  | Some rel -> `That (vp_of_elt_p1 grammar ~id_labelling rel)
 and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
   | Det (annot, det, rel_opt) ->
     let nl_rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
@@ -826,13 +820,13 @@ and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
       `A modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_elt_s1 grammar ~id_labelling np)
-  | NAnd (annot,lr) -> A (annot, `And (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
-  | NOr (annot,lr) -> A (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
-  | NMaybe (annot,x) -> A (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
-  | NNot (annot,x) -> A (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
+  | NAnd (annot,lr) -> `Focus (annot, `And (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
+  | NOr (annot,lr) -> `Focus (annot, `Or (List.map (np_of_elt_s1 grammar ~id_labelling) lr))
+  | NMaybe (annot,x) -> `Focus (annot, `Maybe (np_of_elt_s1 grammar ~id_labelling x))
+  | NNot (annot,x) -> `Focus (annot, `Not (np_of_elt_s1 grammar ~id_labelling x))
 and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> ng = function
   | Det (annot, An (id,modif,head), rel_opt) ->
-     A (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
+     `Focus (annot, `That (word_of_elt_head head, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
     let ng_aggreg =
@@ -841,34 +835,34 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> ng = function
       | Some adj_word -> `AdjThat (adj_word, rel)
       | None -> `NounThatOf (noun_word, rel) in
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
-    A (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
+    `Focus (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
 and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> np = function
-  | Term t -> A (annot, `PN (word_of_term t, rel))
+  | Term t -> `Focus (annot, `PN (word_of_term t, rel))
   | An (id, modif, head) -> head_of_modif grammar (Some annot) (word_of_elt_head head) rel modif
-  | The id -> A (annot, `Qu (`The, `Nil, X (`LabelThat (id_labelling#get_id_label id, rel))))
-(*    A (annot, `Ref (id_labelling#get_id_label id, rel)) *)
+  | The id -> `Focus (annot, `Qu (`The, `Nil, `LabelThat (id_labelling#get_id_label id, rel)))
+(*    `Focus (annot, `Ref (id_labelling#get_id_label id, rel)) *)
 and word_of_elt_head = function
   | Thing -> `Thing
   | Class c -> word_of_class c
 and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> np = function
   | ForEachResult annot ->
-    A (annot, `Qu (`Each, `Nil, X (`That (`Op grammar#result, X `Nil))))
+    `Focus (annot, `Qu (`Each, `Nil, `That (`Op grammar#result, `Nil)))
   | ForEach (annot,id,modif,rel_opt,id2) ->
     let qu, adj = qu_adj_of_modif grammar (Some annot) `Each modif in
-    A (annot, `Qu (qu, adj, X (`LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt))))
+    `Focus (annot, `Qu (qu, adj, `LabelThat (id_labelling#get_id_label id2, rel_of_elt_p1_opt grammar ~id_labelling rel_opt)))
   | ForTerm (annot,t,id2) ->
-    A (annot, `Label (id_labelling#get_id_label id2, Some (word_of_term t)))
+    `Focus (annot, `Label (id_labelling#get_id_label id2, Some (word_of_term t)))
   | TheAggreg (annot,id,modif,g,rel_opt,id2) ->
     np_of_aggreg grammar (Some annot) `The modif g
       (rel_of_elt_p1_opt grammar ~id_labelling rel_opt)
       (ng_of_id ~id_labelling id2)
 and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> np = function
-  | Undef annot -> A (annot, `PN (`Undefined, rel))
-  | Const (annot,t) -> A (annot, `PN (word_of_term t, rel))
+  | Undef annot -> `Focus (annot, `PN (`Undefined, rel))
+  | Const (annot,t) -> `Focus (annot, `PN (word_of_term t, rel))
   | Var (annot,id) ->
     if rel = top_rel
-    then A (annot, `Label (id_labelling#get_id_label id, None))
+    then `Focus (annot, `Label (id_labelling#get_id_label id, None))
     else det_of_elt_s2 grammar ~id_labelling annot rel (The id)
   | Apply (annot,func,args) ->
     np_of_apply grammar (Some annot)
@@ -878,23 +872,23 @@ and np_of_elt_expr grammar ~id_labelling adj rel : annot elt_expr -> np = functi
       rel
   | Choice (annot,le) ->
     let lnp = List.map (fun expr -> np_of_elt_expr grammar ~id_labelling top_adj top_rel expr) le in
-    A (annot, `Choice (adj, lnp, rel))
-and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> nl_s = function
+    `Focus (annot, `Choice (adj, lnp, rel))
+and s_of_elt_expr grammar ~id_labelling : annot elt_expr -> s = function
   | expr -> `Where (np_of_elt_expr grammar ~id_labelling top_adj top_rel expr)
 and s_of_elt_s grammar ~id_labelling : annot elt_s -> s = function
   | Return (annot,np) ->
-    A (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
+    `Focus (annot, `Return (np_of_elt_s1 grammar ~id_labelling np))
   | SAggreg (annot,dims_aggregs) ->
     let dims, aggregs = List.partition is_dim dims_aggregs in
     let nl_s_aggregs =
       if aggregs = []
-      then `Return (X (`PN (`Undefined, X `Nil)))
+      then `Return (`PN (`Undefined, `Nil))
       else `Return (nl_and (List.map (np_of_elt_aggreg grammar ~id_labelling) aggregs)) in
     if dims = []
-    then A (annot, nl_s_aggregs)
+    then `Focus (annot, nl_s_aggregs)
     else
       let np_dims = nl_and (List.map (np_of_elt_aggreg grammar ~id_labelling) dims) in
-      A (annot, `For (np_dims, X nl_s_aggregs))
+      `Focus (annot, `For (np_dims, nl_s_aggregs))
   | SExpr (annot,name,id,modif,expr,rel_opt) ->
     let _qu, adj = qu_adj_of_modif grammar (Some annot) `The modif in
     let rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
@@ -902,13 +896,13 @@ and s_of_elt_s grammar ~id_labelling : annot elt_s -> s = function
     let np =
       if name=""
       then np_expr
-      else X (`PN (`Func name, X (`Ing (`Op "=", np_expr, [])))) in
-    A (annot, `Return np)
+      else `PN (`Func name, `Ing (`Op "=", np_expr, [])) in
+    `Focus (annot, `Return np)
   | SFilter (annot,id,expr) ->
     let s = s_of_elt_expr grammar ~id_labelling expr in
-    A (annot, s)
+    `Focus (annot, s)
   | Seq (annot,lr) ->
-     A (annot, `Seq (List.map (s_of_elt_s grammar ~id_labelling) lr))
+     `Focus (annot, `Seq (List.map (s_of_elt_s grammar ~id_labelling) lr))
 and nl_vp_of_arg_pred grammar ~id_labelling arg pred cp =
   let word, synt = word_syntagm_of_pred grammar pred in
   match arg with
@@ -926,38 +920,38 @@ and nl_vp_of_O_pred grammar ~id_labelling ~word ~synt cp =
   match synt with
   | `Noun -> `IsTheNounCP (word, cp_of_elt_sn grammar ~id_labelling cp)
   | `InvNoun -> `HasPropCP (word, cp_of_elt_sn grammar ~id_labelling ~inv:true cp)
-  | `TransVerb -> nl_is (something (X (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
-  | `TransAdj -> nl_is (something (X (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
+  | `TransVerb -> nl_is (nl_something (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)))
+  | `TransAdj -> nl_is (nl_something (`ThatS (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)))
 and nl_vp_of_Q_pred grammar ~id_labelling q ~word ~synt cp =
   let word_q, synt_q = word_syntagm_of_arg_uri grammar q in
   match synt_q with
-  | `Noun -> nl_is (something (X (`AtWhichNoun (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
-  | `TransAdj -> nl_is (something (X (`PrepWhich (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))))
+  | `Noun -> nl_is (nl_something (`AtWhichNoun (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp)))
+  | `TransAdj -> nl_is (nl_something (`PrepWhich (word_q, s_of_elt_sn grammar ~id_labelling ~word ~synt cp)))
   (*  | `InvNoun -> `HasProp (word_q, X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), []) *)
   (*  | `TransVerb -> nl_is (something (X (`ThatS (X (`Truth (X (`TheFactThat (s_of_elt_sn grammar ~id_labelling ~word ~synt cp)), X (`VT_CP (word_q, X `Nil)))))))) *)
 and s_of_elt_sn grammar ~id_labelling ~word ~synt : annot elt_sn -> s = function
   | CNil annot -> (* missing subject *)
-     X (`Truth (something (X `Nil), X (nl_vp_of_S_pred grammar ~id_labelling ~word ~synt (CNil annot))))
+     `Truth (nl_something `Nil, nl_vp_of_S_pred grammar ~id_labelling ~word ~synt (CNil annot))
   | CCons (annot, arg, np, cp) ->
      if arg = S
-     then A (annot, `Truth (np_of_elt_s1 grammar ~id_labelling np, X (nl_vp_of_S_pred grammar ~id_labelling ~word ~synt cp)))
-     else A (annot, `PP (pp_of_arg_elt_np grammar ~id_labelling arg np, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))
-  | CAnd (annot,lr) -> A (annot, `And (List.map (s_of_elt_sn grammar ~id_labelling ~word ~synt) lr))
-  | COr (annot,lr) -> A (annot, `Or (List.map (s_of_elt_sn grammar ~id_labelling ~word ~synt) lr))
-  | CMaybe (annot,x) -> A (annot, `Maybe (s_of_elt_sn grammar ~id_labelling ~word ~synt x))
-  | CNot (annot,x) -> A (annot, `Not (s_of_elt_sn grammar ~id_labelling ~word ~synt x))
+     then `Focus (annot, `Truth (np_of_elt_s1 grammar ~id_labelling np, nl_vp_of_S_pred grammar ~id_labelling ~word ~synt cp))
+     else `Focus (annot, `PP (pp_of_arg_elt_np grammar ~id_labelling arg np, s_of_elt_sn grammar ~id_labelling ~word ~synt cp))
+  | CAnd (annot,lr) -> `Focus (annot, `And (List.map (s_of_elt_sn grammar ~id_labelling ~word ~synt) lr))
+  | COr (annot,lr) -> `Focus (annot, `Or (List.map (s_of_elt_sn grammar ~id_labelling ~word ~synt) lr))
+  | CMaybe (annot,x) -> `Focus (annot, `Maybe (s_of_elt_sn grammar ~id_labelling ~word ~synt x))
+  | CNot (annot,x) -> `Focus (annot, `Not (s_of_elt_sn grammar ~id_labelling ~word ~synt x))
 and cp_of_elt_sn grammar ~id_labelling ?(inv = false) : annot elt_sn -> cp = function
-  | CNil annot -> A (annot, `Nil)
+  | CNil annot -> `Focus (annot, `Nil)
   | CCons (annot, arg, np, cp) ->
      let arg =
        if inv
        then (match arg with S -> O | O -> S | _ -> arg)
        else arg in
-     A (annot, `Cons (pp_of_arg_elt_np grammar ~id_labelling arg np, cp_of_elt_sn grammar ~id_labelling cp))
-  | CAnd (annot,lr) -> A (annot, `And (List.map (cp_of_elt_sn grammar ~id_labelling ~inv) lr))
-  | COr (annot,lr) -> A (annot, `Or (List.map (cp_of_elt_sn grammar ~id_labelling ~inv) lr))
-  | CMaybe (annot,x) -> A (annot, `Maybe (cp_of_elt_sn grammar ~id_labelling ~inv x))
-  | CNot (annot,x) -> A (annot, `Not (cp_of_elt_sn grammar ~id_labelling ~inv x))
+     `Focus (annot, `Cons (pp_of_arg_elt_np grammar ~id_labelling arg np, cp_of_elt_sn grammar ~id_labelling cp))
+  | CAnd (annot,lr) -> `Focus (annot, `And (List.map (cp_of_elt_sn grammar ~id_labelling ~inv) lr))
+  | COr (annot,lr) -> `Focus (annot, `Or (List.map (cp_of_elt_sn grammar ~id_labelling ~inv) lr))
+  | CMaybe (annot,x) -> `Focus (annot, `Maybe (cp_of_elt_sn grammar ~id_labelling ~inv x))
+  | CNot (annot,x) -> `Focus (annot, `Not (cp_of_elt_sn grammar ~id_labelling ~inv x))
 and pp_of_arg_elt_np grammar ~id_labelling arg np =
   let np = np_of_elt_s1 grammar ~id_labelling np in
   match arg with
@@ -987,49 +981,44 @@ end
 
 (* top-down recursive transformation using [transf] like a visitor *)
 
-let map_annotated x map_nl_x =
-  match x with
-  | A (annot,nl) -> A (annot, map_nl_x nl)
-  | X nl -> X (map_nl_x nl)
-  
 let rec map_s (transf : transf) s =
-  map_annotated (transf#s s)
-    ( function
-    | `Return np -> `Return (map_np transf np)
-    | `ThereIs np -> `ThereIs (map_np transf np)
-    | `ThereIs_That (np,s) -> `ThereIs_That (map_np transf np, map_s transf s)
-    | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
-    | `PP (pp,s) -> `PP (map_pp transf pp, map_s transf s)
-    | `Where np -> `Where (map_np transf np)
-    | `For (np,s) -> `For (map_np transf np, map_s transf s)
-    | `Seq lr -> `Seq (List.map (map_s transf) lr)
-    | `And lr -> `And (List.map (map_s transf) lr)
-    | `Or lr -> `Or (List.map (map_s transf) lr)
-    | `Maybe rel -> `Maybe (map_s transf s)
-    | `Not rel -> `Not (map_s transf s) )
+  match transf#s s with
+  | `Return np -> `Return (map_np transf np)
+  | `ThereIs np -> `ThereIs (map_np transf np)
+  | `ThereIs_That (np,s) -> `ThereIs_That (map_np transf np, map_s transf s)
+  | `Truth (np,vp) -> `Truth (map_np transf np, map_vp transf vp)
+  | `PP (pp,s) -> `PP (map_pp transf pp, map_s transf s)
+  | `Where np -> `Where (map_np transf np)
+  | `For (np,s) -> `For (map_np transf np, map_s transf s)
+  | `Seq lr -> `Seq (List.map (map_s transf) lr)
+  | `And lr -> `And (List.map (map_s transf) lr)
+  | `Or lr -> `Or (List.map (map_s transf) lr)
+  | `Maybe rel -> `Maybe (map_s transf s)
+  | `Not rel -> `Not (map_s transf s)
+  | `Focus (annot,s) -> `Focus (annot, map_s transf s)
 and map_np transf np =
-  map_annotated (transf#np np)
-    ( function
-    | `Void -> `Void
-    | `PN (w,rel) -> `PN (w, map_rel transf rel)
-    | `This -> `This
-    | `TheFactThat (s) -> `TheFactThat (map_s transf s)
-    | `Label (l,w_opt) -> `Label (l,w_opt)
-    | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
-    | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
-    | `And (lr) -> `And (List.map (map_np transf) lr)
-    | `Or (lr) -> `Or (List.map (map_np transf) lr)
-    | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
-    | `Maybe (np) -> `Maybe (map_np transf np)
-    | `Not (np) -> `Not (map_np transf np)
-    | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel) )
+  match transf#np np with
+  | `Void -> `Void
+  | `PN (w,rel) -> `PN (w, map_rel transf rel)
+  | `This -> `This
+  | `TheFactThat (s) -> `TheFactThat (map_s transf s)
+  | `Label (l,w_opt) -> `Label (l,w_opt)
+  | `Qu (qu,adj,ng) -> `Qu (qu, map_adj transf adj, map_ng transf ng)
+  | `QuOneOf (qu,lw) -> `QuOneOf (qu,lw)
+  | `And (lr) -> `And (List.map (map_np transf) lr)
+  | `Or (lr) -> `Or (List.map (map_np transf) lr)
+  | `Choice (adj,lr,rel) -> `Choice (map_adj transf adj, List.map (map_np transf) lr, map_rel transf rel)
+  | `Maybe (np) -> `Maybe (map_np transf np)
+  | `Not (np) -> `Not (map_np transf np)
+  | `Expr (adj,syntax,lnp,rel) -> `Expr (map_adj transf adj, syntax, List.map (map_np transf) lnp, map_rel transf rel)
+  | `Focus (annot,np) -> `Focus (annot, map_np transf np)
 and map_ng transf ng =
-  map_annotated (transf#ng ng)
-    ( function
-    | `That (w,rel) -> `That (w, map_rel transf rel)
-    | `LabelThat (l,rel) -> `LabelThat (l, map_rel transf rel)
-    | `OfThat (w,np,rel) -> `OfThat (w, map_np transf np, map_rel transf rel)
-    | `Aggreg (susp,ngg,ng) -> `Aggreg (susp, map_ng_aggreg transf ngg, map_ng transf ng) )
+  match transf#ng ng with
+  | `That (w,rel) -> `That (w, map_rel transf rel)
+  | `LabelThat (l,rel) -> `LabelThat (l, map_rel transf rel)
+  | `OfThat (w,np,rel) -> `OfThat (w, map_np transf np, map_rel transf rel)
+  | `Aggreg (susp,ngg,ng) -> `Aggreg (susp, map_ng_aggreg transf ngg, map_ng transf ng)
+  | `Focus (annot,ng) -> `Focus (annot, map_ng transf ng)
 and map_adj transf adj =
   match transf#adj adj with
   | `Nil -> `Nil
@@ -1041,55 +1030,55 @@ and map_ng_aggreg transf ngg =
     | `AdjThat (w,rel) -> `AdjThat (w, map_rel transf rel)
     | `NounThatOf (w,rel) -> `NounThatOf (w, map_rel transf rel)
 and map_rel transf rel =
-  map_annotated (transf#rel rel)
-    ( function
-    | `Nil -> `Nil
-    | `That vp -> `That (map_vp transf vp)
-    | `ThatS s -> `ThatS (map_s transf s)
-    | `Whose (ng,vp) -> `Whose (map_ng transf ng, map_vp transf vp)
-    | `PrepWhich (w,s) -> `PrepWhich (w, map_s transf s)
-    | `AtWhichNoun (w,s) -> `AtWhichNoun (w, map_s transf s)
+  match transf#rel rel with
+  | `Nil -> `Nil
+  | `That vp -> `That (map_vp transf vp)
+  | `ThatS s -> `ThatS (map_s transf s)
+  | `Whose (ng,vp) -> `Whose (map_ng transf ng, map_vp transf vp)
+  | `PrepWhich (w,s) -> `PrepWhich (w, map_s transf s)
+  | `AtWhichNoun (w,s) -> `AtWhichNoun (w, map_s transf s)
     (*    | `Of np -> `Of (map_np transf np) *)
-    | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
-    | `Ing (w,np,lpp) -> `Ing (w, map_np transf np, List.map (map_pp transf) lpp)
-    | `InWhich (s) -> `InWhich (map_s transf s)
-    | `And lr -> `And (List.map (map_rel transf) lr)
-    | `Or lr -> `Or (List.map (map_rel transf) lr)
-    | `Maybe rel -> `Maybe (map_rel transf rel)
-    | `Not rel -> `Not (map_rel transf rel)
-    | `In (npg,rel) -> `In (map_np transf npg, map_rel transf rel)
-    | `Ellipsis -> `Ellipsis )
+  | `PP (lpp) -> `PP (List.map (map_pp transf) lpp)
+  | `Ing (w,np,lpp) -> `Ing (w, map_np transf np, List.map (map_pp transf) lpp)
+  | `InWhich (s) -> `InWhich (map_s transf s)
+  | `And lr -> `And (List.map (map_rel transf) lr)
+  | `Or lr -> `Or (List.map (map_rel transf) lr)
+  | `Maybe rel -> `Maybe (map_rel transf rel)
+  | `Not rel -> `Not (map_rel transf rel)
+  | `In (npg,rel) -> `In (map_np transf npg, map_rel transf rel)
+  | `Ellipsis -> `Ellipsis
+  | `Focus (annot,rel) -> `Focus (annot, map_rel transf rel)
 and map_vp transf vp =
-  map_annotated (transf#vp vp)
-    ( function
-    | `IsNP (np,lpp) -> `IsNP (map_np transf np, List.map (map_pp transf) lpp)
-    | `IsPP pp -> `IsPP (map_pp transf pp)
-    | `IsTheNounCP (w,cp) -> `IsTheNounCP (w, map_cp transf cp)
-    | `IsAdjCP (w,cp) -> `IsAdjCP (w,map_cp transf cp)
-    | `IsInWhich s -> `IsInWhich (map_s transf s)
-    | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
-    | `HasPropCP (w,cp) -> `HasPropCP (w, map_cp transf cp)
-    | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
-    | `HasCP cp -> `HasCP (map_cp transf cp)
-    | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
-    | `VT_CP (w,cp) -> `VT_CP (w, map_cp transf cp)
-    | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
-    | `And lr -> `And (List.map (map_vp transf) lr)
-    | `Or lr -> `Or (List.map (map_vp transf) lr)
-    | `Maybe vp -> `Maybe (map_vp transf vp)
-    | `Not vp -> `Not (map_vp transf vp)
-    | `EpsilonHead vp -> `EpsilonHead (map_vp transf vp)
-    | `In (npg,vp) -> `In (map_np transf npg, map_vp transf vp)
-    | `Ellipsis -> `Ellipsis )
+  match transf#vp vp with
+  | `IsNP (np,lpp) -> `IsNP (map_np transf np, List.map (map_pp transf) lpp)
+  | `IsPP pp -> `IsPP (map_pp transf pp)
+  | `IsTheNounCP (w,cp) -> `IsTheNounCP (w, map_cp transf cp)
+  | `IsAdjCP (w,cp) -> `IsAdjCP (w,map_cp transf cp)
+  | `IsInWhich s -> `IsInWhich (map_s transf s)
+  | `HasProp (w,np,lpp) -> `HasProp (w, map_np transf np, List.map (map_pp transf) lpp)
+  | `HasPropCP (w,cp) -> `HasPropCP (w, map_cp transf cp)
+  | `Has (np,lpp) -> `Has (map_np transf np, List.map (map_pp transf) lpp)
+  | `HasCP cp -> `HasCP (map_cp transf cp)
+  | `VT (w,np,lpp) -> `VT (w, map_np transf np, List.map (map_pp transf) lpp)
+  | `VT_CP (w,cp) -> `VT_CP (w, map_cp transf cp)
+  | `Subject (np,vp) -> `Subject (map_np transf np, map_vp transf vp)
+  | `And lr -> `And (List.map (map_vp transf) lr)
+  | `Or lr -> `Or (List.map (map_vp transf) lr)
+  | `Maybe vp -> `Maybe (map_vp transf vp)
+  | `Not vp -> `Not (map_vp transf vp)
+  | `EpsilonHead vp -> `EpsilonHead (map_vp transf vp)
+  | `In (npg,vp) -> `In (map_np transf npg, map_vp transf vp)
+  | `Ellipsis -> `Ellipsis
+  | `Focus (annot,vp) -> `Focus (annot, map_vp transf vp)
 and map_cp transf cp =
-  map_annotated (transf#cp cp)
-    ( function
-    | `Nil -> `Nil
-    | `Cons (pp,cp) -> `Cons (map_pp transf pp, map_cp transf cp)
-    | `And lr -> `And (List.map (map_cp transf) lr)
-    | `Or lr -> `Or (List.map (map_cp transf) lr)
-    | `Maybe cp -> `Maybe (map_cp transf cp)
-    | `Not cp -> `Not (map_cp transf cp) )
+  match transf#cp cp with
+  | `Nil -> `Nil
+  | `Cons (pp,cp) -> `Cons (map_pp transf pp, map_cp transf cp)
+  | `And lr -> `And (List.map (map_cp transf) lr)
+  | `Or lr -> `Or (List.map (map_cp transf) lr)
+  | `Maybe cp -> `Maybe (map_cp transf cp)
+  | `Not cp -> `Not (map_cp transf cp)
+  | `Focus (annot,cp) -> `Focus (annot, map_cp transf cp)
 and map_pp transf pp =
   match transf#pp pp with
     | `Bare np -> `Bare (map_np transf np)  
@@ -1103,67 +1092,67 @@ let main_transf =
 object (self)
   inherit transf
   method s nl =
-    map_annotated nl
-      (function
-      | `Return (A (a2, `PN (w, X `Nil)))
-	-> `ThereIs (A (a2, `PN (w, X `Nil)))
-      | `Return (A (a2, `PN (w, X (`That vp))))
-	-> `Truth (A (a2, `PN (w, top_rel)), vp)
-      | `Return (A (a2, `Qu (`A, adj, (X (`That ((`Thing | `Class _), _)) as ng))))
-	-> `Return (A (a2, `Qu (`Every, adj, ng)))
-      | nl -> nl)
+    match nl with
+    | `Focus (annot,s) -> `Focus (annot, self#s s)
+    | `Return (`Focus (a2, `PN (w, `Nil)))
+      -> `ThereIs (`Focus (a2, `PN (w, `Nil)))
+    | `Return (`Focus (a2, `PN (w, `That vp)))
+      -> `Truth (`Focus (a2, `PN (w, top_rel)), vp)
+    | `Return (`Focus (a2, `Qu (`A, adj, (`That ((`Thing | `Class _), _) as ng))))
+      -> `Return (`Focus (a2, `Qu (`Every, adj, ng)))
+    | nl -> nl
   method np = function
-  | A (a1, `Qu (_, adj, X (`That (`Thing, X (`That (A (a2, `IsNP (X (`Qu (qu, `Nil, X ng)), []))))))))
-    -> A (a1, `Qu (qu, adj, A (a2, ng)))
-  | X (`Qu (`A, `Nil, X (`That (`Thing, X (`That (X (`IsNP (np, [])))))))) ->
+  | `Focus (a1, `Qu (_, adj, `That (`Thing, `That (`Focus (a2, `IsNP (`Qu (qu, `Nil, ng), []))))))
+    -> `Focus (a1, `Qu (qu, adj, `Focus (a2, ng)))
+  | `Qu (`A, `Nil, `That (`Thing, `That (`IsNP (np, [])))) ->
      np
-  | A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, `That (`Thing, X (`That (X (`IsNP (X (`Qu ((`A | `The), `Nil, X ng)), []))))))))))
-    -> A (a1, `Qu (qu, adj, A (a2, `Aggreg (susp, ngg, A (a3, ng)))))
-  | A (a1, `QuOneOf (_, [w]))
-    -> A (a1, `PN (w, top_rel))
-  | A (a1, `Maybe (A (a2, `Qu (qu, adj, X ng))))
-    -> A (a1, `Qu (qu, `Optional (a1#is_susp_focus, adj), A (a2, ng))) (* TODO: adj out of foc1? *)
-  | A (a1, `Not (A (a2, `Qu (`A, adj, X ng))))
-    -> A (a1, `Qu (`No (a1#is_susp_focus), adj, A (a2, ng))) (* TODO: adj out of foc1 *)
+  | `Focus (a1, `Qu (qu, adj, `Focus (a2, `Aggreg (susp, ngg, `Focus (a3, `That (`Thing, `That (`IsNP (`Qu ((`A | `The), `Nil, ng), []))))))))
+    -> `Focus (a1, `Qu (qu, adj, `Focus (a2, `Aggreg (susp, ngg, `Focus (a3, ng)))))
+  | `Focus (a1, `QuOneOf (_, [w]))
+    -> `Focus (a1, `PN (w, top_rel))
+  | `Focus (a1, `Maybe (`Focus (a2, `Qu (qu, adj, ng))))
+    -> `Focus (a1, `Qu (qu, `Optional (a1#is_susp_focus, adj), `Focus (a2, ng))) (* TODO: adj out of foc1? *)
+  | `Focus (a1, `Not (`Focus (a2, `Qu (`A, adj, ng))))
+    -> `Focus (a1, `Qu (`No (a1#is_susp_focus), adj, `Focus (a2, ng))) (* TODO: adj out of foc1 *)
   | nl -> nl
   method rel = function
-  | X (`That (A (a1, vp))) -> self#rel (A (a1, `That (X vp)))
-  | A (a1, `That (X `Ellipsis)) -> A (a1, `Ellipsis)
-  | A (a1, `That (X (`And lr))) -> A (a1, `And (List.map (fun vp -> X (`That vp)) lr))
-  | A (a1, `That (X (`Or lr))) -> A (a1, `Or (List.map (fun vp -> X (`That vp)) lr))
+  | `That (`Focus (a1, vp)) -> self#rel (`Focus (a1, `That vp))
+  | `Focus (a1, `That `Ellipsis) -> `Focus (a1, `Ellipsis)
+  | `Focus (a1, `That (`And lr)) -> `Focus (a1, `And (List.map (fun vp -> `That vp) lr))
+  | `Focus (a1, `That (`Or lr)) -> `Focus (a1, `Or (List.map (fun vp -> `That vp) lr))
 (*    | `That (`Maybe (susp,vp)) -> `Maybe (susp, `That vp) *)
 (*    | `That (`Not (susp,vp)) -> `Not (susp, `That vp) *)
-  | A (a1, `That (X (`HasProp (p,np,lpp)))) ->
+  | `Focus (a1, `That (`HasProp (p,np,lpp))) ->
     ( match np with
-    | A (a2, `Qu (`A, `Nil, X (`That (`Thing, X (`That vp)))))
-      -> A (a1, `Whose (X (`That (p, X (`PP lpp))), A (a2, `EpsilonHead vp)))
-    | A (a2, `Qu (qu, adj, X (`That (`Thing, rel))))
-      -> A (a1, `That (X (`HasProp (p,np,lpp)))) (* simplification at VP level *)
-    | A (a2, `Qu (qu, adj, X (`Aggreg (susp, ngg, A (a3, `That (`Thing, rel2))))))
-      -> A (a1, `That (X (`HasProp (p,np,lpp)))) (* idem *)
-    | _ -> A (a1, `Whose (X (`That (p, X (`PP lpp))), X (`IsNP (np,[])))) )
-  | A (a1, `That (X (`IsNP (X (`Qu (`A, `Nil, X (`That (`Thing, X rel)))), [])))) -> A (a1, rel)
-  | A (a1, `That (X (`IsPP pp))) -> A (a1, `PP [pp])
-  | A (a1, `That (X (`IsInWhich s))) -> A (a1, `InWhich s)
+    | `Focus (a2, `Qu (`A, `Nil, `That (`Thing, `That vp)))
+      -> `Focus (a1, `Whose (`That (p, `PP lpp), `Focus (a2, `EpsilonHead vp)))
+    | `Focus (a2, `Qu (qu, adj, `That (`Thing, rel)))
+      -> `Focus (a1, `That (`HasProp (p,np,lpp))) (* simplification at VP level *)
+    | `Focus (a2, `Qu (qu, adj, `Aggreg (susp, ngg, `Focus (a3, `That (`Thing, rel2)))))
+      -> `Focus (a1, `That (`HasProp (p,np,lpp))) (* idem *)
+    | _ -> `Focus (a1, `Whose (`That (p, `PP lpp), `IsNP (np,[]))) )
+  | `Focus (a1, `That (`IsNP (`Qu (`A, `Nil, `That (`Thing, rel)), []))) -> `Focus (a1, rel)
+  | `Focus (a1, `That (`IsPP pp)) -> `Focus (a1, `PP [pp])
+  | `Focus (a1, `That (`IsInWhich s)) -> `Focus (a1, `InWhich s)
   | nl -> nl
   method vp nl =
-    map_annotated nl
-      (function
-      | `HasProp (p, A (a2, `Qu (qu, adj, X (`That (`Thing, rel)))), lpp)
-	-> `Has (A (a2, `Qu (qu, adj, X (`That (p, rel)))), lpp)
-      | `HasProp (p, A (a2, `Qu (qu, adj, X (`Aggreg (susp, ngg, A (a3, `That (`Thing, rel2)))))), lpp)
-	-> `Has (A (a2, `Qu (qu, adj, X (`Aggreg (susp, ngg, A (a3, `That (p, rel2)))))), lpp)
-      | `HasProp (p, A (a2, `Maybe (A (a3, `Qu (qu, adj, X (`That (`Thing, rel)))))), lpp)
-	-> `Has (A (a2, `Qu (qu, `Optional (a3#is_susp_focus, adj), A (a3, `That (p, rel)))), lpp) (* TODO: adj out of a3 *)
-      | `HasPropCP (p, A (a2, `Nil))
-	-> `Has (A (a2, `Qu (`A, `Nil, X (`That (p, X `Nil)))), [])
-      | `HasPropCP (p, A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (`Thing, rel))))), A (a4, cp))))
-	-> `HasCP (A (a2, `Cons (`Bare (A (a3, `Qu (qu, adj, X (`That (p, rel))))), A (a4, cp))))
-      (*	 `Has (A (a3, `Qu (qu, adj, X (`That (p, rel)))), []) *)
-      | nl -> nl)
+    match nl with
+    | `Focus (annot,vp) -> `Focus (annot, self#vp vp)
+    | `HasProp (p, `Focus (a2, `Qu (qu, adj, `That (`Thing, rel))), lpp)
+      -> `Has (`Focus (a2, `Qu (qu, adj, `That (p, rel))), lpp)
+    | `HasProp (p, `Focus (a2, `Qu (qu, adj, `Aggreg (susp, ngg, `Focus (a3, `That (`Thing, rel2))))), lpp)
+      -> `Has (`Focus (a2, `Qu (qu, adj, `Aggreg (susp, ngg, `Focus (a3, `That (p, rel2))))), lpp)
+    | `HasProp (p, `Focus (a2, `Maybe (`Focus (a3, `Qu (qu, adj, `That (`Thing, rel))))), lpp)
+      -> `Has (`Focus (a2, `Qu (qu, `Optional (a3#is_susp_focus, adj), `Focus (a3, `That (p, rel)))), lpp) (* TODO: adj out of a3 *)
+    | `HasPropCP (p, `Focus (a2, `Nil))
+      -> `Has (`Focus (a2, `Qu (`A, `Nil, `That (p, `Nil))), [])
+    | `HasPropCP (p, `Focus (a2, `Cons (`Bare (`Focus (a3, `Qu (qu, adj, `That (`Thing, rel)))), `Focus (a4, cp))))
+      -> `HasCP (`Focus (a2, `Cons (`Bare (`Focus (a3, `Qu (qu, adj, `That (p, rel)))), `Focus (a4, cp))))
+    (*	 `Has (A (a3, `Qu (qu, adj, X (`That (p, rel)))), []) *)
+    | nl -> nl
   method pp = function
-    | `AtNoun (prep, A (a2, `Qu (qu, adj, X (`That (`Thing, rel)))))
-      -> `At (A (a2, `Qu (qu, adj, X (`That (prep, rel)))))
+    | `AtNoun (prep, `Focus (a2, `Qu (qu, adj, `That (`Thing, rel))))
+      -> `At (`Focus (a2, `Qu (qu, adj, `That (prep, rel))))
     | pp -> pp
 end
 
@@ -1285,44 +1274,39 @@ let xml_focus annot xml =
        | _ -> false, xml in
      [Focus (current_focus, focus, xml)]
 
-let xml_annotated x_annot f =
-  match x_annot with
-  | X x -> f None x
-  | A (annot,x) -> xml_focus annot (f (Some annot) x)
-
-let rec xml_s grammar ~id_labelling (s : s) =
-  xml_annotated s
-    ( fun annot_opt -> function
-    | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
-    | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
-    | `ThereIs_That (np,s) -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np @ Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
-    | `Truth (np,vp) -> (*Kwd grammar#it_is_true_that ::*) xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
-    | `PP (pp,s) -> xml_pp grammar ~id_labelling pp @ xml_s grammar ~id_labelling s
-    | `Where np -> Kwd grammar#where :: xml_np grammar ~id_labelling np
-    | `For (np,s) -> Kwd grammar#for_ :: xml_np grammar ~id_labelling np @ Coord ([], [xml_s grammar ~id_labelling s]) :: []    
+let rec xml_s grammar ~id_labelling ?(annot_opt = None) (s : s) =
+  match s with
+  | `Return np -> Kwd grammar#give_me :: xml_np grammar ~id_labelling np
+  | `ThereIs np -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np
+  | `ThereIs_That (np,s) -> Kwd grammar#there_is :: xml_np grammar ~id_labelling np @ Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
+  | `Truth (np,vp) -> (*Kwd grammar#it_is_true_that ::*) xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+  | `PP (pp,s) -> xml_pp grammar ~id_labelling pp @ xml_s grammar ~id_labelling s
+  | `Where np -> Kwd grammar#where :: xml_np grammar ~id_labelling np
+  | `For (np,s) -> Kwd grammar#for_ :: xml_np grammar ~id_labelling np @ Coord ([], [xml_s grammar ~id_labelling s]) :: []    
       (* [Enum (", ", [Kwd grammar#for_ :: xml_np grammar ~id_labelling np;
 	 xml_s grammar ~id_labelling s])] *)
-    | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
-    | `And lr -> xml_and grammar (List.map (xml_s grammar ~id_labelling) lr)
-    | `Or lr -> xml_or grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
-    | `Maybe s -> xml_maybe grammar annot_opt (xml_s grammar ~id_labelling s)
-    | `Not s -> xml_not grammar annot_opt (xml_s grammar ~id_labelling s) )
-and xml_np grammar ~id_labelling np =
-  xml_annotated np
-    ( fun annot_opt -> function
-    | `Void -> []
-    | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
-    | `This -> [Kwd grammar#this]
-    | `TheFactThat (s) -> Kwd grammar#the_fact_that :: xml_s grammar ~id_labelling s
-    | `Label (l,w_opt) -> xml_np_label grammar ~id_labelling l @ (match w_opt with None -> [] | Some w -> [Word w])
-    | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
-    | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
-    | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
-    | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
-    | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
-    | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
-    | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
-    | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel) )
+  | `Seq lr -> xml_seq grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
+  | `And lr -> xml_and grammar (List.map (xml_s grammar ~id_labelling) lr)
+  | `Or lr -> xml_or grammar annot_opt (List.map (xml_s grammar ~id_labelling) lr)
+  | `Maybe s -> xml_maybe grammar annot_opt (xml_s grammar ~id_labelling s)
+  | `Not s -> xml_not grammar annot_opt (xml_s grammar ~id_labelling s)
+  | `Focus (annot,s) -> xml_focus annot (xml_s grammar ~id_labelling ~annot_opt:(Some annot) s)
+and xml_np grammar ~id_labelling ?(annot_opt = None) np =
+  match np with
+  | `Void -> []
+  | `PN (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
+  | `This -> [Kwd grammar#this]
+  | `TheFactThat (s) -> Kwd grammar#the_fact_that :: xml_s grammar ~id_labelling s
+  | `Label (l,w_opt) -> xml_np_label grammar ~id_labelling l @ (match w_opt with None -> [] | Some w -> [Word w])
+  | `Qu (qu,adj,ng) -> xml_qu grammar qu (xml_adj grammar adj (xml_ng grammar ~id_labelling ng))
+  | `QuOneOf (qu,lw) -> xml_qu grammar qu (Kwd grammar#quantif_of :: Enum (", ", List.map (fun w -> [Word w]) lw) :: [])
+  | `And lr -> xml_and grammar (List.map (xml_np grammar ~id_labelling) lr)
+  | `Or lr -> xml_or grammar annot_opt (List.map (xml_np grammar ~id_labelling) lr)
+  | `Choice (adj,lr,rel) -> xml_choice grammar annot_opt (xml_adj grammar adj) (List.map (xml_np grammar ~id_labelling) lr) @ xml_rel grammar ~id_labelling rel
+  | `Maybe np -> xml_maybe grammar annot_opt (xml_np grammar ~id_labelling np)
+  | `Not np -> xml_not grammar annot_opt (xml_np grammar ~id_labelling np)
+  | `Expr (adj,syntax,lnp,rel) -> xml_adj grammar adj (xml_expr grammar syntax (List.map (xml_np grammar ~id_labelling) lnp) @ xml_rel grammar ~id_labelling rel)
+  | `Focus (annot,np) -> xml_focus annot (xml_np grammar ~id_labelling ~annot_opt:(Some annot) np)
 and xml_expr grammar syntax lnp =
   match syntax with
   | `Noun s -> Kwd grammar#the :: Word (`Func s) :: Kwd grammar#of_ :: List.concat lnp
@@ -1338,12 +1322,12 @@ and xml_expr grammar syntax lnp =
 	 | `Arg i -> (try List.nth lnp (i-1) with _ -> [Word `Undefined]))
 	 l)
 and xml_ng grammar ~id_labelling rel =
-  xml_annotated rel
-    ( fun annot_opt -> function
-    | `That (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
-    | `LabelThat (l,rel) -> xml_ng_label grammar ~id_labelling l @ xml_rel grammar ~id_labelling rel
-    | `OfThat (w,np,rel) -> Word w :: Word (`Op grammar#of_) :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
-    | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg )
+  match rel with
+  | `That (w,rel) -> Word w :: xml_rel grammar ~id_labelling rel
+  | `LabelThat (l,rel) -> xml_ng_label grammar ~id_labelling l @ xml_rel grammar ~id_labelling rel
+  | `OfThat (w,np,rel) -> Word w :: Word (`Op grammar#of_) :: xml_np grammar ~id_labelling np @ xml_rel grammar ~id_labelling rel
+  | `Aggreg (susp,ngg,ng) -> xml_ng_aggreg grammar ~id_labelling susp (xml_ng grammar ~id_labelling ng) ngg
+  | `Focus (annot,rel) -> xml_focus annot (xml_ng grammar ~id_labelling rel)
 and xml_qu grammar qu xml =
   match xml with
     | Word `Thing :: xml_rem ->
@@ -1384,53 +1368,49 @@ and xml_ng_aggreg grammar ~id_labelling susp xml_ng = function
     then xml_suspended susp xml_g_rel @ xml_ng
     else xml_ng @ xml_suspended susp xml_g_rel
   | `NounThatOf (g,rel) -> xml_suspended susp (Word g :: xml_rel grammar ~id_labelling rel @ [Word (`Op grammar#of_)]) @ xml_ng
-and xml_rel grammar ~id_labelling = function
-  | A (a1, `Maybe (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
-  | A (a1, `Not (A (a2, `That (X vp)))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Not a1 a2 vp)
-  | rel ->
-    xml_annotated rel
-      (fun annot_opt -> function
-      | `Nil -> []
-      | `That vp -> Kwd grammar#relative_that :: xml_vp grammar ~id_labelling vp
-      | `ThatS s -> Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
-      | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
-      | `PrepWhich (w,s) -> Word w :: Kwd grammar#which :: xml_s grammar ~id_labelling s
-      | `AtWhichNoun (w,s) -> Kwd grammar#with_ :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
+and xml_rel grammar ~id_labelling ?(annot_opt = None) = function
+  | `Nil -> []
+  | `That vp -> Kwd grammar#relative_that :: xml_vp grammar ~id_labelling vp
+  | `ThatS s -> Kwd grammar#relative_that_object :: xml_s grammar ~id_labelling s
+  | `Whose (ng,vp) -> Kwd grammar#whose :: xml_ng grammar ~id_labelling ng @ xml_vp grammar ~id_labelling vp
+  | `PrepWhich (w,s) -> Word w :: Kwd grammar#which :: xml_s grammar ~id_labelling s
+  | `AtWhichNoun (w,s) -> Kwd grammar#with_ :: Kwd grammar#which :: Word w :: xml_s grammar ~id_labelling s
       (*      | `Of np -> Kwd grammar#of_ :: xml_np grammar ~id_labelling np *)
-      | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
-      | `Ing (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `InWhich s -> xml_in_which grammar ~id_labelling s
-      | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
-      | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
-      | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar ~id_labelling rel)
-      | `Not rel -> xml_not grammar annot_opt (xml_rel grammar ~id_labelling rel)
-      | `In (npg,rel) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_rel grammar ~id_labelling rel)
-      | `Ellipsis -> xml_ellipsis )
-and xml_vp grammar ~id_labelling = function
-  | A (a1, `Maybe (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
-  | A (a1, `Not (A (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Not a1 a2 vp) (* negation inversion *)
-  | vp ->
-    xml_annotated vp
-      (fun annot_opt -> function
-      | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `IsPP pp -> Kwd grammar#is :: xml_pp grammar ~id_labelling pp
-      | `IsTheNounCP (w,cp) -> Kwd grammar#is :: Kwd grammar#the :: Word w :: xml_cp grammar ~id_labelling cp
-      | `IsAdjCP (w,cp) -> Kwd grammar#is :: Word w :: xml_cp grammar ~id_labelling cp
-      | `IsInWhich s -> Kwd grammar#is :: Kwd grammar#something :: xml_in_which grammar ~id_labelling s
-      | `HasProp (p,np,lpp) -> xml_has_as_a grammar [Word p] @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `HasPropCP (w,cp) -> xml_has_as_a grammar [Word w] @ xml_cp grammar ~id_labelling cp
-      | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `HasCP cp -> Kwd grammar#has :: xml_cp grammar ~id_labelling cp
-      | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
-      | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
-      | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
-      | `And lr -> xml_and grammar (List.map (xml_vp grammar ~id_labelling) lr)
-      | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
-      | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar ~id_labelling vp)
-      | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
-      | `EpsilonHead vp -> xml_epsilon_head (xml_vp grammar ~id_labelling vp)
-      | `In (npg,vp) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_vp grammar ~id_labelling vp)
-      | `Ellipsis -> xml_ellipsis )
+  | `PP lpp -> xml_pp_list grammar ~id_labelling lpp
+  | `Ing (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+  | `InWhich s -> xml_in_which grammar ~id_labelling s
+  | `And lr -> xml_and grammar (List.map (xml_rel grammar ~id_labelling) lr)
+  | `Or lr -> xml_or grammar annot_opt (List.map (xml_rel grammar ~id_labelling) lr)
+  | `Maybe rel -> xml_maybe grammar annot_opt (xml_rel grammar ~id_labelling rel)
+  | `Not rel -> xml_not grammar annot_opt (xml_rel grammar ~id_labelling rel)
+  | `In (npg,rel) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_rel grammar ~id_labelling rel)
+  | `Ellipsis -> xml_ellipsis
+  | `Focus (a1, `Maybe (`Focus (a2, `That vp))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
+  | `Focus (a1, `Not (`Focus (a2, `That vp))) -> xml_focus a1 (Kwd grammar#relative_that :: xml_vp_mod grammar ~id_labelling `Not a1 a2 vp)
+  | `Focus (annot,rel) -> xml_focus annot (xml_rel grammar ~id_labelling ~annot_opt:(Some annot) rel)
+and xml_vp grammar ~id_labelling ?(annot_opt = None) = function
+  | `IsNP (np,lpp) -> Kwd grammar#is :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+  | `IsPP pp -> Kwd grammar#is :: xml_pp grammar ~id_labelling pp
+  | `IsTheNounCP (w,cp) -> Kwd grammar#is :: Kwd grammar#the :: Word w :: xml_cp grammar ~id_labelling cp
+  | `IsAdjCP (w,cp) -> Kwd grammar#is :: Word w :: xml_cp grammar ~id_labelling cp
+  | `IsInWhich s -> Kwd grammar#is :: Kwd grammar#something :: xml_in_which grammar ~id_labelling s
+  | `HasProp (p,np,lpp) -> xml_has_as_a grammar [Word p] @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+  | `HasPropCP (w,cp) -> xml_has_as_a grammar [Word w] @ xml_cp grammar ~id_labelling cp
+  | `Has (np,lpp) -> Kwd grammar#has :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+  | `HasCP cp -> Kwd grammar#has :: xml_cp grammar ~id_labelling cp
+  | `VT (w,np,lpp) -> Word w :: xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp
+  | `VT_CP (w,cp) -> Word w :: xml_cp grammar ~id_labelling cp
+  | `Subject (np,vp) -> xml_np grammar ~id_labelling np @ xml_vp grammar ~id_labelling vp
+  | `And lr -> xml_and grammar (List.map (xml_vp grammar ~id_labelling) lr)
+  | `Or lr -> xml_or grammar annot_opt (List.map (xml_vp grammar ~id_labelling) lr)
+  | `Maybe vp -> xml_maybe grammar annot_opt (xml_vp grammar ~id_labelling vp)
+  | `Not vp -> xml_not grammar annot_opt (xml_vp grammar ~id_labelling vp)
+  | `EpsilonHead vp -> xml_epsilon_head (xml_vp grammar ~id_labelling vp)
+  | `In (npg,vp) -> xml_in grammar (xml_np grammar ~id_labelling npg) (xml_vp grammar ~id_labelling vp)
+  | `Ellipsis -> xml_ellipsis
+  | `Focus (a1, `Maybe (`Focus (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Maybe a1 a2 vp)
+  | `Focus (a1, `Not (`Focus (a2, vp))) -> xml_focus a1 (xml_vp_mod grammar ~id_labelling `Not a1 a2 vp) (* negation inversion *)
+  | `Focus (annot,vp) -> xml_focus annot (xml_vp grammar ~id_labelling ~annot_opt:(Some annot) vp)
 and xml_in_which grammar ~id_labelling s =
   Word (`Op grammar#according_to) :: Kwd grammar#which :: Coord ([], [xml_s grammar ~id_labelling s]) :: []
 and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_vp vp =
@@ -1442,16 +1422,16 @@ and xml_vp_mod grammar ~id_labelling (op_mod : [`Not | `Maybe]) annot_mod annot_
     | (`Not | `Maybe), `IsInWhich s -> xml_focus annot_vp (Kwd grammar#is :: xml_mod @ Kwd grammar#something :: xml_in_which grammar ~id_labelling s)
     | `Not, `HasProp (p,np,lpp) -> xml_focus annot_vp (xml_has_as_a grammar (xml_mod @ [Word p]) @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
     | `Not, `Has (np,lpp) -> xml_focus annot_vp (Kwd grammar#has :: xml_mod @ xml_np grammar ~id_labelling np @ xml_pp_list grammar ~id_labelling lpp)
-    | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling (X vp))
-and xml_cp grammar ~id_labelling cp =
-  xml_annotated cp
-    (fun annot_opt -> function
-    | `Nil -> xml_epsilon_head []
-    | `Cons (pp,cp) -> xml_pp grammar ~id_labelling pp @ xml_cp grammar ~id_labelling cp
-    | `And lr -> xml_and grammar (List.map (xml_cp grammar ~id_labelling) lr)
-    | `Or lr -> xml_or grammar annot_opt (List.map (xml_cp grammar ~id_labelling) lr)
-    | `Maybe cp -> xml_maybe grammar annot_opt (xml_cp grammar ~id_labelling cp)
-    | `Not cp -> xml_not grammar annot_opt (xml_cp grammar ~id_labelling cp) )
+    | _, vp -> xml_mod @ xml_focus annot_vp (xml_vp grammar ~id_labelling vp)
+and xml_cp grammar ~id_labelling ?(annot_opt = None) cp =
+  match cp with
+  | `Nil -> xml_epsilon_head []
+  | `Cons (pp,cp) -> xml_pp grammar ~id_labelling pp @ xml_cp grammar ~id_labelling cp
+  | `And lr -> xml_and grammar (List.map (xml_cp grammar ~id_labelling) lr)
+  | `Or lr -> xml_or grammar annot_opt (List.map (xml_cp grammar ~id_labelling) lr)
+  | `Maybe cp -> xml_maybe grammar annot_opt (xml_cp grammar ~id_labelling cp)
+  | `Not cp -> xml_not grammar annot_opt (xml_cp grammar ~id_labelling cp)
+  | `Focus (annot,cp) -> xml_focus annot (xml_cp grammar ~id_labelling ~annot_opt:(Some annot) cp)
 and xml_pp_list grammar ~id_labelling lpp =
   List.concat (List.map (xml_pp grammar ~id_labelling) lpp)
 and xml_pp grammar ~id_labelling = function
@@ -1555,7 +1535,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
        | _ -> CCons (dummy_annot, S, dummy_s1,
 		     CCons (dummy_annot, O, dummy_s1,
 			    CNil dummy_annot)) in
-     let rel = A (dummy_annot, `That (X (nl_vp_of_arg_pred grammar ~id_labelling arg pred cp))) in
+     let rel = `Focus (dummy_annot, `That (nl_vp_of_arg_pred grammar ~id_labelling arg pred cp)) in
      let rel = map_rel main_transf rel in
      xml_incr_coordinate grammar focus (xml_rel grammar ~id_labelling rel)
   | IncrArg q ->
@@ -1627,7 +1607,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
      else xml
   | IncrSim (pred,args,argo) ->
      let vp = vp_of_sim grammar None (focus_span_np incr) pred args argo 1 in
-     let np = X (`Qu (`A, `Nil, X (`That (`Thing, X (`That vp))))) in
+     let np = `Qu (`A, `Nil, `That (`Thing, `That vp)) in
      let np = main_transf#np np in
      xml_np grammar ~id_labelling np
   | IncrSimRankIncr -> Kwd grammar#with_ :: Word (`Op grammar#rank) :: Word (`Op "+ 1") :: []

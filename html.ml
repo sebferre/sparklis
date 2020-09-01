@@ -565,7 +565,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
        Some (position, sort_frequency), html_freq in
   let data = 
     let text =
-      String.lowercase
+      String.lowercase_ascii
 	(Lisql2nl.word_text_content
 	   grammar
 	   (Lisql2nl.word_of_incr grammar incr)) in
