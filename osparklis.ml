@@ -668,6 +668,7 @@ object (self)
     refreshing_terms <- true;
     jquery_select "#select-terms" (fun select ->
      jquery_input "#pattern-terms" (fun input ->
+      jquery "#selection-terms-button" (fun elt_sel_button ->
       jquery "#selection-terms-items" (fun elt_sel_items ->
        jquery "#list-terms" (fun elt_list ->
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
@@ -686,6 +687,9 @@ object (self)
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in 
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##.innerHTML := string html_sel;
+	      if html_sel = "" (* disable multi-selection button if no sel item *)
+	      then elt_sel_button##.classList##add (string "disabled")
+	      else elt_sel_button##.classList##remove (string "disabled");
 	      set_innerHTML_fadeInOut_then
 		elt_list html_list
 		(fun () ->
@@ -709,7 +713,7 @@ object (self)
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
 		 refreshing_terms <- false;
 		 let new_constr = term_constr in
-		 self#refresh_new_term_constr current_constr new_constr))))))))
+		 self#refresh_new_term_constr current_constr new_constr)))))))))
 
   val mutable refreshing_properties = false (* says whether a recomputation of property increments is ongoing *)
   method private refresh_property_increments current_constr =
@@ -744,6 +748,7 @@ object (self)
     refreshing_properties <- true;
     jquery_select "#select-properties" (fun select ->
       jquery_input "#pattern-properties" (fun input ->
+       jquery "#selection-properties-button" (fun elt_sel_button ->
        jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
@@ -762,6 +767,9 @@ object (self)
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
 	      elt_sel_items##.innerHTML := string html_sel;
+	      if html_sel = "" (* disable multi-selection button if no sel item *)
+	      then elt_sel_button##.classList##add (string "disabled")
+	      else elt_sel_button##.classList##remove (string "disabled");
 	      set_innerHTML_fadeInOut_then
 		elt_list html_list
 		(fun () ->
@@ -779,7 +787,7 @@ object (self)
 		   else apply_incr elt));
 		 refreshing_properties <- false;
 		 let new_constr = property_constr in
-		 self#refresh_new_property_constr current_constr new_constr))))))))
+		 self#refresh_new_property_constr current_constr new_constr)))))))))
 
   method private refresh_modifier_increments (mode : [`Dropdown|`List]) =
     let filter_dropdown_increment =
