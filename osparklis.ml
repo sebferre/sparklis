@@ -702,7 +702,8 @@ object (self)
 		 jquery_hide "#selection-terms";
 		 stop_propagation_from elt_list "a, .term-input";
 		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-		   if jquery_shown "#selection-terms" (*to_bool ev##.ctrlKey*)
+		   if to_bool ev##.ctrlKey then jquery_show "#selection-terms";
+		   if jquery_shown "#selection-terms"
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
@@ -782,7 +783,8 @@ object (self)
 		 jquery_hide "#selection-properties";
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
 		 jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-		   if jquery_shown "#selection-properties" (* to_bool ev##.ctrlKey *)
+		   if to_bool ev##.ctrlKey then jquery_show "#selection-properties";
+		   if jquery_shown "#selection-properties"
 		   then toggle_incr elt
 		   else apply_incr elt));
 		 refreshing_properties <- false;
@@ -870,7 +872,8 @@ object (self)
 	   jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev ->
 	     apply_incr elt));
 	   jquery_all_from elt_list ".valid-increment" (onclick (fun elt ev ->
-	     if jquery_shown "#selection-modifiers" (* to_bool ev##.ctrlKey *)
+	     if to_bool ev##.ctrlKey then jquery_show "#selection-modifiers";
+	     if jquery_shown "#selection-modifiers"
 	     then toggle_incr elt
 	     else apply_incr elt));
 	   jquery_all_from elt_list ".term-input" (onenter (fun elt ev ->
