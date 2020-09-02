@@ -21,13 +21,51 @@
     <h2>Release Notes</h2>
   </div>
 
-  <p>
-    This page lists a number of queries over different endpoints
-    (mostly DBpedia) that can be built in <a target="_blank"
-					     href="osparklis.html">Sparklis</a>.
-  </p>
-
   <ul>
+    <li><strong>March 2020</strong>
+      <ul>
+	<li>New menu <em>Issues</em> and command to create and post an
+	issue. Use it to report any bug or problem you encounter when
+	using Sparklis. You can also use it to express feature
+	  needs.</li>
+	<li>Three new filtering operators: "is exactly", "starts
+	with", "ends with". They allow more precise filtering on
+	  strings, concepts, and entities.</li>
+	<li>Highlight (in yellow) of all UI elements that can be
+	  selected to move the query focus or modify the query.</li>
+	<li>Buttons on top of suggestion lists as another way for
+	triggering the multi-selection mode. The number of selected
+	items, and applicable operators are shown in a yellow
+	  span.</li>
+	<li>When filtering suggestions results in an empty list, the
+	elements that match the filtering condition but not the query
+	(i.e. they would lead to empty results) are shown striked
+	through and cannot be selected.</li>
+      </ul>
+    </li>
+    <li><strong>November 2019</strong>
+      <ul>
+	<li>New configuration option (in Advanced features) to choose
+	whether pressing ENTER in filtering inputs should insert the
+	filtering condition in the query (default) or trigger the
+	filtering of suggestions (instead of input changes by
+	  default).</li>
+	<li>Nested tables as a new result view, and the new default
+	one. It presents results in a more structured and legible way,
+	reflecting the dependencies between the result columns
+	(i.e. between the related entities in the query).</li>
+      </ul>
+    </li>
+    <li><strong>April 2019</strong>
+      <ul>
+	<li>Several improvements for the Wikidata endpoint that make
+	it much practical to explore. In particular, use of Wikidata
+	search API for efficient entity filtering. See the 10 queries
+	added to the example page.</li>
+	<li>Invalid filter inputs on top of suggestion lists are shown
+	in red.</li>
+      </ul>
+    </li>
     <li><strong>January 2019</strong>
       <ul>
 	<li>New button <button class="btn btn-default
