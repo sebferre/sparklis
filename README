@@ -1,6 +1,4 @@
 
-Sparklis online: <http://www.irisa.fr/LIS/ferre/sparklis/>
-
 Sparklis is a query builder in natural language that allows people to
 explore and query SPARQL endpoints with all the power of SPARQL and
 without any knowledge of SPARQL.
@@ -49,9 +47,14 @@ simpler problem of NL generation. The user interface lends itself to
 multilinguality, and is so far available in English, French, and
 Spanish.
 
+Author: Sébastien Ferré <http://people.irisa.fr/Sebastien.Ferre/>
 
-Team: SemLIS at IRISA <http://www-semlis.irisa.fr/>
-Contact: Sébastien Ferré <http://people.irisa.fr/Sebastien.Ferre/>
-Copyright © 2013-2017 Sébastien Ferré, IRISA, Université de Rennes 1, France
-Licence: GPLv3
+Affiliation: Univ. Rennes 1, team SemLIS at IRISA <http://www-semlis.irisa.fr/>
 
+Copyright © 2013 Sébastien Ferré, IRISA, Université de Rennes 1, France
+
+Licence: Apache Licence 2.0
+
+Online application: <http://www.irisa.fr/LIS/ferre/sparklis/>
+
+Source repository: <https://bitbucket.org/sebferre/sparklis/>
