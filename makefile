@@ -4,43 +4,16 @@ OBJ=common.cmo find_merge.cmo cache.cmo jsutils.cmo config.cmo rdf.cmo sparql.cm
 osparklis: $(OBJ)
 	ocamlfind ocamlc -package lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -linkpkg -o osparklis.byte $(OBJ) osparklis.ml
 	js_of_ocaml osparklis.byte
+	mv osparklis.js webapp/
 
 install:
-	cp log/.htaccess /local/ferre/web/ferre/sparklis/log
-	cp log/*.php /local/ferre/web/ferre/sparklis/log
-	cp yasgui.min.css /local/ferre/web/ferre/sparklis
-	cp yasgui.min.js /local/ferre/web/ferre/sparklis
-	cp osparklis.html /local/ferre/web/ferre/sparklis
-	cp osparklis.html /local/ferre/web/ferre/sparklis/index.html
-	cp osparklis.css /local/ferre/web/ferre/sparklis
-	cp osparklis.js /local/ferre/web/ferre/sparklis
-	cp *.png /local/ferre/web/ferre/sparklis
-	cp *.jpg /local/ferre/web/ferre/sparklis
-	cp examples.html /local/ferre/web/ferre/sparklis
-	cp release_notes.html /local/ferre/web/ferre/sparklis
+	cp -r webapp/* /local/ferre/web/ferre/sparklis
 
 install-dev:
-	cp yasgui.min.css /local/ferre/web/ferre/sparklis-dev
-	cp yasgui.min.js /local/ferre/web/ferre/sparklis-dev
-	cp osparklis.html /local/ferre/web/ferre/sparklis-dev
-	cp osparklis.html /local/ferre/web/ferre/sparklis-dev/index.html
-	cp osparklis.css /local/ferre/web/ferre/sparklis-dev
-	cp osparklis.js /local/ferre/web/ferre/sparklis-dev
-	cp *.png /local/ferre/web/ferre/sparklis-dev
-	cp *.jpg /local/ferre/web/ferre/sparklis-dev
-	cp examples.html /local/ferre/web/ferre/sparklis-dev
-	cp release_notes.html /local/ferre/web/ferre/sparklis-dev
+	cp -r webapp/* /local/ferre/web/ferre/sparklis-dev
 
-pack: osparklis.js
-	rm -f package/*
-	cp osparklis.html package/index.html
-	cp osparklis.css package/
-	cp osparklis.js package/
-	cp *.png package/
-	cp *.jpg package/
-	cp examples.html package/
-	cp release_notes.html package/
-	zip sparklis-package.zip package/*
+pack: webapp/osparklis.js
+	zip -r sparklis-webapp.zip webapp
 
 clean:
 	rm -f *.cm[ioax]
