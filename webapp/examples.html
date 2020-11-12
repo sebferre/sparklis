@@ -9,8 +9,8 @@
 <!-- jQuery library -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
 <!-- Bootstrap -->
-<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
-<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 <!-- Sparklis -->
 <link rel="stylesheet" type="text/css" href="osparklis.css">
 </head>
@@ -53,7 +53,7 @@
 
   <div class="col-md-9 tab-content">
     <div id="youtube-demo" class="tab-pane fade in active">
-      <h3>Example queries demonstrated in the <a target="_blank" href="http://youtu.be/O999FVXn8Qc">YouTube demo</a></h3>
+      <h3>Example queries demonstrated in the <a target="_blank" href="https://youtu.be/O999FVXn8Qc">YouTube demo</a></h3>
   <ol>
     <li><strong>List of films directed by Tim Burton and starring somebody born after 1980, ordered by increasing birth date.</strong>
       <a class="sparklis-permalink" target="_blank" href="osparklis.html?title=DBpedia&endpoint=http%3A//dbpedia.org/sparql&sparklis-query=%5BVId%5DReturn%28Det%28An%281%2CModif%28Select%2CUnordered%29%2CClass%28%22http%3A//dbpedia.org/ontology/Film%22%29%29%2CSome%28And%28Rel%28%22http%3A//dbpedia.org/ontology/director%22%2CFwd%2CDet%28Term%28URI%28%22http%3A//dbpedia.org/resource/Tim_Burton%22%29%29%2CNone%29%29%2CRel%28%22http%3A//dbpedia.org/ontology/starring%22%2CFwd%2CDet%28An%28120%2CModif%28Select%2CUnordered%29%2CThing%29%2CSome%28Rel%28%22http%3A//dbpedia.org/ontology/birthDate%22%2CFwd%2CDet%28An%28149%2CModif%28Select%2CLowest%29%2CThing%29%2CSome%28Filter%28After%28%221980%22%29%29%29%29%29%29%29%29%29%29%29%29"><button class="btn btn-default btn-sm">Open in Sparklis</button></a>

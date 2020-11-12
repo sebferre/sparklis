@@ -31,11 +31,11 @@ let is_dev_version : bool = (* flag at TRUE if this is the dev version that is r
 
 let logging_on () = not is_dev_version && config_logging#value
 
-let url_log_php = (* http://www.irisa.fr/LIS/ferre/sparklis/log/log.php *)
-  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015"
+let url_log_php = "log/log.php"
+(*  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\019\016\024Q\015\023\015" *)
 
-let url_querylog_php = (* "http://www.irisa.fr/LIS/ferre/sparklis/log/querylog.php" *)
-  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015"
+let url_querylog_php = "log/querylog.php"
+(*  Common.unobfuscate_string "\023\011\011\015EPP\b\b\bQ\022\r\022\012\030Q\025\rP36,P\025\026\r\r\026P\012\015\030\r\020\019\022\012P\019\016\024P\014\n\026\r\006\019\016\024Q\015\023\015" *)
 
 let session_id : string = (* random session ID to disambiguate undefinite IPs *)
   Random.self_init (); string_of_int (Random.int 1000000000);;
