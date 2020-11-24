@@ -657,22 +657,22 @@ object
   | `Lang -> `Pattern [`Kwd "el"; `Func "idioma"; `Kwd "de"; `Arg 1]
   | `Datatype -> `Pattern [`Kwd "el"; `Func "tipo"; `Kwd "de"; `Arg 1]
   | `IRI -> `Pattern [`Kwd "la"; `Func "IRI"; `Arg 1]
-  | `STRDT -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "con";  `Func "tipo"; `Arg 2]
-  | `STRLANG -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "con"; `Func "idioma"; `Arg 2]
+  | `STRDT -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de";  `Func "tipo"; `Arg 2]
+  | `STRLANG -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de"; `Func "idioma"; `Arg 2]
   | `Strlen -> `Pattern [`Kwd "la"; `Func "longitud"; `Kwd "de"; `Arg 1]
   | `Substr2 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2]
   | `Substr3 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2; `Kwd "y de longitud"; `Arg 3]
   | `Strbefore -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "antes"; `Arg 2]
   | `Strafter -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "depués"; `Arg 2]
   | `Concat -> `Infix " ++ "
-  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "mayúscula"]
-  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minúscula"]
-  | `Encode_for_URI -> `Pattern [`Kwd "la"; `Func "codificación de la URL"; `Kwd "de"; `Arg 1]
+  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "mayúsculas"]
+  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minúsculas"]
+  | `Encode_for_URI -> `Pattern [`Kwd "la"; `Func "codificación de la URI"; `Kwd "de"; `Arg 1]
   | `Replace -> `Pattern [`Kwd "el"; `Func "reemplazo"; `Kwd "en"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "por"; `Arg 3]
   | `Integer -> `Pattern [`Arg 1; `Kwd "como"; `Func "entero"]
   | `Decimal -> `Pattern [`Arg 1; `Kwd "como"; `Func "decimal"]
   | `Double -> `Pattern [`Arg 1; `Kwd "como"; `Func "flotante"]
-  | `Indicator -> `Pattern [`Kwd "1 o 0"; `Kwd "dependiendo"; `Kwd "si"; `Arg 1]
+  | `Indicator -> `Pattern [`Kwd "1 o 0"; `Kwd "dependiendo"; `Kwd "de"; `Kwd "si"; `Arg 1]
   | `Add -> `Infix " + "
   | `Sub -> `Infix " - "
   | `Mul -> `Infix " * "
@@ -695,7 +695,7 @@ object
   | `NOW -> `Pattern [`Func "ahora"]
   | `And -> `Infix " y "
   | `Or -> `Infix " o "
-  | `Not -> `Prefix "no es verdad que "
+  | `Not -> `Prefix " no es verdad que "
   | `EQ -> `Infix " = "
   | `NEQ -> `Infix " ≠ "
   | `GT -> `Infix " > "
@@ -703,7 +703,7 @@ object
   | `LT -> `Infix " < "
   | `LEQ -> `Infix " ≤ "
   | `BOUND -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "valor"]
-  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "caso contrario"; `Arg 3]
+  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "en caso contrario"; `Arg 3]
   | `IsIRI -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "una"; `Func "IRI"]
   | `IsBlank -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "nodo anónimo"]
   | `IsLiteral -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "literal"]
@@ -712,8 +712,8 @@ object
   | `StrEnds -> `Pattern [`Arg 1; `Func "termina en"; `Arg 2]
   | `Contains -> `Pattern [`Arg 1; `Func "contiene"; `Arg 2]
   | `REGEX -> `Pattern [`Arg 1; `Func "coincide con la expresión regular"; `Arg 2]
-  | `REGEX_i -> `Pattern [`Arg 1; `Func "coincide con la expresión regular (case insensible)"; `Arg 2]
-  | `LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincida con"; `Arg 2]
+  | `REGEX_i -> `Pattern [`Arg 1; `Func "coincide con la expresión regular (ignora mayús./minús.)"; `Arg 2]
+  | `LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincide con"; `Arg 2]
  
   method order_highest = "en orden descendente"
   method order_lowest = "en orden ascendente"
@@ -747,26 +747,26 @@ object
   method tooltip_delete_current_focus = "Haga clic en la X para eliminar el foco actual"
   method tooltip_remove_element_at_focus = "Eliminar el elemento en el foco actual de consulta"
   method tooltip_focus_on_property = "Insertar un foco sobre la propiedad para refinarla"
-  method tooltip_duplicate_focus = "Insertar una copia de el foco actual"
+  method tooltip_duplicate_focus = "Insertar una copia del foco actual"
   method tooltip_or = "Insertar una alternativa en el foco actual"
-  method tooltip_optionally = "Hacer al foco actual opcional"
-  method tooltip_not = "Aplicar una negación en el foco actual"
+  method tooltip_optionally = "Hacer opcional el foco actual"
+  method tooltip_not = "Aplicar una negación al foco actual"
   method tooltip_any = "Ocultar la columna del foco actual en la tabla de resultados"
-  method tooltip_sample = "Vuelva a colocar la agregación de una muestra con el fin de seleccionar otro agregador"
-  method tooltip_aggreg = "Totalizar la columna del foco actual en la tabla de resultados" (* pour chaque valuation des autres colonnes *)
+  method tooltip_sample = "Reemplazar la agregación por una muestra para poder seleccionar otro agregador"
+  method tooltip_aggreg = "Agregar la columna del foco actual en la tabla de resultados" (* pour chaque valuation des autres colonnes *)
   method tooltip_func = "Aplicar esta función en el foco actual"
-  method tooltip_input_name = "Introduzca un nombre (nuevo) para el resultado de la expresión"
-  method tooltip_foreach = "Compartir los resultados para cada valor de esta entidad"
+  method tooltip_input_name = "Introducir un nombre (nuevo) para el resultado de la expresión"
+  method tooltip_foreach = "Agrupar los resultados para cada valor de esta entidad"
   method tooltip_foreach_result = "Calcular la agregación para cada resultado de la consulta asociada"
   method tooltip_foreach_id = "Calcular la agregación para cada valor de esta entidad"
   method tooltip_aggreg_id = "Insertar una nueva columna de agregación para esta entidad"
-  method tooltip_highest = "Ordenar la columna del foco actual en forma descendente"
-  method tooltip_lowest = "Ordenar la columna del foco actual en forma ascendente"
+  method tooltip_highest = "Ordenar la columna del foco actual en orden descendente"
+  method tooltip_lowest = "Ordenar la columna del foco actual en orden ascendente"
   method tooltip_header_hide_focus = "Haga clic en el encabezado de la columna para ocultar el foco"
   method tooltip_header_set_focus = "Haga clic en el encabezado de la columna para poner el foco en él"
   method tooltip_header_exact_count = "Haga clic para obtener el número exacto"
   method tooltip_geolocation = "Recuperar geolocaciones para mostrar entidades en un mapa"
-  method tooltip_hierarchy = "Mostrar una jerarquía de entidades de acuerdo con la propiedad a la izquierda"
+  method tooltip_hierarchy = "Mostrar una jerarquía de entidades de acuerdo a la propiedad de la izquierda"
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
   method result_results = "resultado", "resultados"
