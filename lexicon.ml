@@ -157,14 +157,14 @@ let sparql_lexicon
 	  select ~projections:[(`Bare,u); (`Bare,l); (`Bare,p)] ~froms
 	    (join
 	       [ values v_u
-		   (List.map (fun x_uri -> (uri x_uri :> term)) l_uri);
+		   (List.map (fun x_uri -> (term_uri x_uri :> term)) l_uri);
 		 optional
 		   (join
 		      ( union
 			  (List.map
 			     (fun property ->
-			      join [ triple (v_u :> term) (uri property :> pred) (v_l :> term);
-				     bind (uri property :> expr) v_p ])
+			      join [ triple (v_u :> term) (path_uri property :> pred) (v_l :> term);
+				     bind (term_uri property :> expr) v_p ])
 			     pref_properties)
 			:: (if pref_languages = []
 			    then [] (* no language constraint *)

@@ -138,7 +138,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
       let open Sparql in
       let term_l = (var (gv#new_var "constr_label") :> Sparql.term) in
       `Filter (formula_and_list
-		 [ Pattern (triple t (path_alt (List.map uri label_props :> pred list)) term_l);
+		 [ Pattern (triple t (path_alt (List.map path_uri label_props :> pred list)) term_l);
 		   (if label_langs = []
 		    then True
 		    else Filter (expr_in (expr_func "lang" [term_l]) (List.map string label_langs)));
@@ -174,7 +174,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
 	   let open Sparql in
 	   let term_l = var (gv#new_var "constr_label") in
 	   `Filter (formula_and_list
-		      [ Pattern (triple t (path_alt (List.map uri label_props :> pred list)) term_l);
+		      [ Pattern (triple t (path_alt (List.map path_uri label_props :> pred list)) term_l);
 			Pattern (bif_contains term_l sql_query);
 			(if label_langs = []
 			 then True
@@ -407,8 +407,8 @@ module WhichClass =
     let intent_pattern ?(hook : string formula_hook option) () =
       make_pat ?hook "c"
 	       Sparql.(union
-			 [ rdf_type (var "c") (uri Rdf.rdfs_Class);
-			   rdf_type (var "c") (uri Rdf.owl_Class) ])
+			 [ rdf_type (var "c") (term_uri Rdf.rdfs_Class);
+			   rdf_type (var "c") (term_uri Rdf.owl_Class) ])
     let pattern_of_term ?(hook : string formula_hook option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
@@ -435,9 +435,9 @@ module WhichProp =
     let intent_pattern ?(hook : string formula_hook option) () =
       make_pat ?hook "p"
 	       Sparql.(union
-			 [ rdf_type (var "p") (uri Rdf.rdf_Property);
-			   rdf_type (var "p") (uri Rdf.owl_ObjectProperty);
-			   rdf_type (var "p") (uri Rdf.owl_DatatypeProperty) ])
+			 [ rdf_type (var "p") (term_uri Rdf.rdf_Property);
+			   rdf_type (var "p") (term_uri Rdf.owl_ObjectProperty);
+			   rdf_type (var "p") (term_uri Rdf.owl_DatatypeProperty) ])
     let pattern_of_term ?(hook : string formula_hook option) (t_opt : Rdf.term option) : Sparql.pattern =
       let init, t =
 	match t_opt with
@@ -473,12 +473,12 @@ module WhichPred =
     let pattern_SO ps po =
       Sparql.(triple
 		(var ps)
-		(uri Rdf.nary_subjectObject)
+		(path_uri Rdf.nary_subjectObject)
 		(var po))
     let pattern_EO pe po =
       Sparql.(triple
 		(var pe)
-		(uri Rdf.nary_eventObject)
+		(path_uri Rdf.nary_eventObject)
 		(var po))
     let filter_wikidata pe po =
       Sparql.(join
@@ -486,8 +486,8 @@ module WhichPred =
 		  filter (expr_func "strstarts" [expr_func "str" [var po]; (string "http://www.wikidata.org/prop/statement/P" :> expr)]) ])
     let pattern_wikidata pe po =
       Sparql.(bnode_triples_as_pattern
-		[ (uri Rdf.wikibase_claim :> pred), var pe;
-		  (uri Rdf.wikibase_statementProperty :> pred), var po ])
+		[ (path_uri Rdf.wikibase_claim :> pred), var pe;
+		  (path_uri Rdf.wikibase_statementProperty :> pred), var po ])
 	    
     let intent_pattern ?(hook : string formula_hook option) () : Sparql.pattern =
       if Rdf.config_wikidata_mode#value
@@ -635,8 +635,8 @@ let pattern_pred_args (pred : pred) (args : (arg * _ Sparql.any_term) list) (var
   let args = if List.mem_assoc S args then args else (S, Sparql.bnode "")::args in
   let args = if List.mem_assoc O args then args else (O, Sparql.bnode "")::args in
   match pred with
-  | Class c -> Sparql.rdf_type (get_arg S args) (Sparql.uri c)
-  | Prop p -> Sparql.triple (get_arg S args) (Sparql.uri p) (get_arg O args)
+  | Class c -> Sparql.rdf_type (get_arg S args) (Sparql.term_uri c)
+  | Prop p -> Sparql.triple (get_arg S args) (Sparql.path_uri p) (get_arg O args)
   | SO (ps,po) ->
      let lpo = [] in
      let lpo =
@@ -647,10 +647,10 @@ let pattern_pred_args (pred : pred) (args : (arg * _ Sparql.any_term) list) (var
        List.fold_right
 	 (fun (arg,t) lpo ->
 	  match arg with
-	  | S -> ((Sparql.uri ps :> Sparql.pred), t) :: lpo
-	  | O -> ((Sparql.uri po :> Sparql.pred), t) :: lpo
+	  | S -> ((Sparql.path_uri ps :> Sparql.pred), t) :: lpo
+	  | O -> ((Sparql.path_uri po :> Sparql.pred), t) :: lpo
 	  | P -> lpo
-	  | Q q -> ((Sparql.uri q :> Sparql.pred), t) :: lpo)
+	  | Q q -> ((Sparql.path_uri q :> Sparql.pred), t) :: lpo)
 	 args lpo in
      Sparql.bnode_triples_as_pattern lpo
   | EO (pe,po) ->
@@ -664,13 +664,13 @@ let pattern_pred_args (pred : pred) (args : (arg * _ Sparql.any_term) list) (var
 	 (fun (arg,t) lpo ->
 	  match arg with
 	  | S -> lpo
-	  | O -> ((Sparql.uri po :> Sparql.pred), t) :: lpo
+	  | O -> ((Sparql.path_uri po :> Sparql.pred), t) :: lpo
 	  | P -> lpo
-	  | Q q -> ((Sparql.uri q :> Sparql.pred), t) :: lpo)
+	  | Q q -> ((Sparql.path_uri q :> Sparql.pred), t) :: lpo)
 	 args lpo in
      Sparql.(triple
 	       (get_arg S args)
-	       (uri pe)
+	       (path_uri pe)
 	       (bnode_triples lpo))
 
 module WhichArg =
@@ -682,11 +682,11 @@ module WhichArg =
 	match pred with
 	| Class _ -> Sparql.empty
 	| Prop _ -> Sparql.empty
-	| SO (ps,po) -> Sparql.(filter (expr_not_in (var "pq") [uri Rdf.rdf_type; uri ps; uri po]))
+	| SO (ps,po) -> Sparql.(filter (expr_not_in (var "pq") [term_uri Rdf.rdf_type; term_uri ps; term_uri po]))
 	| EO (pe,po) ->
 	   if Rdf.config_wikidata_mode#value
 	   then Sparql.(filter (expr_func "strstarts" [expr_func "str" [var "pq"]; (string "http://www.wikidata.org/prop/qualifier/P" :> expr)]))
-	   else Sparql.(filter (expr_not_in (var "pq") [uri Rdf.rdf_type; uri po])) in
+	   else Sparql.(filter (expr_not_in (var "pq") [term_uri Rdf.rdf_type; term_uri po])) in
       Sparql.(join
 		[ make_pat ?hook "pq"
 			   (Sparql.join
@@ -705,12 +705,12 @@ module WhichArg =
 let path_pred_args_argo pred args argo =
   let open Sparql in
   match pred, args, argo with
-  | Prop p, S, O -> (uri p :> pred)
-  | Prop p, O, S -> path_inverse (uri p)
-  | SO (ps,po), S, O -> path_seq (path_inverse (uri ps)) (uri po) 
-  | SO (po,ps), O, S -> path_seq (path_inverse (uri po)) (uri ps)
-  | EO (pe,po), S, O -> path_seq (uri pe) (uri po)
-  | EO (pe,po), O, S -> path_inverse (path_seq (uri pe)  (uri po))
+  | Prop p, S, O -> (path_uri p :> pred)
+  | Prop p, O, S -> path_inverse (path_uri p)
+  | SO (ps,po), S, O -> path_seq (path_inverse (path_uri ps)) (path_uri po) 
+  | SO (po,ps), O, S -> path_seq (path_inverse (path_uri po)) (path_uri ps)
+  | EO (pe,po), S, O -> path_seq (path_uri pe) (path_uri po)
+  | EO (pe,po), O, S -> path_inverse (path_seq (path_uri pe) (path_uri po))
   | _ -> assert false (* from Lisql.toggle_hierarchy *)
 	     
 let form_pred state (pred : pred) : sparql_pn =
@@ -732,9 +732,9 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
      (fun x -> cp (fun l -> pred ((arg,x)::l)))
   | Type (annot,c) ->
      (fun x -> []),
-     (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c)))
+     (fun x -> Sparql.Pattern (Sparql.rdf_type x (Sparql.term_uri c)))
   | Rel (annot,prop,ori,np) ->
-     let p = Sparql.uri prop in
+     let p = Sparql.path_uri prop in
      let rel =
        match ori with
        | Fwd -> (fun x y -> Sparql.Pattern (Sparql.triple x p y))
@@ -822,8 +822,8 @@ and form_latlong = function
   | `Custom (plat,plong) ->
      (fun x lat long ->
       Sparql.(formula_and
-	(Pattern (triple x (uri plat) lat))
-	(Pattern (triple x (uri plong) long))))
+	(Pattern (triple x (path_uri plat) lat))
+	(Pattern (triple x (path_uri plong) long))))
   | `Wikidata ->
      (fun x lat long -> Sparql.Pattern (Sparql.wikidata_lat_long x lat long))
 and form_p1_opt state = function
@@ -883,7 +883,7 @@ and form_s2_as_p1 state : elt_s2 -> sparql_p1 = function
       Sparql.(Filter (expr_comp "=" x (term t))))
 and form_head_as_p1 state : elt_head -> sparql_p1 = function
   | Thing -> (fun x -> Sparql.True)
-  | Class c -> (fun x -> Sparql.(Pattern (rdf_type x (uri c))))
+  | Class c -> (fun x -> Sparql.(Pattern (rdf_type x (term_uri c))))
 and form_sn state : annot elt_sn -> deps_sn * sparql_sn = function
   | CNil annot ->
      (fun p -> p []),
@@ -990,7 +990,7 @@ and form_head state : elt_head -> (Sparql.term -> Sparql.formula -> Sparql.formu
   | Thing ->
     (fun x form -> Sparql.formula_bind x form)
   | Class c ->
-    (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Sparql.uri c))) form)
+    (fun x form -> Sparql.formula_and (Sparql.Pattern (Sparql.rdf_type x (Sparql.term_uri c))) form)
 and form_aggreg_op state idg modifg g (d : sparql_p1) id : unit =
   let vg = state#id_labelling#get_id_var idg in
   let v = state#id_labelling#get_id_var id in

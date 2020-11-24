@@ -146,7 +146,7 @@ end
 
 
 
-let uri (uri : Rdf.uri) : term =
+let term_uri (uri : Rdf.uri) : term =
   match prologue#qname_of_uri uri with
   | None -> sparql ("<" ^ uri ^ ">")
   | Some qname -> sparql qname
@@ -171,9 +171,9 @@ let string : string -> term =
   fun s -> sparql ("\"" ^ escape s ^ "\"")
 
 let rec term : Rdf.term -> term = function
-  | Rdf.URI u -> uri u
+  | Rdf.URI u -> term_uri u
   | Rdf.Number (f,s,dt) -> if dt="" then term (Rdf.PlainLiteral (s,"")) else term (Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> string s ^^ sparql "^^" ^^ uri dt
+  | Rdf.TypedLiteral (s,dt) -> string s ^^ sparql "^^" ^^ term_uri dt
   | Rdf.PlainLiteral (s,lang) -> string s ^^ sparql (if lang = "" then "" else "@" ^ lang)
   | Rdf.Bnode name -> bnode name
   | Rdf.Var v -> (var v :> term)
@@ -228,6 +228,11 @@ let log_or (le : _ any_expr list) : expr =
       | [e] -> e
       | _ -> "(  " ^< concat "\n|| " (List.map (indent 3) le) ^> " )"
 
+let path_uri (uri : Rdf.uri) : pred =
+  match prologue#qname_of_uri uri with
+  | Some "rdf:item" -> sparql "rdf:rest*/rdf:first"
+  | Some qname -> sparql qname
+  | None -> sparql ("<" ^ uri ^ ">")
 let path_seq (p1 : _ any_pred) (p2 : _ any_pred) : pred =
   if Rdf.config_wikidata_mode#value
   then
@@ -345,7 +350,7 @@ let select
     let s = "SELECT " ^< (if distinct then "DISTINCT " else "") ^< sel in
     let s =
       List.fold_left
-	(fun s from -> s ^^ "\nFROM " ^< uri from)
+	(fun s from -> s ^^ "\nFROM " ^< term_uri from)
 	s froms in
     let s = s ^^ "\nWHERE { " ^< indent 8 pattern ^> " }" in
     let s =

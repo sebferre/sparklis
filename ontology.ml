@@ -49,7 +49,7 @@ let sparql_relation
 	  select ~projections:[(`Bare,source); (`Bare,image)] ~froms
 	    (join
 	       [ values v_source
-		   (List.map (fun x_uri -> (uri x_uri :> term)) l_uri);
+		   (List.map (fun x_uri -> (term_uri x_uri :> term)) l_uri);
 		 optional
 		   (make_pattern v_source v_image) ]))
 	l_l_uri in
@@ -98,7 +98,7 @@ let sparql_relation
 let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) ~(image_opt_of_term : Rdf.term -> 'a option) : 'a relation =
   let make_pattern v_source v_image : Sparql.pattern =
     let open Sparql in
-    let uri_property = (uri property :> pred) in
+    let uri_property = (path_uri property :> pred) in
     if inverse
     then triple (v_image :> term) uri_property (v_source :> term)
     else triple (v_source :> term) uri_property (v_image :> term)
@@ -183,8 +183,8 @@ let sparql_relations =
 	Hashtbl.add ht_hierarchy property_path rel;
 	rel
 	  
-    method subclassof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.uri Rdf.rdfs_subClassOf :> Sparql.pred)
-    method subpropertyof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.uri Rdf.rdfs_subPropertyOf :> Sparql.pred)
+    method subclassof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subClassOf :> Sparql.pred)
+    method subpropertyof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subPropertyOf :> Sparql.pred)
     method domain ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_domain ~inverse:false
     method range ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_range ~inverse:false
     method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false

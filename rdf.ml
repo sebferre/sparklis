@@ -38,6 +38,8 @@ let xsd_boolean = "http://www.w3.org/2001/XMLSchema#boolean"
 
 let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 let rdf_Property = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property"
+let rdf_first = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+let rdf_item = "http://www.w3.org/1999/02/22-rdf-syntax-ns#item" (* virtual RDF property to be expanded by rdf:rest*/rdf:first in SPARQL queries *)
 		 
 let rdfs_Class = "http://www.w3.org/2000/01/rdf-schema#Class"
 let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"

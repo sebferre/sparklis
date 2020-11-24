@@ -179,7 +179,7 @@ let formula_concept_profile_term (tx : _ Sparql.any_term) : Sparql.formula =
     else Sparql.(Pattern
 		   (union
 		      (List.map
-			 (fun u -> rdf_type tx (uri u))
+			 (fun u -> rdf_type tx (term_uri u))
 			 uris)))
 let formula_concept_profile (v : string) : Sparql.formula =
   formula_concept_profile_term (Sparql.var v)
@@ -1440,6 +1440,8 @@ object (self)
 		   ( match ori with
 		     | Lisql.Fwd -> fwd_prop := true
 		     | Lisql.Bwd -> bwd_prop := true );
+		   if p = Rdf.rdf_first then
+		     incr_index#add (Lisql.IncrRel (Rdf.rdf_item, ori), freq_opt);
 		   if incr_sim_ok then (
 		     let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
 		     ( match incr_index#get inv_incr with
