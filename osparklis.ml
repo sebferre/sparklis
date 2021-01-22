@@ -1310,15 +1310,26 @@ let initialize endpoint focus =
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
 	jquery_input "#pattern-terms" (fun input ->
-	   let present = history#present in
-	   let constr = norm_constr present#term_constr in
-	   if constr = Lisql.True
-	   then
-	     Jsutils.alert "Empty filter"
-	   else
-	     history#update_focus
-	       ~push_in_history:true
-	       (Lisql.insert_constr constr present#lis#filter_type)))));
+	    let present = history#present in
+            let current_constr = present#term_constr in
+            (* getting current constr, possibly not yet processed *)
+            Html.make_new_constr
+              ~endpoint:present#lis#endpoint
+              current_constr
+              select input
+              (fun new_constr_opt ->
+                let constr =
+                  match new_constr_opt with
+                  | None -> current_constr
+                  | Some new_constr -> new_constr in
+	        let constr = norm_constr constr in
+	        if constr = Lisql.True
+	        then
+	          Jsutils.alert "Empty filter"
+	        else
+	          history#update_focus
+	            ~push_in_history:true
+	            (Lisql.insert_constr constr present#lis#filter_type))))));
 
     List.iter
       (fun (getting_constr, input_changed,
