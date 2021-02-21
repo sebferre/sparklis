@@ -385,6 +385,7 @@ object (self)
 
   val mutable permalink = ""
   initializer permalink <- permalink_of_place lis
+  method permalink = permalink
 				
   method show_permalink : unit =
     let show (url : string) : unit =
@@ -420,13 +421,17 @@ object (self)
 	    Lwt.return ()))
     else show permalink
 
+  val mutable val_html_query = ""
+  initializer val_html_query <- html_query html_state lis#query
+  method html_query = val_html_query
+
   method private refresh_lisql (k : unit -> unit) =
     let str_highlighted = string "highlighted" in
     let str_prehighlighted = string "prehighlighted" in
     jquery "#lisql" (fun elt ->
       set_innerHTML_fadeInOut_then
 	elt
-	(html_query html_state lis#query)
+	val_html_query
 	(fun () ->		
 	 stop_links_propagation_from elt;
 	 jquery_all_from
@@ -1146,9 +1151,12 @@ object (self)
       
   method new_place endpoint focus =
     let lis = new Lis.place endpoint focus in
+    let html_state = new Html.state lis#id_labelling in
+    let val_html_query = html_query html_state lis#query in
     {< lis = lis;
-       html_state = new Html.state lis#id_labelling;
+       html_state = html_state;
        permalink = permalink_of_place lis;
+       val_html_query = val_html_query;
        offset = 0;
        term_constr = Lisql.True (*Lisql.MatchesAll []*);
        property_constr = Lisql.True (*Lisql.MatchesAll []*);
@@ -1161,6 +1169,48 @@ object (self)
 
 end
 
+module Endpoint_log =
+  struct
+    type record = { timestamp : string;
+                    permalink : string;
+                    html_query : string }
+
+    let endpoint_key (endpoint : string) : record (* list *) Jsutils.storage_key =
+      "sparklis@" ^ endpoint
+                
+    let record (p : place) : unit =
+      let key = endpoint_key p#lis#endpoint in (* log by endpoint *)
+      let timestamp = to_string (new%js Js.date_now)##toISOString in
+      let permalink = p#permalink in
+      let html_query = p#html_query in
+      let record = {timestamp; permalink; html_query} in
+      Jsutils.update_localStorage key
+        (function
+         | None -> Some [record]
+         | Some log -> Some (record::log))
+
+    let clear (endpoint : string) : unit =
+      let key = endpoint_key endpoint in
+      Jsutils.update_localStorage key
+        (fun _ -> None)
+
+    let html_table (endpoint : string) : string =
+      let key = endpoint_key endpoint in
+      match Jsutils.get_localStorage key with
+      | None -> "No available log for this endpoint"
+      | Some log ->
+         Html.table ~classe:"table-endpoint-log"
+           [ None, None, None, "timestamp";
+             None, None, None, "query"]
+           (List.map
+              (fun record ->
+                [ record.timestamp ^ "&nbsp;"
+                  ^ Html.html_open_new_window ~height:12 record.permalink;
+                  record.html_query ])
+              log)
+        
+  end
+  
 class history (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable past : place list = []
@@ -1183,7 +1233,13 @@ object (self)
     past <- present::past;
     present <- p;
     future <- []
-		
+
+  method refresh_present =
+    if true then ( (* TODO: add option *)
+      Endpoint_log.record present
+    );
+    present#refresh
+    
   method change_endpoint url =
     Sparql.prologue#reset;
     present#abort_all_ajax;
@@ -1195,7 +1251,7 @@ object (self)
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
-    p#refresh
+    self#refresh_present
 
   method update_focus ~push_in_history f =
     match f present#lis#focus with
@@ -1207,7 +1263,7 @@ object (self)
 	 let p = present#new_place present#lis#endpoint foc in
 	 p#set_navigation (self :> navigation);
 	 if push_in_history then self#push p else present <- p;
-	 p#refresh
+	 self#refresh_present
 
   method home =
     self#update_focus ~push_in_history:true
@@ -1222,7 +1278,7 @@ object (self)
 	 future <- present::future;
 	 present <- p;
 	 past <- lp;
-	 p#refresh
+	 self#refresh_present
 	   
   method forward : unit =
     match future with
@@ -1233,15 +1289,16 @@ object (self)
 	 past <- present::past;
 	 present <- p;
 	 future <- lp;
-	 p#refresh
+	 self#refresh_present
 
   method refresh : unit =
     present#abort_all_ajax;
     present#save_ui_state;
     present#reinit;
-    present#refresh
+    self#refresh_present
 end
 
+  
 (* main *)
 
 let translate () =
@@ -1290,13 +1347,26 @@ let initialize endpoint focus =
       config#if_has_changed
 	~translate
 	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some (focus, Lisql.DeltaNil)))));
+    jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
     jquery "#switch-view" (onclick (fun elt ev ->
       jquery_toggle "#sparklis-view";
       jquery_toggle "#yasgui-view";
       let view = jquery_toggle_innerHTML "#switch-view" "YASGUI view" "SPARKLIS view" in
       if view = "SPARKLIS view" then Jsutils.yasgui#refresh));
-
-    jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
+    jquery "#switch-view-log" (onclick (fun elt ev ->
+      jquery_toggle "#query-view";
+      jquery_toggle "#log-view";
+      let view = jquery_toggle_innerHTML "#switch-view-log" "History View" "Query View" in (* TODO: internationalize *)
+      if view = "Query View" then
+        jquery_set_innerHTML "#endpoint-log"
+          (Endpoint_log.html_table history#present#lis#endpoint)));
+    jquery "#clear-log" (onclick (fun elt ev ->
+      if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_clear_log then (   
+        let endpoint = history#present#lis#endpoint in
+        Endpoint_log.clear endpoint;
+        jquery_set_innerHTML "#endpoint-log"
+          (Endpoint_log.html_table endpoint)
+      )));
 
 (*
     jquery "#show-hide-increments" (onclick (fun elt ev ->
@@ -1454,7 +1524,7 @@ let initialize endpoint focus =
     
     (* generating and displaying contents *)
     translate ();
-    history#present#refresh
+    history#refresh_present
 
 (* main *)
 let _ =

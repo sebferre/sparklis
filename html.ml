@@ -255,6 +255,11 @@ let pattern_of_constr =
   
 (* pretty-printing of terms, NL in HTML *)
 
+let attr_opt name = function
+  | None -> ""
+  | Some "" -> " " ^ name
+  | Some id -> " " ^ name ^ "=\"" ^ id ^ "\""
+                                         
 let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp "<") text "&lt;" in
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
@@ -312,6 +317,32 @@ let html_small html = "<small>" ^ html ^ "</small>"
 let html_glyphicon ?title name =
   html_span ~classe:("glyphicon glyphicon-" ^ name) ?title ""
 
+let table ?id ?classe ?title headers rows =
+  assert (headers <> []);
+  let buf = Buffer.create 1000 in
+  let add s = Buffer.add_string buf s in
+  add "<table";
+  add (attr_opt "id" id);
+  add (attr_opt "class" classe);
+  add (attr_opt "title" title);
+  add "><tr>";
+  headers |> List.iter (fun (id_opt,classe_opt,title_opt,h) ->
+    add "<th";
+    add (attr_opt "id" id_opt);
+    add (attr_opt "class" (match classe_opt with None -> Some "header" | Some cl -> Some ("header " ^ cl)));
+    add (attr_opt "title" title_opt);
+    add ">";
+    add h;
+    add "</th>");
+  add "</tr>";
+  rows |> List.iter (fun row ->
+    add "<tr>";
+    row |> List.iter (fun cell ->
+      add "<td>"; add cell; add "</td>");
+    add "</tr>");
+  add "</table>";
+  Buffer.contents buf
+  
 let html_open_new_window ~height uri =
   html_a uri
 	 (html_glyphicon ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "new-window")

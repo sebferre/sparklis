@@ -977,6 +977,14 @@
     </span>
 
     <span class="tooltiped">
+      <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
+      <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
+      <span class="tooltip lang-es">Haga clic para mostrar el enlace permanente a la vista actual</span>
+      <span class="tooltip lang-nl">Klik om de permanente link naar de huidige weergave weer te geven </span>
+      <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
+    </span>
+
+    <span class="tooltiped">
       <span class="tooltip lang-en">Click to switch between SPARKLIS and YASGUI views</span>
       <span class="tooltip lang-fr">Cliquer pour commuter entre les vues SPARKLIS et YASGUI</span>
       <span class="tooltip lang-es">Haga clic para cambiar entre las vistas SPARKLIS y YASGUI</span>
@@ -985,16 +993,19 @@
     </span>
 
     <span class="tooltiped">
-      <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
-      <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
-      <span class="tooltip lang-es">Haga clic para mostrar el enlace permanente a la vista actual</span>
-      <span class="tooltip lang-nl">Klik om de permanente link naar de huidige weergave weer te geven </span>
-      <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
+      <span class="tooltip lang-en">Click to switch between the Query and History views</span>
+      <span class="tooltip lang-fr">Cliquer pour commuter entre les vues Requête et Historique</span>
+      <span class="tooltip lang-en">Haga clic para cambiar entre las vistas de Consulta e Historial</span>
+      <span class="tooltip lang-en">Klik om te schakelen tussen de Query en de Geschiedenis weergave</span>
+      <button id="switch-view-log" class="btn btn-default btn-md navbar-btn">History View</button>
     </span>
+
   </div>
 </div>
 
 <div class="container-fluid">
+
+<div id="query-view">
   <div id="sparklis-view" class="panel-group">
     <div id="query" class="panel panel-info">
       <div class="panel-heading">
@@ -1484,11 +1495,11 @@
       </div>
     </div>
 </div>
-</div>
+
 
 <div id="yasgui-view" class="panel panel-info" style="display:none">
   <div class="panel-heading">
-    <h5>
+    <h5 class="panel-title">
       <span class="texte lang-en">Your query in SPARQL + results (with YASGUI)</span>
       <span class="texte lang-fr">Votre requête en SPARQL + résultats (avec YASGUI)</span>
       <span class="texte lang-es">Tu consulta en SPARQL + resultados (con YASGUI)</span>
@@ -1499,6 +1510,34 @@
     <div id="sparql-query"></div>
     <div id="sparklis-yasgui"></div>
   </div>
+</div>
+
+</div> <!-- end of query view -->
+
+<div id="log-view" class="panel panel-info" style="display:none">
+  <div class="panel-heading">
+    <h5 class="panel-title">
+      <span class="texte lang-en">Your navigation history on this endpoint</span>
+      <span class="texte lang-fr">Votre historique de navigation sur ce point d'accès</span>
+      <span class="texte lang-es">Su historial de navegación en este SPARQL endpoint</span>
+      <span class="texte lang-nl">Uw navigatiegeschiedenis op dit SPARQL endpoint</span>
+      <button id="clear-log" class="btn btn-primary btn-xs" style="float: right">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Clear this history</span>
+	  <span class="tooltip lang-fr">Effacer cet historique</span>
+	  <span class="tooltip lang-es">Borrar este historial</span>
+	  <span class="tooltip lang-nl">Wis deze geschiedenis</span>
+	  <span class="glyphicon glyphicon-trash"></span>
+	</span>
+      </button>
+    </h5>
+  </div>
+  <div class="panel-body">
+    <div id="endpoint-log">
+    </div>
+  </div>
+</div>
+
 </div>
 
 </div>
