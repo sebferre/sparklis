@@ -984,28 +984,29 @@
       <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
     </span>
 
-    <span class="tooltiped">
-      <span class="tooltip lang-en">Click to switch between SPARKLIS and YASGUI views</span>
-      <span class="tooltip lang-fr">Cliquer pour commuter entre les vues SPARKLIS et YASGUI</span>
-      <span class="tooltip lang-es">Haga clic para cambiar entre las vistas SPARKLIS y YASGUI</span>
-      <span class="tooltip lang-nl">Klik om te schakelen tussen de SPARKLIS en YASGUI weergave</span>
-      <button id="switch-view" class="btn btn-default btn-md navbar-btn">YASGUI view</button>
-    </span>
-
-    <span class="tooltiped">
-      <span class="tooltip lang-en">Click to switch between the Query and History views</span>
-      <span class="tooltip lang-fr">Cliquer pour commuter entre les vues Requête et Historique</span>
-      <span class="tooltip lang-en">Haga clic para cambiar entre las vistas de Consulta e Historial</span>
-      <span class="tooltip lang-en">Klik om te schakelen tussen de Query en de Geschiedenis weergave</span>
-      <button id="switch-view-log" class="btn btn-default btn-md navbar-btn">History View</button>
-    </span>
+    <div class="btn-group btn-group-toggle" data-toggle="buttons">
+      <label  id="button-sparklis-view" class="btn btn-default btn-md navbar-btn active">
+	<input type="radio" name="options" autocomplete="off" checked>
+	Sparklis
+      </label>
+      <label  id="button-yasgui-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	YASGUI
+      </label>
+      <label  id="button-log-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	<span class="texte lang-en">History</span>
+	<span class="texte lang-fr">Historique</span>
+	<span class="texte lang-es">Historial</span>
+	<span class="texte lang-nl">Geschiedenis</span>
+      </label>
+    </div>
 
   </div>
 </div>
 
 <div class="container-fluid">
 
-<div id="query-view">
   <div id="sparklis-view" class="panel-group">
     <div id="query" class="panel panel-info">
       <div class="panel-heading">
@@ -1511,8 +1512,6 @@
     <div id="sparklis-yasgui"></div>
   </div>
 </div>
-
-</div> <!-- end of query view -->
 
 <div id="log-view" class="panel panel-info" style="display:none">
   <div class="panel-heading">

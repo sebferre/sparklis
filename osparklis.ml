@@ -1348,18 +1348,21 @@ let initialize endpoint focus =
 	~translate
 	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some (focus, Lisql.DeltaNil)))));
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
-    jquery "#switch-view" (onclick (fun elt ev ->
-      jquery_toggle "#sparklis-view";
-      jquery_toggle "#yasgui-view";
-      let view = jquery_toggle_innerHTML "#switch-view" "YASGUI view" "SPARKLIS view" in
-      if view = "SPARKLIS view" then Jsutils.yasgui#refresh));
-    jquery "#switch-view-log" (onclick (fun elt ev ->
-      jquery_toggle "#query-view";
-      jquery_toggle "#log-view";
-      let view = jquery_toggle_innerHTML "#switch-view-log" "History View" "Query View" in (* TODO: internationalize *)
-      if view = "Query View" then
-        jquery_set_innerHTML "#endpoint-log"
-          (Endpoint_log.html_table history#present#lis#endpoint)));
+    jquery "#button-sparklis-view" (onclick (fun elt ev ->
+      jquery_show "#sparklis-view";
+      jquery_hide "#yasgui-view";
+      jquery_hide "#log-view"));
+    jquery "#button-yasgui-view" (onclick (fun elt ev ->
+      jquery_hide "#sparklis-view";
+      jquery_show "#yasgui-view";
+      jquery_hide "#log-view";
+      Jsutils.yasgui#refresh));
+    jquery "#button-log-view" (onclick (fun elt ev ->
+      jquery_hide "#sparklis-view";
+      jquery_hide "#yasgui-view";
+      jquery_show "#log-view";
+      jquery_set_innerHTML "#endpoint-log"
+        (Endpoint_log.html_table history#present#lis#endpoint)));
     jquery "#clear-log" (onclick (fun elt ev ->
       if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_clear_log then (   
         let endpoint = history#present#lis#endpoint in
