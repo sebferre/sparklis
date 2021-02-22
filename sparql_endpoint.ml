@@ -53,7 +53,24 @@ let float_of_results (res: results) : float option =
   | [ [| Some (Rdf.Number (f,_,_)) |] ] -> Some f
   | _ -> None
 
-		     
+let csv_of_results (res : results) : string =
+  let buf = Buffer.create 10103 in
+  let ch = Csv.to_buffer buf in
+  Csv.output_record ch (List.map fst res.vars);
+  List.iter
+    (fun binding ->
+      Csv.output_record ch
+        (List.map
+           (fun (v,i) ->
+             match binding.(i) with
+             | None -> ""
+             | Some term -> Rdf.string_of_term term) (* TODO: refine? language/datatype lost *)
+           res.vars))
+    res.bindings;
+  Csv.close_out ch;
+  Buffer.contents buf
+
+       
 module Xml = (* CAUTION: some specifics to SPARQL results *)
 struct
   let lookup_prefix (elt : Dom.element t) (ns : string) : string =

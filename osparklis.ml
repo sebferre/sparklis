@@ -1363,6 +1363,11 @@ let initialize endpoint focus =
       jquery_show "#log-view";
       jquery_set_innerHTML "#endpoint-log"
         (Endpoint_log.html_table history#present#lis#endpoint)));
+    
+    jquery "#button-download-results" (onclick (fun elt ev ->
+      let contents = Sparql_endpoint.csv_of_results history#present#lis#results in
+      Jsutils.trigger_download ~mime:"text/csv" contents
+      ));
     jquery "#clear-log" (onclick (fun elt ev ->
       if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_clear_log then (   
         let endpoint = history#present#lis#endpoint in
@@ -1370,15 +1375,6 @@ let initialize endpoint focus =
         jquery_set_innerHTML "#endpoint-log"
           (Endpoint_log.html_table endpoint)
       )));
-
-(*
-    jquery "#show-hide-increments" (onclick (fun elt ev ->
-      jquery_toggle "#increments-body";
-      ignore (jquery_toggle_innerHTML "#show-hide-increments" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
-    jquery "#show-hide-results" (onclick (fun elt ev ->
-      jquery_toggle "#list-results";
-      ignore (jquery_toggle_innerHTML "#show-hide-results" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
- *)
     
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->

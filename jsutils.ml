@@ -30,6 +30,13 @@ let prompt msg text = Dom_html.window##prompt (string msg) (string text)
 
 let firebug msg = Firebug.console##log (string msg)
 
+let make_data_url mime contents =
+  "data:" ^ mime ^ "," ^ Url.urlencode contents				       
+let trigger_download ~mime contents : unit =
+  let data_url = make_data_url mime contents in
+  let _w_opt = Dom_html.window##open_ (string data_url) (string "_blank") null in
+  ()
+  
 let timeout (dur : float) (k : unit -> unit) : unit =
   ignore (Dom_html.window##setTimeout (wrap_callback k) dur)
 
