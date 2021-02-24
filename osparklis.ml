@@ -421,9 +421,19 @@ object (self)
 	    Lwt.return ()))
     else show permalink
 
-  method csv_of_results : string =
-  (* Sparql_endpoint.csv_of_results results *)
-    Html.csv_of_results html_state lis#results
+  method csv_of_results ?(raw_terms = false) ?(max_results : int option = None) (k : string -> unit) : unit =
+    let process limit_opt =
+      if raw_terms
+      then Sparql_endpoint.csv_of_results ?limit:limit_opt lis#results
+      else Html.csv_of_results html_state ?limit:limit_opt lis#results
+    in
+    match max_results with
+    | None -> k (process None)
+    | Some limit ->
+       lis#ajax_get_more_results ~limit (norm_constr term_constr) []
+         ~k_sparql:(fun sparql_opt -> ())
+         ~k_results:(fun sparql_opt -> k (process (Some limit)))
+         ~k_trivial:(fun () -> k (process (Some limit)))
     
   val mutable val_html_query = ""
   initializer val_html_query <- html_query html_state lis#query
@@ -560,6 +570,9 @@ object (self)
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus)))
       in
+      (* CSV download dialog *)
+      jquery_input "#input-csv-max-results" (fun input ->
+          input##.value := string (string_of_int lis#results_nb));
       (* nested table *)
       jquery "#nested-table" (fun elt_table ->
 	lis#results_shape_data
@@ -977,7 +990,8 @@ object (self)
 	    lis#ajax_get_more_results
 	      (norm_constr term_constr) [elt_res]
 	      ~k_sparql:self#refresh_sparql
-	      ~k_results:(fun _ -> k ()))
+	      ~k_results:(fun _ -> k ())
+              ~k_trivial:(fun () -> ()))
 	   
   method private filter_increments ?on_modifiers elt_list constr =
     let matcher = compile_constr ?on_modifiers constr in
@@ -1368,10 +1382,17 @@ let initialize endpoint focus =
       jquery_set_innerHTML "#endpoint-log"
         (Endpoint_log.html_table history#present#lis#endpoint)));
     
-    jquery "#button-download-results" (onclick (fun elt ev ->
-      let contents = history#present#csv_of_results in
-      Jsutils.trigger_download ~mime:"text/csv" contents
-      ));
+    jquery "#ok-download-results" (onclick (fun elt ev ->
+      jquery_input "#input-csv-raw-terms"
+        (fun input_raw_terms ->
+          jquery_input "#input-csv-max-results"
+            (fun input_max_results ->
+              history#present#csv_of_results
+                ~raw_terms:(to_bool input_raw_terms##.checked)
+                ~max_results:(integer_of_input ~min:0 input_max_results)
+                (fun contents ->
+                  Jsutils.trigger_download ~mime:"text/csv" contents)
+      ))));
     jquery "#clear-log" (onclick (fun elt ev ->
       if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_clear_log then (   
         let endpoint = history#present#lis#endpoint in

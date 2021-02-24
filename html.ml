@@ -855,7 +855,7 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
   Buffer.add_string buf "</table></div>";
   Buffer.contents buf
 
-let csv_of_results (state : state) results =
+let csv_of_results (state : state) ?(limit : int option) results =
   let open Sparql_endpoint in
   let grammar = Lisql2nl.config_lang#grammar in
   let id_labelling = state#id_labelling in
@@ -869,16 +869,24 @@ let csv_of_results (state : state) results =
            (Lisql2nl.xml_ng_id ~isolated:true
               grammar ~id_labelling id))
        results.vars);
-  List.iter
-    (fun binding ->
-      Csv.output_record ch
-        (List.map
-           (fun (v,i) ->
-             match binding.(i) with
-             | None -> ""
-             | Some t -> Lisql2nl.string_of_term t)
-           results.vars))
-    results.bindings;
+  let _ =
+    let valid_rank =
+      match limit with
+      | None -> (fun rank -> true)
+      | Some n -> (fun rank -> rank < n)
+    in
+    List.fold_left
+      (fun rank binding ->
+        if valid_rank rank then
+          Csv.output_record ch
+            (List.map
+               (fun (v,i) ->
+                 match binding.(i) with
+                 | None -> ""
+                 | Some t -> Lisql2nl.string_of_term t)
+               results.vars);
+        rank+1)
+      0 results.bindings in
   Csv.close_out ch;
   Buffer.contents buf
   

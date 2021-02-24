@@ -942,13 +942,18 @@ object (self)
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.state#geolocs results k
   method results_slides k = slides_of_results results k
 
-  method ajax_get_more_results term_constr elts
+  method ajax_get_more_results ?limit term_constr elts
 			       ~(k_sparql : string option -> unit)
-			       ~(k_results : string option -> unit) =
-    if self#partial_results then
+			       ~(k_results : string option -> unit)
+                               ~(k_trivial : unit -> unit) =
+    let limit =
+      match limit with
+      | Some n -> n
+      | None -> max_results + config_max_results#value in
+    if self#partial_results && limit > max_results then
       begin
-	max_results <- max_results + config_max_results#value;
-	self#define_sparql term_constr ~limit:max_results;
+	max_results <- limit;
+	self#define_sparql term_constr ~limit;
 	k_sparql sparql_opt;
 	match sparql_opt with
 	| None -> ()
@@ -959,6 +964,7 @@ object (self)
 	     (fun res -> results <- res; k_results (Some sparql))
 	     (fun code -> ())
       end
+    else k_trivial ()
 
   (* counts: must be called after [ajax_sparql_results] has terminated *)
   method estimate_count_var (var : Rdf.var) : (int * bool (* partial *)) option =

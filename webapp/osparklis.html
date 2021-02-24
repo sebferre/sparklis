@@ -935,6 +935,57 @@
   </div>
 </div>
 
+
+<div id="download-results-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Download results as a CSV file</span>
+	  <span class="texte lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	  <span class="texte lang-es">Descargar los resultados en un archivo CSV</span>
+	  <span class="texte lang-nl">Resultaten downloaden als CSV-bestand</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <input id="input-csv-raw-terms" type="checkbox">
+	      <span class="texte lang-en">Fill cells with raw URIs and literals rather than as displayed in the table</span>
+	      <span class="texte lang-fr">Remplir les cellules avec des URI et des littéraux bruts plutôt que comme indiqué dans le tableau</span>
+	      <span class="texte lang-es">Rellenar las celdas con URIs y literales en bruto en lugar de como se muestra en la tabla</span>
+	      <span class="texte lang-nl">Vul cellen met ruwe URI's en literalen in plaats van zoals weergegeven in de tabel</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <span class="texte lang-en">Compute at most </span>
+	      <span class="texte lang-fr">Calculer au plus </span>
+	      <span class="texte lang-es">Calcular como máximo </span>
+	      <span class="texte lang-nl">Bereken hooguit </span>
+	      <input id="input-csv-max-results" type="number" value="">
+	      <span class="texte lang-en"> query results</span>
+	      <span class="texte lang-fr"> résultats à la requête</span>
+	      <span class="texte lang-es"> resultados de la consulta</span>
+	      <span class="texte lang-nl"> query resultaten</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-remove"></span>
+	</button>
+	<button id="ok-download-results" type="button" class="btn btn-primary" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-ok"></span>
+	</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <div id="control-navig" class="navbar" data-spy="affix" data-offset-top="75">
   <div class="nav navbar-nav navbar-left">
     <span class="btn-group">
@@ -1375,15 +1426,15 @@
 	    <span class="texte lang-nl">Resultaten van uw query</span>
 	  </a>
 	  &nbsp;
-	  <button id="button-download-results" class="btn btn-primary btn-xs">
-	    <span class="tooltiped">
-	      <span class="tooltip lang-en">Download results as a CSV file</span>
-	      <span class="tooltip lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
-	      <span class="tooltip lang-es">Descargar los resultados en un archivo CSV</span>
-	      <span class="tooltip lang-nl">Resultaten downloaden als CSV-bestand</span>
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Download results as a CSV file</span>
+	    <span class="tooltip lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	    <span class="tooltip lang-es">Descargar los resultados en un archivo CSV</span>
+	    <span class="tooltip lang-nl">Resultaten downloaden als CSV-bestand</span>
+	    <button id="button-download-results" data-toggle="modal" data-target="#download-results-modal" class="btn btn-primary btn-xs">
 	      <span class="glyphicon glyphicon-download-alt"></span>
-	    </span>
-	  </button>
+	    </button>
+	  </span>
 	</h5>
       </div>
       <div id="collapse-results" class="panel-collapse collapse in">
