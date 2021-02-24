@@ -855,6 +855,33 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
   Buffer.add_string buf "</table></div>";
   Buffer.contents buf
 
+let csv_of_results (state : state) results =
+  let open Sparql_endpoint in
+  let grammar = Lisql2nl.config_lang#grammar in
+  let id_labelling = state#id_labelling in
+  let buf = Buffer.create 10103 in
+  let ch = Csv.to_buffer buf in
+  Csv.output_record ch
+    (List.map
+       (fun (v,i) ->
+         let id = id_labelling#get_var_id v in
+         Lisql2nl.xml_text_content grammar
+           (Lisql2nl.xml_ng_id ~isolated:true
+              grammar ~id_labelling id))
+       results.vars);
+  List.iter
+    (fun binding ->
+      Csv.output_record ch
+        (List.map
+           (fun (v,i) ->
+             match binding.(i) with
+             | None -> ""
+             | Some t -> Lisql2nl.string_of_term t)
+           results.vars))
+    results.bindings;
+  Csv.close_out ch;
+  Buffer.contents buf
+  
 
 let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.var option list) shape_data counts =
   let open Sparql_endpoint in

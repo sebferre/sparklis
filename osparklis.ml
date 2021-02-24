@@ -421,6 +421,10 @@ object (self)
 	    Lwt.return ()))
     else show permalink
 
+  method csv_of_results : string =
+  (* Sparql_endpoint.csv_of_results results *)
+    Html.csv_of_results html_state lis#results
+    
   val mutable val_html_query = ""
   initializer val_html_query <- html_query html_state lis#query
   method html_query = val_html_query
@@ -1365,7 +1369,7 @@ let initialize endpoint focus =
         (Endpoint_log.html_table history#present#lis#endpoint)));
     
     jquery "#button-download-results" (onclick (fun elt ev ->
-      let contents = Sparql_endpoint.csv_of_results history#present#lis#results in
+      let contents = history#present#csv_of_results in
       Jsutils.trigger_download ~mime:"text/csv" contents
       ));
     jquery "#clear-log" (onclick (fun elt ev ->
