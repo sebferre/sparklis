@@ -346,8 +346,9 @@ let property_selection = new increment_selection "#selection-properties"
 let modifier_selection = new increment_selection "#selection-modifiers"
 
 class place (endpoint : string) (foc : Lisql.focus) =
+  let lis0 = new Lis.place endpoint foc in
 object (self)
-  val mutable lis = new Lis.place endpoint foc
+  val mutable lis = lis0
   method lis = lis
 
   val mutable offset = 0
@@ -380,8 +381,7 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
-  initializer html_state <- new Html.state lis#id_labelling
+  val mutable html_state = new Html.state lis0
 
   val mutable permalink = ""
   initializer permalink <- permalink_of_place lis
@@ -482,30 +482,7 @@ object (self)
 		     Dom_html.stopPropagation ev;
 		     navigation#update_focus ~push_in_history:true Lisql.delete_focus));
 	 k ()))
-
-  method private refresh_focus =
-    let html_focus_np, html_focus_ng =
-      match lis#focus_term_opt with
-	| Some (Rdf.Var v) ->
-	  (try
-	      let id = lis#id_labelling#get_var_id v in
-	      Html.html_id_np html_state id, Html.html_id_ng html_state id
-	    with _ -> (* should not happen *)
-		 let html = escapeHTML v in
-		 html, html)
-	| Some t ->
- 	   let html = Html.html_term t in
-	   html, html
-	| None ->
-	   let html = "(" ^ Lisql2nl.config_lang#grammar#undefined ^ ")" in
-	   html, html in
-    jquery_all ".focus-np"
-	       (fun elt ->
-		set_innerHTML_fadeInOut elt html_focus_np);
-    jquery_all ".focus-ng"
-	       (fun elt ->
-		set_innerHTML_fadeInOut elt html_focus_ng)
-
+    
   method private refresh_constrs term_constr property_constr =
     List.iter
       (fun (sel_select, sel_input, constr, get_list_constraints) ->
@@ -646,7 +623,7 @@ object (self)
 					let geolocations =
 					  List.map
 					    (fun (lat,long,term) ->
-					     let html = Html.html_cell_contents term in
+					     let html = Html.html_cell_contents html_state term in
 					     (lat,long,html))
 					    geolocations in
 					Lwt.on_termination
@@ -951,16 +928,14 @@ object (self)
 	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
 	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr;
-	      self#refresh_focus (* after increments, because they have `FocusName words *)
+	      self#refresh_term_increments term_constr
 	  | Some sparql ->
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
 	      jquery_input "#pattern-terms" (fun input -> input##.disabled := bool false);
 	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr;
-	      self#refresh_focus)))
+	      self#refresh_term_increments term_constr)))
 
   method refresh_for_term_constr term_constr =
     (* same as method refresh, but assuming same query and focus *)
@@ -1164,12 +1139,12 @@ object (self)
 
   method reinit =
     lis <- new Lis.place lis#endpoint lis#focus;
-    html_state <- new Html.state lis#id_labelling;
+    html_state <- new Html.state lis;
     permalink <- permalink_of_place lis
       
   method new_place endpoint focus =
     let lis = new Lis.place endpoint focus in
-    let html_state = new Html.state lis#id_labelling in
+    let html_state = new Html.state lis in
     let val_html_query = html_query html_state lis#query in
     {< lis = lis;
        html_state = html_state;

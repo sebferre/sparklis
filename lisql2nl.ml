@@ -74,9 +74,9 @@ let word_text_content grammar : word -> string = function
   | `Nary (uri,s) -> s
   | `Func s -> s
   | `Op s -> s
-  | `Undefined -> ""
-  | `FocusSpan _ -> ""
-  | `FocusName -> ""
+  | `Undefined -> "?"
+  | `FocusSpan _ -> "__"
+  | `FocusName -> "thing"
 
 type ng_label =
   [ `Word of word
