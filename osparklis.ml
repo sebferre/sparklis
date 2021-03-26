@@ -346,8 +346,9 @@ let property_selection = new increment_selection "#selection-properties"
 let modifier_selection = new increment_selection "#selection-modifiers"
 
 class place (endpoint : string) (foc : Lisql.focus) =
+  let lis0 = new Lis.place endpoint foc in
 object (self)
-  val mutable lis = new Lis.place endpoint foc
+  val mutable lis = lis0
   method lis = lis
 
   val mutable offset = 0
@@ -380,11 +381,11 @@ object (self)
   val mutable navigation = new navigation
   method set_navigation (navig : navigation) = navigation <- navig
 
-  val mutable html_state = new Html.state (new Lisql2nl.id_labelling [])
-  initializer html_state <- new Html.state lis#id_labelling
+  val mutable html_state = new Html.state lis0
 
   val mutable permalink = ""
   initializer permalink <- permalink_of_place lis
+  method permalink = permalink
 				
   method show_permalink : unit =
     let show (url : string) : unit =
@@ -420,13 +421,31 @@ object (self)
 	    Lwt.return ()))
     else show permalink
 
+  method csv_of_results ?(raw_terms = false) ?(max_results : int option = None) (k : string -> unit) : unit =
+    let process limit_opt =
+      if raw_terms
+      then Sparql_endpoint.csv_of_results ?limit:limit_opt lis#results
+      else Html.csv_of_results html_state ?limit:limit_opt lis#results
+    in
+    match max_results with
+    | None -> k (process None)
+    | Some limit ->
+       lis#ajax_get_more_results ~limit (norm_constr term_constr) []
+         ~k_sparql:(fun sparql_opt -> ())
+         ~k_results:(fun sparql_opt -> k (process (Some limit)))
+         ~k_trivial:(fun () -> k (process (Some limit)))
+    
+  val mutable val_html_query = ""
+  initializer val_html_query <- html_query html_state lis#query
+  method html_query = val_html_query
+
   method private refresh_lisql (k : unit -> unit) =
     let str_highlighted = string "highlighted" in
     let str_prehighlighted = string "prehighlighted" in
     jquery "#lisql" (fun elt ->
       set_innerHTML_fadeInOut_then
 	elt
-	(html_query html_state lis#query)
+	val_html_query
 	(fun () ->		
 	 stop_links_propagation_from elt;
 	 jquery_all_from
@@ -463,30 +482,7 @@ object (self)
 		     Dom_html.stopPropagation ev;
 		     navigation#update_focus ~push_in_history:true Lisql.delete_focus));
 	 k ()))
-
-  method private refresh_focus =
-    let html_focus_np, html_focus_ng =
-      match lis#focus_term_opt with
-	| Some (Rdf.Var v) ->
-	  (try
-	      let id = lis#id_labelling#get_var_id v in
-	      Html.html_id_np html_state id, Html.html_id_ng html_state id
-	    with _ -> (* should not happen *)
-		 let html = escapeHTML v in
-		 html, html)
-	| Some t ->
- 	   let html = Html.html_term t in
-	   html, html
-	| None ->
-	   let html = "(" ^ Lisql2nl.config_lang#grammar#undefined ^ ")" in
-	   html, html in
-    jquery_all ".focus-np"
-	       (fun elt ->
-		set_innerHTML_fadeInOut elt html_focus_np);
-    jquery_all ".focus-ng"
-	       (fun elt ->
-		set_innerHTML_fadeInOut elt html_focus_ng)
-
+    
   method private refresh_constrs term_constr property_constr =
     List.iter
       (fun (sel_select, sel_input, constr, get_list_constraints) ->
@@ -551,6 +547,9 @@ object (self)
 	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
 	    Lisql.insert_term term id_focus)))
       in
+      (* CSV download dialog *)
+      jquery_input "#input-csv-max-results" (fun input ->
+          input##.value := string (string_of_int lis#results_nb));
       (* nested table *)
       jquery "#nested-table" (fun elt_table ->
 	lis#results_shape_data
@@ -624,7 +623,7 @@ object (self)
 					let geolocations =
 					  List.map
 					    (fun (lat,long,term) ->
-					     let html = Html.html_cell_contents term in
+					     let html = Html.html_cell_contents html_state term in
 					     (lat,long,html))
 					    geolocations in
 					Lwt.on_termination
@@ -929,16 +928,14 @@ object (self)
 	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
 	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr;
-	      self#refresh_focus (* after increments, because they have `FocusName words *)
+	      self#refresh_term_increments term_constr
 	  | Some sparql ->
 	      self#refresh_extension;
 	      self#refresh_constrs term_constr property_constr;
 	      jquery_input "#pattern-terms" (fun input -> input##.disabled := bool false);
 	      self#refresh_modifier_increments `List;
 	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr;
-	      self#refresh_focus)))
+	      self#refresh_term_increments term_constr)))
 
   method refresh_for_term_constr term_constr =
     (* same as method refresh, but assuming same query and focus *)
@@ -968,7 +965,8 @@ object (self)
 	    lis#ajax_get_more_results
 	      (norm_constr term_constr) [elt_res]
 	      ~k_sparql:self#refresh_sparql
-	      ~k_results:(fun _ -> k ()))
+	      ~k_results:(fun _ -> k ())
+              ~k_trivial:(fun () -> ()))
 	   
   method private filter_increments ?on_modifiers elt_list constr =
     let matcher = compile_constr ?on_modifiers constr in
@@ -1141,14 +1139,17 @@ object (self)
 
   method reinit =
     lis <- new Lis.place lis#endpoint lis#focus;
-    html_state <- new Html.state lis#id_labelling;
+    html_state <- new Html.state lis;
     permalink <- permalink_of_place lis
       
   method new_place endpoint focus =
     let lis = new Lis.place endpoint focus in
+    let html_state = new Html.state lis in
+    let val_html_query = html_query html_state lis#query in
     {< lis = lis;
-       html_state = new Html.state lis#id_labelling;
+       html_state = html_state;
        permalink = permalink_of_place lis;
+       val_html_query = val_html_query;
        offset = 0;
        term_constr = Lisql.True (*Lisql.MatchesAll []*);
        property_constr = Lisql.True (*Lisql.MatchesAll []*);
@@ -1161,6 +1162,48 @@ object (self)
 
 end
 
+module Endpoint_log =
+  struct
+    type record = { timestamp : string;
+                    permalink : string;
+                    html_query : string }
+
+    let endpoint_key (endpoint : string) : record (* list *) Jsutils.storage_key =
+      "sparklis@" ^ endpoint
+                
+    let record (p : place) : unit =
+      let key = endpoint_key p#lis#endpoint in (* log by endpoint *)
+      let timestamp = to_string (new%js Js.date_now)##toISOString in
+      let permalink = p#permalink in
+      let html_query = p#html_query in
+      let record = {timestamp; permalink; html_query} in
+      Jsutils.update_localStorage key
+        (function
+         | None -> Some [record]
+         | Some log -> Some (record::log))
+
+    let clear (endpoint : string) : unit =
+      let key = endpoint_key endpoint in
+      Jsutils.update_localStorage key
+        (fun _ -> None)
+
+    let html_table (endpoint : string) : string =
+      let key = endpoint_key endpoint in
+      match Jsutils.get_localStorage key with
+      | None -> "No available log for this endpoint"
+      | Some log ->
+         Html.table ~classe:"table-endpoint-log"
+           [ None, None, None, "timestamp";
+             None, None, None, "query"]
+           (List.map
+              (fun record ->
+                [ record.timestamp ^ "&nbsp;"
+                  ^ Html.html_open_new_window ~height:12 record.permalink;
+                  record.html_query ])
+              log)
+        
+  end
+  
 class history (endpoint : string) (foc : Lisql.focus) =
 object (self)
   val mutable past : place list = []
@@ -1183,7 +1226,13 @@ object (self)
     past <- present::past;
     present <- p;
     future <- []
-		
+
+  method refresh_present =
+    if true then ( (* TODO: add option *)
+      Endpoint_log.record present
+    );
+    present#refresh
+    
   method change_endpoint url =
     Sparql.prologue#reset;
     present#abort_all_ajax;
@@ -1195,7 +1244,7 @@ object (self)
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
-    p#refresh
+    self#refresh_present
 
   method update_focus ~push_in_history f =
     match f present#lis#focus with
@@ -1207,7 +1256,7 @@ object (self)
 	 let p = present#new_place present#lis#endpoint foc in
 	 p#set_navigation (self :> navigation);
 	 if push_in_history then self#push p else present <- p;
-	 p#refresh
+	 self#refresh_present
 
   method home =
     self#update_focus ~push_in_history:true
@@ -1222,7 +1271,7 @@ object (self)
 	 future <- present::future;
 	 present <- p;
 	 past <- lp;
-	 p#refresh
+	 self#refresh_present
 	   
   method forward : unit =
     match future with
@@ -1233,15 +1282,16 @@ object (self)
 	 past <- present::past;
 	 present <- p;
 	 future <- lp;
-	 p#refresh
+	 self#refresh_present
 
   method refresh : unit =
     present#abort_all_ajax;
     present#save_ui_state;
     present#reinit;
-    present#refresh
+    self#refresh_present
 end
 
+  
 (* main *)
 
 let translate () =
@@ -1290,22 +1340,41 @@ let initialize endpoint focus =
       config#if_has_changed
 	~translate
 	~refresh:(fun () -> history#update_focus ~push_in_history:false (fun focus -> Some (focus, Lisql.DeltaNil)))));
-    jquery "#switch-view" (onclick (fun elt ev ->
-      jquery_toggle "#sparklis-view";
-      jquery_toggle "#yasgui-view";
-      let view = jquery_toggle_innerHTML "#switch-view" "YASGUI view" "SPARKLIS view" in
-      if view = "SPARKLIS view" then Jsutils.yasgui#refresh));
-
     jquery "#permalink" (onclick (fun elt ev -> history#present#show_permalink));
-
-(*
-    jquery "#show-hide-increments" (onclick (fun elt ev ->
-      jquery_toggle "#increments-body";
-      ignore (jquery_toggle_innerHTML "#show-hide-increments" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
-    jquery "#show-hide-results" (onclick (fun elt ev ->
-      jquery_toggle "#list-results";
-      ignore (jquery_toggle_innerHTML "#show-hide-results" (html_glyphicon "collapse-down") (html_glyphicon "collapse-up"))));
- *)
+    jquery "#button-sparklis-view" (onclick (fun elt ev ->
+      jquery_show "#sparklis-view";
+      jquery_hide "#yasgui-view";
+      jquery_hide "#log-view"));
+    jquery "#button-yasgui-view" (onclick (fun elt ev ->
+      jquery_hide "#sparklis-view";
+      jquery_show "#yasgui-view";
+      jquery_hide "#log-view";
+      Jsutils.yasgui#refresh));
+    jquery "#button-log-view" (onclick (fun elt ev ->
+      jquery_hide "#sparklis-view";
+      jquery_hide "#yasgui-view";
+      jquery_show "#log-view";
+      jquery_set_innerHTML "#endpoint-log"
+        (Endpoint_log.html_table history#present#lis#endpoint)));
+    
+    jquery "#ok-download-results" (onclick (fun elt ev ->
+      jquery_input "#input-csv-raw-terms"
+        (fun input_raw_terms ->
+          jquery_input "#input-csv-max-results"
+            (fun input_max_results ->
+              history#present#csv_of_results
+                ~raw_terms:(to_bool input_raw_terms##.checked)
+                ~max_results:(integer_of_input ~min:0 input_max_results)
+                (fun contents ->
+                  Jsutils.trigger_download ~mime:"text/csv" contents)
+      ))));
+    jquery "#clear-log" (onclick (fun elt ev ->
+      if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_clear_log then (   
+        let endpoint = history#present#lis#endpoint in
+        Endpoint_log.clear endpoint;
+        jquery_set_innerHTML "#endpoint-log"
+          (Endpoint_log.html_table endpoint)
+      )));
     
     jquery "#button-terms" (onclick (fun elt ev ->
       jquery_select "#select-terms" (fun select ->
@@ -1454,7 +1523,7 @@ let initialize endpoint focus =
     
     (* generating and displaying contents *)
     translate ();
-    history#present#refresh
+    history#refresh_present
 
 (* main *)
 let _ =

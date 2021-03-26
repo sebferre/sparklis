@@ -70,9 +70,10 @@ let key_of_collapse =
 
 type results_view = Table | NestedTable | Slideshow
 		      
-class state (id_labelling : Lisql2nl.id_labelling) =
+class state (lis : Lis.place) =
 object
-  method id_labelling = id_labelling
+  method focus_term = lis#focus_entity
+  method id_labelling = lis#id_labelling
   val dico_foci : Lisql.focus dico = new dico "focus"
   val alias : (string,string) Hashtbl.t = Hashtbl.create 13
   method add_focus (focus : Lisql.focus) : string =
@@ -255,6 +256,11 @@ let pattern_of_constr =
   
 (* pretty-printing of terms, NL in HTML *)
 
+let attr_opt name = function
+  | None -> ""
+  | Some "" -> " " ^ name
+  | Some id -> " " ^ name ^ "=\"" ^ id ^ "\""
+                                         
 let html_pre text =
   let text = Regexp.global_replace (Regexp.regexp "<") text "&lt;" in
   let text = Regexp.global_replace (Regexp.regexp ">") text "&gt;" in  
@@ -312,6 +318,32 @@ let html_small html = "<small>" ^ html ^ "</small>"
 let html_glyphicon ?title name =
   html_span ~classe:("glyphicon glyphicon-" ^ name) ?title ""
 
+let table ?id ?classe ?title headers rows =
+  assert (headers <> []);
+  let buf = Buffer.create 1000 in
+  let add s = Buffer.add_string buf s in
+  add "<table";
+  add (attr_opt "id" id);
+  add (attr_opt "class" classe);
+  add (attr_opt "title" title);
+  add "><tr>";
+  headers |> List.iter (fun (id_opt,classe_opt,title_opt,h) ->
+    add "<th";
+    add (attr_opt "id" id_opt);
+    add (attr_opt "class" (match classe_opt with None -> Some "header" | Some cl -> Some ("header " ^ cl)));
+    add (attr_opt "title" title_opt);
+    add ">";
+    add h;
+    add "</th>");
+  add "</tr>";
+  rows |> List.iter (fun row ->
+    add "<tr>";
+    row |> List.iter (fun cell ->
+      add "<td>"; add cell; add "</td>");
+    add "</tr>");
+  add "</table>";
+  Buffer.contents buf
+  
 let html_open_new_window ~height uri =
   html_a uri
 	 (html_glyphicon ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "new-window")
@@ -335,26 +367,8 @@ let html_logos uri =
 	let name = Filename.basename logo_url in
 	html_img ~classe:"uri-logo" ~height ~alt:"" ~title:name logo_url)
        logo_urls)
-				
-let html_word = function
-  | `Thing -> html_span Lisql2nl.config_lang#grammar#thing
-  | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
-  | `Literal s -> html_literal s
-  | `TypedLiteral (s,t) ->
-    if Lisql2nl.config_show_datatypes#value
-    then html_literal s ^ " (" ^ escapeHTML t ^ ")"
-    else html_literal s
-  | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
-  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" uri s
-  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" uri s
-  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" uri (escapeHTML s)
-  | `Func s -> html_span ~classe:"function" (escapeHTML s)
-  | `Op op -> html_modifier op
-  | `Undefined -> "___"
-  | `FocusSpan incr -> html_span ~classe:"highlighted"
-				 (match incr with Lisql.IncrHierarchy _ -> "▼ ___" | _ -> "___")
-  | `FocusName -> html_span ~classe:"focus-ng" "thing"
+
+
 
 let html_input dt =
   let t, hint =
@@ -425,7 +439,7 @@ and html_of_nl_node ~(controls : string) ?(highlight=false) (state : state) : Li
   function
     | Epsilon -> html_span (*"•"*) "⚬" ^ controls
     | Kwd s -> html_span s ^ controls
-    | Word w -> html_word w ^ controls
+    | Word w -> html_word state w ^ controls
     | Input dt -> html_input dt ^ controls
     | Selection xml_selop -> html_of_nl_xml ~controls ~highlight state xml_selop
     | Suffix (xml,suf) -> html_span (html_of_nl_xml ~controls:"" ~highlight state xml ^ suf) ^ controls
@@ -480,11 +494,46 @@ and html_highlight h xml =
   if h
   then html_span ~classe:"highlighted" xml
   else xml
-
-(* HTML of different AST elements *)
-
-let html_term (t : Rdf.term) : string =
-  html_word (Lisql2nl.word_of_term t)
+and html_word state = function
+  | `Thing -> html_span Lisql2nl.config_lang#grammar#thing
+  | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
+  | `Literal s -> html_literal s
+  | `TypedLiteral (s,t) ->
+    if Lisql2nl.config_show_datatypes#value
+    then html_literal s ^ " (" ^ escapeHTML t ^ ")"
+    else html_literal s
+  | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
+  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
+  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" uri s
+  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" uri s
+  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" uri (escapeHTML s)
+  | `Func s -> html_span ~classe:"function" (escapeHTML s)
+  | `Op op -> html_modifier op
+  | `Undefined -> "___"
+  | `FocusSpan incr -> html_span ~classe:"highlighted"
+				 (match incr with Lisql.IncrHierarchy _ -> "▼ ___" | _ -> "___")
+  | `FocusName -> html_focus_name state
+and html_focus_name state =
+  match state#focus_term with
+  | `Id id -> html_id_ng state id
+  | `Term t -> html_term state t
+  | `Undefined -> "___"
+and html_term state (t : Rdf.term) : string =
+  html_word state (Lisql2nl.word_of_term t)
+and html_id_np (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_np_id
+       Lisql2nl.config_lang#grammar
+       ~id_labelling:state#id_labelling
+       id)
+and html_id_ng (state : state) (id : int) : string =
+  html_of_nl_xml state
+    (Lisql2nl.xml_ng_id
+       Lisql2nl.config_lang#grammar
+       ~id_labelling:state#id_labelling
+       id)
+  
+(* HTML of queries *)
 
 let html_query (state : state) (query : annot elt_s) : string =
   html_of_nl_xml state
@@ -493,18 +542,6 @@ let html_query (state : state) (query : annot elt_s) : string =
        ~id_labelling:state#id_labelling
        query)
 
-let html_id_np (state : state) (id : int) : string =
-  html_of_nl_xml state
-    (Lisql2nl.xml_np_id
-       Lisql2nl.config_lang#grammar
-       ~id_labelling:state#id_labelling
-       id)
-let html_id_ng (state : state) (id : int) : string =
-  html_of_nl_xml state
-    (Lisql2nl.xml_ng_id
-       Lisql2nl.config_lang#grammar
-       ~id_labelling:state#id_labelling
-       id)
 
 (* HTML of increment lists *)
 
@@ -744,17 +781,17 @@ let html_cell_video url =
 let html_cell_audio url =
   html_audio url ^ html_open_new_window ~height:16 url
 
-let html_cell_contents (t : Rdf.term) =
+let html_cell_contents state (t : Rdf.term) =
   match t with
   | Rdf.URI uri ->
      if Rdf.uri_is_image uri then html_cell_img ~height:120 uri
      else if Rdf.uri_is_video uri then html_cell_video uri
      else if Rdf.uri_is_audio uri then html_cell_audio uri
-     else html_word (Lisql2nl.word_of_term t)
-  | _ -> html_word (Lisql2nl.word_of_term t)
+     else html_word state (Lisql2nl.word_of_term t)
+  | _ -> html_word state (Lisql2nl.word_of_term t)
 			 
 let html_cell state ?(view : results_view option) ?(rank : int option) ?(column : Lisql.id option) t =
-  let contents = html_cell_contents t in
+  let contents = html_cell_contents state t in
   let key_opt =
     match view, rank, column with
     | Some view, Some rank, Some column ->
@@ -824,6 +861,41 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
   Buffer.add_string buf "</table></div>";
   Buffer.contents buf
 
+let csv_of_results (state : state) ?(limit : int option) results =
+  let open Sparql_endpoint in
+  let grammar = Lisql2nl.config_lang#grammar in
+  let id_labelling = state#id_labelling in
+  let buf = Buffer.create 10103 in
+  let ch = Csv.to_buffer buf in
+  Csv.output_record ch
+    (List.map
+       (fun (v,i) ->
+         let id = id_labelling#get_var_id v in
+         Lisql2nl.xml_text_content grammar
+           (Lisql2nl.xml_ng_id ~isolated:true
+              grammar ~id_labelling id))
+       results.vars);
+  let _ =
+    let valid_rank =
+      match limit with
+      | None -> (fun rank -> true)
+      | Some n -> (fun rank -> rank < n)
+    in
+    List.fold_left
+      (fun rank binding ->
+        if valid_rank rank then
+          Csv.output_record ch
+            (List.map
+               (fun (v,i) ->
+                 match binding.(i) with
+                 | None -> ""
+                 | Some t -> Lisql2nl.string_of_term t)
+               results.vars);
+        rank+1)
+      0 results.bindings in
+  Csv.close_out ch;
+  Buffer.contents buf
+  
 
 let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.var option list) shape_data counts =
   let open Sparql_endpoint in

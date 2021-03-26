@@ -24,10 +24,19 @@ open XmlHttpRequest
 
 let alert msg = Dom_html.window##alert (string msg)
 
+let confirm msg = to_bool (Dom_html.window##confirm (string msg))
+              
 let prompt msg text = Dom_html.window##prompt (string msg) (string text)
 
 let firebug msg = Firebug.console##log (string msg)
 
+let make_data_url mime contents =
+  "data:" ^ mime ^ "," ^ Url.urlencode contents				       
+let trigger_download ~mime contents : unit =
+  let data_url = make_data_url mime contents in
+  let _w_opt = Dom_html.window##open_ (string data_url) (string "_blank") null in
+  ()
+  
 let timeout (dur : float) (k : unit -> unit) : unit =
   ignore (Dom_html.window##setTimeout (wrap_callback k) dur)
 
@@ -178,6 +187,41 @@ let lookupPrefix (elt : Dom.element t) (ns : js_string t) : js_string t opt =
   (* not working in Internet Explorer *)
   some (Unsafe.coerce (Unsafe.meth_call elt "lookupPrefix" [|Unsafe.inject ns|]))
 
+(* local storage utilities *)
+
+type 'a storage_key = string
+  
+let get_localStorage (key : 'a storage_key) : 'a option =
+  Optdef.case
+    Dom_html.window##.localStorage
+    (fun () -> firebug "Your browser has no local storage"; None)
+    (fun storage ->
+      let jkey = string key in
+      try
+        Opt.to_option
+          (Opt.map
+             (storage##getItem jkey)
+             Json.unsafe_input)
+      with _ -> None)
+  
+let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) : unit =
+  Optdef.case
+    Dom_html.window##.localStorage
+    (fun () -> firebug "Your browser has no local storage")
+    (fun storage ->
+      let jkey = string key in
+      let arg_opt =
+        try
+          Opt.to_option
+            (Opt.map
+               (storage##getItem jkey)
+               Json.unsafe_input)
+        with _ -> None in
+      let res_opt = f arg_opt in
+      match res_opt with
+      | Some res -> storage##setItem jkey (Json.output res)
+      | None -> storage##removeItem jkey)
+  
 
 (* helping injection of OCaml values to JSON values *)
 

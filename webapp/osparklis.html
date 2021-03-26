@@ -187,6 +187,7 @@
 	</ul>
 
 	<ul class="nav navbar-nav navbar-right">
+	  <!--
 	  <li class="dropdown">
 	    <a class="dropdown-toggle" data-toggle="dropdown">
 	      <span class="texte lang-en">Issues</span>
@@ -206,6 +207,7 @@
 	      </li>
 	    </ul>
 	  </li>
+	  -->
 
 	  <li class="dropdown">
 	    <a class="dropdown-toggle" data-toggle="dropdown">
@@ -305,6 +307,12 @@
 		</a>
 	      </li>
 	      <li>
+		<a target="_blank" href="https://github.com/sebferre/sparklis">
+		  GitHub
+		</a>
+	      </li>
+	      <!--
+	      <li>
 		<a target="_blank" href="http://tinyurl.com/kxozx9r">
 		  <span class="texte lang-en">Usability survey</span>
 		  <span class="texte lang-fr">Enquête d'utilisabilité</span>
@@ -312,6 +320,7 @@
 		  <span class="texte lang-nl">Gebruiksvriendelijkheid enquête</span>
 		</a>
 	      </li>
+	      -->
 	    </ul>
 	  </li>
 	</ul>
@@ -935,6 +944,57 @@
   </div>
 </div>
 
+
+<div id="download-results-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Download results as a CSV file</span>
+	  <span class="texte lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	  <span class="texte lang-es">Descargar los resultados en un archivo CSV</span>
+	  <span class="texte lang-nl">Resultaten downloaden als CSV-bestand</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <input id="input-csv-raw-terms" type="checkbox">
+	      <span class="texte lang-en">Fill cells with raw URIs and literals rather than as displayed in the table</span>
+	      <span class="texte lang-fr">Remplir les cellules avec des URI et des littéraux bruts plutôt que comme indiqué dans le tableau</span>
+	      <span class="texte lang-es">Rellenar las celdas con URIs y literales en bruto en lugar de como se muestra en la tabla</span>
+	      <span class="texte lang-nl">Vul cellen met ruwe URI's en literalen in plaats van zoals weergegeven in de tabel</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <span class="texte lang-en">Compute at most </span>
+	      <span class="texte lang-fr">Calculer au plus </span>
+	      <span class="texte lang-es">Calcular como máximo </span>
+	      <span class="texte lang-nl">Bereken hooguit </span>
+	      <input id="input-csv-max-results" type="number" value="">
+	      <span class="texte lang-en"> query results</span>
+	      <span class="texte lang-fr"> résultats à la requête</span>
+	      <span class="texte lang-es"> resultados de la consulta</span>
+	      <span class="texte lang-nl"> query resultaten</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-remove"></span>
+	</button>
+	<button id="ok-download-results" type="button" class="btn btn-primary" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-ok"></span>
+	</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <div id="control-navig" class="navbar" data-spy="affix" data-offset-top="75">
   <div class="nav navbar-nav navbar-left">
     <span class="btn-group">
@@ -977,24 +1037,36 @@
     </span>
 
     <span class="tooltiped">
-      <span class="tooltip lang-en">Click to switch between SPARKLIS and YASGUI views</span>
-      <span class="tooltip lang-fr">Cliquer pour commuter entre les vues SPARKLIS et YASGUI</span>
-      <span class="tooltip lang-es">Haga clic para cambiar entre las vistas SPARKLIS y YASGUI</span>
-      <span class="tooltip lang-nl">Klik om te schakelen tussen de SPARKLIS en YASGUI weergave</span>
-      <button id="switch-view" class="btn btn-default btn-md navbar-btn">YASGUI view</button>
-    </span>
-
-    <span class="tooltiped">
       <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
       <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
       <span class="tooltip lang-es">Haga clic para mostrar el enlace permanente a la vista actual</span>
       <span class="tooltip lang-nl">Klik om de permanente link naar de huidige weergave weer te geven </span>
       <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
     </span>
+
+    <div class="btn-group btn-group-toggle" data-toggle="buttons">
+      <label  id="button-sparklis-view" class="btn btn-default btn-md navbar-btn active">
+	<input type="radio" name="options" autocomplete="off" checked>
+	Sparklis
+      </label>
+      <label  id="button-yasgui-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	YASGUI
+      </label>
+      <label  id="button-log-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	<span class="texte lang-en">History</span>
+	<span class="texte lang-fr">Historique</span>
+	<span class="texte lang-es">Historial</span>
+	<span class="texte lang-nl">Geschiedenis</span>
+      </label>
+    </div>
+
   </div>
 </div>
 
 <div class="container-fluid">
+
   <div id="sparklis-view" class="panel-group">
     <div id="query" class="panel panel-info">
       <div class="panel-heading">
@@ -1362,6 +1434,16 @@
 	    <span class="texte lang-es">Resultados de tu consulta</span>
 	    <span class="texte lang-nl">Resultaten van uw query</span>
 	  </a>
+	  &nbsp;
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Download results as a CSV file</span>
+	    <span class="tooltip lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	    <span class="tooltip lang-es">Descargar los resultados en un archivo CSV</span>
+	    <span class="tooltip lang-nl">Resultaten downloaden als CSV-bestand</span>
+	    <button id="button-download-results" data-toggle="modal" data-target="#download-results-modal" class="btn btn-primary btn-xs">
+	      <span class="glyphicon glyphicon-download-alt"></span>
+	    </button>
+	  </span>
 	</h5>
       </div>
       <div id="collapse-results" class="panel-collapse collapse in">
@@ -1484,11 +1566,11 @@
       </div>
     </div>
 </div>
-</div>
+
 
 <div id="yasgui-view" class="panel panel-info" style="display:none">
   <div class="panel-heading">
-    <h5>
+    <h5 class="panel-title">
       <span class="texte lang-en">Your query in SPARQL + results (with YASGUI)</span>
       <span class="texte lang-fr">Votre requête en SPARQL + résultats (avec YASGUI)</span>
       <span class="texte lang-es">Tu consulta en SPARQL + resultados (con YASGUI)</span>
@@ -1499,6 +1581,32 @@
     <div id="sparql-query"></div>
     <div id="sparklis-yasgui"></div>
   </div>
+</div>
+
+<div id="log-view" class="panel panel-info" style="display:none">
+  <div class="panel-heading">
+    <h5 class="panel-title">
+      <span class="texte lang-en">Your navigation history on this endpoint</span>
+      <span class="texte lang-fr">Votre historique de navigation sur ce point d'accès</span>
+      <span class="texte lang-es">Su historial de navegación en este SPARQL endpoint</span>
+      <span class="texte lang-nl">Uw navigatiegeschiedenis op dit SPARQL endpoint</span>
+      <button id="clear-log" class="btn btn-primary btn-xs" style="float: right">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Clear this history</span>
+	  <span class="tooltip lang-fr">Effacer cet historique</span>
+	  <span class="tooltip lang-es">Borrar este historial</span>
+	  <span class="tooltip lang-nl">Wis deze geschiedenis</span>
+	  <span class="glyphicon glyphicon-trash"></span>
+	</span>
+      </button>
+    </h5>
+  </div>
+  <div class="panel-body">
+    <div id="endpoint-log">
+    </div>
+  </div>
+</div>
+
 </div>
 
 </div>
@@ -1528,10 +1636,10 @@
       <br/>
     </span>
 
-    <span class="texte lang-en">Last modified September 1st, 2020. Visit </span>
-    <span class="texte lang-fr">Dernière modification le 1er septembre 2020. Visiter </span>
-    <span class="texte lang-es">Última modificación el 1 de Septiembre 2020. Visite </span>
-    <span class="texte lang-nl">Voor het laatst gewijzigd op 1 september 2020. Bezoek </span>
+    <span class="texte lang-en">Last modified February 25th, 2021. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 25 février 2021. Visiter </span>
+    <span class="texte lang-es">Última modificación el 25 de Febrero 2021. Visite </span>
+    <span class="texte lang-nl">Voor het laatst gewijzigd op 25 Februari 2021. Bezoek </span>
     <a target="_blank" href="http://people.irisa.fr/Sebastien.Ferre/software/">
       <span class="texte lang-en">my homepage</span>
       <span class="texte lang-fr">ma page Web</span>

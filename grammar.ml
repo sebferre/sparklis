@@ -146,6 +146,7 @@ object (self)
   method virtual tooltip_hierarchy : string
 
   method virtual msg_permalink : string
+  method virtual msg_clear_log : string
   method virtual result_results : string * string
   method virtual item_items : string * string
   method entity_entities : string * string = self#item_items
@@ -358,6 +359,7 @@ object
   method tooltip_hierarchy = "Show a hierarchy of entities according to the property at the left"
 
   method msg_permalink = "The following URL points to the current endpoint and query (Ctrl+C, Enter to copy to clipboard)."
+  method msg_clear_log = "Are you sure that you want to clear the navigation history? (This action cannot be undone.)"
   method result_results = "result", "results"
   method item_items = "item", "items"
   (*method entity_entities = "entity", "entities"
@@ -563,6 +565,7 @@ object
   method tooltip_hierarchy = "Montrer une hiérarchie d'entités selon la propriété à gauche"
 
   method msg_permalink = "L'URL suivante pointe sur le point d'accès et la requête actuelles (Ctrl+C, Entrée pour copier)."
+  method msg_clear_log = "Êtes-vous sûr de vouloir effacer l'historique de navigation ? (Cette action ne peut être annulée)."
   method result_results = "résultat", "résultats"
   method item_items = "élément", "éléments"
   (*method entity_entities = "entité", "entités"
@@ -769,6 +772,7 @@ object
   method tooltip_hierarchy = "Mostrar una jerarquía de entidades de acuerdo a la propiedad de la izquierda"
 
   method msg_permalink = "La siguiente URL apunta al Endpoint y consulta actuales (Ctrl+C, Enter para copiar)."
+  method msg_clear_log = "¿Está seguro de que quiere borrar el historial de navegación? (Esta acción no se puede deshacer)."
   method result_results = "resultado", "resultados"
   method item_items = "elemento", "elementos"
   (*method entity_entities = "entidad", "entidades"
@@ -974,6 +978,7 @@ object
   method tooltip_hierarchy = "Geef een hiërarchie weer van entiteiten volgende de eigenschap aan de linkerkant"
 
   method msg_permalink = "De volgende URL verwijst naar het huidige endpoint en de query (CTRL+C, Enter om naar het klembord te kopiëren"
+  method msg_clear_log = "Weet u zeker dat u de navigatiegeschiedenis wilt wissen? (Deze actie kan niet ongedaan worden gemaakt.)"
   method result_results = "resultaat", "resultaten"
   method item_items = "item", "items"
   (*method entity_entities = "entiteit", "entiteiten"
