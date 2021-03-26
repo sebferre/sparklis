@@ -248,7 +248,11 @@ let path_alt (lp : _ any_pred list) : pred =
   | [] -> assert false
   | [p] -> p
   | _ -> "(" ^< concat "|" lp ^> ")"
-let path_transitive (p : _ any_pred) : pred = "(" ^< p ^> ")*"
+let path_transitive (p : _ any_pred) : pred =
+  if Common.has_suffix (p : 'a sparql :> string) "medDRA_parent" (* PEGASE-specific *)
+     || Common.has_suffix (p : 'a sparql :> string) "SNOMED_parent"
+  then p ^> "_star" (* materialized transitive closure. TODO: add predicate to declare them in a more general way *)
+  else "(" ^< p ^> ")*"
 let path_inverse (p : _ any_pred) : pred = "^(" ^< p ^> ")"
 let path_interv (p : _ any_pred) (min : int) (max : int) : pred =
   "(" ^< p ^> (if min=0 && max=1
