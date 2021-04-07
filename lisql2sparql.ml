@@ -702,15 +702,26 @@ module WhichArg =
       | _ -> []
   end
 	   
-let path_pred_args_argo pred args argo =
+let path_pred_args_argo ?(transitive = false) pred args argo =
+  let path_transitive_opt path =
+    if transitive
+    then Sparql.path_transitive path
+    else path in
+  let uri_transitive_opt uri =
+    if transitive
+    then
+      match Ontology.config_transitive_closure#value#info uri with
+      | uri_star::_ -> Sparql.path_uri uri_star
+      | _ -> Sparql.path_transitive (Sparql.path_uri uri)
+    else Sparql.path_uri uri in
   let open Sparql in
   match pred, args, argo with
-  | Prop p, S, O -> (path_uri p :> pred)
-  | Prop p, O, S -> path_inverse (path_uri p)
-  | SO (ps,po), S, O -> path_seq (path_inverse (path_uri ps)) (path_uri po) 
-  | SO (po,ps), O, S -> path_seq (path_inverse (path_uri po)) (path_uri ps)
-  | EO (pe,po), S, O -> path_seq (path_uri pe) (path_uri po)
-  | EO (pe,po), O, S -> path_inverse (path_seq (path_uri pe) (path_uri po))
+  | Prop p, S, O -> (uri_transitive_opt p :> pred)
+  | Prop p, O, S -> path_inverse (uri_transitive_opt p)
+  | SO (ps,po), S, O -> path_transitive_opt (path_seq (path_inverse (path_uri ps)) (path_uri po))
+  | SO (po,ps), O, S -> path_transitive_opt (path_seq (path_inverse (path_uri po)) (path_uri ps))
+  | EO (pe,po), S, O -> path_transitive_opt (path_seq (path_uri pe) (path_uri po))
+  | EO (pe,po), O, S -> path_inverse (path_transitive_opt (path_seq (path_uri pe) (path_uri po)))
   | _ -> assert false (* from Lisql.toggle_hierarchy *)
 	     
 let form_pred state (pred : pred) : sparql_pn =
@@ -748,8 +759,7 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
      let y = (Sparql.var vy :> Sparql.term) in
      let hier =
        let open Sparql in
-       let path = path_pred_args_argo pred args argo in
-       let trans_path = path_transitive path in
+       let trans_path = path_pred_args_argo ~transitive:true pred args argo in
        (fun x y -> Pattern (triple x trans_path y)) in
      let q_np_deps, q_np = form_s1 ~ignore_top:true state np in
      (fun x -> q_np_deps (fun z -> [[x;z]]) @ [[x; Rdf.Var vy]]),

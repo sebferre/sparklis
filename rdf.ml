@@ -46,7 +46,7 @@ let rdfs_subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf"
 let rdfs_subPropertyOf = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
 let rdfs_domain = "http://www.w3.org/2000/01/rdf-schema#domain"
 let rdfs_range = "http://www.w3.org/2000/01/rdf-schema#range"
-let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough"
+let rdfs_inheritsThrough = "http://www.w3.org/2000/01/rdf-schema#inheritsThrough" (* TODO: move to other namespace *)
 let rdfs_label = "http://www.w3.org/2000/01/rdf-schema#label"
 
 let owl_Thing = "http://www.w3.org/2002/07/owl#Thing"
@@ -54,6 +54,8 @@ let owl_Class = "http://www.w3.org/2002/07/owl#Class"
 let owl_ObjectProperty = "http://www.w3.org/2002/07/owl#ObjectProperty"
 let owl_DatatypeProperty = "http://www.w3.org/2002/07/owl#DatatypeProperty"
 
+let owl_transitiveOf = "http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf" 
+                         
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
 

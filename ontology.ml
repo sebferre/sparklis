@@ -188,6 +188,7 @@ let sparql_relations =
     method domain ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_domain ~inverse:false
     method range ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_range ~inverse:false
     method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
+    method transitiveclosure ~froms = self#get_property_uri ~froms ~property:Rdf.owl_transitiveOf ~inverse:true
 
     method position ~froms = self#get_property_number ~froms ~property:Rdf.schema_position
     method logo ~froms = self#get_property_uri ~froms ~property:Rdf.schema_logo ~inverse:false
@@ -299,6 +300,16 @@ let config_hierarchy_inheritance =
       ~default:false
       ()
 
+let config_transitive_closure =
+  new config_relation
+    ~key:"transitive_closure"
+    ~input_selector:"#input-transitive-closure"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
+    ~inactive_relation:no_relation
+    ~active_relation:sparql_relations#transitiveclosure
+    ~default:true
+    ()
+  
 let config_sort_by_position =
   new config_relation
       ~key:"sort_by_position"
@@ -330,6 +341,7 @@ let enqueue_class uri =
 let enqueue_property uri =
   config_property_hierarchy#value#enqueue uri;
   config_hierarchy_inheritance#value#enqueue uri;
+  config_transitive_closure#value#enqueue uri;
   enqueue_entity uri
 let enqueue_pred uri =
   enqueue_entity uri
@@ -347,4 +359,6 @@ let sync_concepts k =
        (fun () ->
 	config_hierarchy_inheritance#value#sync
 	  (fun () ->
-	   sync_entities k)))
+            config_transitive_closure#value#sync
+              (fun () ->
+	        sync_entities k))))
