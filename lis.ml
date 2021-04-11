@@ -143,6 +143,7 @@ let term_hierarchy_of_focus focus =
   | None -> Ontology.no_relation
   | Some (id,pred,args,argo) ->
      Ontology.sparql_relations#get_hierarchy
+       ~mode:`Tabled
        ~froms:Sparql_endpoint.config_default_graphs#froms
        ~property_path:(Lisql2sparql.path_pred_args_argo pred args argo)
 						       

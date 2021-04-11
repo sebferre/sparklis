@@ -1245,7 +1245,8 @@ object (self)
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
-    self#refresh_present
+    Ontology.sync_endpoint (* loading ontological facts *)
+      (fun () -> self#refresh_present)
 
   method update_focus ~push_in_history f =
     match f present#lis#focus with
@@ -1524,7 +1525,8 @@ let initialize endpoint focus =
     
     (* generating and displaying contents *)
     translate ();
-    history#refresh_present
+    Ontology.sync_endpoint
+      (fun () -> history#refresh_present)
 
 (* main *)
 let _ =

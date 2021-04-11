@@ -18,15 +18,90 @@
 
 (* ontological relations *)
 class virtual ['a] relation = [Rdf.uri, 'a list] Cache.cache
-class ['a] pure_relation get_images = [Rdf.uri, 'a list] Cache.pure_cache ~get:get_images
-class ['a] tabled_relation default_images bind_images = [Rdf.uri, 'a list] Cache.tabled_cache ~default:default_images ~bind:bind_images
+class ['a] pure_relation get = [Rdf.uri, 'a list] Cache.pure_cache ~get
+class ['a] init_relation default bind = [Rdf.uri, 'a list] Cache.init_cache ~default ~bind
+class ['a] tabled_relation default bind = [Rdf.uri, 'a list] Cache.tabled_cache ~default ~bind
 
 (* default void hierarchy *)
 let no_relation = new pure_relation (fun uri -> [])
 
+(* SPARQL-based relations *)
 
-(* SPARQL-based relation, retrieving relation from endpoint *)
-let sparql_relation
+class ['a] source_images =
+object
+  val ht_images : (Rdf.uri, 'a list ref) Hashtbl.t = Hashtbl.create 101
+
+  method add uri_source image =
+    let images_ref =
+      try Hashtbl.find ht_images uri_source
+      with Not_found ->
+	let imgs_ref = ref [] in
+	Hashtbl.add ht_images uri_source imgs_ref;
+	imgs_ref in
+    if not (List.mem image !images_ref)
+    then images_ref := image :: !images_ref
+    else ()
+
+  method add_no_image uri_source =
+    Hashtbl.add ht_images uri_source (ref [])
+
+  method list =
+    Hashtbl.fold
+      (fun uri_source images_ref res -> (uri_source, Some !images_ref)::res)
+      ht_images []
+end
+
+let sparql_relation_process_results ~image_opt_of_term source image src_imgs results =
+  try
+    let i = List.assoc source results.Sparql_endpoint.vars in
+    let j_opt = try Some (List.assoc image results.Sparql_endpoint.vars) with _ -> None in
+    (* some endpoints do not include ?image when no binding at all (in OPTIONAL) *)
+    List.iter
+      (fun binding ->
+	match binding.(i),
+              (match j_opt with
+               | None -> None
+               | Some j -> match binding.(j) with
+                           | None -> None
+                           | Some t -> image_opt_of_term t)
+        with
+	| Some (Rdf.URI uri_source), Some image -> src_imgs#add uri_source image
+	| Some (Rdf.URI uri_source), None -> src_imgs#add_no_image uri_source (* recording absence of image *)
+	| _ -> ())
+      results.Sparql_endpoint.bindings
+  with _ -> Jsutils.firebug ("Missing variable(s) in SPARQL results: ?uri")
+
+  
+(* SPARQL-based relation, computed at once *)
+let sparql_init_relation
+      ~(name : string)
+      ~(endpoint : string)
+      ~(froms : Rdf.uri list)
+      ~(make_pattern : Sparql.var -> Sparql.var -> Sparql.pattern)
+      ~(image_opt_of_term : Rdf.term -> 'a option)
+    : 'a relation =
+  let ajax_pool = new Sparql_endpoint.ajax_pool in
+  let bind k =
+    Jsutils.firebug ("Retrieving relation " ^ name);
+    let source, image = "uri", "image" in (* SPARQL vars *)
+    let sparql =
+      let open Sparql in
+      let v_source, v_image = var source, var image in
+      select ~projections:[(`Bare,source); (`Bare,image)] ~froms
+        (make_pattern v_source v_image) in
+    Sparql_endpoint.ajax_in [] ajax_pool endpoint (sparql :> string)
+      (fun results ->
+        let src_imgs = new source_images in
+        sparql_relation_process_results ~image_opt_of_term source image src_imgs results;
+        k src_imgs#list)
+      (fun code ->
+        ajax_pool#alert ("Relation " ^ name ^ " could not be retrieved.");
+        k [])
+  in
+  new init_relation (fun uri -> []) bind
+                
+(* SPARQL-based relation, computed by chunks of source URIS *)
+let sparql_tabled_relation
       ~(name : string)
       ~(endpoint : string)
       ~(froms : Rdf.uri list)
@@ -53,41 +128,14 @@ let sparql_relation
 		 optional
 		   (make_pattern v_source v_image) ]))
 	l_l_uri in
-    let add_source_image ht_images uri_source image =
-      let images_ref =
-	try Hashtbl.find ht_images uri_source
-	with Not_found ->
-	  let imgs_ref = ref [] in
-	  Hashtbl.add ht_images uri_source imgs_ref;
-	  imgs_ref in
-      if not (List.mem image !images_ref)
-      then images_ref := image :: !images_ref
-      else ()
-    in
     Sparql_endpoint.ajax_list_in [] ajax_pool endpoint (l_sparql :> string list)
       (fun l_results ->
-	let ht_images : (Rdf.uri, 'a list ref) Hashtbl.t = Hashtbl.create 101 in
+        let src_imgs = new source_images in
 	List.iter
 	  (fun results ->
-	   try
-	     let i = List.assoc source results.Sparql_endpoint.vars in
-	     let j_opt = try Some (List.assoc image results.Sparql_endpoint.vars) with _ -> None in
-	     (* some endpoints do not include ?image when no binding at all (in OPTIONAL) *)
-	     List.iter
-	       (fun binding ->
-		match binding.(i), (match j_opt with None -> None | Some j -> match binding.(j) with None -> None | Some t -> image_opt_of_term t) with
-		(*		| Some (Rdf.URI uri_source), Some (Rdf.URI uri_image) -> add_source_image ht_images uri_source uri_image*)
-		| Some (Rdf.URI uri_source), Some image -> add_source_image ht_images uri_source image
-		| Some (Rdf.URI uri_source), None -> Hashtbl.add ht_images uri_source (ref []) (* recording absence of parents *)
-		| _ -> ())
-	       results.Sparql_endpoint.bindings
-	   with _ -> Jsutils.firebug ("Missing variable(s) in SPARQL results: ?uri"))
+            sparql_relation_process_results ~image_opt_of_term source image src_imgs results)
 	  l_results;
-	let l_uri_info_opt =
-	  Hashtbl.fold
-	    (fun uri_source images_ref res -> (uri_source, Some !images_ref)::res)
-	    ht_images [] in
-	k l_uri_info_opt)
+	k src_imgs#list)
       (fun code ->
 	ajax_pool#alert ("The image URIs could not be retrieved in " ^ name ^ ".");
 	k [])
@@ -95,7 +143,7 @@ let sparql_relation
   new tabled_relation (fun uri -> []) bind_images
 
 (* SPARQL-based relation, retrieving data from endpoint *)
-let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) ~(image_opt_of_term : Rdf.term -> 'a option) : 'a relation =
+let sparql_relation_property ~(mode : [`Init | `Tabled]) ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : bool) ~(image_opt_of_term : Rdf.term -> 'a option) : 'a relation =
   let make_pattern v_source v_image : Sparql.pattern =
     let open Sparql in
     let uri_property = (path_uri property :> pred) in
@@ -103,6 +151,10 @@ let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : 
     then triple (v_image :> term) uri_property (v_source :> term)
     else triple (v_source :> term) uri_property (v_image :> term)
   in
+  let sparql_relation =
+    match mode with
+    | `Init -> sparql_init_relation
+    | `Tabled -> sparql_tabled_relation in
   sparql_relation
     ~name:("property <" ^ property ^ ">")
     ~endpoint
@@ -111,7 +163,7 @@ let sparql_relation_property ~endpoint ~froms ~(property : Rdf.uri) ~(inverse : 
     ~image_opt_of_term
 
 (* SPARQL-based hierarchy, retrieving hierarchical relation from endpoint *)    
-let sparql_relation_hierarchy ~endpoint ~froms ~(property_path : Sparql.pred) : Rdf.uri relation =
+let sparql_relation_hierarchy ~(mode : [`Init | `Tabled]) ~endpoint ~froms ~(property_path : Sparql.pred) : Rdf.uri relation =
   let make_pattern v_child v_parent : Sparql.pattern =
     let open Sparql in
     let has_parent s o = triple s property_path o in
@@ -128,6 +180,10 @@ let sparql_relation_hierarchy ~endpoint ~froms ~(property_path : Sparql.pred) : 
 			      ]))
       ]
   in
+  let sparql_relation =
+    match mode with
+    | `Init -> sparql_init_relation
+    | `Tabled -> sparql_tabled_relation in
   sparql_relation
     ~name:("property path: " ^ (property_path :> string))
     ~endpoint
@@ -158,40 +214,40 @@ let sparql_relations =
 
     method reset = ()
 
-    method get_property_number ~(froms : Rdf.uri list) ~(property : Rdf.uri) : float relation =
+    method get_property_number ~mode ~(froms : Rdf.uri list) ~(property : Rdf.uri) : float relation =
       try Hashtbl.find ht_property_number property
       with Not_found ->
-	let rel = sparql_relation_property
+	let rel = sparql_relation_property ~mode
 		    ~endpoint ~froms ~property ~inverse:false
 		    ~image_opt_of_term:(function Rdf.Number (f,_,_) -> Some f | _ -> None) in
 	Hashtbl.add ht_property_number property rel;
 	rel
 
-    method get_property_uri ~(froms : Rdf.uri list) ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
+    method get_property_uri ~mode ~(froms : Rdf.uri list) ~(property : Rdf.uri) ~(inverse : bool) : Rdf.uri relation =
       try Hashtbl.find ht_property_uri (property,inverse)
       with Not_found ->
-	let rel = sparql_relation_property
+	let rel = sparql_relation_property ~mode
 		    ~endpoint ~froms ~property ~inverse
 		    ~image_opt_of_term:(function Rdf.URI uri -> Some uri | _ -> None) in
 	Hashtbl.add ht_property_uri (property,inverse) rel;
 	rel
 
-    method get_hierarchy ~(froms : Rdf.uri list) ~(property_path : Sparql.pred) : Rdf.uri relation =
+    method get_hierarchy ~mode ~(froms : Rdf.uri list) ~(property_path : Sparql.pred) : Rdf.uri relation =
       try Hashtbl.find ht_hierarchy property_path
       with Not_found ->
-	let rel = sparql_relation_hierarchy ~endpoint ~froms ~property_path in
+	let rel = sparql_relation_hierarchy ~mode ~endpoint ~froms ~property_path in
 	Hashtbl.add ht_hierarchy property_path rel;
 	rel
 	  
-    method subclassof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subClassOf :> Sparql.pred)
-    method subpropertyof ~froms = self#get_hierarchy ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subPropertyOf :> Sparql.pred)
-    method domain ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_domain ~inverse:false
-    method range ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_range ~inverse:false
-    method inheritsthrough ~froms = self#get_property_uri ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
-    method transitiveclosure ~froms = self#get_property_uri ~froms ~property:Rdf.owl_transitiveOf ~inverse:true
+    method subclassof ~froms = self#get_hierarchy ~mode:`Tabled ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subClassOf :> Sparql.pred)
+    method subpropertyof ~froms = self#get_hierarchy ~mode:`Tabled ~froms ~property_path:(Sparql.path_uri Rdf.rdfs_subPropertyOf :> Sparql.pred)
+    method domain ~froms = self#get_property_uri ~mode:`Init ~froms ~property:Rdf.rdfs_domain ~inverse:false
+    method range ~froms = self#get_property_uri ~mode:`Init ~froms ~property:Rdf.rdfs_range ~inverse:false
+    method inheritsthrough ~froms = self#get_property_uri ~mode:`Init ~froms ~property:Rdf.rdfs_inheritsThrough ~inverse:false
+    method transitiveclosure ~froms = self#get_property_uri ~mode:`Init ~froms ~property:Rdf.owl_transitiveOf ~inverse:true
 
-    method position ~froms = self#get_property_number ~froms ~property:Rdf.schema_position
-    method logo ~froms = self#get_property_uri ~froms ~property:Rdf.schema_logo ~inverse:false
+    method position ~froms = self#get_property_number ~mode:`Tabled ~froms ~property:Rdf.schema_position
+    method logo ~froms = self#get_property_uri ~mode:`Tabled ~froms ~property:Rdf.schema_logo ~inverse:false
   end
 							     
 (* configuration *)
@@ -351,14 +407,14 @@ let enqueue_arg uri =
 let sync_entities k =
   config_sort_by_position#value#sync
     (fun () ->
-     config_show_logo#value#sync k)
+      config_show_logo#value#sync k)
 let sync_concepts k =
   config_class_hierarchy#value#sync
     (fun () ->
      config_property_hierarchy#value#sync
        (fun () ->
-	config_hierarchy_inheritance#value#sync
-	  (fun () ->
-            config_transitive_closure#value#sync
-              (fun () ->
-	        sync_entities k))))
+	 sync_entities k))
+let sync_endpoint k =
+  config_hierarchy_inheritance#value#sync
+    (fun () ->
+      config_transitive_closure#value#sync k)

@@ -31,6 +31,31 @@ object
   method sync k = k ()
 end
 
+class ['a,'b] init_cache ~(default : 'a -> 'b) ~(bind : (('a * 'b option) list -> unit) -> unit) =
+object
+  inherit ['a,'b] cache
+  val h : ('a,'b) Hashtbl.t = Hashtbl.create 101
+  method info key =
+    try Hashtbl.find h key
+    with Not_found -> default key
+
+  val mutable synced = false
+  method enqueue key = ()
+  method sync k =
+    if synced
+    then k ()
+    else
+      bind
+        (fun lxy ->
+          List.iter
+            (function
+             | (x, Some y) -> Hashtbl.add h x y
+             | (x, None) -> ())
+            lxy;
+          synced <- true;
+          k ())
+end
+  
 class ['a,'b] tabled_cache ~(default : 'a -> 'b) ~(bind : 'a list -> (('a * 'b option) list -> unit) -> unit) =
 object (self)
   val h : ('a,'b option) Hashtbl.t = Hashtbl.create 1001
