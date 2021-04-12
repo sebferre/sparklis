@@ -346,6 +346,7 @@ let config_property_hierarchy =
     ~active_relation:sparql_relations#subpropertyof
     ~default:true
     ()
+  
 let config_hierarchy_inheritance =
   new config_relation
       ~key:"hierarchy_inheritance"
@@ -355,7 +356,6 @@ let config_hierarchy_inheritance =
       ~active_relation:sparql_relations#inheritsthrough
       ~default:false
       ()
-
 let config_transitive_closure =
   new config_relation
     ~key:"transitive_closure"
@@ -363,7 +363,7 @@ let config_transitive_closure =
     ~config_graphs:Sparql_endpoint.config_schema_graphs
     ~inactive_relation:no_relation
     ~active_relation:sparql_relations#transitiveclosure
-    ~default:true
+    ~default:false
     ()
   
 let config_sort_by_position =
