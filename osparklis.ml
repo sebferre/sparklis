@@ -236,6 +236,7 @@ let config =
       (Lexicon.config_concept_lexicon :> Config.input);
       (Lexicon.config_entity_tooltips :> Config.input);
       (Lexicon.config_concept_tooltips :> Config.input);
+      (Lexicon.config_open_links :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);

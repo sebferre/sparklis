@@ -110,15 +110,19 @@ let syntagm_name_of_uri_arg =
     syntagm_of_arg_name name
 
 let default_entity_lexicon = new pure_lexicon name_of_uri_entity
+
 let default_class_lexicon = new pure_lexicon name_of_uri_concept
 let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
 let default_arg_lexicon = new pure_lexicon syntagm_name_of_uri_arg
-let default_tooltip_lexicon = new pure_lexicon (fun uri -> uri)
 
 let default_concept_lexicon =
   { classes = default_class_lexicon;
     properties = default_property_lexicon;
     args = default_arg_lexicon }
+
+let default_tooltip_lexicon = new pure_lexicon (fun uri -> uri)
+
+let default_open_links = new pure_lexicon (fun uri -> uri)
 
 (* lexicon retrieving labels from a SPARQL endpoint *)
 
@@ -273,19 +277,24 @@ let sparql_lexicon
 
 let sparql_entity_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   sparql_lexicon ~kind:"entity" ~default_label:name_of_uri_entity ~endpoint ~froms ?pref_properties ?pref_languages (fun l -> l)
+
 let sparql_class_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   sparql_lexicon ~kind:"class" ~default_label:name_of_uri_concept ~endpoint ~froms ?pref_properties ?pref_languages (fun l -> l)
 let sparql_property_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   sparql_lexicon ~kind:"property" ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_property_name
 let sparql_arg_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   sparql_lexicon ~kind:"argument" ~default_label:syntagm_name_of_uri_arg ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_arg_name
-let sparql_tooltip_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
-  sparql_lexicon ~kind:"tooltip" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun tooltip -> tooltip) 
 
 let sparql_concept_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   { classes = sparql_class_lexicon ~endpoint ~froms ?pref_properties ?pref_languages ();
     properties = sparql_property_lexicon ~endpoint ~froms ?pref_properties ?pref_languages ();
     args = sparql_arg_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () }
+
+let sparql_tooltip_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"tooltip" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun tooltip -> tooltip)
+
+let sparql_open_links ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"open-link" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun link -> link) 
 
 (* configuration *)
 
@@ -445,43 +454,14 @@ let config_concept_lexicon =
     ~default_lexicon:default_concept_lexicon
     ~custom_lexicon:sparql_concept_lexicon
     ()
-(*let config_class_lexicon =
-  new config_input
-    ~key:"class_lexicon"
-    ~select_selector:"#config-label-class-select"
-    ~input_selector:"#config-label-class-input"
-    ~lang_input_selector:"#config-label-class-input-lang"
-    ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_lexicon:default_class_lexicon
-    ~custom_lexicon:sparql_class_lexicon
-    ()
-let config_property_lexicon =
-  new config_input
-    ~key:"property_lexicon"
-    ~select_selector:"#config-label-property-select"
-    ~input_selector:"#config-label-property-input"
-    ~lang_input_selector:"#config-label-property-input-lang"
-    ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_lexicon:default_property_lexicon
-    ~custom_lexicon:sparql_property_lexicon
-    ()
-let config_arg_lexicon =
-  new config_input
-    ~key:"arg_lexicon"
-    ~select_selector:"#config-label-arg-select"
-    ~input_selector:"#config-label-arg-input"
-    ~lang_input_selector:"#config-label-arg-input-lang"
-    ~config_graphs:Sparql_endpoint.config_schema_graphs
-    ~default_lexicon:default_arg_lexicon
-    ~custom_lexicon:sparql_arg_lexicon
-    () *)
+
 let config_entity_tooltips =
   new config_input
     ~key:"entity_tooltips"
     ~select_selector:"#config-entity-tooltips-select"
     ~input_selector:"#config-entity-tooltips-input"
     ~lang_input_selector:"#config-entity-tooltips-input-lang"
-    ~config_graphs:Sparql_endpoint.config_schema_graphs
+    ~config_graphs:Sparql_endpoint.config_default_graphs
     ~default_lexicon:default_tooltip_lexicon
     ~custom_lexicon:sparql_tooltip_lexicon
     ()
@@ -496,9 +476,23 @@ let config_concept_tooltips =
     ~custom_lexicon:sparql_tooltip_lexicon
     ()
 
-(* utilities for enqueuing and syncing *)
+let config_open_links =
+  new config_input
+    ~key:"open_links"
+    ~select_selector:"#config-open-links-select"
+    ~input_selector:"#config-open-links-input"
+    ~lang_input_selector:"#config-open-links-input-lang" (* TODO: not needed *)
+    ~config_graphs:Sparql_endpoint.config_default_graphs
+    ~default_lexicon:default_open_links
+    ~custom_lexicon:sparql_open_links
+    ()
+  
+(* utilities for enqueuing, syncing, and accessing *)
 
-let enqueue_entity uri = config_entity_lexicon#value#enqueue uri; config_entity_tooltips#value#enqueue uri
+let enqueue_entity uri =
+  config_entity_lexicon#value#enqueue uri;
+  config_entity_tooltips#value#enqueue uri;
+  config_open_links#value#enqueue uri
 let enqueue_class uri = config_concept_lexicon#value.classes#enqueue uri; config_concept_tooltips#value#enqueue uri
 let enqueue_property uri = config_concept_lexicon#value.properties#enqueue uri; config_concept_tooltips#value#enqueue uri
 let enqueue_arg uri = config_concept_lexicon#value.args#enqueue uri; config_concept_tooltips#value#enqueue uri
@@ -509,6 +503,7 @@ let sync_entities k =
   let> () = config_entity_lexicon#value#sync in
   let> () = config_concept_lexicon#value.classes#sync (* 'class' for datatypes *) in
   let> () = config_entity_tooltips#value#sync in
+  let> () = config_open_links#value#sync in
   k ()
   
 let sync_concepts k =
@@ -525,6 +520,7 @@ let sync k =
   let> () = config_concept_lexicon#value.args#sync in
   let> () = config_entity_tooltips#value#sync in
   let> () = config_concept_tooltips#value#sync in
+  let> () = config_open_links#value#sync in
   k ()
 
 let entity_label uri = config_entity_lexicon#value#info uri
@@ -533,3 +529,5 @@ let property_label uri = config_concept_lexicon#value.properties#info uri
 let arg_label uri = config_concept_lexicon#value.args#info uri
 let entity_tooltip uri = config_entity_tooltips#value#info uri
 let concept_tooltip uri = config_concept_tooltips#value#info uri
+let entity_open_link uri = config_open_links#value#info uri
+

@@ -504,7 +504,7 @@ and html_word state = function
     else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
   | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" ~title:(Lexicon.entity_tooltip uri) uri s
-                       ^ " " ^ html_open_new_window ~height:12 uri
+                       ^ " " ^ html_open_new_window ~height:12 (Lexicon.entity_open_link uri)
   | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" ~title:(Lexicon.concept_tooltip uri) uri s
   | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" ~title:(Lexicon.concept_tooltip uri) uri s
   | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" ~title:(Lexicon.concept_tooltip uri) uri (escapeHTML s)

@@ -723,6 +723,7 @@
 	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
+	  
 	  <li class="list-group-item">
 	    <div id="config-entity-tooltips" class="config-param">
 	      <span class="texte lang-en">For the tooltips of <span class="URI">entities</span>, use property </span>
@@ -730,7 +731,7 @@
 	      <span class="texte lang-es">Para los tooltips de las <span class="URI">entidades</span>, utilizar la propiedad </span>
 	      <span class="texte lang-nl"> Voor de tooltips van <span class="URI">entities</span>, gebruik eigenschap </span>
 	      <select id="config-entity-tooltips-select">
-		<option value=""></option>
+		<option value="">(URI)</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -769,7 +770,7 @@
 	      <span class="texte lang-es">Para los tooltips de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
 	      <span class="texte lang-nl">Voor de tooltips van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
 	      <select id="config-concept-tooltips-select">
-		<option value=""></option>
+		<option value="">(URI)</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -801,6 +802,48 @@
 	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
+
+	  <li class="list-group-item">
+	    <div id="config-open-links" class="config-param">
+	      <span class="texte lang-en">For the hyperlinks <span class="glyphicon glyphicon-new-window"></span> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les hyperliens <span class="glyphicon glyphicon-new-window"></span> des <span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los hipervínculos <span class="glyphicon glyphicon-new-window"></span> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de hyperlinks <span class="glyphicon glyphicon-new-window"></span> van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <select id="config-open-links-select">
+		<option value="">(URI)</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#seeAlso">rdfs:seeAlso</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#isDefinedBy">rdfs:isDefinedBy</option>
+		<option value="http://xmlns.com/foaf/0.1/homepage">foaf:homepage</option>
+		<option value="http://xmlns.com/foaf/0.1/primaryTopic">foaf:primaryTopic</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-open-links-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span style="display:none"> <!-- no need for language tag with open links -->
+		<span class="texte lang-en"> with languages (optional) </span>
+		<span class="texte lang-fr"> avec les langues (optionnel) </span>
+		<span class="texte lang-es"> con los idiomas (opcional) </span>
+		<span class="texte lang-nl"> met talen (optioneel) </span>
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Enter here the desired language tags</span>
+		  <span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		  <span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		  <span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		  <input id="config-open-links-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+		</span>
+		<span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+		<span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+		<span class="texte lang-es"> (ej., 'en,fr' para inglés o francés) </span>
+		<span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	      </span>
+	    </div>
+	  </li>
+
 	  <li class="list-group-item">
 	    <div id="config-show-datatypes" class="config-param">
 	      <input id="input-show-datatypes" type="checkbox"> <!-- default value -->
