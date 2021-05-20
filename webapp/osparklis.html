@@ -649,7 +649,7 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-label-entity" class="config-param">
-	      <span class="texte lang-en">For <span class="URI">entity</span> labels, use property </span>
+	      <span class="texte lang-en">For the labels of <span class="URI">entities</span>, use property </span>
 	      <span class="texte lang-fr">Pour les étiquettes d'<span class="URI">entités</span>, utiliser la propriété </span>
 	      <span class="texte lang-es">Para las etiquetas de las <span class="URI">entidades</span>, utilizar la propiedad </span>
 	      <span class="texte lang-nl"> Voor <span class="URI">entity</span> labels, gebruik eigenschap </span>
@@ -686,12 +686,12 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-label-class" class="config-param">
-	      <span class="texte lang-en">For <span class="classURI">class</span> labels, use property</span>
-	      <span class="texte lang-fr">Pour les étiquettes de <span class="classURI">classes</span>, utiliser la propriété</span>
-	      <span class="texte lang-es">Para las etiquetas de las <span class="classURI">clases</span>, utilizar la propiedad</span>
-	      <span class="texte lang-nl">Voor labels van <span class="classURI">klassen</span>, gebruik de eigenschap</span>
-	      <select id="config-label-class-select">
+	    <div id="config-label-concept" class="config-param">
+	      <span class="texte lang-en">For the labels of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les étiquettes de <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para las etiquetas de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor labels van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <select id="config-label-concept-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -704,7 +704,7 @@
 		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
 		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
-		<input id="config-label-class-input" type="text" size="50" placeholder="uri1, uri2, ...">
+		<input id="config-label-concept-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
 	      <span class="texte lang-en"> with languages (optional)</span>
 	      <span class="texte lang-fr"> avec les langues (optionnel)</span>
@@ -715,7 +715,7 @@
 		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
 		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
-		<input id="config-label-class-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+		<input id="config-label-concept-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
 	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
 	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
@@ -724,13 +724,14 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-label-property" class="config-param">
-	      <span class="texte lang-en">For <span class="propURI">property</span> labels, use property</span>
-	      <span class="texte lang-fr">Pour les étiquettes de <span class="propURI">propriétés</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">Para las etiquetas de las <span class="propURI">propiedades</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl">Voor labels van <span class="propURI">eigenschappen</span>, gebruik de eigenschap</span>
-	      <select id="config-label-property-select">
+	    <div id="config-entity-tooltips" class="config-param">
+	      <span class="texte lang-en">For the tooltips of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les info-bulles d'<span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los tooltips de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de tooltips van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <select id="config-entity-tooltips-select">
 		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
@@ -742,33 +743,34 @@
 		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
 		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
-		<input id="config-label-property-input" type="text" size="50" placeholder="uri1, uri2, ...">
+		<input id="config-entity-tooltips-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
 	      <span class="texte lang-en"> with languages (optional) </span>
 	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
 	      <span class="texte lang-es"> con los idiomas (opcional) </span>
-	      <span class="texte lang-nl"> met talen (optioneel)</span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
 	      <span class="tooltiped">
 		<span class="tooltip lang-en">Enter here the desired language tags</span>
 		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
 		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
-		<input id="config-label-property-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+		<input id="config-entity-tooltips-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
-	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
-	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
-	      <span class="texte lang-es">(ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+	      <span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+	      <span class="texte lang-es"> (ej., 'en,fr' para inglés o francés) </span>
 	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
 	    </div>
 	  </li>
 	  <li class="list-group-item">
-	    <div id="config-label-arg" class="config-param">
-	      <span class="texte lang-en">For <span class="naryURI">qualifier</span> labels, use property</span>
-	      <span class="texte lang-fr">Pour les étiquettes des <span class="naryURI">qualifieurs</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">Para las etiquetas de los <span class="naryURI">calificadores</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl">voor labels van <span class="naryURI">qualifiers</span>, gebruik de eigenschap </span>
-	      <select id="config-label-arg-select">
+	    <div id="config-concept-tooltips" class="config-param">
+	      <span class="texte lang-en">For the tooltips of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les info-bulles des <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para los tooltips de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor de tooltips van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <select id="config-concept-tooltips-select">
 		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
 		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
@@ -776,60 +778,22 @@
 		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-en">Enter here the URI of the desired properties</span>
 		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschappen</span>
-		<input id="config-label-arg-input" type="text" size="50" placeholder="url1, url2, ...">
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-concept-tooltips-input" type="text" size="50" placeholder="uri1, uri2, ...">
 	      </span>
-	      <span class="texte lang-en"> with languages (optional) </span>
-	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-en"> with languages (optional)</span>
+	      <span class="texte lang-fr"> avec les langues (optionnel)</span>
 	      <span class="texte lang-es"> con los idiomas (opcional) </span>
-	      <span class="texte lang-nl"> met talen (optioneel) </span>
+	      <span class="texte lang-nl"> met talen (optioneel)</span>
 	      <span class="tooltiped">
 		<span class="tooltip lang-en">Enter here the desired language tags</span>
 		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
 		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
 		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
-		<input id="config-label-arg-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
-	      </span>
-	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
-	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
-	      <span class="texte lang-es">(ej., 'en,fr' para inglés o francés) </span>
-	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
-	    </div>
-	  </li>
-	  <li class="list-group-item">
-	    <div id="config-tooltip" class="config-param">
-	      <span class="texte lang-en">For entity and concept tooltips, use property</span>
-	      <span class="texte lang-fr">TODO: Pour les étiquettes des <span class="naryURI">qualifieurs</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">TODO: Para las etiquetas de los <span class="naryURI">calificadores</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl">TODO: voor labels van <span class="naryURI">qualifiers</span>, gebruik de eigenschap </span>
-	      <select id="config-tooltip-select">
-		<option value=""></option>
-		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
-		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
-		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
-		<option value="http://purl.org/dc/terms/title">dct:title</option>
-		<option value="other">prop1, prop2, ...</option>
-	      </select>
-	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
-		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
-		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
-		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschappen</span>
-		<input id="config-tooltip-input" type="text" size="50" placeholder="url1, url2, ...">
-	      </span>
-	      <span class="texte lang-en"> with languages (optional) </span>
-	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
-	      <span class="texte lang-es"> con los idiomas (opcional) </span>
-	      <span class="texte lang-nl"> met talen (optioneel) </span>
-	      <span class="tooltiped">
-		<span class="tooltip lang-en">Enter here the desired language tags</span>
-		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
-		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
-		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
-		<input id="config-tooltip-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+		<input id="config-concept-tooltips-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
 	      </span>
 	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
 	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>

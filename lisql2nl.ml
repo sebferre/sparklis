@@ -214,16 +214,16 @@ let nl_there_is : np -> s = fun np -> `ThereIs np
 	   
 (* verbalization of terms, classes, properties *)
 
-let word_of_entity uri = `Entity (uri, Lexicon.config_entity_lexicon#value#info uri)
-let word_of_class uri = `Class (uri, Lexicon.config_class_lexicon#value#info uri)
+let word_of_entity uri = `Entity (uri, Lexicon.entity_label uri)
+let word_of_class uri = `Class (uri, Lexicon.class_label uri)
 let word_syntagm_of_property grammar uri =
-  let synt, name = Lexicon.config_property_lexicon#value#info uri in
+  let synt, name = Lexicon.property_label uri in
   `Prop (uri, name), synt
 let word_syntagm_of_pred_uri grammar uri =
-  let synt, name = Lexicon.config_property_lexicon#value#info uri in
+  let synt, name = Lexicon.property_label uri in
   `Nary (uri,name), synt
 let word_syntagm_of_arg_uri grammar uri =
-  let synt, name = Lexicon.config_arg_lexicon#value#info uri in
+  let synt, name = Lexicon.arg_label uri in
   `Nary (uri,name), synt
 
 let word_syntagm_of_pred grammar (pred : pred) =
@@ -236,14 +236,14 @@ let word_syntagm_of_pred grammar (pred : pred) =
 let rec word_of_term = function
   | Rdf.URI uri -> word_of_entity uri
   | Rdf.Number (f,s,dt) -> word_of_term (if dt="" then Rdf.PlainLiteral (s,"") else Rdf.TypedLiteral (s,dt))
-  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.config_class_lexicon#value#info dt)
+  | Rdf.TypedLiteral (s,dt) -> `TypedLiteral (s, Lexicon.class_label dt)
   | Rdf.PlainLiteral (s,"") -> `Literal s
   | Rdf.PlainLiteral (s,lang) -> `TypedLiteral (s,lang)
   | Rdf.Bnode id -> `Blank id (* should not occur *)
   | Rdf.Var v -> assert false (*`Id (0, `Var v)*) (* should not occur *)
 
 let string_of_term = function
-  | Rdf.URI uri -> Lexicon.config_entity_lexicon#value#info uri
+  | Rdf.URI uri -> Lexicon.entity_label uri
   | Rdf.Number (f,s,dt) -> s
   | Rdf.TypedLiteral (s,dt) -> s
   | Rdf.PlainLiteral (s,_) -> s

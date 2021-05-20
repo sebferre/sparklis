@@ -233,10 +233,9 @@ let config =
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
-      (Lexicon.config_class_lexicon :> Config.input);
-      (Lexicon.config_property_lexicon :> Config.input);
-      (Lexicon.config_arg_lexicon :> Config.input);
-      (Lexicon.config_tooltip_lexicon :> Config.input);
+      (Lexicon.config_concept_lexicon :> Config.input);
+      (Lexicon.config_entity_tooltips :> Config.input);
+      (Lexicon.config_concept_tooltips :> Config.input);
       (Lisql2nl.config_lang :> Config.input);
       (Lisql2nl.config_show_datatypes :> Config.input);
       (Lisql2sparql.config_fulltext_search :> Config.input);

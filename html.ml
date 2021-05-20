@@ -349,7 +349,7 @@ let html_open_new_window ~height uri =
 	 (html_glyphicon ~title:Lisql2nl.config_lang#grammar#tooltip_open_resource "new-window")
 
 let html_literal s = html_span ~classe:"Literal" (escapeHTML s)
-let html_uri ~classe uri s = html_span ~classe ~title:(Lexicon.config_tooltip_lexicon#value#info uri) (escapeHTML s)
+let html_uri ~classe ~title uri s = html_span ~classe ~title (escapeHTML s)
 let html_function f = html_span ~classe:"function" (escapeHTML f)
 let html_modifier m = html_span ~classe:"modifier" (escapeHTML m)
 
@@ -503,10 +503,11 @@ and html_word state = function
     then html_literal s ^ " (" ^ escapeHTML t ^ ")"
     else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" uri s ^ " " ^ html_open_new_window ~height:12 uri
-  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" uri s
-  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" uri s
-  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" uri (escapeHTML s)
+  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" ~title:(Lexicon.entity_tooltip uri) uri s
+                       ^ " " ^ html_open_new_window ~height:12 uri
+  | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" ~title:(Lexicon.concept_tooltip uri) uri s
+  | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" ~title:(Lexicon.concept_tooltip uri) uri s
+  | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" ~title:(Lexicon.concept_tooltip uri) uri (escapeHTML s)
   | `Func s -> html_span ~classe:"function" (escapeHTML s)
   | `Op op -> html_modifier op
   | `Undefined -> "___"
