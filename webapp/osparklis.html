@@ -800,6 +800,44 @@
 	    </div>
 	  </li>
 	  <li class="list-group-item">
+	    <div id="config-tooltip" class="config-param">
+	      <span class="texte lang-en">For entity and concept tooltips, use property</span>
+	      <span class="texte lang-fr">TODO: Pour les étiquettes des <span class="naryURI">qualifieurs</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">TODO: Para las etiquetas de los <span class="naryURI">calificadores</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl">TODO: voor labels van <span class="naryURI">qualifiers</span>, gebruik de eigenschap </span>
+	      <select id="config-tooltip-select">
+		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URI in van de gewenste eigenschappen</span>
+		<input id="config-tooltip-input" type="text" size="50" placeholder="url1, url2, ...">
+	      </span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-tooltip-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+	      </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
 	    <div id="config-show-datatypes" class="config-param">
 	      <input id="input-show-datatypes" type="checkbox"> <!-- default value -->
 	      <span class="texte lang-en">For <span class="Literal">literals</span>, show datatypes and language tags </span>

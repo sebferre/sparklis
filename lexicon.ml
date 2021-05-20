@@ -108,6 +108,7 @@ let default_entity_lexicon = new pure_lexicon name_of_uri_entity
 let default_class_lexicon = new pure_lexicon name_of_uri_concept
 let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
 let default_arg_lexicon = new pure_lexicon syntagm_name_of_uri_arg
+let default_tooltip_lexicon = new pure_lexicon (fun uri -> uri)
 
 
 (* lexicon retrieving labels from a SPARQL endpoint *)
@@ -269,7 +270,8 @@ let sparql_property_lexicon ~endpoint ~froms ?pref_properties ?pref_languages ()
   sparql_lexicon ~kind:"property" ~default_label:syntagm_name_of_uri_property ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_property_name
 let sparql_arg_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
   sparql_lexicon ~kind:"argument" ~default_label:syntagm_name_of_uri_arg ~endpoint ~froms ?pref_properties ?pref_languages syntagm_of_arg_name
-
+let sparql_tooltip_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
+  sparql_lexicon ~kind:"tooltip" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun tooltip -> tooltip) 
 
 (* configuration *)
 
@@ -449,24 +451,40 @@ let config_arg_lexicon =
     ~default_lexicon:default_arg_lexicon
     ~custom_lexicon:sparql_arg_lexicon
     ()
+let config_tooltip_lexicon =
+  new config_input
+    ~key:"tooltip_lexicon"
+    ~select_selector:"#config-tooltip-select"
+    ~input_selector:"#config-tooltip-input"
+    ~lang_input_selector:"#config-tooltip-input-lang"
+    ~config_graphs:Sparql_endpoint.config_schema_graphs
+    ~default_lexicon:default_tooltip_lexicon
+    ~custom_lexicon:sparql_tooltip_lexicon
+    ()
 
 (* utilities for enqueuing and syncing *)
 
-let enqueue_entity uri = config_entity_lexicon#value#enqueue uri
-let enqueue_class uri = config_class_lexicon#value#enqueue uri
-let enqueue_property uri = config_property_lexicon#value#enqueue uri
-let enqueue_arg uri = config_arg_lexicon#value#enqueue uri
+let enqueue_entity uri = config_entity_lexicon#value#enqueue uri; config_tooltip_lexicon#value#enqueue uri
+let enqueue_class uri = config_class_lexicon#value#enqueue uri; config_tooltip_lexicon#value#enqueue uri
+let enqueue_property uri = config_property_lexicon#value#enqueue uri; config_tooltip_lexicon#value#enqueue uri
+let enqueue_arg uri = config_arg_lexicon#value#enqueue uri; config_tooltip_lexicon#value#enqueue uri
 
 let sync_entities k =
   config_entity_lexicon#value#sync
     (fun () ->
-     config_class_lexicon#value#sync k) (* 'class' for datatypes *)
+      config_class_lexicon#value#sync (* 'class' for datatypes *)
+        (fun () ->
+          config_tooltip_lexicon#value#sync
+            k))
 let sync_concepts k =
   config_class_lexicon#value#sync
     (fun () ->
      config_property_lexicon#value#sync
        (fun () ->
-	config_arg_lexicon#value#sync k))
+	 config_arg_lexicon#value#sync
+           (fun () ->
+             config_tooltip_lexicon#value#sync
+               k)))
     
 let sync k =
   config_entity_lexicon#value#sync
@@ -475,4 +493,7 @@ let sync k =
        (fun () ->
 	config_property_lexicon#value#sync
 	  (fun () ->
-	   config_arg_lexicon#value#sync k)))
+	    config_arg_lexicon#value#sync
+              (fun () ->
+                config_tooltip_lexicon#value#sync
+                  k))))

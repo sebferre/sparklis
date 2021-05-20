@@ -392,10 +392,14 @@ let enqueue_binding_terms binding =
 let sync_terms k =
   Lexicon.sync_entities
     (fun () ->
-     Lexicon.sync_concepts
-       (fun () ->
-	Ontology.sync_entities
-	  (fun () -> k ())))
+      Ontology.sync_entities
+	(fun () -> k ()))
+	   
+let sync_concepts k =
+  Ontology.sync_concepts
+    (fun () ->
+      Lexicon.sync_concepts
+	(fun () -> k ()))
 	   
 let page_of_results
       (offset : int) (limit : int)
@@ -1184,9 +1188,8 @@ object (self)
 	incr_index#add (Lisql.IncrTriple Lisql.S, None);
 	incr_index#add (Lisql.IncrTriple Lisql.O, None)
       );
-      Ontology.sync_concepts (fun () ->
-	Lexicon.sync_concepts (fun () ->
-	    k ~partial (Some incr_index)))
+      sync_concepts (fun () ->
+	  k ~partial (Some incr_index))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1298,9 +1301,8 @@ object (self)
 	 Lisql2sparql.WhichClass.increments_of_terms ~init:true lt |>
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
-      Ontology.sync_concepts (fun () ->
-	Lexicon.sync_concepts (fun () ->
-	  k ~partial (Some incr_index))) in
+      sync_concepts (fun () ->
+	  k ~partial (Some incr_index)) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=`Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
@@ -1322,9 +1324,8 @@ object (self)
 	      with Not_found -> assert false)
 	     lx lt
 	| _ -> () );
-      Ontology.sync_concepts (fun () ->
-	Lexicon.sync_concepts (fun () ->
-	  k ~partial:true (Some incr_index)))
+      sync_concepts (fun () ->
+	  k ~partial:true (Some incr_index))
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
@@ -1535,9 +1536,8 @@ object (self)
 	 if Lisql.insert_increment incr focus <> None
 	 then incr_index#add (incr,None))
 	[Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
-      Ontology.sync_concepts (fun () ->
-	Lexicon.sync_concepts (fun () ->
-	  k ~partial (Some incr_index))))
+      sync_concepts (fun () ->
+	  k ~partial (Some incr_index)))
     in
     let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
     let froms = Sparql_endpoint.config_default_graphs#froms in
