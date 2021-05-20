@@ -253,6 +253,15 @@ object (self)
   method get_permalink : (string * string) list =
     List.concat (List.map (fun input -> input#get_permalink) config_inputs)
   method set_permalink (args : (string * string) list) : unit =
+    let args = (* handling backward compatibility, like argument name changes *)
+      List.map
+        (fun (k,v) ->
+          (* merging of class_lexicon, property_lexicon, arg_lexicon into concept_lexicons *)
+          if k = "class_lexicon_select" then ("concept_lexicons_select",v)
+          else if k = "class_lexicon_property" then ("concept_lexicons_property",v)
+          else if k = "class_lexicon_lang" then ("concept_lexicons_lang",v)
+          else (k,v))
+        args in
     List.iter (fun input -> input#set_permalink args) config_inputs
 
   method private set_yasgui_options =
