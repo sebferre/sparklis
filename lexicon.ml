@@ -297,10 +297,10 @@ let sparql_concept_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () 
     args = sparql_arg_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () }
 
 let sparql_tooltip_lexicon ~endpoint ~froms ?pref_properties ?pref_languages () =
-  sparql_lexicon ~kind:"tooltip" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun tooltip -> tooltip)
+  sparql_lexicon ~kind:"tooltip" ~default_label:(fun uri -> "") ~endpoint ~froms ?pref_properties ?pref_languages (fun tooltip -> tooltip)
 
 let sparql_open_links ~endpoint ~froms ?pref_properties ?pref_languages () =
-  sparql_lexicon ~kind:"open-link" ~default_label:(fun uri -> uri) ~endpoint ~froms ?pref_properties ?pref_languages (fun link -> link) 
+  sparql_lexicon ~kind:"open-link" ~default_label:(fun uri -> "") ~endpoint ~froms ?pref_properties ?pref_languages (fun link -> link) 
 
 (* configuration *)
 
