@@ -635,10 +635,10 @@
 	<ul class="list-group">
 	  <li class="list-group-item">
 	    <div id="config-lang" class="config-param">
-	      <span class="texte lang-en">Set the page and query language as </span>
-	      <span class="texte lang-fr">Définir la langue de la page et des requêtes </span>
-	      <span class="texte lang-es">Cambiar el idioma de la página y las consultas a </span>
-	      <span class="texte lang-nl"> Stel de pagina en query taal in als</span>
+	      <span class="texte lang-en">Set the page and query <strong>language</strong> as </span>
+	      <span class="texte lang-fr">Définir la <strong>langue</strong> de la page et des requêtes </span>
+	      <span class="texte lang-es">Cambiar el <strong>idioma</strong> de la página y las consultas a </span>
+	      <span class="texte lang-nl"> Stel de pagina en query <strong>taal</strong> in als</span>
 	      <select id="lang-select">
 		<option value="en">English</option>
 		<option value="fr">français</option>
@@ -649,10 +649,10 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-label-entity" class="config-param">
-	      <span class="texte lang-en">For the labels of <span class="URI">entities</span>, use property </span>
-	      <span class="texte lang-fr">Pour les étiquettes d'<span class="URI">entités</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">Para las etiquetas de las <span class="URI">entidades</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl"> Voor <span class="URI">entity</span> labels, gebruik eigenschap </span>
+	      <span class="texte lang-en">For the <strong>labels</strong> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>étiquettes</strong> d'<span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para las <strong>etiquetas</strong> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor <strong>labels</strong> van <span class="URI">entity</span>, gebruik eigenschap </span>
 	      <select id="config-label-entity-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
@@ -687,10 +687,10 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-label-concept" class="config-param">
-	      <span class="texte lang-en">For the labels of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
-	      <span class="texte lang-fr">Pour les étiquettes de <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
-	      <span class="texte lang-es">Para las etiquetas de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
-	      <span class="texte lang-nl">Voor labels van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <span class="texte lang-en">For the <strong>labels</strong> of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les <strong>étiquettes</strong> de <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para las <strong>etiquetas</strong> de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor <strong>labels</strong> van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
 	      <select id="config-label-concept-select">
 		<option value=""></option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
@@ -726,12 +726,13 @@
 	  
 	  <li class="list-group-item">
 	    <div id="config-entity-tooltips" class="config-param">
-	      <span class="texte lang-en">For the tooltips of <span class="URI">entities</span>, use property </span>
-	      <span class="texte lang-fr">Pour les info-bulles d'<span class="URI">entités</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">Para los tooltips de las <span class="URI">entidades</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl"> Voor de tooltips van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <span class="texte lang-en">For the <strong>tooltips</strong> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>info-bulles</strong> d'<span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los <strong>tooltips</strong> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de <strong>tooltips</strong> van <span class="URI">entities</span>, gebruik eigenschap </span>
 	      <select id="config-entity-tooltips-select">
 		<option value="">(URI)</option>
+		<option value="void">(void)</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -765,12 +766,13 @@
 	  </li>
 	  <li class="list-group-item">
 	    <div id="config-concept-tooltips" class="config-param">
-	      <span class="texte lang-en">For the tooltips of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
-	      <span class="texte lang-fr">Pour les info-bulles des <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
-	      <span class="texte lang-es">Para los tooltips de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
-	      <span class="texte lang-nl">Voor de tooltips van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <span class="texte lang-en">For the <strong>tooltips</strong> of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les <strong>info-bulles</strong> des <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para los <strong>tooltips</strong> de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor de <strong>tooltips</strong> van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
 	      <select id="config-concept-tooltips-select">
 		<option value="">(URI)</option>
+		<option value="void">(void)</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
 		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
@@ -805,16 +807,17 @@
 
 	  <li class="list-group-item">
 	    <div id="config-open-links" class="config-param">
-	      <span class="texte lang-en">For the hyperlinks <span class="glyphicon glyphicon-new-window"></span> of <span class="URI">entities</span>, use property </span>
-	      <span class="texte lang-fr">Pour les hyperliens <span class="glyphicon glyphicon-new-window"></span> des <span class="URI">entités</span>, utiliser la propriété </span>
-	      <span class="texte lang-es">Para los hipervínculos <span class="glyphicon glyphicon-new-window"></span> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
-	      <span class="texte lang-nl"> Voor de hyperlinks <span class="glyphicon glyphicon-new-window"></span> van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <span class="texte lang-en">For the <strong>hyperlinks</strong> <span class="glyphicon glyphicon-new-window"></span> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>hyperliens</strong> <span class="glyphicon glyphicon-new-window"></span> des <span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los <strong>hipervínculos</strong> <span class="glyphicon glyphicon-new-window"></span> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de <strong>hyperlinks</strong> <span class="glyphicon glyphicon-new-window"></span> van <span class="URI">entities</span>, gebruik eigenschap </span>
 	      <select id="config-open-links-select">
 		<option value="">(URI)</option>
+		<option value="void">(void)</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#seeAlso">rdfs:seeAlso</option>
 		<option value="http://www.w3.org/2000/01/rdf-schema#isDefinedBy">rdfs:isDefinedBy</option>
 		<option value="http://xmlns.com/foaf/0.1/homepage">foaf:homepage</option>
-		<option value="http://xmlns.com/foaf/0.1/primaryTopic">foaf:primaryTopic</option>
+		<option value="http://xmlns.com/foaf/0.1/isPrimaryTopicOf">foaf:isPrimaryTopicOf</option>
 		<option value="other">prop1, prop2, ...</option>
 	      </select>
 	      <span class="tooltiped">

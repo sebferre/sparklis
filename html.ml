@@ -268,16 +268,16 @@ let html_pre text =
 
 let html_span ?id ?classe ?title text =
   "<span" ^
-    (match id with None -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
-    (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
-    (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
+    (match id with None | Some "" -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
+    (match classe with None | Some "" -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
+    (match title with None | Some "" -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</span>"
 
 let html_div ?id ?classe ?title text =
   "<div" ^
-    (match id with None -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
-    (match classe with None -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
-    (match title with None -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
+    (match id with None | Some "" -> "" | Some id -> " id=\"" ^ id ^ "\"") ^
+    (match classe with None | Some "" -> "" | Some cl -> " class=\"" ^ cl ^ "\"") ^
+    (match title with None | Some "" -> "" | Some tit -> " title=\"" ^ tit ^ "\"") ^
     ">" ^ text ^ "</div>"
 
 let html_a url html =
@@ -503,8 +503,11 @@ and html_word state = function
     then html_literal s ^ " (" ^ escapeHTML t ^ ")"
     else html_literal s
   | `Blank id -> html_span ~classe:"nodeID" (escapeHTML id) ^ " (bnode)"
-  | `Entity (uri,s) -> html_logos uri ^ html_uri ~classe:"URI" ~title:(Lexicon.entity_tooltip uri) uri s
-                       ^ " " ^ html_open_new_window ~height:12 (Lexicon.entity_open_link uri)
+  | `Entity (uri,s) ->
+     let open_link = Lexicon.entity_open_link uri in
+     html_logos uri
+     ^ html_uri ~classe:"URI" ~title:(Lexicon.entity_tooltip uri) uri s
+     ^ (if open_link = "" then "" else " " ^ html_open_new_window ~height:12 open_link)
   | `Class (uri,s) -> html_logos uri ^ html_uri ~classe:"classURI" ~title:(Lexicon.concept_tooltip uri) uri s
   | `Prop (uri,s) -> html_logos uri ^ html_uri ~classe:"propURI" ~title:(Lexicon.concept_tooltip uri) uri s
   | `Nary (uri,s) -> html_logos uri ^ html_uri ~classe:"naryURI" ~title:(Lexicon.concept_tooltip uri) uri (escapeHTML s)

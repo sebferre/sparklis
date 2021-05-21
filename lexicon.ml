@@ -109,21 +109,26 @@ let syntagm_name_of_uri_arg =
     let name = name_of_uri_concept uri in
     syntagm_of_arg_name name
 
-let default_entity_lexicon = new pure_lexicon name_of_uri_entity
+let default_entity_lexicon s = new pure_lexicon name_of_uri_entity
 
-let default_class_lexicon = new pure_lexicon name_of_uri_concept
-let default_property_lexicon = new pure_lexicon syntagm_name_of_uri_property
-let default_arg_lexicon = new pure_lexicon syntagm_name_of_uri_arg
+let default_class_lexicon s = new pure_lexicon name_of_uri_concept
+let default_property_lexicon s = new pure_lexicon syntagm_name_of_uri_property
+let default_arg_lexicon s = new pure_lexicon syntagm_name_of_uri_arg
 
-let default_concept_lexicon =
-  { classes = default_class_lexicon;
-    properties = default_property_lexicon;
-    args = default_arg_lexicon }
+let default_concept_lexicon s =
+  { classes = default_class_lexicon s;
+    properties = default_property_lexicon s;
+    args = default_arg_lexicon s }
 
-let default_tooltip_lexicon = new pure_lexicon (fun uri -> uri)
+let default_tooltip_lexicon = function
+  | "void" -> new pure_lexicon (fun uri -> "")
+  | _ -> new pure_lexicon (fun uri -> uri)
 
-let default_open_links = new pure_lexicon (fun uri -> uri)
+let default_open_links = function
+  | "void" -> new pure_lexicon (fun uri -> "")
+  | _ -> new pure_lexicon (fun uri -> uri)
 
+       
 (* lexicon retrieving labels from a SPARQL endpoint *)
 
 let wikidata_entity_of_predicate uri =
@@ -235,12 +240,13 @@ let sparql_lexicon
 	       (fun binding ->
 		match binding.(i_u), binding.(i_l), binding.(i_p) with
 		| Some (Rdf.URI uri),
-		  Some (Rdf.PlainLiteral _ | Rdf.TypedLiteral _ as label_term),
+		  Some (Rdf.PlainLiteral _ | Rdf.TypedLiteral _ | Rdf.URI _ as label_term),
 		  Some (Rdf.URI prop) ->
 		   let label, lang =
 		     match label_term with
 		     | Rdf.PlainLiteral (label, lang) -> label, lang
 		     | Rdf.TypedLiteral (label, _) -> label, ""
+                     | Rdf.URI uri -> uri, ""
 		     | _ -> assert false in
 		   let prio =
 		     (try Hashtbl.find ht_pref_properties prop with _ -> 0),
@@ -306,11 +312,13 @@ let regexp_sep = Regexp.regexp "[,;][ ]*"
 class ['lexicon] config_input ~(key : string)
   ~(select_selector : string) ~(input_selector : string) ~(lang_input_selector : string)
   ~(config_graphs : Sparql_endpoint.config_graphs)
-  ~(default_lexicon : 'lexicon) ~(custom_lexicon : endpoint:string -> froms:(Rdf.uri list) -> ?pref_properties:(Rdf.uri list) -> ?pref_languages:(string list) -> unit -> 'lexicon) () =
+  ~(default_lexicon : string -> 'lexicon) ~(custom_lexicon : endpoint:string -> froms:(Rdf.uri list) -> ?pref_properties:(Rdf.uri list) -> ?pref_languages:(string list) -> unit -> 'lexicon) () =
   let other = "other" in
   let key_select = key ^ "_select" in
   let key_property = key ^ "_property" in
   let key_lang = key ^ "_lang" in
+  let void_lexicon = default_lexicon "void" in
+  let uri_lexicon = default_lexicon "" in
 object (self)
   inherit Config.input as super
   val mutable init_select = ""
@@ -322,7 +330,7 @@ object (self)
   val mutable current_lang = ""
   val mutable current_pref_properties = []
   val mutable current_pref_languages = []
-  val mutable current_lexicon = default_lexicon
+  val mutable current_lexicon = uri_lexicon
 
   method private get_select_property_lang select input lang_input =
     let sel = to_string select##.value in
@@ -358,8 +366,8 @@ object (self)
   method private define_lexicon : unit =
     self#define_pref_lists;
     current_lexicon <-
-      if current_pref_properties = []
-      then default_lexicon
+      if current_select = "" then uri_lexicon
+      else if current_select = "void" then void_lexicon
       else custom_lexicon ~endpoint
 			  ~froms:config_graphs#froms
 			  ~pref_properties:current_pref_properties
@@ -486,7 +494,7 @@ let config_open_links =
     ~default_lexicon:default_open_links
     ~custom_lexicon:sparql_open_links
     ()
-  
+
 (* utilities for enqueuing, syncing, and accessing *)
 
 let enqueue_entity uri =
