@@ -166,6 +166,7 @@ let config_max_results = new Config.integer_input ~key:"max_results" ~input_sele
 let config_max_increment_samples = new Config.integer_input ~key:"max_increment_samples" ~input_selector:"#input-max-increment-samples" ~min:1 ~default:200 ()
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
 let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
+let config_avoid_lengthy_queries = new Config.boolean_input ~key:"avoid_lengthy_queries" ~input_selector:"#input-avoid-lengthy-queries" ~default:false ()
 
 let regexp_sep = Regexp.regexp "[,;][ ]*"
 
@@ -1620,8 +1621,8 @@ object (self)
 		 (List.map
 		    (fun (key,(_, graph_index)) ->
 		     let pat = graph_opt graph_index (make_pattern ?hook:None key) in
-		     if Rdf.config_wikidata_mode#value
-		     then pat (* TODO: create an independent option for that because mostly useful when lack of shuffling in endpoint indexes *)
+		     if Rdf.config_wikidata_mode#value || config_avoid_lengthy_queries#value
+		     then pat
 		     else Sparql.subquery
 			    (Sparql.select
 			       ~distinct:true ~projections

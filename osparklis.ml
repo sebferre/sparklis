@@ -232,6 +232,7 @@ let config =
       (Lis.config_max_increment_samples :> Config.input);
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
+      (Lis.config_avoid_lengthy_queries :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
       (Lexicon.config_concept_lexicon :> Config.input);
       (Lexicon.config_entity_tooltips :> Config.input);
