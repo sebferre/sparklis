@@ -22,6 +22,33 @@
   </div>
 
   <ul>
+    <li><strong>May 2021</strong>
+      <ul>
+	<li>New "Language and labels" configuration element to specify
+	properties (e.g., <code>rdfs:comment</code>) and language tags
+	for the tooltip contents of entities and concepts. The default
+	is to use URIs. There is also an option to have void
+	tooltips.</li>
+	<li>New "Language and labels" configuration element to specify
+	properties
+	(e.g., <code>rdfs:seeAlso</code>, <code>foaf:homepage</code>)
+	for the hyperlinks on entities. The default is to use the
+	entity URI (according to the Linked Data principle). There is
+	  also an option to have void hyperlinks.</li>
+	<li>New "Endpoint and queries" configuration element to avoid
+	very long queries in the retrieval of suggestions.</li>
+      </ul>
+    </li>
+    <li><strong>April 2021</strong>
+      <ul>
+	<li>New ontology configuration for using materialized
+	transitive closures when computing hierarchies. The
+	Sparklis-specific property <code>lis-owl:transitiveOf</code>
+	must be used to relate property <em>P1</em> to
+	property <em>P2</em>, where <em>P1</em> holds the materialized
+	transitive closure of <em>P2</em>.</li>
+      </ul>
+    </li>
     <li><strong>February 2021</strong>
       <ul>
 	<li>Link to the Github repo in the <em>Learn</em> menu. Github
