@@ -94,6 +94,8 @@ object (self)
     map <- (* default namespaces (reverse order of declarations) *)
       [("http://jena.apache.org/text#", "text:");
        ("http://www.irisa.fr/LIS/ferre/vocab/nary#", "nary:");
+       ("https://schema.org/","sdo:");
+       ("http://schema.org/","schema:");
        ("http://www.wikidata.org/prop/statement/value/","psv:");
        ("http://www.wikidata.org/prop/statement/","ps:");
        ("http://www.wikidata.org/prop/","p:");

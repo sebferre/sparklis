@@ -59,8 +59,8 @@ let owl_transitiveOf = "http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf"
 let nary_subjectObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject"
 let nary_eventObject = "http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject"
 
-let schema_position = "http://schema.org/position"
-let schema_logo = "http://schema.org/logo"
+let schema_position = "https://schema.org/position"
+let schema_logo = "https://schema.org/logo"
 
 let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
@@ -75,7 +75,8 @@ let lat_long_properties =
   [ "http://www.w3.org/2003/01/geo/wgs84_pos#lat", "http://www.w3.org/2003/01/geo/wgs84_pos#long";
     "http://www.semwebtech.org/mondial/10/meta#latitude", "http://www.semwebtech.org/mondial/10/meta#longitude";
     "http://www.w3.org/2006/vcard/ns#latitude", "http://www.w3.org/2006/vcard/ns#longitude";
-    "http://schema.org/latitude", "http://schema.org/longitude" ]
+    "http://schema.org/latitude", "http://schema.org/longitude";
+    "https://schema.org/latitude", "https://schema.org/longitude" ]
   
 (* ------------------------- *)
 
