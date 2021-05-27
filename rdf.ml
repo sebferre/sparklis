@@ -100,6 +100,10 @@ type term =
 let term_is_var = function
   | Var _ -> true
   | _ -> false
+
+let term_can_be_subject = function
+  | URI _ | Bnode _ | Var _ -> true
+  | _ -> false
 	     
 let string_of_term = function
   | URI uri -> uri

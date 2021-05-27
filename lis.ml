@@ -1379,350 +1379,362 @@ object (self)
     else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
       k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
     else begin
-    let hierarchy_focus_as_incr_opt =
-      let open Lisql in
-      match focus with
-      | AtS1 (np, RelX (p,ori,ctx)) ->
-	 Some (IncrRel (p,ori))
-      | AtS1 (_np, CConsX1 ((S|O as _argo), CNil _, PredX ((S|O as args), pred, _ctx))) ->
-	 Some (IncrPred (args, pred))
-      | AtSn (_cp, PredX ((S|O as args), pred, _ctx)) ->
-	 Some (IncrPred (args, pred))
-      | _ -> None in
-    let process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg =
-      let partial_class = partial || results_class.Sparql_endpoint.length = config_max_classes#value in
-      let partial_prop = partial || results_prop.Sparql_endpoint.length = config_max_properties#value in
-      let partial_pred = partial || results_pred.Sparql_endpoint.length = config_max_properties#value in
-      let partial_arg = partial || results_arg.Sparql_endpoint.length = config_max_properties#value in
-      let partial = partial_class || partial_prop || partial_pred || partial_arg in
-      let int_index_class = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichClass.pattern_vars) results_class in
-      let int_index_prop = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichProp.pattern_vars) results_prop in
-      let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
-      let int_index_arg = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichArg.pattern_vars) results_arg in
-      if constr <> Lisql.True
-	 && int_index_class#is_empty
-	 && int_index_prop#is_empty
-	 && int_index_pred#is_empty
-	 && int_index_arg#is_empty
-      then self#ajax_index_properties_init ~freq0:true constr elt k
-      else (
-      let incr_index = new incr_freq_tree_index term_hierarchy in
-      let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
-      let trans_rel = ref false in
-      let fwd_prop = ref false in
-      let bwd_prop = ref false in
-      (* adding selection increments *)
-      incr_index#add (Lisql.IncrSelection (`And, []), None);
-      incr_index#add (Lisql.IncrSelection (`Or, []), None);
-      (* adding class increments *)
-      int_index_class#iter
-	(fun (lt, count) ->
-	 List.iter
-	   (function
-	     | Some (Rdf.URI uri) ->
-		Ontology.enqueue_class uri;
-		Lexicon.enqueue_class uri
-	     | _ -> ())
-	   lt;
-	  Lisql2sparql.WhichClass.increments_of_terms ~init:false lt |>
-	    List.iter
-	      (fun incr -> incr_index#add (incr, Some { value=count; max_value=max_value_term; partial=partial_class; unit })));
-      (* adding property increments + hierarchy + LatLong *)
-      int_index_prop#iter
-	(fun (lt,count) ->
-	 List.iter
-	   (function
-	     | Some (Rdf.URI uri) ->
-		Ontology.enqueue_property uri;
-		Lexicon.enqueue_property uri
-	     | _ -> ())
-	   lt;
-	 let freq_opt = Some { value=count; max_value=max_value_term; partial=partial_prop; unit } in
-	 Lisql2sparql.WhichProp.increments_of_terms ~init:false lt |>
-	   List.iter
-	     (fun incr ->
-	      incr_index#add (incr, freq_opt);
-	      if Some incr = hierarchy_focus_as_incr_opt then
-		trans_rel := true;
-	      ( match incr with
-		| Lisql.IncrRel (p,ori) ->
-		   ( match ori with
-		     | Lisql.Fwd -> fwd_prop := true
-		     | Lisql.Bwd -> bwd_prop := true );
-		   if p = Rdf.rdf_first then
-		     incr_index#add (Lisql.IncrRel (Rdf.rdf_item, ori), freq_opt);
-		   if incr_sim_ok then (
-		     let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
-		     ( match incr_index#get inv_incr with
-		       | None -> ()
-		       | Some inv_freq_opt ->
-			  let fwd_freq_opt, bwd_freq_opt =
-			    match ori with
-			    | Lisql.Fwd -> freq_opt, inv_freq_opt
-			    | Lisql.Bwd -> inv_freq_opt, freq_opt in
-			  incr_index#add (Lisql.(IncrSim(Prop p,S,O)), fwd_freq_opt);
-			  incr_index#add (Lisql.(IncrSim(Prop p,O,S)), bwd_freq_opt))
-		   )
-		| _ -> () );
-	      ( match Lisql.latlong_of_increment incr with
-		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
-		| None -> () )));
-      (* adding pred+arg increments *)
-      int_index_pred#iter
-	(fun (lt, count) ->
-	 List.iter
-	   (function
-	     | Some (Rdf.URI p) ->
-		Ontology.enqueue_pred p;
-		Lexicon.enqueue_property p
-	     | _ -> ()) lt;
-	 let freq_opt = Some { value=count; max_value=max_value_term; partial=partial_pred; unit } in
-	 Lisql2sparql.WhichPred.increments_of_terms ~init:false lt |>
-	   List.iter
-	     (fun incr ->
-	      incr_index#add (incr, freq_opt);
-	      if Some incr = hierarchy_focus_as_incr_opt then
-		trans_rel := true;
-	      ( match incr with
-		| Lisql.IncrPred ((Lisql.S | Lisql.O as arg),pred) ->
-		   if incr_sim_ok then (
-		     let inv_arg =
-		       match arg with
-		       | Lisql.S -> Lisql.O
-		       | Lisql.O -> Lisql.S
-		       | _ -> assert false in
-		     let inv_incr = Lisql.IncrPred (inv_arg,pred) in
-		     ( match incr_index#get inv_incr with
-		       | None -> ()
-		       | Some inv_freq_opt ->
-			  let fwd_freq_opt, bwd_freq_opt =
-			    match arg with
-			    | Lisql.S -> freq_opt, inv_freq_opt
-			    | Lisql.O -> inv_freq_opt, freq_opt
-			    | _ -> assert false in
-			  incr_index#add (Lisql.(IncrSim(pred,S,O)), fwd_freq_opt);
-			  incr_index#add (Lisql.(IncrSim(pred,O,S)), bwd_freq_opt))
-		   )
-		| _ -> () );
-	      ( match Lisql.latlong_of_increment incr with
-		| Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
-		| None -> () );
-	      Lisql2sparql.WhichPred.increments_hidden_by_increment ~init:false incr |>
-	       List.iter incr_index#remove));
-      int_index_arg#iter
-	(fun (lt,count) ->
-	 List.iter
-	   (function
-	     | Some (Rdf.URI uri) ->
-		Ontology.enqueue_arg uri;
-		Lexicon.enqueue_arg uri
-	     | _ -> ())
-	   lt;
-	 let freq_opt = Some { value=count; max_value=max_value_arg; partial=partial_arg; unit } in
-	 Lisql2sparql.WhichArg.increments_of_terms lt |>
-	   List.iter
-	     (fun incr -> incr_index#add (incr,freq_opt)));
-      (* adding hierarchy increments *)
-      if !trans_rel then
-	List.iter
-	  (fun incr ->
-	   if Lisql.insert_increment incr focus <> None
-	   then incr_index#add (incr,None))
-	  [Lisql.IncrHierarchy true];
-      (* adding other increments *)
-      if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
-      if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
-      List.iter
-	(fun incr ->
-	 if Lisql.insert_increment incr focus <> None
-	 then incr_index#add (incr,None))
-	[Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
-      sync_concepts (fun () ->
-	  k ~partial (Some incr_index)))
-    in
-    let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
-    let froms = Sparql_endpoint.config_default_graphs#froms in
-    let ajax_intent () =
-      (* focus_term_index is not empty *)
-      let max_value_term, max_value_arg = None, None in
-      let partial = self#partial_results in
-      let unit = `Results in
-      let make_sparql (query_opt : Lisql2sparql.template option) filter_constr config_max =
-	match query_opt with
-	| None -> ""
-	| Some query ->
-	   query
-	     ~hook:(fun tx form ->
-		    Sparql.formula_and_list
-		      [formula_concept_profile_term tx;
-		       filter_constr sparql_genvar tx constr;
-		       formula_hidden_URIs_term tx;
-		       form])
-	     ~froms ~limit:config_max#value () in
-      let sparql_class = make_sparql
-		       s_sparql.Lisql2sparql.query_class_opt
-		       Lisql2sparql.filter_constr_class
-		       config_max_classes in
-      let sparql_prop =
-	if Rdf.config_wikidata_mode#value && config_nary_relations#value
-	then ""
-	else make_sparql
-	       s_sparql.Lisql2sparql.query_prop_opt
-	       Lisql2sparql.filter_constr_property
-	       config_max_properties in
-      let sparql_pred =
-	if config_nary_relations#value
-	then make_sparql
-	       s_sparql.Lisql2sparql.query_pred_opt
-	       Lisql2sparql.filter_constr_property
-	       config_max_properties
-	else "" in
-      let sparql_arg = make_sparql
-			 s_sparql.Lisql2sparql.query_arg_opt
-			 Lisql2sparql.filter_constr_property
-			 config_max_properties in
-      Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
+        let hierarchy_focus_as_incr_opt =
+          let open Lisql in
+          match focus with
+          | AtS1 (np, RelX (p,ori,ctx)) ->
+	     Some (IncrRel (p,ori))
+          | AtS1 (_np, CConsX1 ((S|O as _argo), CNil _, PredX ((S|O as args), pred, _ctx))) ->
+	     Some (IncrPred (args, pred))
+          | AtSn (_cp, PredX ((S|O as args), pred, _ctx)) ->
+	     Some (IncrPred (args, pred))
+          | _ -> None in
+        let process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg =
+          let partial_class = partial || results_class.Sparql_endpoint.length = config_max_classes#value in
+          let partial_prop = partial || results_prop.Sparql_endpoint.length = config_max_properties#value in
+          let partial_pred = partial || results_pred.Sparql_endpoint.length = config_max_properties#value in
+          let partial_arg = partial || results_arg.Sparql_endpoint.length = config_max_properties#value in
+          let partial = partial_class || partial_prop || partial_pred || partial_arg in
+          let int_index_class = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichClass.pattern_vars) results_class in
+          let int_index_prop = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichProp.pattern_vars) results_prop in
+          let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
+          let int_index_arg = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichArg.pattern_vars) results_arg in
+          if constr <> Lisql.True
+	     && int_index_class#is_empty
+	     && int_index_prop#is_empty
+	     && int_index_pred#is_empty
+	     && int_index_arg#is_empty
+          then self#ajax_index_properties_init ~freq0:true constr elt k
+          else (
+            let incr_index = new incr_freq_tree_index term_hierarchy in
+            let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
+            let trans_rel = ref false in
+            let fwd_prop = ref false in
+            let bwd_prop = ref false in
+            (* adding selection increments *)
+            incr_index#add (Lisql.IncrSelection (`And, []), None);
+            incr_index#add (Lisql.IncrSelection (`Or, []), None);
+            (* adding class increments *)
+            int_index_class#iter
+	      (fun (lt, count) ->
+	        List.iter
+	          (function
+	           | Some (Rdf.URI uri) ->
+		      Ontology.enqueue_class uri;
+		      Lexicon.enqueue_class uri
+	           | _ -> ())
+	          lt;
+	        Lisql2sparql.WhichClass.increments_of_terms ~init:false lt |>
+	          List.iter
+	            (fun incr -> incr_index#add (incr, Some { value=count; max_value=max_value_term; partial=partial_class; unit })));
+            (* adding property increments + hierarchy + LatLong *)
+            int_index_prop#iter
+	      (fun (lt,count) ->
+	        List.iter
+	          (function
+	           | Some (Rdf.URI uri) ->
+		      Ontology.enqueue_property uri;
+		      Lexicon.enqueue_property uri
+	           | _ -> ())
+	          lt;
+	        let freq_opt = Some { value=count; max_value=max_value_term; partial=partial_prop; unit } in
+	        Lisql2sparql.WhichProp.increments_of_terms ~init:false lt |>
+	          List.iter
+	            (fun incr ->
+	              incr_index#add (incr, freq_opt);
+	              if Some incr = hierarchy_focus_as_incr_opt then
+		        trans_rel := true;
+	              ( match incr with
+		        | Lisql.IncrRel (p,ori) ->
+		           ( match ori with
+		             | Lisql.Fwd -> fwd_prop := true
+		             | Lisql.Bwd -> bwd_prop := true );
+		           if p = Rdf.rdf_first then
+		             incr_index#add (Lisql.IncrRel (Rdf.rdf_item, ori), freq_opt);
+		           if incr_sim_ok then (
+		             let inv_incr = Lisql.IncrRel (p, Lisql.inverse_orientation ori) in
+		             ( match incr_index#get inv_incr with
+		               | None -> ()
+		               | Some inv_freq_opt ->
+			          let fwd_freq_opt, bwd_freq_opt =
+			            match ori with
+			            | Lisql.Fwd -> freq_opt, inv_freq_opt
+			            | Lisql.Bwd -> inv_freq_opt, freq_opt in
+			          incr_index#add (Lisql.(IncrSim(Prop p,S,O)), fwd_freq_opt);
+			          incr_index#add (Lisql.(IncrSim(Prop p,O,S)), bwd_freq_opt))
+		           )
+		        | _ -> () );
+	              ( match Lisql.latlong_of_increment incr with
+		        | Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
+		        | None -> () )));
+            (* adding pred+arg increments *)
+            int_index_pred#iter
+	      (fun (lt, count) ->
+	        List.iter
+	          (function
+	           | Some (Rdf.URI p) ->
+		      Ontology.enqueue_pred p;
+		      Lexicon.enqueue_property p
+	           | _ -> ()) lt;
+	        let freq_opt = Some { value=count; max_value=max_value_term; partial=partial_pred; unit } in
+	        Lisql2sparql.WhichPred.increments_of_terms ~init:false lt |>
+	          List.iter
+	            (fun incr ->
+	              incr_index#add (incr, freq_opt);
+	              if Some incr = hierarchy_focus_as_incr_opt then
+		        trans_rel := true;
+	              ( match incr with
+		        | Lisql.IncrPred ((Lisql.S | Lisql.O as arg),pred) ->
+		           if incr_sim_ok then (
+		             let inv_arg =
+		               match arg with
+		               | Lisql.S -> Lisql.O
+		               | Lisql.O -> Lisql.S
+		               | _ -> assert false in
+		             let inv_incr = Lisql.IncrPred (inv_arg,pred) in
+		             ( match incr_index#get inv_incr with
+		               | None -> ()
+		               | Some inv_freq_opt ->
+			          let fwd_freq_opt, bwd_freq_opt =
+			            match arg with
+			            | Lisql.S -> freq_opt, inv_freq_opt
+			            | Lisql.O -> inv_freq_opt, freq_opt
+			            | _ -> assert false in
+			          incr_index#add (Lisql.(IncrSim(pred,S,O)), fwd_freq_opt);
+			          incr_index#add (Lisql.(IncrSim(pred,O,S)), bwd_freq_opt))
+		           )
+		        | _ -> () );
+	              ( match Lisql.latlong_of_increment incr with
+		        | Some ll -> incr_index#add (Lisql.IncrLatLong ll, freq_opt)
+		        | None -> () );
+	              Lisql2sparql.WhichPred.increments_hidden_by_increment ~init:false incr |>
+	                List.iter incr_index#remove));
+            int_index_arg#iter
+	      (fun (lt,count) ->
+	        List.iter
+	          (function
+	           | Some (Rdf.URI uri) ->
+		      Ontology.enqueue_arg uri;
+		      Lexicon.enqueue_arg uri
+	           | _ -> ())
+	          lt;
+	        let freq_opt = Some { value=count; max_value=max_value_arg; partial=partial_arg; unit } in
+	        Lisql2sparql.WhichArg.increments_of_terms lt |>
+	          List.iter
+	            (fun incr -> incr_index#add (incr,freq_opt)));
+            (* adding hierarchy increments *)
+            if !trans_rel then
+	      List.iter
+	        (fun incr ->
+	          if Lisql.insert_increment incr focus <> None
+	          then incr_index#add (incr,None))
+	        [Lisql.IncrHierarchy true];
+            (* adding other increments *)
+            if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
+            if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
+            List.iter
+	      (fun incr ->
+	        if Lisql.insert_increment incr focus <> None
+	        then incr_index#add (incr,None))
+	      [Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
+            sync_concepts (fun () ->
+	        k ~partial (Some incr_index)))
+        in
+        let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
+        let froms = Sparql_endpoint.config_default_graphs#froms in
+        let ajax_intent () =
+          (* focus_term_index is not empty *)
+          let max_value_term, max_value_arg = None, None in
+          let partial = self#partial_results in
+          let unit = `Results in
+          let make_sparql (query_opt : Lisql2sparql.template option) filter_constr config_max =
+	    match query_opt with
+	    | None -> ""
+	    | Some query ->
+	       query
+	         ~hook:(fun tx form ->
+		   Sparql.formula_and_list
+		     [formula_concept_profile_term tx;
+		      filter_constr sparql_genvar tx constr;
+		      formula_hidden_URIs_term tx;
+		      form])
+	         ~froms ~limit:config_max#value () in
+          let sparql_class = make_sparql
+		               s_sparql.Lisql2sparql.query_class_opt
+		               Lisql2sparql.filter_constr_class
+		               config_max_classes in
+          let sparql_prop =
+	    if Rdf.config_wikidata_mode#value && config_nary_relations#value
+	    then ""
+	    else make_sparql
+	           s_sparql.Lisql2sparql.query_prop_opt
+	           Lisql2sparql.filter_constr_property
+	           config_max_properties in
+          let sparql_pred =
+	    if config_nary_relations#value
+	    then make_sparql
+	           s_sparql.Lisql2sparql.query_pred_opt
+	           Lisql2sparql.filter_constr_property
+	           config_max_properties
+	    else "" in
+          let sparql_arg = make_sparql
+			     s_sparql.Lisql2sparql.query_arg_opt
+			     Lisql2sparql.filter_constr_property
+			     config_max_properties in
+          Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	    (function
-	      | [results_class; results_prop; results_pred; results_arg] ->
-		 process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
-	      | _ -> assert false)
+	     | [results_class; results_prop; results_pred; results_arg] ->
+		process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
+	     | _ -> assert false)
 	    (fun code -> k ~partial:true None)
-    in
-    let ajax_extent () =
-      (* focus_term_index is not empty *)
-      let sparql_genvar = new Lisql2sparql.genvar in
-      let nb_samples_term, samples_term =
-	focus_term_index#sample_list config_max_increment_samples#value
-				     (fun (t,(f,graph_index)) -> ([t],(f,graph_index))) in
-      let max_value_term = Some nb_samples_term in
-      let partial = self#partial_results || nb_samples_term < focus_term_index#length in
-      let unit = `Entities in
-      let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> Rdf.term list -> Sparql.pattern) =
-	assert (lv <> []);
-	match samples with
-	| [] -> ""
-	| (key0, (_, graph_index0))::_ ->
-	  let projections = List.map (fun v -> `Bare, v) lv in
-	  let hook v form =
-	    Sparql.formula_and_list
-	      [formula_concept_profile v;
-	       filter_constr sparql_genvar (Sparql.var v) constr;
-	       form] in
-	  let gp =
-	    match hook "_" Sparql.True with
-	    | Sparql.True -> (* when no constraint, use this to have a better sample of properties *)
-	       let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
-		 match s_sparql.Lisql2sparql.focus_graph_opt with
-		 | Some _ when not graph_index#is_empty ->
-		    Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
-		 | _ -> gp
-	       in
-	       Sparql.union
-		 (List.map
-		    (fun (key,(_, graph_index)) ->
-		     let pat = graph_opt graph_index (make_pattern ?hook:None key) in
-		     if Rdf.config_wikidata_mode#value || config_avoid_lengthy_queries#value
-		     then pat
-		     else Sparql.subquery
-			    (Sparql.select
-			       ~distinct:true ~projections
-			       ~limit:config_max#value
-			       pat))
-		    samples)
-	    | _ -> (* when constraint, use this to avoid Garguanta queries (repeats of constraints) *)
-	       let key_vars = List.map (fun _ -> sparql_genvar#new_var "key") key0 in
-	       let graph_var_opt =
-		 match s_sparql.Lisql2sparql.focus_graph_opt with
-		 | Some _ when not graph_index0#is_empty -> Some (sparql_genvar#new_var "graph")
-		 | _ -> None in
-	       let pat_values =
-		 match graph_var_opt with
-		 | None ->
-		    Sparql.(values_tuple
-			      (List.map Sparql.var key_vars)
-			      (List.map
-				 (fun (key,_) -> List.map Sparql.term key)
-				 samples))
-		 | Some gv ->
-		    Sparql.(values_tuple
-			      (List.map Sparql.var (gv::key_vars))
-			      (List.concat
-				 (List.map
-				    (fun (key,(_, graph_index)) ->
-				     (graph_index : Rdf.term int_index)#filter_map_list
-				       (fun (tg,_) -> Some (List.map Sparql.term (tg::key) : Sparql.term list)))
-				    samples))) in
-	       let pat_incr =
-		 let pat = make_pattern ~hook (List.map (fun v -> Rdf.Var v) key_vars) in
-		 match graph_var_opt with
-		 | None -> pat
-		 | Some gv -> Sparql.(graph (var gv) pat) in
-	       Sparql.(subquery
-			 (select
-			    ~distinct:true
-			    ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
-			    ~limit:(config_max#value * min 10 nb_samples)
-			    (join [pat_values; pat_incr]))) in
-	  Sparql.((select
-		    ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
-		    (join (gp :: List.map (fun v -> pattern_hidden_URIs v) lv))
-		  :> string))
-      in
-      let sparql_class =
-	make_sparql (nb_samples_term, samples_term)
-		    config_max_classes Lisql2sparql.filter_constr_class
-		    Lisql2sparql.WhichClass.pattern_vars
-		    (fun ?hook lt ->
+        in
+        let ajax_extent () =
+          (* focus_term_index is not empty *)
+          let sparql_genvar = new Lisql2sparql.genvar in
+          let nb_samples_term, samples_term =
+	    focus_term_index#sample_list config_max_increment_samples#value
+	      (fun (t,(f,graph_index)) -> ([t],(f,graph_index))) in
+          let max_value_term = Some nb_samples_term in
+          let partial = self#partial_results || nb_samples_term < focus_term_index#length in
+          let unit = `Entities in
+          let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> Rdf.term list -> Sparql.pattern (* maybe empty *)) =
+	    assert (lv <> []);
+	    match samples with
+	    | [] -> ""
+	    | (key0, (_, graph_index0))::_ ->
+	       let projections = List.map (fun v -> `Bare, v) lv in
+	       let hook v form =
+	         Sparql.formula_and_list
+	           [formula_concept_profile v;
+	            filter_constr sparql_genvar (Sparql.var v) constr;
+	            form] in
+	       let gp =
+	         match hook "_" Sparql.True with
+	         | Sparql.True -> (* when no constraint, use this to have a better sample of properties *)
+	            let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
+		      if gp = Sparql.empty then gp
+                      else
+                        match s_sparql.Lisql2sparql.focus_graph_opt with
+		        | Some _ when not graph_index#is_empty ->
+		           Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+		        | _ -> gp
+	            in
+	            Sparql.union
+		      (List.map
+		         (fun (key,(_, graph_index)) ->
+		           let pat = graph_opt graph_index (make_pattern ?hook:None key) in
+		           if Rdf.config_wikidata_mode#value
+                              || config_avoid_lengthy_queries#value
+                              || pat = Sparql.empty
+		           then pat
+		           else Sparql.subquery
+			          (Sparql.select
+			             ~distinct:true ~projections
+			             ~limit:config_max#value
+			             pat))
+		         samples)
+	         | _ -> (* when constraint, use this to avoid Garguanta queries (repeats of constraints) *)
+	            let key_vars = List.map (fun _ -> sparql_genvar#new_var "key") key0 in
+	            let graph_var_opt =
+		      match s_sparql.Lisql2sparql.focus_graph_opt with
+		      | Some _ when not graph_index0#is_empty -> Some (sparql_genvar#new_var "graph")
+		      | _ -> None in
+	            let pat_values =
+		      match graph_var_opt with
+		      | None ->
+		         Sparql.(values_tuple
+			           (List.map Sparql.var key_vars)
+			           (List.map
+				      (fun (key,_) -> List.map Sparql.term key)
+				      samples))
+		      | Some gv ->
+		         Sparql.(values_tuple
+			           (List.map Sparql.var (gv::key_vars))
+			           (List.concat
+				      (List.map
+				         (fun (key,(_, graph_index)) ->
+				           (graph_index : Rdf.term int_index)#filter_map_list
+				             (fun (tg,_) -> Some (List.map Sparql.term (tg::key) : Sparql.term list)))
+				         samples))) in
+	            let pat_incr =
+		      let pat = make_pattern ~hook (List.map (fun v -> Rdf.Var v) key_vars) in
+		      if pat = Sparql.empty then pat
+                      else
+                        match graph_var_opt with
+		        | None -> pat
+		        | Some gv -> Sparql.(graph (var gv) pat) in
+                    if pat_incr = Sparql.empty then pat_incr
+                    else
+	              Sparql.(subquery
+			        (select
+			           ~distinct:true
+			           ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
+			           ~limit:(config_max#value * min 10 nb_samples)
+			           (join [pat_values; pat_incr]))) in
+               if gp = Sparql.empty
+               then Sparql.((empty :> string))
+               else Sparql.((select
+		               ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
+		               (join (gp :: List.map (fun v -> pattern_hidden_URIs v) lv))
+		             :> string))
+          in
+          let sparql_class =
+	    make_sparql (nb_samples_term, samples_term)
+	      config_max_classes Lisql2sparql.filter_constr_class
+	      Lisql2sparql.WhichClass.pattern_vars
+	      (fun ?hook lt ->
+		assert (lt<>[]);
+		Lisql2sparql.WhichClass.pattern_of_term ?hook (Some (List.hd lt))) in
+          let () = Jsutils.firebug ("CLASSES: " ^ sparql_class) in (* TEST *)
+          let sparql_prop =
+	    if Rdf.config_wikidata_mode#value && config_nary_relations#value
+	    then ""
+	    else make_sparql (nb_samples_term, samples_term)
+		   config_max_properties Lisql2sparql.filter_constr_property
+		   Lisql2sparql.WhichProp.pattern_vars
+		   (fun ?hook lt ->
 		     assert (lt<>[]);
-		     Lisql2sparql.WhichClass.pattern_of_term ?hook (Some (List.hd lt))) in
-      let sparql_prop =
-	if Rdf.config_wikidata_mode#value && config_nary_relations#value
-	then ""
-	else make_sparql (nb_samples_term, samples_term)
-			 config_max_properties Lisql2sparql.filter_constr_property
-			 Lisql2sparql.WhichProp.pattern_vars
-			 (fun ?hook lt ->
-			  assert (lt<>[]);
-			  Lisql2sparql.WhichProp.pattern_of_term ?hook (Some (List.hd lt))) in
-      let sparql_pred =
-	if config_nary_relations#value
-	then make_sparql (nb_samples_term, samples_term)
-			 config_max_properties Lisql2sparql.filter_constr_property
-			 Lisql2sparql.WhichPred.pattern_vars
-			 (fun ?hook lt ->
-			  assert (lt<>[]);
-			  Lisql2sparql.WhichPred.pattern_of_term ?hook (Some (List.hd lt)))
-	else "" in
-      let max_value_arg, sparql_arg =
-	match s_sparql.Lisql2sparql.focus_pred_args_opt with
-	| None
-	| Some ((Lisql.Class _ | Lisql.Prop _),_) -> None, "" (* non-reified predicates *)
-	| Some (pred,args) ->
-	   let nb_samples_arg, samples_arg =
-	     focus_pred_args_index#sample_list config_max_increment_samples#value
-					       (fun lt_v -> lt_v) in
-	   Some nb_samples_arg,
-	   make_sparql (nb_samples_arg, samples_arg)
-		       config_max_properties Lisql2sparql.filter_constr_property
-		       Lisql2sparql.WhichArg.pattern_vars
-		       (fun ?hook lt ->
-			let args = List.map2 (fun (arg,_) t -> (arg,t)) args lt in
-			Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
-      Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
-	(function
-	  | [results_class; results_prop; results_pred; results_arg] ->
-	     process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
-	  | _ -> assert false)
-	(fun _ -> ajax_intent ())
-    in
-    if focus_term_index#is_empty then
-      if some_focus_term_is_blank then ajax_intent ()
-      else if not focus_pred_args_index#is_empty then ajax_extent ()
-      else self#ajax_index_properties_init ~freq0:true constr elt k
-    else
-      if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
-      then ajax_intent ()
-      else ajax_extent ()
+		     Lisql2sparql.WhichProp.pattern_of_term ?hook (Some (List.hd lt))) in
+          let () = Jsutils.firebug ("PROPERTIES: " ^ sparql_prop) in (* TEST *)
+          let sparql_pred =
+	    if config_nary_relations#value
+	    then make_sparql (nb_samples_term, samples_term)
+		   config_max_properties Lisql2sparql.filter_constr_property
+		   Lisql2sparql.WhichPred.pattern_vars
+		   (fun ?hook lt ->
+		     assert (lt<>[]);
+		     Lisql2sparql.WhichPred.pattern_of_term ?hook (Some (List.hd lt)))
+	    else "" in
+          let max_value_arg, sparql_arg =
+	    match s_sparql.Lisql2sparql.focus_pred_args_opt with
+	    | None
+	      | Some ((Lisql.Class _ | Lisql.Prop _),_) -> None, "" (* non-reified predicates *)
+	    | Some (pred,args) ->
+	       let nb_samples_arg, samples_arg =
+	         focus_pred_args_index#sample_list config_max_increment_samples#value
+		   (fun lt_v -> lt_v) in
+	       Some nb_samples_arg,
+	       make_sparql (nb_samples_arg, samples_arg)
+		 config_max_properties Lisql2sparql.filter_constr_property
+		 Lisql2sparql.WhichArg.pattern_vars
+		 (fun ?hook lt ->
+		   let args = List.map2 (fun (arg,_) t -> (arg,t)) args lt in
+		   Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
+          Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
+	    (function
+	     | [results_class; results_prop; results_pred; results_arg] ->
+	        process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
+	     | _ -> assert false)
+	    (fun _ -> ajax_intent ())
+        in
+        if focus_term_index#is_empty then
+          if some_focus_term_is_blank then ajax_intent ()
+          else if not focus_pred_args_index#is_empty then ajax_extent ()
+          else self#ajax_index_properties_init ~freq0:true constr elt k
+        else
+          if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
+          then ajax_intent ()
+          else ajax_extent ()
       end
 
   method index_modifiers : incr_freq_index =

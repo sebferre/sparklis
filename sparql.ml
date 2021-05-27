@@ -290,15 +290,20 @@ let join (lp : _ any_pattern list) : pattern =
 let union (lp : _ any_pattern list) : pattern =
   let lp = List.filter ((<>) empty) lp in
   match Common.list_to_set lp with
-    | [] -> invalid_arg "Sparql.union: empty list"
-    | [p] -> p
-    | p::lp1 -> "{ " ^< indent 2 p ^^ " }\nUNION " ^< concat "\nUNION " (List.map (fun p -> "{ " ^< indent 8 p ^> " }") lp1)
+  | [] -> empty (* WARNING: should mean no solution *)
+  | [p] -> p
+  | p::lp1 -> "{ " ^< indent 2 p ^^ " }\nUNION " ^< concat "\nUNION " (List.map (fun p -> "{ " ^< indent 8 p ^> " }") lp1)
 let optional (p : _ any_pattern) : pattern =
-  if p = empty then invalid_arg "Sparql.optional: empty pattern";
-  "OPTIONAL { " ^< indent 11 p ^> " }"
-let exists (p : _ any_pattern) : expr = "EXISTS { " ^< indent 9 p ^> " }"
-let not_exists (p : _ any_pattern) : expr = "NOT EXISTS { " ^< indent 13 p ^> " }"
-let graph (g : _ any_term) (p : _ any_pattern) : pattern = "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
+  if p = empty then empty (*invalid_arg "Sparql.optional: empty pattern" *)
+  else "OPTIONAL { " ^< indent 11 p ^> " }"
+let exists (p : _ any_pattern) : expr =
+  if p = empty then sparql "true"
+  else "EXISTS { " ^< indent 9 p ^> " }"
+let not_exists (p : _ any_pattern) : expr =
+  if p = empty then sparql "false"
+  else "NOT EXISTS { " ^< indent 13 p ^> " }"
+let graph (g : _ any_term) (p : _ any_pattern) : pattern =
+  "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
 
 let subquery (q : _ any_query) : pattern = "{ " ^< indent 2 q ^> " }"
 
