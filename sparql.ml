@@ -205,7 +205,7 @@ let expr_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " IN (" ^< con
 let expr_not_in (e : _ any_expr) (le : _ any_expr list) : expr = e ^^ " NOT IN (" ^< concat ", " le ^> ")"
 let expr_coalesce (le : _ any_expr list) : expr = "COALESCE(" ^< concat ", " le ^> ")"
 
-let conv_numeric (e : _ any_expr) : expr = expr_func "xsd:double" [e]
+let conv_numeric (e : _ any_expr) : expr = expr_func "xsd:double" [expr_func "str" [e]]
 
 let log_true : expr = sparql "true"
 let log_false : expr = sparql "false"
