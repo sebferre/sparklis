@@ -813,7 +813,7 @@ object (self)
   val mutable focus_term_index : (Rdf.term, Rdf.term) nested_int_index = new nested_int_index (* used when some focus term *)
   val mutable focus_graph_index : Rdf.term int_index = new int_index (* used when no focus_term but some focus graph *)
   val mutable focus_pred_args_index : (Rdf.term list, Rdf.term) nested_int_index = new nested_int_index (* used when some focus-pred-args *)
-  val mutable some_focus_term_is_blank : bool = false
+  val mutable some_focus_term_is_not_queryable : bool = false
 
   method filter_type : Lisql.filter_type =
     let has_IRI =
@@ -859,10 +859,15 @@ object (self)
     (* re-initializing *)
     let filter_term =
       function
-      | Rdf.URI uri when String.contains uri ' ' -> false
-      (* URIs with spaces inside are not allowed in SPARQL queries *)
-      | Rdf.Bnode _ -> some_focus_term_is_blank <- true ; false
-      (* blank nodes are not allowed in SPARQL queries *)
+      | Rdf.URI uri when String.contains uri ' ' ->
+        (* URIs with spaces inside are not allowed in SPARQL queries *)
+         some_focus_term_is_not_queryable <- true; false
+      | Rdf.Bnode _ ->
+        (* blank nodes are not allowed in SPARQL queries *)
+         some_focus_term_is_not_queryable <- true; false
+      | (Rdf.TypedLiteral (s,_) | Rdf.PlainLiteral (s,_)) when String.length s > 100 ->
+        (* long literals can clutter term suggestions and queries retrieving concept suggestions *)
+         some_focus_term_is_not_queryable <- true; false
       | _ -> true in
     let mapfilter_term_opt =
       function
@@ -875,7 +880,7 @@ object (self)
     focus_term_index <- new nested_int_index;
     focus_graph_index <- new int_index;
     focus_pred_args_index <- new nested_int_index;
-    some_focus_term_is_blank <- false;
+    some_focus_term_is_not_queryable <- false;
     (* computing results and derived attributes *)
     match sparql_opt with
     | None ->
@@ -1051,7 +1056,11 @@ object (self)
       k ~partial:false (Some (new incr_freq_index))
     else if focus_descr#unconstrained then
       self#ajax_index_terms_init constr elt k
-    else if focus_term_index#is_empty && not (Lisql.is_undef_expr_focus focus) then (* typically, when no match for query+constr, then show constr match with freq=0 *)
+    else if focus_term_index#is_empty
+            (* except when it is expected to have an empty term index *)
+            && not (some_focus_term_is_not_queryable
+                    || Lisql.is_undef_expr_focus focus) then
+      (* typically, when no match for query+constr, then show constr match with freq=0 *)
       self#ajax_index_terms_init ~freq0:true constr elt k
     else begin
       let max_value = None (*Some self#results_nb*) in
@@ -1728,7 +1737,7 @@ object (self)
 	    (fun _ -> ajax_intent ())
         in
         if focus_term_index#is_empty then
-          if some_focus_term_is_blank then ajax_intent ()
+          if some_focus_term_is_not_queryable then ajax_intent ()
           else if not focus_pred_args_index#is_empty then ajax_extent ()
           else self#ajax_index_properties_init ~freq0:true constr elt k
         else
