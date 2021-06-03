@@ -246,10 +246,13 @@ let config =
       (config_short_permalink :> Config.input);
       (config_auto_filtering :> Config.input); ] in
 object (self)
-  method set_endpoint (endpoint : string) : unit =
+  val mutable endpoint : string = ""
+  method get_endpoint : string = endpoint
+  method set_endpoint (url : string) : unit =
     Sparql_endpoint.config_proxy#set_value false; (* no proxy by default *)
-    List.iter (fun input -> input#set_endpoint endpoint) config_inputs;
-    Jsutils.yasgui#set_endpoint endpoint
+    List.iter (fun input -> input#set_endpoint url) config_inputs;
+    Jsutils.yasgui#set_endpoint url;
+    endpoint <- url
 
   method get_permalink : (string * string) list =
     List.concat (List.map (fun input -> input#get_permalink) config_inputs)
@@ -1256,8 +1259,9 @@ object (self)
     let p = present#new_place url focus in
     p#set_navigation (self :> navigation);
     self#push p;
-    Ontology.sync_endpoint (* loading ontological facts *)
-      (fun () -> self#refresh_present)
+    Ontology.sync_endpoint (fun () -> (* loading ontological facts *)
+        self#refresh_present;
+        Config.sparklis_extension##afterEndpointChange)
 
   method update_focus ~push_in_history f =
     match f present#lis#focus with
@@ -1304,7 +1308,15 @@ object (self)
     self#refresh_present
 end
 
-  
+
+(* JS API *)
+
+let make_js_sparklis (history : history) =
+  object%js (self)
+    method endpoint : js_string t = string config#get_endpoint
+    method permalink : js_string t = string history#present#permalink
+  end
+
 (* main *)
 
 let translate () =
@@ -1326,6 +1338,9 @@ let translate () =
 
 let initialize endpoint focus =
   let history = new history endpoint focus in
+  (* exporting the JS API *)
+  Jsutils.firebug "Exporting JS API as global variable 'sparklis'";
+  Js.export "sparklis" (make_js_sparklis history);
   
   (* setting event callbacks *)
   jquery "#button-home" (onclick (fun elt ev -> history#home));

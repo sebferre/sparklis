@@ -198,3 +198,13 @@ object (self)
 	select)
   method reset = self#set_select init_v
 end
+
+  
+(* JS object for Sparklis extension *)
+
+let sparklis_extension =
+  object%js (self)
+    method afterEndpointChange = ()
+  end
+let () = Js.export "sparklis_extension" sparklis_extension
+  
