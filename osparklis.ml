@@ -1260,8 +1260,7 @@ object (self)
     p#set_navigation (self :> navigation);
     self#push p;
     Ontology.sync_endpoint (fun () -> (* loading ontological facts *)
-        self#refresh_present;
-        Config.sparklis_extension##afterEndpointChange)
+        self#refresh_present)
 
   method update_focus ~push_in_history f =
     match f present#lis#focus with

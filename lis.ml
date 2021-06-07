@@ -898,6 +898,11 @@ object (self)
     | Some sparql ->
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
+            Jsutils.firebug "calling hookResults ?";
+            let res = Config.apply_hook
+                        Config.sparklis_extension##.hookResults
+                        Sparql_endpoint.Js.results_map
+                        res in
 	    results <- res;
 	    results_shape <- results_shape_of_deps
 			       s_sparql.Lisql2sparql.deps
@@ -1694,7 +1699,6 @@ object (self)
 	      (fun ?hook lt ->
 		assert (lt<>[]);
 		Lisql2sparql.WhichClass.pattern_of_term ?hook (Some (List.hd lt))) in
-          let () = Jsutils.firebug ("CLASSES: " ^ sparql_class) in (* TEST *)
           let sparql_prop =
 	    if Rdf.config_wikidata_mode#value && config_nary_relations#value
 	    then ""
@@ -1704,7 +1708,6 @@ object (self)
 		   (fun ?hook lt ->
 		     assert (lt<>[]);
 		     Lisql2sparql.WhichProp.pattern_of_term ?hook (Some (List.hd lt))) in
-          let () = Jsutils.firebug ("PROPERTIES: " ^ sparql_prop) in (* TEST *)
           let sparql_pred =
 	    if config_nary_relations#value
 	    then make_sparql (nb_samples_term, samples_term)

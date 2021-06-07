@@ -13,7 +13,8 @@ install-dev:
 	cp -r webapp/* /local/ferre/web/ferre/sparklis-dev
 
 pack: webapp/osparklis.js
-	zip -r sparklis-webapp.zip webapp
+	rm -f sparklis-webapp.zip
+	zip -j sparklis-webapp.zip webapp/osparklis.html webapp/osparklis.css webapp/osparklis.js webapp/examples.html webapp/release_notes.html webapp/irisa.jpg webapp/semlis.png webapp/UR1.png webapp/youtube.jpg webapp/example_extension.js
 
 clean:
 	rm -f *.cm[ioax]

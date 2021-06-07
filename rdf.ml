@@ -97,6 +97,48 @@ type term =
   | Bnode of string
   | Var of var
 
+module Js =
+  struct
+    open Js_of_ocaml
+    open Jsutils
+
+    include Js
+         
+    let term =
+      function
+      | URI uri -> Inject.(obj [| "type", string "uri";
+                                  "uri", string uri |])
+      | Number (f,s,dt) -> Inject.(obj [| "type", string "number";
+                                          "number", float f;
+                                          "str", string s;
+                                          "datatype", string dt |])
+      | TypedLiteral (s,dt) -> Inject.(obj [| "type", string "typedLiteral";
+                                              "str", string s;
+                                              "datatype", string s |])
+      | PlainLiteral (s,lang) -> Inject.(obj [| "type", string "plainLiteral";
+                                                "str", string s;
+                                                "lang", string lang |])
+      | Bnode id -> Inject.(obj [| "type", string "bnode";
+                                   "id", string id |])
+      | Var v -> Inject.(obj [| "type", string "var";
+                                "name", string v |])
+               
+    let to_term (js : _ t) : term (* unsafe *) =
+      let typ = Extract.get_string js "type" in
+      match typ with
+      | "uri" -> Extract.(URI (Extract.get_string js "uri"))
+      | "number" -> Extract.(Number (get_float js "number",
+                                     get_string js "str",
+                                     get_string js "datatype"))
+      | "typedLiteral" -> Extract.(TypedLiteral (get_string js "str",
+                                                 get_string js "datatype"))
+      | "plainLiteral" -> Extract.(PlainLiteral (get_string js "str",
+                                                 get_string js "lang"))
+      | "bnode" -> Extract.(Bnode (get_string js "id"))
+      | "var" -> Extract.(Var (get_string js "name"))
+      | typ -> Extract.raise_error_wrong_type "RDF term" js
+  end
+         
 let term_is_var = function
   | Var _ -> true
   | _ -> false

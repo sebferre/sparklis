@@ -22,6 +22,8 @@ open Js_of_ocaml_lwt
 open Js
 open XmlHttpRequest
 
+let raise_error msg = raise_js_error (new%js error_constr (string msg))
+   
 let alert msg = Dom_html.window##alert (string msg)
 
 let confirm msg = to_bool (Dom_html.window##confirm (string msg))
@@ -225,6 +227,9 @@ let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) : un
 
 (* helping injection of OCaml values to JSON values *)
 
+let string_of_js (js : _ t) : string =
+  to_string (_JSON##stringify js)
+  
 module Inject =
 struct
   let bool b = Unsafe.inject (bool b)
@@ -235,7 +240,75 @@ struct
   let obj ar = Unsafe.obj ar
 end
 
+module Extract =
+  struct
+    let str_boolean = string "boolean"
+    let str_number = string "number"
+    let str_string = string "string"
+    
+    let raise_error_wrong_type expected js =
+      raise_error ("Expected a " ^ expected ^ " but found: " ^ string_of_js js)
+    let raise_error_null_property name js =
+      raise_error ("Property " ^ name ^ " is undefined or null in: " ^ string_of_js js)
+
+    let as_bool (js : _ t) : bool (* unsafe *) =
+      if Js.typeof js = str_boolean
+      then Js.to_bool js
+      else raise_error_wrong_type "boolean" js
+    let as_int (js : _ t) : int (* unsafe *) =
+      if Js.typeof js = str_number
+      then
+        try int_of_float (Js.float_of_number js)
+        with _ -> raise_error_wrong_type "integer" js
+      else raise_error_wrong_type "number" js
+    let as_float (js : _ t) : float (* unsafe *) =
+      if Js.typeof js = str_number
+      then Js.float_of_number js
+      else raise_error_wrong_type "number" js
+    let as_string (js : _ t) : string (* unsafe *) =
+      if Js.typeof js = str_string
+      then Js.to_string js
+      else raise_error_wrong_type "string" js
+    let as_object (js : _ t) : _ t (* unsafe *) =
+      if Js.instanceof js Unsafe.global##.Object
+      then js
+      else raise_error_wrong_type "object" js
+    let as_array (js : _ t) : _ array (* unsafe *) =
+      if Js.instanceof js Unsafe.global##.Array
+      then Js.to_array js
+      else raise_error_wrong_type "array" js
+
+    let as_option (js : _ opt) : _ option =
+      Js.Opt.to_option js
+                   
+    let get_bool (js : _ t) (name : string) : bool (* unsafe *) =
+      let v = Unsafe.get js (string name) in
+      if v = Js.null then raise_error_null_property name js
+      else as_bool v           
+    let get_int (js : _ t) (name : string) : int (* unsafe *) =
+      let v = Unsafe.get js (string name) in
+      if v = Js.null then raise_error_null_property name js
+      else as_int v
+    let get_float (js : _ t) (name : string) : float (* unsafe *) =
+      let v = Unsafe.get js (string name) in
+      if v = Js.null then raise_error_null_property name js
+      else as_float v
+    let get_string (js : _ t) (name : string) : string (* unsafe *) =
+      let v = Unsafe.get js (string name) in
+      if v = Js.null then raise_error_null_property name js
+      else as_string v
+    let get_object (js : _ t) (name : string) : _ t (* unsafe *) =
+      let o = Unsafe.get js (string name) in
+      if o = Js.null then raise_error_null_property name js
+      else as_object o
+    let get_array (js : _ t) (name : string) : _ array (* unsafe *) =
+      let a = Unsafe.get js (string name) in
+      if a = Js.null then raise_error_null_property name js
+      else as_array a
+
+  end
   
+         
 (* YASGUI bindings *)
 
 let opt_iter (opt : 'a option) (k : 'a -> unit) : unit =

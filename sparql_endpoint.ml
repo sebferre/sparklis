@@ -41,6 +41,54 @@ type results =
       bindings : binding list;
     }
 
+module Js =
+  struct
+    include Js
+          
+    let binding binding =
+      binding
+      |> Array.map (function
+             | None -> Js.null
+             | Some t -> Js.some (Rdf.Js.term t))
+      |> Js.array
+    let to_binding (js : _ Js.t) : binding (* unsafe *) =
+      let ar = Extract.as_array js in
+      Array.map
+        (fun js1_opt ->
+          match Extract.as_option js1_opt with
+          | None -> None
+          | Some js1 -> Some (Rdf.Js.to_term js1))
+        ar
+  
+    let results (res : results) : _ Js.t =
+      Inject.(obj [|
+                  "columns",
+                  res.vars
+                  |> List.sort (fun (_,i) (_,j) -> Stdlib.compare i j)
+                  |> List.map (fun (v,i) -> string v)
+                  |> Array.of_list
+                  |> array;
+              
+                  "rows",
+                  res.bindings
+                  |> Array.of_list
+                  |> Array.map binding
+                  |> array
+                |])
+
+    let to_results (js : _ Js.t) : results (* unsafe *) =
+      let js = Extract.as_object js in
+      let cols = Extract.get_array js "columns" in
+      let ar = Array.mapi (fun i js_s -> (Extract.as_string js_s, i)) cols in
+      let dim, vars = Array.length ar, Array.to_list ar in
+      let rows = Extract.get_array js "rows" in
+      let ar = Array.map to_binding rows in
+      let length, bindings = Array.length ar, Array.to_list ar in
+      { dim; vars; length; bindings }
+
+    let results_map : results Config.hook_map = { inject = results; extract = to_results }
+  end
+  
 let empty_results = { dim=0; vars=[]; length=0; bindings=[]; }
 let unit_results = { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
 
