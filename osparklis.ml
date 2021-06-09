@@ -446,7 +446,6 @@ object (self)
     | None -> k (process None)
     | Some limit ->
        lis#ajax_get_more_results ~limit (norm_constr term_constr) []
-         ~k_sparql:(fun sparql_opt -> ())
          ~k_results:(fun sparql_opt -> k (process (Some limit)))
          ~k_trivial:(fun () -> k (process (Some limit)))
     
@@ -908,14 +907,6 @@ object (self)
 	         let incr_elt = Dom_html.element dom_elt in
 		 apply_incr incr_elt))))))))
 
-  method private refresh_sparql =
-    function
-    | None ->
-       Jsutils.yasgui#set_query "SELECT * WHERE { }"
-    | Some sparql ->
-       let sparql_with_prefixes = Sparql.prologue#add_declarations_to_query sparql in
-       Jsutils.yasgui#set_query sparql_with_prefixes
-	   
   method refresh =
     Dom_html.window##.history##replaceState Js.null (string "") (Js.some (string permalink));
     Dom_html.document##.body##.scrollTop := document_scroll;
@@ -930,7 +921,6 @@ object (self)
 	let term_constr = term_constr in (* BECAUSE state term_constr can change any time *)
 	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
-	  ~k_sparql:self#refresh_sparql
 	  ~k_results:
 	  (function
 	  | None ->
@@ -958,7 +948,6 @@ object (self)
       jquery "#list-results" (fun elt_res ->
 	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
-	  ~k_sparql:self#refresh_sparql
 	  ~k_results:
 	  (function
 	  | None ->
@@ -979,7 +968,6 @@ object (self)
 	   (fun elt_res ->
 	    lis#ajax_get_more_results
 	      (norm_constr term_constr) [elt_res]
-	      ~k_sparql:self#refresh_sparql
 	      ~k_results:(fun _ -> k ())
               ~k_trivial:(fun () -> ()))
 	   

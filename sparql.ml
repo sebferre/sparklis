@@ -72,6 +72,8 @@ type 'a any_query = ([<query_kind] as 'a) sparql
 			
 type converter = expr -> expr
 
+(*let js_sparql_map : query Jsutils.js_map = Jsutils.(js_map `String)*)
+
 let split_uri (uri : Rdf.uri) : (string * string) option (* namespace, local name *) =
   try match Regexp.search (Regexp.regexp "[A-Za-z0-9_]+$") uri 0 with
     | Some (i,res) ->

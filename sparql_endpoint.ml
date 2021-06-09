@@ -390,17 +390,18 @@ let cache_eval (endpoint : string) (sparql : string) : results option =
   | None -> None
 
 (* query evaluation, by AJAX call if required *)
-let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_results_to_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(update_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
  if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
  then k1 empty_results
  else
   let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
+  let () = if update_yasgui then Jsutils.yasgui#set_query prologue_sparql in
   match cache#lookup real_endpoint prologue_sparql with
     | Some (response_text, results) ->
-      if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
-      k1 results
+       if update_yasgui then Jsutils.yasgui#set_response response_text;
+       k1 results
     | None ->
       let encode_fields l =
 	String.concat "&"
@@ -466,7 +467,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(send_res
 			  | None -> None
 			  | Some txt ->
 			     let response_text = to_string txt in
-			     if send_results_to_yasgui then Jsutils.yasgui#set_response response_text;
+			     if update_yasgui then Jsutils.yasgui#set_response response_text;
 			     Some (response_text, results_of_xml doc)
 			) in
 		  ( match results_opt with

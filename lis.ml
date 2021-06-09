@@ -896,7 +896,7 @@ object (self)
 	| None -> () ); *)
 	k_results None
     | Some sparql ->
-	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
+	Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
             let res = Config.apply_hook
                         Config.sparklis_extension##.hookResults
@@ -941,10 +941,8 @@ object (self)
 	  (fun code -> k_results (Some sparql))
 
   method ajax_sparql_results term_constr elts
-			     ~(k_sparql : string option -> unit)
-			     ~(k_results : string option -> unit) =
+	   ~(k_results : string option -> unit) =
     self#define_sparql term_constr ~limit:config_max_results#value;
-    k_sparql sparql_opt;
     self#ajax_results elts ~k_results
 
   method results = results
@@ -958,9 +956,8 @@ object (self)
   method results_slides k = slides_of_results results k
 
   method ajax_get_more_results ?limit term_constr elts
-			       ~(k_sparql : string option -> unit)
-			       ~(k_results : string option -> unit)
-                               ~(k_trivial : unit -> unit) =
+	   ~(k_results : string option -> unit)
+           ~(k_trivial : unit -> unit) =
     let limit =
       match limit with
       | Some n -> n
@@ -969,12 +966,11 @@ object (self)
       begin
 	max_results <- limit;
 	self#define_sparql term_constr ~limit;
-	k_sparql sparql_opt;
 	match sparql_opt with
 	| None -> ()
 	| Some sparql ->
 	   Sparql_endpoint.ajax_in
-	     ~send_results_to_yasgui:true
+	     ~update_yasgui:true
 	     elts ajax_pool endpoint sparql
 	     (fun res -> results <- res; k_results (Some sparql))
 	     (fun code -> ())
