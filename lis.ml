@@ -898,10 +898,9 @@ object (self)
     | Some sparql ->
 	Sparql_endpoint.ajax_in ~send_results_to_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
-            Jsutils.firebug "calling hookResults ?";
             let res = Config.apply_hook
                         Config.sparklis_extension##.hookResults
-                        Sparql_endpoint.Js.results_map
+                        Sparql_endpoint.js_results_map
                         res in
 	    results <- res;
 	    results_shape <- results_shape_of_deps

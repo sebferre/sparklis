@@ -204,10 +204,8 @@ end
 
 type hook = Unsafe.top optdef (* optionally defined ('a -> 'a) functions on JS objects, which can be used to add side effects and to modify the data back into Sparklis *)
 
-type 'a hook_map = { inject : 'a -> Unsafe.any; extract : Unsafe.any -> 'a }
-          
 (* apply a hook, if defined, to some Sparklis data [x], given functions for injection to and extraction from JS objects. *) 
-let apply_hook (hook : hook) (map : 'a hook_map) (x : 'a) : 'a =
+let apply_hook (hook : hook) (map : 'a js_map) (x : 'a) : 'a =
   Optdef.case hook
     (fun () -> x) (* identity if hook undefined *)
     (fun callback ->
@@ -223,4 +221,3 @@ let sparklis_extension =
     val mutable hookResults : hook = undefined (* data : Sparql_endpoint.results *)
   end
 let () = Js.export "sparklis_extension" sparklis_extension
-

@@ -232,12 +232,13 @@ let string_of_js (js : _ t) : string =
   
 module Inject =
 struct
-  let bool b = Unsafe.inject (bool b)
-  let int i = Unsafe.inject i
-  let float f = Unsafe.inject f
-  let string s = Unsafe.inject (string s)
-  let array ar = Unsafe.inject (array ar)
-  let obj ar = Unsafe.obj ar
+  let null : Unsafe.any = Unsafe.inject Js.null
+  let bool (b : bool) : Unsafe.any = Unsafe.inject (bool b)
+  let int (i : int) : Unsafe.any = Unsafe.inject i
+  let float (f : float) : Unsafe.any = Unsafe.inject f
+  let string (s : string) : Unsafe.any = Unsafe.inject (string s)
+  let array (ar : Unsafe.any array) : Unsafe.any = Unsafe.inject (array ar)
+  let obj (ar : (string * Unsafe.any) array) : Unsafe.any = Unsafe.obj ar
 end
 
 module Extract =
@@ -250,65 +251,297 @@ module Extract =
       raise_error ("Expected a " ^ expected ^ " but found: " ^ string_of_js js)
     let raise_error_null_property name js =
       raise_error ("Property " ^ name ^ " is undefined or null in: " ^ string_of_js js)
+    let raise_error_invalid_index pos js =
+      raise_error ("Index " ^ string_of_int pos ^ " is undefined or null in: " ^ string_of_js js)
 
-    let as_bool (js : _ t) : bool (* unsafe *) =
+    let as_bool (js : Unsafe.any) : bool (* unsafe *) =
       if Js.typeof js = str_boolean
-      then Js.to_bool js
+      then Js.to_bool (Unsafe.coerce js)
       else raise_error_wrong_type "boolean" js
-    let as_int (js : _ t) : int (* unsafe *) =
+    let as_int (js : Unsafe.any) : int (* unsafe *) =
       if Js.typeof js = str_number
       then
-        try int_of_float (Js.float_of_number js)
+        try int_of_float (Js.float_of_number (Unsafe.coerce js))
         with _ -> raise_error_wrong_type "integer" js
       else raise_error_wrong_type "number" js
-    let as_float (js : _ t) : float (* unsafe *) =
+    let as_float (js : Unsafe.any) : float (* unsafe *) =
       if Js.typeof js = str_number
-      then Js.float_of_number js
+      then Js.float_of_number (Unsafe.coerce js)
       else raise_error_wrong_type "number" js
-    let as_string (js : _ t) : string (* unsafe *) =
+    let as_string (js : Unsafe.any) : string (* unsafe *) =
       if Js.typeof js = str_string
-      then Js.to_string js
+      then Js.to_string (Unsafe.coerce js)
       else raise_error_wrong_type "string" js
-    let as_object (js : _ t) : _ t (* unsafe *) =
+    let as_object (js : Unsafe.any) : _ t (* unsafe *) =
       if Js.instanceof js Unsafe.global##.Object
       then js
       else raise_error_wrong_type "object" js
-    let as_array (js : _ t) : _ array (* unsafe *) =
+    let as_array (js : Unsafe.any) : _ array (* unsafe *) =
       if Js.instanceof js Unsafe.global##.Array
-      then Js.to_array js
+      then Js.to_array (Unsafe.coerce js)
       else raise_error_wrong_type "array" js
+    let as_option (js : Unsafe.any) : _ option (* unsafe *) =
+      if some js = null
+      then None
+      else Some js
 
-    let as_option (js : _ opt) : _ option =
-      Js.Opt.to_option js
-                   
-    let get_bool (js : _ t) (name : string) : bool (* unsafe *) =
+    let get (js : Unsafe.any) (name : string) : _ t (* unsafe *) =
       let v = Unsafe.get js (string name) in
       if v = Js.null then raise_error_null_property name js
-      else as_bool v           
-    let get_int (js : _ t) (name : string) : int (* unsafe *) =
-      let v = Unsafe.get js (string name) in
-      if v = Js.null then raise_error_null_property name js
-      else as_int v
-    let get_float (js : _ t) (name : string) : float (* unsafe *) =
-      let v = Unsafe.get js (string name) in
-      if v = Js.null then raise_error_null_property name js
-      else as_float v
-    let get_string (js : _ t) (name : string) : string (* unsafe *) =
-      let v = Unsafe.get js (string name) in
-      if v = Js.null then raise_error_null_property name js
-      else as_string v
-    let get_object (js : _ t) (name : string) : _ t (* unsafe *) =
-      let o = Unsafe.get js (string name) in
-      if o = Js.null then raise_error_null_property name js
-      else as_object o
-    let get_array (js : _ t) (name : string) : _ array (* unsafe *) =
-      let a = Unsafe.get js (string name) in
-      if a = Js.null then raise_error_null_property name js
-      else as_array a
-
+      else v
+    let get_index (js : Unsafe.any) (pos : int) : _ t (* unsafe *) =
+      let v = Unsafe.get js pos in
+      if v = Js.null then raise_error_invalid_index pos js
+      else v
   end
-  
-         
+
+type 'a js_map =
+  { spec : js_map_spec;
+    inject : 'a -> Unsafe.any;
+    extract : Unsafe.any -> 'a }  
+and js_map_spec =
+  [ `Bool
+  | `Int
+  | `Float
+  | `String
+  | `List of js_map_spec
+  | `Array of js_map_spec
+  | `Tuple of js_map_spec array
+  | `Record of (string * js_map_spec) array
+  | `Sum of (string * (string * js_map_spec) array) array
+  | `Option of js_map_spec
+  | `Custom of Obj.t js_map ]
+
+let rec string_of_js_map_spec = function
+  | `Bool -> "bool"
+  | `Int -> "int"
+  | `Float -> "float"
+  | `String -> "string"
+  | `List spec -> string_of_js_map_spec spec ^ " list"
+  | `Array spec -> string_of_js_map_spec spec ^ " array"
+  | `Tuple fields ->
+     "(" ^ String.concat " * "
+             (Array.to_list (Array.map string_of_js_map_spec fields)) ^ ")"
+  | `Record fields ->
+     "{" ^ String.concat "; "
+             (Array.to_list
+                (Array.map
+                   (fun (name,spec) ->
+                     name ^ ": " ^ string_of_js_map_spec spec)
+                   fields)) ^ "}"
+  | `Sum constructors ->
+     "[" ^ String.concat " | "
+             (Array.to_list
+                (Array.map
+                   (fun (constr,fields) ->
+                     constr ^ (if fields = [| |] then ""
+                               else " {" ^ string_of_js_map_spec (`Record fields) ^ "}"))
+                   constructors)) ^ "]"
+  | `Option spec -> string_of_js_map_spec spec ^ " option"
+  | `Custom { spec } -> string_of_js_map_spec spec
+
+exception InconsistentMapSpec
+
+let raise_inconsistent_map_spec spec r =
+  Firebug.console##log_4 (string "inconsistent js_map_spec") (string (string_of_js_map_spec spec)) (string "on") r;
+  raise InconsistentMapSpec
+                               
+let rec js_inject (spec : js_map_spec) : Obj.t -> Unsafe.any =
+  match spec with
+  | `Bool ->
+     (fun r ->
+       if Obj.is_int r then
+         Inject.bool (Obj.obj r : bool)
+       else raise_inconsistent_map_spec spec r)
+  | `Int ->
+     (fun r ->
+       if Obj.is_int r then
+         Inject.int (Obj.obj r : int)
+       else raise_inconsistent_map_spec spec r)
+  | `Float ->
+     (fun r ->
+       if Obj.is_int r then (* surprising but tested, probably means is_number in js_of_ocaml *)
+         Inject.float (Obj.obj r : float)
+       else raise_inconsistent_map_spec spec r)
+  | `String ->
+     (fun r ->
+       if Obj.is_block r && Obj.tag r = Obj.string_tag then Inject.string (Obj.obj r : string)
+       else raise_inconsistent_map_spec spec r)
+  | `List spec_elt ->
+     let inject_elt = js_inject spec_elt in
+     (fun r ->
+       if Obj.is_block r && Obj.tag r < 2 then
+         let l = (Obj.obj r : _ list) in
+         let ar = Array.of_list l in
+         let ar_r = Array.map (fun elt -> inject_elt (Obj.repr elt)) ar in
+         Inject.array ar_r
+       else raise_inconsistent_map_spec spec r)
+  | `Array spec_elt ->
+     let inject_elt = js_inject spec_elt in
+     (fun r ->
+       if Obj.is_block r && Obj.tag r = 0 then
+         let ar = (Obj.obj r : _ array) in
+         let ar_r = Array.map (fun elt -> inject_elt (Obj.repr elt)) ar in
+         Inject.array ar_r
+       else raise_inconsistent_map_spec spec r)
+  | `Tuple fields ->
+     let fields_inject =
+       Array.map
+         (fun spec_field -> js_inject spec_field)
+         fields in
+     (fun r ->
+       if Obj.is_block r && Obj.size r = Array.length fields then
+         let fields_js =
+           Array.mapi
+             (fun i inject_field ->
+               inject_field (Obj.field r i))
+             fields_inject in
+         Inject.array fields_js
+       else raise_inconsistent_map_spec spec r)
+  | `Record fields ->
+     let fields_inject =
+       Array.map
+         (fun (name,spec_field) -> name, js_inject spec_field)
+         fields in
+     (fun r ->
+       if Obj.is_block r && Obj.size r = Array.length fields then
+         let fields_js =
+           Array.mapi
+             (fun i (name,inject_field) ->
+               name, inject_field (Obj.field r i))
+             fields_inject in
+         Inject.obj fields_js
+       else raise_inconsistent_map_spec spec r)
+  | `Sum constructors ->
+     let constructors_inject =
+       Array.map
+         (fun (constr, fields) ->
+           constr,
+           Array.map
+             (fun (name, spec_field) -> name, js_inject spec_field)
+             fields)
+         constructors in
+     (fun r ->
+       if Obj.is_block r && Obj.tag r < Array.length constructors then
+         let constr, fields_inject = constructors_inject.(Obj.tag r) in
+         let fields_js =
+           Array.init (1 + Array.length fields_inject)
+             (fun i ->
+               if i = 0
+               then "type", Inject.string constr
+               else
+                 let name, inject_field = fields_inject.(i-1) in
+                 name, inject_field (Obj.field r (i-1))) in
+         Inject.obj fields_js
+       else raise_inconsistent_map_spec spec r)
+  | `Option spec_contents ->
+     let inject_contents = js_inject spec_contents in
+     (fun r ->
+       match Obj.obj r with
+       | None -> Inject.null
+       | Some x -> inject_contents (Obj.repr x))
+  | `Custom { inject } -> inject
+             
+let rec js_extract (spec : js_map_spec) : Unsafe.any -> Obj.t =
+  match spec with
+  | `Bool ->
+     (fun js -> Obj.repr (Extract.as_bool js))
+  | `Int ->
+     (fun js -> Obj.repr (Extract.as_int js))
+  | `Float ->
+     (fun js -> Obj.repr (Extract.as_float js))
+  | `String ->
+     (fun js -> Obj.repr (Extract.as_string js))
+  | `List spec_elt ->
+     let extract_elt = js_extract spec_elt in
+     (fun js ->
+       let ar_js = Extract.as_array js in
+       let ar = Array.map extract_elt ar_js in
+       let l = Array.to_list ar in
+       Obj.repr l)
+  | `Array spec_elt ->
+     let extract_elt = js_extract spec_elt in
+     (fun js ->
+       let ar_js = Extract.as_array js in
+       let ar = Array.map extract_elt ar_js in
+       Obj.repr ar)
+  | `Tuple fields ->
+     let tag = 0 in
+     let fields_extract =
+       Array.map
+         (fun spec_field -> js_extract spec_field)
+         fields in
+     (fun js ->
+       let bl = Obj.new_block tag (Array.length fields) in
+       Array.iteri
+         (fun i extract_field ->
+           Obj.set_field bl i (extract_field (Extract.get_index js i)))
+         fields_extract;
+       bl)
+  | `Record fields ->
+     let tag = 0 in
+     let fields_extract =
+       Array.map
+         (fun (name,spec_field) -> name, js_extract spec_field)
+         fields in
+     (fun js ->
+       let bl = Obj.new_block tag (Array.length fields) in
+       Array.iteri
+         (fun i (name,extract_field) ->
+           Obj.set_field bl i (extract_field (Extract.get js name)))
+         fields_extract;
+       bl)
+  | `Sum constructors ->
+     let constructors_extract =
+       Array.map
+         (fun (constr, fields) ->
+           constr,
+           Array.map
+             (fun (name, spec_field) -> name, js_extract spec_field)
+             fields)
+         constructors in
+     (fun js ->
+       let typ = Extract.(as_string (get js "type")) in
+       let tag, fields_extract =
+         let i_ref = ref 0 in
+         let f_ref = ref [| |] in
+         Array.iteri
+           (fun i (constr,fields_extract) ->
+             if constr = typ then (
+               i_ref := i; f_ref := fields_extract
+           ))
+           constructors_extract;
+       !i_ref, !f_ref in
+      let bl = Obj.new_block tag (Array.length fields_extract) in
+      Array.iteri
+        (fun i (name,extract_field) ->
+          Obj.set_field bl i (extract_field (Extract.get js name)))
+        fields_extract;
+      bl)
+  | `Option spec_contents ->
+     let extract_contents = js_extract spec_contents in
+     (fun js ->
+       let opt =
+         match Extract.as_option js with
+         | None -> None
+         | Some js_c -> Some (extract_contents js_c) in
+       Obj.repr opt)
+  | `Custom { extract } -> extract
+
+let js_map (spec : js_map_spec) : 'a js_map =
+  let inject = js_inject spec in
+  let extract = js_extract spec in
+  { spec;
+    inject = (fun x -> inject (Obj.repr x));
+    extract = (fun r -> Obj.obj (extract r)) }
+
+let js_custom_map (map : 'a js_map) : Obj.t js_map =
+  { spec = map.spec;
+    inject = (fun r -> map.inject (Obj.obj r));
+    extract = (fun js -> Obj.repr (map.extract js)) }
+let js_custom_spec map = `Custom (js_custom_map map)
+
+                       
 (* YASGUI bindings *)
 
 let opt_iter (opt : 'a option) (k : 'a -> unit) : unit =
@@ -406,8 +639,8 @@ object
       let data =
 	let col t = Inject.(obj [| "type", string t |]) in
 	let row lat long name =
-	  let cell v = Inject.(obj [| "v", float v |]) in
-	  Inject.(obj [| "c", array [| cell lat; cell long; cell (string name) |] |]) in
+	  let cell v = Inject.(obj [| "v", v |]) in
+	  Inject.(obj [| "c", array [| cell (float lat); cell (float long); cell (string name) |] |]) in
 	Inject.(obj [| 
 	  "cols", array [| col "number"; col "number"; col "string" |];
 	  "rows", array (Array.of_list (List.map (fun (lat,long,name) -> row lat long name) points)) |]) in

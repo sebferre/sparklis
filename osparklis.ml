@@ -21,7 +21,7 @@ open Js_of_ocaml_lwt
 open Js
 open Jsutils
 open Html
-
+   
 (* logging utilities *)
 
 let config_logging = new Config.boolean_input ~key:"logging" ~input_selector:"#input-logging" ~default:true ()
