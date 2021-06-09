@@ -233,6 +233,7 @@ let string_of_js (js : _ t) : string =
 module Inject =
 struct
   let null : Unsafe.any = Unsafe.inject Js.null
+  let undefined : Unsafe.any = Unsafe.inject Js.undefined
   let bool (b : bool) : Unsafe.any = Unsafe.inject (bool b)
   let int (i : int) : Unsafe.any = Unsafe.inject i
   let float (f : float) : Unsafe.any = Unsafe.inject f

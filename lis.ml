@@ -19,6 +19,22 @@
 open Js_of_ocaml
 open Js
 
+(* hooks for Sparklis extension *)
+   
+let hook_sparql (sparql : string) : string =
+  Config.apply_hook
+    Config.sparklis_extension##.hookSparql
+    Sparql.js_sparql_map
+    sparql
+
+let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
+  Config.apply_hook
+    Config.sparklis_extension##.hookResults
+    Sparql_endpoint.js_results_map
+    res
+
+(* indices *)
+    
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
 object (self)
   val mutable organized : bool = false
@@ -896,12 +912,10 @@ object (self)
 	| None -> () ); *)
 	k_results None
     | Some sparql ->
+        let sparql = hook_sparql sparql in
 	Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
-            let res = Config.apply_hook
-                        Config.sparklis_extension##.hookResults
-                        Sparql_endpoint.js_results_map
-                        res in
+            let res = hook_results res in
 	    results <- res;
 	    results_shape <- results_shape_of_deps
 			       s_sparql.Lisql2sparql.deps
@@ -969,10 +983,14 @@ object (self)
 	match sparql_opt with
 	| None -> ()
 	| Some sparql ->
+           let sparql = hook_sparql sparql in
 	   Sparql_endpoint.ajax_in
 	     ~update_yasgui:true
 	     elts ajax_pool endpoint sparql
-	     (fun res -> results <- res; k_results (Some sparql))
+	     (fun res ->
+               let res = hook_results res in
+               results <- res;
+               k_results (Some sparql))
 	     (fun code -> ())
       end
     else k_trivial ()
