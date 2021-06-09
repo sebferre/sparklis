@@ -1299,9 +1299,35 @@ end
 (* JS API *)
 
 let make_js_sparklis (history : history) =
+  let place =
+    object%js
+      method permalink : js_string t =
+        string history#present#permalink
+      method sparql : js_string opt =
+        match history#present#lis#sparql with
+        | None -> null
+        | Some s -> some (string s)
+      method results : Unsafe.any =
+        Sparql_endpoint.js_results_map.inject history#present#lis#results
+    end
+  in
   object%js (self)
-    method endpoint : js_string t = string config#get_endpoint
-    method permalink : js_string t = string history#present#permalink
+    method endpoint : js_string t =
+      string config#get_endpoint
+    method evalSparql (sparql : js_string t)
+             (callback : Unsafe.any (* results -> unit *))
+             (on_error : Unsafe.top optdef (* HTTP error code -> unit*)) : unit =
+      let ajax_pool = new Sparql_endpoint.ajax_pool in
+      Sparql_endpoint.ajax_in [] ajax_pool config#get_endpoint (to_string sparql)
+        (fun res ->
+          let js_res = Sparql_endpoint.js_results_map.inject res in
+          Unsafe.fun_call callback [|js_res|])
+        (fun code ->
+          Optdef.case on_error
+            (fun () -> ())
+            (fun f -> Unsafe.fun_call f [| Inject.int code|]))
+
+    val place = place
   end
 
 (* main *)
