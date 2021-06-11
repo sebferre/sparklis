@@ -87,10 +87,10 @@ let reset_constr : constr -> constr = function
 
 type num_conv_type = IntegerConv | DecimalConv | DoubleConv
 type num_conv = num_conv_type * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
-(*let js_num_conv_map : num_conv Jsutils.js_map =
+let js_num_conv_map : num_conv Jsutils.js_map =
   Jsutils.js_map (`Tuple [| `Enum [| "Integer"; "Decimal"; "Double" |]; `Bool |])
-let _ = Jsutils.js_map_log "num_conv:" js_num_conv_map [(`Integer,false); (`Double,true)] (* TEST *)*)
-  
+(*let _ = Jsutils.js_map_log "num_conv:" js_num_conv_map [(IntegerConv,false); (DoubleConv,true)] (* TEST *) *)
+
 type id = int
         
 type arg = S | P | O | Q of Rdf.uri (* qualifier *)
@@ -103,12 +103,12 @@ let js_arg_map : arg Jsutils.js_map =
 type project = Unselect | Select
                         
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
-(*let js_order_map : order Jsutils.js_map =
+let js_order_map : order Jsutils.js_map =
   let open Jsutils in
   js_map
     (`Sum ([| "Unordered" |],
            [| "Highest", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-              "Lowest", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])) *)
+              "Lowest", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))
                                                               
 type modif_s2 = project * order
               
@@ -132,12 +132,12 @@ let js_pred_map : pred Jsutils.js_map =
               "SO", [| "uriS", `String; "uriO", `String |];
               "EO", [| "uriE", `String; "uriO", `String |] |]))
         
-type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
-(*let js_latlong_map : latlong Jsutils.js_map =
+type latlong = CustomLatLong of Rdf.uri * Rdf.uri | WikidataLatLong
+let js_latlong_map : latlong Jsutils.js_map =
   Jsutils.js_map
     (`Sum ([| "Wikidata" |],
            [| "Custom", [| "uriLat", `String; "uriLong", `String |] |]))
-let _ = Jsutils.js_map_log "latlong:" js_latlong_map [`Wikidata; `Custom ("http://lat", "http://long")] (* TEST *)*)
+let _ = Jsutils.js_map_log "latlong:" js_latlong_map [WikidataLatLong; CustomLatLong ("http://lat", "http://long")] (* TEST *)
              
 type aggreg =
   | NumberOf
@@ -147,13 +147,13 @@ type aggreg =
   | Average of num_conv option
   | Maximum of num_conv option
   | Minimum of num_conv option
-(*let js_aggreg_map : aggreg Jsutils.js_map =
+let js_aggreg_map : aggreg Jsutils.js_map =
   Jsutils.(js_map
     (`Sum ([| "NumberOf"; "listOf"; "Sample" |],
            [|  "Total", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
                "Average", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
                "Maximum", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-               "Minimum", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))) *)
+               "Minimum", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])))
              
 type func =
   [ `Str
@@ -1454,12 +1454,12 @@ let uri_of_increment (incr : increment) : Rdf.uri option =
 	      
 let latlong_of_increment (incr : increment) : latlong option =
   match incr with
-  | IncrPred (S, EO (pe,po)) when pe = Rdf.p_P625 -> Some `Wikidata
+  | IncrPred (S, EO (pe,po)) when pe = Rdf.p_P625 -> Some WikidataLatLong
   | IncrRel (uri,Fwd) ->
      if uri = Rdf.p_P625
-     then Some `Wikidata
+     then Some WikidataLatLong
      else
-       (try Some (`Custom (uri, List.assoc uri Rdf.lat_long_properties))
+       (try Some (CustomLatLong (uri, List.assoc uri Rdf.lat_long_properties))
 	with Not_found -> None)
   | _ -> None
 

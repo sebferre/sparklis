@@ -187,8 +187,8 @@ and print_pred = function
   | SO (ps,po) -> print_bin "SO" (print_uri ps) (print_uri po)
   | EO (pe,po) -> print_bin "EO" (print_uri pe) (print_uri po)
 and print_latlong = function
-  | `Custom (plat,plong) -> print_bin "Custom" (print_uri plat) (print_uri plong)
-  | `Wikidata -> print_atom "Wikidata"
+  | CustomLatLong (plat,plong) -> print_bin "Custom" (print_uri plat) (print_uri plong)
+  | WikidataLatLong -> print_atom "Wikidata"
 and print_modif_p2 = function
   | ori -> print_orientation ori
 and print_orientation = function
@@ -372,7 +372,7 @@ and parse_p1 ~version = parser
   | [< id, pred, args, argo, np = parse_quin ~version "HierPred" parse_id parse_pred parse_arg parse_arg parse_s1 >] -> Hier ((),id,pred,args,argo,np)
   | [< np, pred, args, argo, rank = parse_quin ~version "Sim" parse_s1 parse_pred parse_arg parse_arg parse_int >] -> Sim ((),np,pred,args,argo,rank)
   | [< arg, np1, np2 = parse_ter ~version "Triple" parse_arg parse_s1 parse_s1 >] -> Triple ((),arg,np1,np2)
-  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_property parse_property parse_id parse_id >] -> LatLong ((), `Custom (plat,plong), id1, id2) (* for backward compatibility *)
+  | [< plat, plong, id1, id2 = parse_quad ~version "LatLong" parse_property parse_property parse_id parse_id >] -> LatLong ((), CustomLatLong (plat,plong), id1, id2) (* for backward compatibility *)
   | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
   | [< c, ft = parse_bin ~version "Filter2" parse_constr parse_filter_type >] -> Filter ((),c,ft)
@@ -392,8 +392,8 @@ and parse_pred ~version = parser
   | [< ps, po = parse_bin ~version "SO" parse_property parse_property >] -> SO (ps,po)
   | [< pe, po = parse_bin ~version "EO" parse_property parse_property >] -> EO (pe,po)
 and parse_latlong ~version = parser
-  | [< plat, plong = parse_bin ~version "Custom" parse_property parse_property >] -> `Custom (plat,plong)
-  | [< () = parse_atom ~version "Wikidata" >] -> `Wikidata
+  | [< plat, plong = parse_bin ~version "Custom" parse_property parse_property >] -> CustomLatLong (plat,plong)
+  | [< () = parse_atom ~version "Wikidata" >] -> WikidataLatLong
 and parse_modif_p2 ~version = parser
   | [< ori, () = parse_bin ~version "ModifP2" parse_orientation parse_path >] -> ori  (* for backward compatibility *)
   | [< ori = parse_orientation ~version >] -> ori

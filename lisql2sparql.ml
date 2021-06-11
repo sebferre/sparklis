@@ -851,12 +851,12 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
      (fun x -> []),
      (fun x -> Sparql.True)
 and form_latlong = function
-  | `Custom (plat,plong) ->
+  | CustomLatLong (plat,plong) ->
      (fun x lat long ->
       Sparql.(formula_and
 	(Pattern (triple x (path_uri plat) lat))
 	(Pattern (triple x (path_uri plong) long))))
-  | `Wikidata ->
+  | WikidataLatLong ->
      (fun x lat long -> Sparql.Pattern (Sparql.wikidata_lat_long x lat long))
 and form_p1_opt state = function
   | None -> (fun x -> []), (fun x -> Sparql.True)
