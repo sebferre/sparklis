@@ -1086,8 +1086,8 @@ object (self)
       let unit = `Results in
       let incr_index = new incr_freq_tree_index term_hierarchy in
     (* adding selection increments *)
-      incr_index#add (Lisql.IncrSelection (`NAnd, []), None);
-      incr_index#add (Lisql.IncrSelection (`NOr, []), None);
+      incr_index#add (Lisql.IncrSelection (NAndSel, []), None);
+      incr_index#add (Lisql.IncrSelection (NOrSel, []), None);
     (* adding increment 'anything' *)
       if focus_term_index#length > 1 && Lisql.insert_increment Lisql.IncrAnything focus <> None then
 	incr_index#add (Lisql.IncrAnything, None);
@@ -1101,9 +1101,9 @@ object (self)
       if Lisql.is_undef_expr_focus focus then
 	List.iter
 	  (fun (dt : Lisql.input_type) ->
-	    if Lisql_type.is_insertable_input (dt :> Lisql_type.datatype) focus_type_constraints then
+	    if Lisql_type.is_insertable_input (Lisql_type.of_input_type dt) focus_type_constraints then
 	      incr_index#add (Lisql.IncrInput ("",dt), None))
-	  [`IRI; `String; `Float; `Integer; `Date; `Time; `DateTime; `Duration];
+	  [IRIInput; StringInput; FloatInput; IntegerInput; DateInput; TimeInput; DateTimeInput; DurationInput];
     (* adding ids *)
       ( match s_sparql.Lisql2sparql.focus_term_opt with
       | Some term ->
@@ -1439,8 +1439,8 @@ object (self)
             let fwd_prop = ref false in
             let bwd_prop = ref false in
             (* adding selection increments *)
-            incr_index#add (Lisql.IncrSelection (`And, []), None);
-            incr_index#add (Lisql.IncrSelection (`Or, []), None);
+            incr_index#add (Lisql.IncrSelection (AndSel, []), None);
+            incr_index#add (Lisql.IncrSelection (OrSel, []), None);
             (* adding class increments *)
             int_index_class#iter
 	      (fun (lt, count) ->
@@ -1770,7 +1770,7 @@ object (self)
       else
 	let incrs = [] in
 	let incrs =
-	  IncrSelection (`Aggreg, []) ::
+	  IncrSelection (AggregSel, []) ::
 	    (*IncrThatIs ::*) (* unnecessary and confusing *)
 	    IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
 	    IncrSimRankIncr :: IncrSimRankDecr ::

@@ -137,7 +137,7 @@ let js_latlong_map : latlong Jsutils.js_map =
   Jsutils.js_map
     (`Sum ([| "Wikidata" |],
            [| "Custom", [| "uriLat", `String; "uriLong", `String |] |]))
-let _ = Jsutils.js_map_log "latlong:" js_latlong_map [WikidataLatLong; CustomLatLong ("http://lat", "http://long")] (* TEST *)
+(* let _ = Jsutils.js_map_log "latlong:" js_latlong_map [WikidataLatLong; CustomLatLong ("http://lat", "http://long")] (* TEST *) *)
              
 type aggreg =
   | NumberOf
@@ -1315,15 +1315,15 @@ let home_focus () : focus * delta =
 
 (* increments *)
 
-type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime | `Duration ] (* a sub-type of Sparql.datatype *)
-(*let js_input_type_map : input_type Jsutils.js_map =
+type input_type =  IRIInput | StringInput | FloatInput | IntegerInput | DateInput | TimeInput | DateTimeInput | DurationInput (* a sub-type of Sparql.datatype *)
+let js_input_type_map : input_type Jsutils.js_map =
   Jsutils.js_map
-    (`Enum [| "IRI"; "String"; "Float"; "Integer"; "Date"; "Time"; "DateTime"; "Duration" |]) *)
+    (`Enum [| "IRI"; "String"; "Float"; "Integer"; "Date"; "Time"; "DateTime"; "Duration" |])
 
-type selection_op = [`And | `Or | `NAnd | `NOr | `Aggreg]
-(* let js_selection_op_map : selection_op Jsutils.js_map =
+type selection_op = AndSel | OrSel | NAndSel | NOrSel | AggregSel
+let js_selection_op_map : selection_op Jsutils.js_map =
   Jsutils.js_map
-    (`Enum [| "And"; "Or"; "NAnd"; "NOr"; "Aggreg" |]) *)
+    (`Enum [| "And"; "Or"; "NAnd"; "NOr"; "Aggreg" |])
   
 type increment =
   | IncrSelection of selection_op * increment list
@@ -1363,7 +1363,7 @@ type increment =
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *) * num_conv option (* function result *) * num_conv option (* argument *)
   | IncrName of string
               
-(*let js_increment_map : increment Jsutils.js_map =
+let js_increment_map : increment Jsutils.js_map =
   let open Jsutils in
   js_map
     (`Sum
@@ -1417,20 +1417,23 @@ type increment =
                              "resultConv", `Option (js_custom_spec js_num_conv_map);
                              "argConv", `Option (js_custom_spec js_num_conv_map) |];
            "IncrName", [| "name", `String |]
-          |])) *)
-  
+          |]))
+(* let _ = Jsutils.js_map_log "increment:" js_increment_map
+          [ IncrRel ("http://dbpedia.org/director", Fwd);
+            IncrOr;
+            IncrTerm (Rdf.PlainLiteral ("hello","en")) ] (* TEST *) *)
 
 let datatype_of_input_type = function
-  | `IRI -> invalid_arg "datatype_of_input_type: URI has no datatype"
-  | `String -> Rdf.xsd_string
-  | `Float -> Rdf.xsd_double
-  | `Integer -> Rdf.xsd_integer
-  | `Date -> Rdf.xsd_date
-  | `Time -> Rdf.xsd_time
-  | `DateTime -> Rdf.xsd_dateTime
-  | `Duration -> Rdf.xsd_duration
+  | IRIInput -> invalid_arg "datatype_of_input_type: URI has no datatype"
+  | StringInput -> Rdf.xsd_string
+  | FloatInput -> Rdf.xsd_double
+  | IntegerInput -> Rdf.xsd_integer
+  | DateInput -> Rdf.xsd_date
+  | TimeInput -> Rdf.xsd_time
+  | DateTimeInput -> Rdf.xsd_dateTime
+  | DurationInput -> Rdf.xsd_duration
 let term_of_input s = function
-  | `IRI -> Rdf.URI s
+  | IRIInput -> Rdf.URI s
   | typ -> Rdf.TypedLiteral (s, datatype_of_input_type typ)
 
 let rec term_of_increment : increment -> Rdf.term option = function
@@ -2302,11 +2305,11 @@ let insert_increment (incr : increment) (focus : focus) : (focus * delta) option
   match incr with
     | IncrSelection (selop, l_incr) ->
        ( match selop with
-	 | `And -> insert_selection_and l_incr focus
-	 | `Or -> insert_selection_or l_incr focus
-	 | `NAnd -> insert_selection_nand l_incr focus
-	 | `NOr -> insert_selection_nor l_incr focus
-	 | `Aggreg -> insert_selection_aggreg l_incr focus )
+	 | AndSel -> insert_selection_and l_incr focus
+	 | OrSel -> insert_selection_or l_incr focus
+	 | NAndSel -> insert_selection_nand l_incr focus
+	 | NOrSel -> insert_selection_nor l_incr focus
+	 | AggregSel -> insert_selection_aggreg l_incr focus )
     | IncrInput (s,dt) -> insert_input s dt focus
     | IncrTerm t -> insert_term t focus
     | IncrId (id,conv_opt) -> insert_id id conv_opt focus

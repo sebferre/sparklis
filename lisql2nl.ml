@@ -251,14 +251,14 @@ let string_of_term = function
   | Rdf.Var v -> assert false
 
 let string_of_input_type grammar = function
-  | `IRI -> grammar#uri
-  | `String -> grammar#string
-  | `Float -> grammar#number
-  | `Integer -> grammar#integer
-  | `Date -> grammar#date
-  | `Time -> grammar#time
-  | `DateTime -> grammar#date_and_time
-  | `Duration -> grammar#duration
+  | IRIInput -> grammar#uri
+  | StringInput -> grammar#string
+  | FloatInput -> grammar#number
+  | IntegerInput -> grammar#integer
+  | DateInput -> grammar#date
+  | TimeInput -> grammar#time
+  | DateTimeInput -> grammar#date_and_time
+  | DurationInput -> grammar#duration
     
 let aggreg_syntax grammar g =
   let qu, noun, adj_opt = grammar#aggreg_syntax g in
@@ -293,9 +293,9 @@ let word_of_order grammar = function
   | Lowest _ -> `Op grammar#order_lowest
 
 let word_of_selection_op grammar  = function
-  | `And | `NAnd -> `Op grammar#and_
-  | `Or | `NOr -> `Op grammar#or_
-  | `Aggreg -> `Op ""
+  | AndSel | NAndSel -> `Op grammar#and_
+  | OrSel | NOrSel -> `Op grammar#or_
+  | AggregSel -> `Op ""
 		 
 let word_of_incr grammar = function
   | IncrSelection (selop,_) -> word_of_selection_op grammar selop
@@ -1268,9 +1268,9 @@ let xml_in grammar xml1 xml2 =
   Word (`Op grammar#according_to) :: xml1 @ [Coord ([], [xml2])]
 let xml_selection_op grammar (selop : Lisql.selection_op) : xml =
   match selop with
-  | `And | `NAnd -> [Kwd "..."; Word (`Op grammar#and_); Kwd "..."]
-  | `Or | `NOr -> [Kwd "..."; Word (`Op grammar#or_); Kwd "..."]
-  | `Aggreg -> [Kwd "..."]
+  | AndSel | NAndSel -> [Kwd "..."; Word (`Op grammar#and_); Kwd "..."]
+  | OrSel | NOrSel -> [Kwd "..."; Word (`Op grammar#or_); Kwd "..."]
+  | AggregSel -> [Kwd "..."]
 let xml_ellipsis = [Kwd "..."]
 
 let xml_focus annot xml =
@@ -1662,7 +1662,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
 	    (fun i -> if i=pos then focus_span_np incr else undefined_np)
 	    (Common.from_to 1 arity))
       	 top_rel)
-  | IncrName name -> [Input `String; Word (`Op "="); Word focus_span])
+  | IncrName name -> [Input StringInput; Word (`Op "="); Word focus_span])
 
 		       
 (* main verbalization functions *)

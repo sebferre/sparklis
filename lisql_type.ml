@@ -39,6 +39,16 @@ type datatype =
 | `Conversion of datatype * num_conv * datatype (* (A,conv,B) : conv converts A to B *)
 ]
 
+let of_input_type : input_type -> datatype = function
+  | IRIInput -> `IRI
+  | StringInput -> `String
+  | FloatInput -> `Float
+  | IntegerInput -> `Integer
+  | DateInput -> `Date
+  | TimeInput -> `Time
+  | DateTimeInput -> `DateTime
+  | DurationInput -> `Duration
+  
 let inheritance : (datatype * datatype list) list =
   let rec aux dt =
     dt ::

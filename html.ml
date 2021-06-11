@@ -373,14 +373,14 @@ let html_logos uri =
 let html_input dt =
   let t, hint =
     match dt with
-    | `IRI -> "url", "http://"
-    | `String -> "text", ""
-    | `Float -> "number", "0.0e+0"
-    | `Integer -> "number", "0"
-    | `Date -> "text", "yyyy-mm-dd"
-    | `Time -> "text", "hh:mm:ss"
-    | `DateTime -> "text", "yyyy-mm-ddThh:mm:ss"
-    | `Duration -> "text", "PxYxMxDTxHxMx.xS"
+    | IRIInput -> "url", "http://"
+    | StringInput -> "text", ""
+    | FloatInput -> "number", "0.0e+0"
+    | IntegerInput -> "number", "0"
+    | DateInput -> "text", "yyyy-mm-dd"
+    | TimeInput -> "text", "hh:mm:ss"
+    | DateTimeInput -> "text", "yyyy-mm-ddThh:mm:ss"
+    | DurationInput -> "text", "PxYxMxDTxHxMx.xS"
   in
   "<input class=\"term-input\" type=\"" ^ t ^ "\" placeholder=\"" ^ hint ^ "\">"
 
