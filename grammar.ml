@@ -243,67 +243,67 @@ object
   | Lisql.Minimum _ -> `The, "minimum", Some "minimal"
 
   method func_syntax = function
-  | `Str -> `Noun "string"
-  | `Lang -> `Noun "language"
-  | `Datatype -> `Noun "datatype"
-  | `IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
-  | `STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
-  | `STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
-  | `Strlen -> `Noun "length"
-  | `Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
-  | `Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
-  | `Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
-  | `Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
-  | `Concat -> `Infix " ++ "
-  | `UCase -> `Noun "uppercase"
-  | `LCase -> `Noun "lowercase"
-  | `Encode_for_URI -> `Noun "URI encoding"
-  | `Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
-  | `Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
-  | `Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
-  | `Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
-  | `Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
-  | `Add -> `Infix " + "
-  | `Sub -> `Infix " - "
-  | `Mul -> `Infix " * "
-  | `Div -> `Infix " / "
-  | `Neg -> `Prefix "- "
-  | `Abs -> `Brackets ("|","|")
-  | `Round -> `Noun "rounding"
-  | `Ceil -> `Noun "ceiling"
-  | `Floor -> `Noun "floor"
-  | `Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
-  | `Date -> `Noun "date"
-  | `Time -> `Noun "time"
-  | `Year -> `Noun "year"
-  | `Month -> `Noun "month"
-  | `Day -> `Noun "day"
-  | `Hours -> `Noun "hours"
-  | `Minutes -> `Noun "minutes"
-  | `Seconds -> `Noun "seconds"
-  | `TODAY -> `Pattern [`Func "today"]
-  | `NOW -> `Pattern [`Func "now"]
-  | `And -> `Infix " and "
-  | `Or -> `Infix " or "
-  | `Not -> `Prefix "it is not true that "
-  | `EQ -> `Infix " = "
-  | `NEQ -> `Infix " ≠ "
-  | `GT -> `Infix " > "
-  | `GEQ -> `Infix " ≥ "
-  | `LT -> `Infix " < "
-  | `LEQ -> `Infix " ≤ "
-  | `BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
-  | `IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
-  | `IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
-  | `IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
-  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
-  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
-  | `StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
-  | `StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
-  | `Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
-  | `REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
-  | `REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
-  | `LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
+  | Str -> `Noun "string"
+  | Lang -> `Noun "language"
+  | Datatype -> `Noun "datatype"
+  | IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
+  | STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
+  | STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
+  | Strlen -> `Noun "length"
+  | Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
+  | Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
+  | Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
+  | Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
+  | Concat -> `Infix " ++ "
+  | UCase -> `Noun "uppercase"
+  | LCase -> `Noun "lowercase"
+  | Encode_for_URI -> `Noun "URI encoding"
+  | Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
+  | Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
+  | Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
+  | Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
+  | Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
+  | Add -> `Infix " + "
+  | Sub -> `Infix " - "
+  | Mul -> `Infix " * "
+  | Div -> `Infix " / "
+  | Neg -> `Prefix "- "
+  | Abs -> `Brackets ("|","|")
+  | Round -> `Noun "rounding"
+  | Ceil -> `Noun "ceiling"
+  | Floor -> `Noun "floor"
+  | Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
+  | Date -> `Noun "date"
+  | Time -> `Noun "time"
+  | Year -> `Noun "year"
+  | Month -> `Noun "month"
+  | Day -> `Noun "day"
+  | Hours -> `Noun "hours"
+  | Minutes -> `Noun "minutes"
+  | Seconds -> `Noun "seconds"
+  | TODAY -> `Pattern [`Func "today"]
+  | NOW -> `Pattern [`Func "now"]
+  | And -> `Infix " and "
+  | Or -> `Infix " or "
+  | Not -> `Prefix "it is not true that "
+  | EQ -> `Infix " = "
+  | NEQ -> `Infix " ≠ "
+  | GT -> `Infix " > "
+  | GEQ -> `Infix " ≥ "
+  | LT -> `Infix " < "
+  | LEQ -> `Infix " ≤ "
+  | BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
+  | IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
+  | IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
+  | IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
+  | IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
+  | IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
+  | StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
+  | StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
+  | Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
+  | REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
+  | REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
+  | LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
  
   method order_highest = "highest-to-lowest"
   method order_lowest = "lowest-to-highest"
@@ -449,67 +449,67 @@ object
   | Lisql.Minimum _ -> `The, "minimum", Some "minimal·e"
 
   method func_syntax = function
-  | `Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]
-  | `Lang -> `Pattern [`Kwd "la"; `Func "langue"; `Kwd "de"; `Arg 1]
-  | `Datatype -> `Pattern [`Kwd "le"; `Func "type"; `Kwd "de"; `Arg 1]
-  | `IRI -> `Pattern [`Kwd "l'"; `Func "IRI"; `Arg 1]
-  | `STRDT -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de";  `Func "type"; `Arg 2]
-  | `STRLANG -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de"; `Func "langue"; `Arg 2]
-  | `Strlen -> `Pattern [`Kwd "la"; `Func "longueur"; `Kwd "de"; `Arg 1]
-  | `Substr2 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2]
-  | `Substr3 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2; `Kwd "et de longueur"; `Arg 3]
-  | `Strbefore -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "avant"; `Arg 2]
-  | `Strafter -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "après"; `Arg 2]
-  | `Concat -> `Infix " ++ "
-  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "majuscules"]
-  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minuscules"]
-  | `Encode_for_URI -> `Pattern [`Kwd "l'"; `Func "encodage URI"; `Kwd "de"; `Arg 1]
-  | `Replace -> `Pattern [`Kwd "le"; `Func "remplacement"; `Kwd "dans"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "par"; `Arg 3]
-  | `Integer -> `Pattern [`Arg 1; `Kwd "comme"; `Func "entier"]
-  | `Decimal -> `Pattern [`Arg 1; `Kwd "comme"; `Func "décimal"]
-  | `Double -> `Pattern [`Arg 1; `Kwd "comme"; `Func "flottant"]
-  | `Indicator -> `Pattern [`Kwd "1 ou 0"; `Kwd "selon"; `Kwd "que"; `Arg 1]
-  | `Add -> `Infix " + "
-  | `Sub -> `Infix " - "
-  | `Mul -> `Infix " * "
-  | `Div -> `Infix " / "
-  | `Neg -> `Prefix "- "
-  | `Abs -> `Brackets ("|","|")
-  | `Round -> `Pattern [`Kwd "l'"; `Func "arrondi"; `Kwd "de"; `Arg 1]
-  | `Ceil -> `Pattern [`Kwd "la"; `Func "partie entière par excès"; `Kwd "de"; `Arg 1]
-  | `Floor -> `Pattern [`Kwd "la"; `Func "partie entière par défaut"; `Kwd "de"; `Arg 1]
-  | `Random2 -> `Pattern [`Kwd "un"; `Func "nombre aléatoire"; `Kwd "entre"; `Arg 1; `Kwd "et"; `Arg 2]
-  | `Date -> `Pattern [`Kwd "la"; `Func "date"; `Kwd "de"; `Arg 1]
-  | `Time -> `Pattern [`Kwd "l'"; `Func "heure"; `Kwd "de"; `Arg 1]
-  | `Year -> `Pattern [`Kwd "l'"; `Func "année"; `Kwd "de"; `Arg 1]
-  | `Month -> `Pattern [`Kwd "le"; `Func "mois"; `Kwd "de"; `Arg 1]
-  | `Day -> `Pattern [`Kwd "le"; `Func "jour"; `Kwd "de"; `Arg 1]
-  | `Hours -> `Pattern [`Kwd "les"; `Func "heures"; `Kwd "de"; `Arg 1]
-  | `Minutes -> `Pattern [`Kwd "les"; `Func "minutes"; `Kwd "de"; `Arg 1]
-  | `Seconds -> `Pattern [`Kwd "les"; `Func "secondes"; `Kwd "de"; `Arg 1]
-  | `TODAY -> `Pattern [`Func "aujourd'hui"]
-  | `NOW -> `Pattern [`Func "maintenant"]
-  | `And -> `Infix " et "
-  | `Or -> `Infix " ou "
-  | `Not -> `Prefix "il n'est pas vrai que "
-  | `EQ -> `Infix " = "
-  | `NEQ -> `Infix " ≠ "
-  | `GT -> `Infix " > "
-  | `GEQ -> `Infix " ≥ "
-  | `LT -> `Infix " < "
-  | `LEQ -> `Infix " ≤ "
-  | `BOUND -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "valeur"]
-  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "sinon"; `Arg 3]
-  | `IsIRI -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "une"; `Func "IRI"]
-  | `IsBlank -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "noeud anonyme"]
-  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "litéral"]
-  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "nombre"]
-  | `StrStarts -> `Pattern [`Arg 1; `Func "commence par"; `Arg 2]
-  | `StrEnds -> `Pattern [`Arg 1; `Func "termine par"; `Arg 2]
-  | `Contains -> `Pattern [`Arg 1; `Func "contient"; `Arg 2]
-  | `REGEX -> `Pattern [`Arg 1; `Func "matche la regexp"; `Arg 2]
-  | `REGEX_i -> `Pattern [`Arg 1; `Func "matche la regexp (insensible à la casse)"; `Arg 2]
-  | `LangMatches -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "langue"; `Kwd "qui"; `Func "matche"; `Arg 2]
+  | Str -> `Pattern [`Kwd "la"; `Func "chaine"; `Kwd "de"; `Arg 1]
+  | Lang -> `Pattern [`Kwd "la"; `Func "langue"; `Kwd "de"; `Arg 1]
+  | Datatype -> `Pattern [`Kwd "le"; `Func "type"; `Kwd "de"; `Arg 1]
+  | IRI -> `Pattern [`Kwd "l'"; `Func "IRI"; `Arg 1]
+  | STRDT -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de";  `Func "type"; `Arg 2]
+  | STRLANG -> `Pattern [`Kwd "le"; `Func "littéral"; `Arg 1; `Kwd "de"; `Func "langue"; `Arg 2]
+  | Strlen -> `Pattern [`Kwd "la"; `Func "longueur"; `Kwd "de"; `Arg 1]
+  | Substr2 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2]
+  | Substr3 -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Kwd "partant de la position"; `Arg 2; `Kwd "et de longueur"; `Arg 3]
+  | Strbefore -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "avant"; `Arg 2]
+  | Strafter -> `Pattern [`Kwd "la"; `Func "sous-chaine"; `Kwd "de"; `Arg 1; `Func "après"; `Arg 2]
+  | Concat -> `Infix " ++ "
+  | UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "majuscules"]
+  | LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minuscules"]
+  | Encode_for_URI -> `Pattern [`Kwd "l'"; `Func "encodage URI"; `Kwd "de"; `Arg 1]
+  | Replace -> `Pattern [`Kwd "le"; `Func "remplacement"; `Kwd "dans"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "par"; `Arg 3]
+  | Integer -> `Pattern [`Arg 1; `Kwd "comme"; `Func "entier"]
+  | Decimal -> `Pattern [`Arg 1; `Kwd "comme"; `Func "décimal"]
+  | Double -> `Pattern [`Arg 1; `Kwd "comme"; `Func "flottant"]
+  | Indicator -> `Pattern [`Kwd "1 ou 0"; `Kwd "selon"; `Kwd "que"; `Arg 1]
+  | Add -> `Infix " + "
+  | Sub -> `Infix " - "
+  | Mul -> `Infix " * "
+  | Div -> `Infix " / "
+  | Neg -> `Prefix "- "
+  | Abs -> `Brackets ("|","|")
+  | Round -> `Pattern [`Kwd "l'"; `Func "arrondi"; `Kwd "de"; `Arg 1]
+  | Ceil -> `Pattern [`Kwd "la"; `Func "partie entière par excès"; `Kwd "de"; `Arg 1]
+  | Floor -> `Pattern [`Kwd "la"; `Func "partie entière par défaut"; `Kwd "de"; `Arg 1]
+  | Random2 -> `Pattern [`Kwd "un"; `Func "nombre aléatoire"; `Kwd "entre"; `Arg 1; `Kwd "et"; `Arg 2]
+  | Date -> `Pattern [`Kwd "la"; `Func "date"; `Kwd "de"; `Arg 1]
+  | Time -> `Pattern [`Kwd "l'"; `Func "heure"; `Kwd "de"; `Arg 1]
+  | Year -> `Pattern [`Kwd "l'"; `Func "année"; `Kwd "de"; `Arg 1]
+  | Month -> `Pattern [`Kwd "le"; `Func "mois"; `Kwd "de"; `Arg 1]
+  | Day -> `Pattern [`Kwd "le"; `Func "jour"; `Kwd "de"; `Arg 1]
+  | Hours -> `Pattern [`Kwd "les"; `Func "heures"; `Kwd "de"; `Arg 1]
+  | Minutes -> `Pattern [`Kwd "les"; `Func "minutes"; `Kwd "de"; `Arg 1]
+  | Seconds -> `Pattern [`Kwd "les"; `Func "secondes"; `Kwd "de"; `Arg 1]
+  | TODAY -> `Pattern [`Func "aujourd'hui"]
+  | NOW -> `Pattern [`Func "maintenant"]
+  | And -> `Infix " et "
+  | Or -> `Infix " ou "
+  | Not -> `Prefix "il n'est pas vrai que "
+  | EQ -> `Infix " = "
+  | NEQ -> `Infix " ≠ "
+  | GT -> `Infix " > "
+  | GEQ -> `Infix " ≥ "
+  | LT -> `Infix " < "
+  | LEQ -> `Infix " ≤ "
+  | BOUND -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "valeur"]
+  | IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "sinon"; `Arg 3]
+  | IsIRI -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "une"; `Func "IRI"]
+  | IsBlank -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "noeud anonyme"]
+  | IsLiteral -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "litéral"]
+  | IsNumeric -> `Pattern [`Arg 1; `Kwd "est"; `Kwd "un"; `Func "nombre"]
+  | StrStarts -> `Pattern [`Arg 1; `Func "commence par"; `Arg 2]
+  | StrEnds -> `Pattern [`Arg 1; `Func "termine par"; `Arg 2]
+  | Contains -> `Pattern [`Arg 1; `Func "contient"; `Arg 2]
+  | REGEX -> `Pattern [`Arg 1; `Func "matche la regexp"; `Arg 2]
+  | REGEX_i -> `Pattern [`Arg 1; `Func "matche la regexp (insensible à la casse)"; `Arg 2]
+  | LangMatches -> `Pattern [`Arg 1; `Kwd "a"; `Kwd "une"; `Func "langue"; `Kwd "qui"; `Func "matche"; `Arg 2]
  
   method order_highest = "en ordre décroissant"
   method order_lowest = "en ordre croissant"
@@ -656,67 +656,67 @@ object
   | Lisql.Minimum _ -> `The, "mínimo", Some "mínimo"
 
   method func_syntax = function
-  | `Str -> `Pattern [`Kwd "la"; `Func "cadena"; `Kwd "de"; `Arg 1]
-  | `Lang -> `Pattern [`Kwd "el"; `Func "idioma"; `Kwd "de"; `Arg 1]
-  | `Datatype -> `Pattern [`Kwd "el"; `Func "tipo"; `Kwd "de"; `Arg 1]
-  | `IRI -> `Pattern [`Kwd "la"; `Func "IRI"; `Arg 1]
-  | `STRDT -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de";  `Func "tipo"; `Arg 2]
-  | `STRLANG -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de"; `Func "idioma"; `Arg 2]
-  | `Strlen -> `Pattern [`Kwd "la"; `Func "longitud"; `Kwd "de"; `Arg 1]
-  | `Substr2 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2]
-  | `Substr3 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2; `Kwd "y de longitud"; `Arg 3]
-  | `Strbefore -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "antes"; `Arg 2]
-  | `Strafter -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "depués"; `Arg 2]
-  | `Concat -> `Infix " ++ "
-  | `UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "mayúsculas"]
-  | `LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minúsculas"]
-  | `Encode_for_URI -> `Pattern [`Kwd "la"; `Func "codificación de la URI"; `Kwd "de"; `Arg 1]
-  | `Replace -> `Pattern [`Kwd "el"; `Func "reemplazo"; `Kwd "en"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "por"; `Arg 3]
-  | `Integer -> `Pattern [`Arg 1; `Kwd "como"; `Func "entero"]
-  | `Decimal -> `Pattern [`Arg 1; `Kwd "como"; `Func "decimal"]
-  | `Double -> `Pattern [`Arg 1; `Kwd "como"; `Func "flotante"]
-  | `Indicator -> `Pattern [`Kwd "1 o 0"; `Kwd "dependiendo"; `Kwd "de"; `Kwd "si"; `Arg 1]
-  | `Add -> `Infix " + "
-  | `Sub -> `Infix " - "
-  | `Mul -> `Infix " * "
-  | `Div -> `Infix " / "
-  | `Neg -> `Prefix "- "
-  | `Abs -> `Brackets ("|","|")
-  | `Round -> `Pattern [`Kwd "el"; `Func "redondeo"; `Kwd "de"; `Arg 1]
-  | `Ceil -> `Pattern [`Kwd "la"; `Func "parte entera por exceso"; `Kwd "de"; `Arg 1]
-  | `Floor -> `Pattern [`Kwd "la"; `Func "parte entera por defecto"; `Kwd "de"; `Arg 1]
-  | `Random2 -> `Pattern [`Kwd "un"; `Func "número aleatorio"; `Kwd "entre"; `Arg 1; `Kwd "y"; `Arg 2]
-  | `Date -> `Pattern [`Kwd "la"; `Func "fecha"; `Kwd "de"; `Arg 1]
-  | `Time -> `Pattern [`Kwd "la"; `Func "hora"; `Kwd "de"; `Arg 1]
-  | `Year -> `Pattern [`Kwd "el"; `Func "año"; `Kwd "de"; `Arg 1]
-  | `Month -> `Pattern [`Kwd "el"; `Func "mes"; `Kwd "de"; `Arg 1]
-  | `Day -> `Pattern [`Kwd "el"; `Func "día"; `Kwd "de"; `Arg 1]
-  | `Hours -> `Pattern [`Kwd "las"; `Func "horas"; `Kwd "de"; `Arg 1]
-  | `Minutes -> `Pattern [`Kwd "los"; `Func "minutos"; `Kwd "de"; `Arg 1]
-  | `Seconds -> `Pattern [`Kwd "los"; `Func "segundos"; `Kwd "de"; `Arg 1]
-  | `TODAY -> `Pattern [`Func "hoy"]
-  | `NOW -> `Pattern [`Func "ahora"]
-  | `And -> `Infix " y "
-  | `Or -> `Infix " o "
-  | `Not -> `Prefix " no es verdad que "
-  | `EQ -> `Infix " = "
-  | `NEQ -> `Infix " ≠ "
-  | `GT -> `Infix " > "
-  | `GEQ -> `Infix " ≥ "
-  | `LT -> `Infix " < "
-  | `LEQ -> `Infix " ≤ "
-  | `BOUND -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "valor"]
-  | `IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "en caso contrario"; `Arg 3]
-  | `IsIRI -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "una"; `Func "IRI"]
-  | `IsBlank -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "nodo anónimo"]
-  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "literal"]
-  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "número"]
-  | `StrStarts -> `Pattern [`Arg 1; `Func "comienza por"; `Arg 2]
-  | `StrEnds -> `Pattern [`Arg 1; `Func "termina en"; `Arg 2]
-  | `Contains -> `Pattern [`Arg 1; `Func "contiene"; `Arg 2]
-  | `REGEX -> `Pattern [`Arg 1; `Func "coincide con la expresión regular"; `Arg 2]
-  | `REGEX_i -> `Pattern [`Arg 1; `Func "coincide con la expresión regular (ignora mayús./minús.)"; `Arg 2]
-  | `LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincide con"; `Arg 2]
+  | Str -> `Pattern [`Kwd "la"; `Func "cadena"; `Kwd "de"; `Arg 1]
+  | Lang -> `Pattern [`Kwd "el"; `Func "idioma"; `Kwd "de"; `Arg 1]
+  | Datatype -> `Pattern [`Kwd "el"; `Func "tipo"; `Kwd "de"; `Arg 1]
+  | IRI -> `Pattern [`Kwd "la"; `Func "IRI"; `Arg 1]
+  | STRDT -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de";  `Func "tipo"; `Arg 2]
+  | STRLANG -> `Pattern [`Kwd "el"; `Func "literal"; `Arg 1; `Kwd "de"; `Func "idioma"; `Arg 2]
+  | Strlen -> `Pattern [`Kwd "la"; `Func "longitud"; `Kwd "de"; `Arg 1]
+  | Substr2 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2]
+  | Substr3 -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Kwd "partiendo de la posición"; `Arg 2; `Kwd "y de longitud"; `Arg 3]
+  | Strbefore -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "antes"; `Arg 2]
+  | Strafter -> `Pattern [`Kwd "la"; `Func "subcadena"; `Kwd "de"; `Arg 1; `Func "depués"; `Arg 2]
+  | Concat -> `Infix " ++ "
+  | UCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "mayúsculas"]
+  | LCase -> `Pattern [`Arg 1; `Kwd "en"; `Func "minúsculas"]
+  | Encode_for_URI -> `Pattern [`Kwd "la"; `Func "codificación de la URI"; `Kwd "de"; `Arg 1]
+  | Replace -> `Pattern [`Kwd "el"; `Func "reemplazo"; `Kwd "en"; `Arg 1; `Kwd "de"; `Arg 2; `Kwd "por"; `Arg 3]
+  | Integer -> `Pattern [`Arg 1; `Kwd "como"; `Func "entero"]
+  | Decimal -> `Pattern [`Arg 1; `Kwd "como"; `Func "decimal"]
+  | Double -> `Pattern [`Arg 1; `Kwd "como"; `Func "flotante"]
+  | Indicator -> `Pattern [`Kwd "1 o 0"; `Kwd "dependiendo"; `Kwd "de"; `Kwd "si"; `Arg 1]
+  | Add -> `Infix " + "
+  | Sub -> `Infix " - "
+  | Mul -> `Infix " * "
+  | Div -> `Infix " / "
+  | Neg -> `Prefix "- "
+  | Abs -> `Brackets ("|","|")
+  | Round -> `Pattern [`Kwd "el"; `Func "redondeo"; `Kwd "de"; `Arg 1]
+  | Ceil -> `Pattern [`Kwd "la"; `Func "parte entera por exceso"; `Kwd "de"; `Arg 1]
+  | Floor -> `Pattern [`Kwd "la"; `Func "parte entera por defecto"; `Kwd "de"; `Arg 1]
+  | Random2 -> `Pattern [`Kwd "un"; `Func "número aleatorio"; `Kwd "entre"; `Arg 1; `Kwd "y"; `Arg 2]
+  | Date -> `Pattern [`Kwd "la"; `Func "fecha"; `Kwd "de"; `Arg 1]
+  | Time -> `Pattern [`Kwd "la"; `Func "hora"; `Kwd "de"; `Arg 1]
+  | Year -> `Pattern [`Kwd "el"; `Func "año"; `Kwd "de"; `Arg 1]
+  | Month -> `Pattern [`Kwd "el"; `Func "mes"; `Kwd "de"; `Arg 1]
+  | Day -> `Pattern [`Kwd "el"; `Func "día"; `Kwd "de"; `Arg 1]
+  | Hours -> `Pattern [`Kwd "las"; `Func "horas"; `Kwd "de"; `Arg 1]
+  | Minutes -> `Pattern [`Kwd "los"; `Func "minutos"; `Kwd "de"; `Arg 1]
+  | Seconds -> `Pattern [`Kwd "los"; `Func "segundos"; `Kwd "de"; `Arg 1]
+  | TODAY -> `Pattern [`Func "hoy"]
+  | NOW -> `Pattern [`Func "ahora"]
+  | And -> `Infix " y "
+  | Or -> `Infix " o "
+  | Not -> `Prefix " no es verdad que "
+  | EQ -> `Infix " = "
+  | NEQ -> `Infix " ≠ "
+  | GT -> `Infix " > "
+  | GEQ -> `Infix " ≥ "
+  | LT -> `Infix " < "
+  | LEQ -> `Infix " ≤ "
+  | BOUND -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "valor"]
+  | IF -> `Pattern [`Arg 2; `Func "si"; `Arg 1; `Func "en caso contrario"; `Arg 3]
+  | IsIRI -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "una"; `Func "IRI"]
+  | IsBlank -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "nodo anónimo"]
+  | IsLiteral -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "literal"]
+  | IsNumeric -> `Pattern [`Arg 1; `Kwd "es"; `Kwd "un"; `Func "número"]
+  | StrStarts -> `Pattern [`Arg 1; `Func "comienza por"; `Arg 2]
+  | StrEnds -> `Pattern [`Arg 1; `Func "termina en"; `Arg 2]
+  | Contains -> `Pattern [`Arg 1; `Func "contiene"; `Arg 2]
+  | REGEX -> `Pattern [`Arg 1; `Func "coincide con la expresión regular"; `Arg 2]
+  | REGEX_i -> `Pattern [`Arg 1; `Func "coincide con la expresión regular (ignora mayús./minús.)"; `Arg 2]
+  | LangMatches -> `Pattern [`Arg 1; `Kwd "tiene"; `Kwd "un"; `Func "idioma"; `Kwd "que"; `Func "coincide con"; `Arg 2]
  
   method order_highest = "en orden descendente"
   method order_lowest = "en orden ascendente"
@@ -862,67 +862,67 @@ object
   | Lisql.Minimum _ -> `The, "minimum", Some "minimaal"
 
   method func_syntax = function
-  | `Str -> `Noun "string"
-  | `Lang -> `Noun "language"
-  | `Datatype -> `Noun "datatype"
-  | `IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
-  | `STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
-  | `STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
-  | `Strlen -> `Noun "length"
-  | `Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
-  | `Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
-  | `Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
-  | `Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
-  | `Concat -> `Infix " ++ "
-  | `UCase -> `Noun "uppercase"
-  | `LCase -> `Noun "lowercase"
-  | `Encode_for_URI -> `Noun "URI encoding"
-  | `Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
-  | `Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
-  | `Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
-  | `Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
-  | `Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
-  | `Add -> `Infix " + "
-  | `Sub -> `Infix " - "
-  | `Mul -> `Infix " * "
-  | `Div -> `Infix " / "
-  | `Neg -> `Prefix "- "
-  | `Abs -> `Brackets ("|","|")
-  | `Round -> `Noun "rounding"
-  | `Ceil -> `Noun "ceiling"
-  | `Floor -> `Noun "floor"
-  | `Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
-  | `Date -> `Noun "date"
-  | `Time -> `Noun "time"
-  | `Year -> `Noun "year"
-  | `Month -> `Noun "month"
-  | `Day -> `Noun "day"
-  | `Hours -> `Noun "hours"
-  | `Minutes -> `Noun "minutes"
-  | `Seconds -> `Noun "seconds"
-  | `TODAY -> `Pattern [`Func "today"]
-  | `NOW -> `Pattern [`Func "now"]
-  | `And -> `Infix " and "
-  | `Or -> `Infix " or "
-  | `Not -> `Prefix "it is not true that "
-  | `EQ -> `Infix " = "
-  | `NEQ -> `Infix " ≠ "
-  | `GT -> `Infix " > "
-  | `GEQ -> `Infix " ≥ "
-  | `LT -> `Infix " < "
-  | `LEQ -> `Infix " ≤ "
-  | `BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
-  | `IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
-  | `IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
-  | `IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
-  | `IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
-  | `IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
-  | `StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
-  | `StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
-  | `Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
-  | `REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
-  | `REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
-  | `LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
+  | Str -> `Noun "string"
+  | Lang -> `Noun "language"
+  | Datatype -> `Noun "datatype"
+  | IRI -> `Pattern [`Kwd "the"; `Func "IRI"; `Arg 1]
+  | STRDT -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with"; `Func "datatype"; `Arg 2]
+  | STRLANG -> `Pattern [`Kwd "the"; `Func "literal"; `Arg 1; `Kwd "with";  `Func "language tag"; `Arg 2]
+  | Strlen -> `Noun "length"
+  | Substr2 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2]
+  | Substr3 -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Kwd "from position"; `Arg 2; `Kwd "having length"; `Arg 3]
+  | Strbefore -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "before"; `Arg 2]
+  | Strafter -> `Pattern [`Kwd "the"; `Func "substring"; `Kwd "of"; `Arg 1; `Func "after"; `Arg 2]
+  | Concat -> `Infix " ++ "
+  | UCase -> `Noun "uppercase"
+  | LCase -> `Noun "lowercase"
+  | Encode_for_URI -> `Noun "URI encoding"
+  | Replace -> `Pattern [`Kwd "the"; `Func "replacement"; `Kwd "in"; `Arg 1; `Kwd "of"; `Arg 2; `Kwd "by"; `Arg 3]
+  | Integer -> `Pattern [`Arg 1; `Kwd "as"; `Func "integer"]
+  | Decimal -> `Pattern [`Arg 1; `Kwd "as"; `Func "decimal"]
+  | Double -> `Pattern [`Arg 1; `Kwd "as"; `Func "float"]
+  | Indicator -> `Pattern [`Kwd "1 or 0"; `Kwd "whether"; `Arg 1]
+  | Add -> `Infix " + "
+  | Sub -> `Infix " - "
+  | Mul -> `Infix " * "
+  | Div -> `Infix " / "
+  | Neg -> `Prefix "- "
+  | Abs -> `Brackets ("|","|")
+  | Round -> `Noun "rounding"
+  | Ceil -> `Noun "ceiling"
+  | Floor -> `Noun "floor"
+  | Random2 -> `Pattern [`Kwd "a"; `Func "random number"; `Kwd "between"; `Arg 1; `Kwd "and"; `Arg 2]
+  | Date -> `Noun "date"
+  | Time -> `Noun "time"
+  | Year -> `Noun "year"
+  | Month -> `Noun "month"
+  | Day -> `Noun "day"
+  | Hours -> `Noun "hours"
+  | Minutes -> `Noun "minutes"
+  | Seconds -> `Noun "seconds"
+  | TODAY -> `Pattern [`Func "today"]
+  | NOW -> `Pattern [`Func "now"]
+  | And -> `Infix " and "
+  | Or -> `Infix " or "
+  | Not -> `Prefix "it is not true that "
+  | EQ -> `Infix " = "
+  | NEQ -> `Infix " ≠ "
+  | GT -> `Infix " > "
+  | GEQ -> `Infix " ≥ "
+  | LT -> `Infix " < "
+  | LEQ -> `Infix " ≤ "
+  | BOUND -> `Pattern [`Arg 1; `Kwd "is"; `Func "bound"]
+  | IF -> `Pattern [`Arg 2; `Func "if"; `Arg 1; `Func "else"; `Arg 3]
+  | IsIRI -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "IRI"]
+  | IsBlank -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "blank node"]
+  | IsLiteral -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "literal"]
+  | IsNumeric -> `Pattern [`Arg 1; `Kwd "is"; `Kwd "a"; `Func "number"]
+  | StrStarts -> `Pattern [`Arg 1; `Func "starts with"; `Arg 2]
+  | StrEnds -> `Pattern [`Arg 1; `Func "ends with"; `Arg 2]
+  | Contains -> `Pattern [`Arg 1; `Func "contains"; `Arg 2]
+  | REGEX -> `Pattern [`Arg 1; `Func "matches regexp"; `Arg 2]
+  | REGEX_i -> `Pattern [`Arg 1; `Func "matches regexp (case insensitive)"; `Arg 2]
+  | LangMatches -> `Pattern [`Arg 1; `Kwd "has"; `Kwd "a"; `Func "language"; `Kwd "that"; `Func "matches"; `Arg 2]
  
   method order_highest = "hoogste-naar-laagste"
   method order_lowest = "laagste-naar-hoogste"

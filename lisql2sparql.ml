@@ -277,11 +277,11 @@ let triple_arg arg x y z =
 
 let rec expr_apply func args =
   match func with
-  | `Add -> Sparql.expr_infix "+" args
-  | `Sub -> Sparql.expr_infix "-" args
-  | `Mul -> Sparql.expr_infix "*" args
-  | `Div -> Sparql.expr_infix "/" args
-  | `Random2 ->
+  | Add -> Sparql.expr_infix "+" args
+  | Sub -> Sparql.expr_infix "-" args
+  | Mul -> Sparql.expr_infix "*" args
+  | Div -> Sparql.expr_infix "/" args
+  | Random2 ->
     ( match args with
     | [arg1; arg2] ->
       Sparql.expr_infix "+"
@@ -290,76 +290,76 @@ let rec expr_apply func args =
 	   [Sparql.expr_func "RAND" [];
 	    Sparql.expr_infix "-" [arg2; arg1]]]
     | _ -> assert false )
-  | `TODAY ->
+  | TODAY ->
     ( match args with
     | [] -> Sparql.expr_func "xsd:date" [Sparql.expr_func "NOW" []]
     | _ -> assert false )
-  | `And -> Sparql.expr_infix "&&" args
-  | `Or -> Sparql.expr_infix "||" args
-  | `EQ -> Sparql.expr_infix "=" args
-  | `NEQ -> Sparql.expr_infix "!=" args
-  | `GT -> Sparql.expr_infix ">" args
-  | `GEQ -> Sparql.expr_infix ">=" args
-  | `LT -> Sparql.expr_infix "<" args
-  | `LEQ -> Sparql.expr_infix "<=" args
-  | `STRDT | `STRLANG | `Integer | `Decimal | `Double ->
+  | And -> Sparql.expr_infix "&&" args
+  | Or -> Sparql.expr_infix "||" args
+  | EQ -> Sparql.expr_infix "=" args
+  | NEQ -> Sparql.expr_infix "!=" args
+  | GT -> Sparql.expr_infix ">" args
+  | GEQ -> Sparql.expr_infix ">=" args
+  | LT -> Sparql.expr_infix "<" args
+  | LEQ -> Sparql.expr_infix "<=" args
+  | STRDT | STRLANG | Integer | Decimal | Double ->
     ( match args with
     | arg::other_args -> Sparql.expr_func (name_func func) (Sparql.expr_func "str" [arg] :: other_args)
     | [] -> assert false )
-  | `REGEX_i -> Sparql.expr_func (name_func func) (args @ [(Sparql.string "i" :> Sparql.expr)])
+  | REGEX_i -> Sparql.expr_func (name_func func) (args @ [(Sparql.string "i" :> Sparql.expr)])
   | func -> Sparql.expr_func (name_func func) args
 and name_func = function
-  | `Str -> "str"
-  | `Lang -> "lang"
-  | `Datatype -> "datatype"
-  | `IRI -> "IRI"
-  | `STRDT -> "STRDT"
-  | `STRLANG -> "STRLANG"
-  | `Strlen -> "strlen"
-  | `Substr2 -> "substr"
-  | `Substr3 -> "substr"
-  | `Strbefore -> "strbefore"
-  | `Strafter -> "strafter"
-  | `Concat -> "concat"
-  | `UCase -> "ucase"
-  | `LCase -> "lcase"
-  | `Encode_for_URI -> "encode_for_uri"
-  | `Replace -> "replace"
-  | `Integer -> "xsd:integer"
-  | `Decimal -> "xsd:decimal"
-  | `Double -> "xsd:double"
-  | `Indicator -> "xsd:integer"
-  | `Add | `Sub | `Mul | `Div -> invalid_arg "Lisql2sparql.name_func"
-  | `Neg -> "-"
-  | `Abs -> "abs"
-  | `Round -> "round"
-  | `Ceil -> "ceil"
-  | `Floor -> "floor"
-  | `Random2 -> invalid_arg "Lisql2sparql.name_func: Random2"
-  | `Date -> "xsd:date"
-  | `Time -> "xsd:time"
-  | `Year -> "year"
-  | `Month -> "month"
-  | `Day -> "day"
-  | `Hours -> "hours"
-  | `Minutes -> "minutes"
-  | `Seconds -> "seconds"
-  | `TODAY -> invalid_arg "Lisql2sparql.name_func: TODAY"
-  | `NOW -> "NOW"
-  | `Not -> "!"
-  | `And | `Or
-  | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ -> invalid_arg "Lisql2sparql.name_func"
-  | `BOUND -> "BOUND"
-  | `IF -> "IF"
-  | `IsIRI -> "IsIRI"
-  | `IsBlank -> "IsBlank"
-  | `IsLiteral -> "IsLiteral"
-  | `IsNumeric -> "IsNumeric"
-  | `StrStarts -> "strstarts"
-  | `StrEnds -> "strends"
-  | `Contains -> "contains"
-  | `REGEX | `REGEX_i -> "REGEX"
-  | `LangMatches -> "langMatches"
+  | Str -> "str"
+  | Lang -> "lang"
+  | Datatype -> "datatype"
+  | IRI -> "IRI"
+  | STRDT -> "STRDT"
+  | STRLANG -> "STRLANG"
+  | Strlen -> "strlen"
+  | Substr2 -> "substr"
+  | Substr3 -> "substr"
+  | Strbefore -> "strbefore"
+  | Strafter -> "strafter"
+  | Concat -> "concat"
+  | UCase -> "ucase"
+  | LCase -> "lcase"
+  | Encode_for_URI -> "encode_for_uri"
+  | Replace -> "replace"
+  | Integer -> "xsd:integer"
+  | Decimal -> "xsd:decimal"
+  | Double -> "xsd:double"
+  | Indicator -> "xsd:integer"
+  | Add | Sub | Mul | Div -> invalid_arg "Lisql2sparql.name_func"
+  | Neg -> "-"
+  | Abs -> "abs"
+  | Round -> "round"
+  | Ceil -> "ceil"
+  | Floor -> "floor"
+  | Random2 -> invalid_arg "Lisql2sparql.name_func: Random2"
+  | Date -> "xsd:date"
+  | Time -> "xsd:time"
+  | Year -> "year"
+  | Month -> "month"
+  | Day -> "day"
+  | Hours -> "hours"
+  | Minutes -> "minutes"
+  | Seconds -> "seconds"
+  | TODAY -> invalid_arg "Lisql2sparql.name_func: TODAY"
+  | NOW -> "NOW"
+  | Not -> "!"
+  | And | Or
+  | EQ | NEQ | GT | GEQ | LT | LEQ -> invalid_arg "Lisql2sparql.name_func"
+  | BOUND -> "BOUND"
+  | IF -> "IF"
+  | IsIRI -> "IsIRI"
+  | IsBlank -> "IsBlank"
+  | IsLiteral -> "IsLiteral"
+  | IsNumeric -> "IsNumeric"
+  | StrStarts -> "strstarts"
+  | StrEnds -> "strends"
+  | Contains -> "contains"
+  | REGEX | REGEX_i -> "REGEX"
+  | LangMatches -> "langMatches"
 
 type deps = Rdf.term list list (* each dependency corresponds to a hyper-edge over a list of vars *)
 type deps_p1 = Rdf.term -> deps

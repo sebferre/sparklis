@@ -156,24 +156,24 @@ let js_aggreg_map : aggreg Jsutils.js_map =
                "Minimum", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])))
              
 type func =
-  [ `Str
-  | `Lang | `Datatype
-  | `IRI | `STRDT | `STRLANG
-  | `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
-  | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
-  | `Integer | `Decimal | `Double | `Indicator
-  | `Add | `Sub | `Mul | `Div | `Neg
-  | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
-  | `Date | `Time
-  | `Year | `Month | `Day | `Hours | `Minutes | `Seconds
-  | `TODAY | `NOW
-  | `And | `Or | `Not
-  | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ
-  | `BOUND | `IF
-  | `IsIRI | `IsBlank | `IsLiteral | `IsNumeric
-  | `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX | `REGEX_i (* case insensitive *) ]
+  | Str
+  | Lang | Datatype
+  | IRI | STRDT | STRLANG
+  | Strlen | Substr2 | Substr3 | Strbefore | Strafter
+  | Concat | UCase | LCase | Encode_for_URI | Replace
+  | Integer | Decimal | Double | Indicator
+  | Add | Sub | Mul | Div | Neg
+  | Abs | Round | Ceil | Floor | Random2 (* from some range *)
+  | Date | Time
+  | Year | Month | Day | Hours | Minutes | Seconds
+  | TODAY | NOW
+  | And | Or | Not
+  | EQ | NEQ | GT | GEQ | LT | LEQ
+  | BOUND | IF
+  | IsIRI | IsBlank | IsLiteral | IsNumeric
+  | StrStarts | StrEnds | Contains | LangMatches | REGEX | REGEX_i (* case insensitive *)
 (* missing: timezone, hash functions, BNODE *)
-(*let js_func_map : func Jsutils.js_map =
+let js_func_map : func Jsutils.js_map =
   Jsutils.js_map
     (`Enum
        [| "Str";
@@ -191,7 +191,7 @@ type func =
           "EQ"; "NEQ"; "GT"; "GEQ"; "LT"; "LEQ";
           "BOUND"; "IF";
           "IsIRI"; "IsBlank"; "IsLiteral"; "IsNumeric";
-          "StrStarts"; "StrEnds"; "Contains"; "LangMatches"; "REGEX"; "REGEX_i" |])*)
+          "StrStarts"; "StrEnds"; "Contains"; "LangMatches"; "REGEX"; "REGEX_i" |])
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
 type 'a elt_p1 =

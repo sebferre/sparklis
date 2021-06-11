@@ -209,34 +209,34 @@ let constr_domains : constr -> datatype list = function
 
        
 let func_signatures : func -> (datatype list * datatype) list = function
-  | `Str -> [ [`IRI_Literal], `String ]
-  | `Lang -> [ [`StringLiteral], `String ]
-  | `Datatype -> [ [`Literal], `IRI ]
-  | `IRI -> [ [`IRI_Literal], `IRI ]
-  | `STRDT -> [ [`Literal; `IRI], `Literal ]
-  | `STRLANG -> [ [`Literal; `String], `StringLiteral ]
-  | `Strlen -> [ [`StringLiteral], `Integer ]
-  | `Substr2 -> [ [`StringLiteral; `Integer], `StringLiteral ]
-  | `Substr3 -> [ [`StringLiteral; `Integer; `Integer], `StringLiteral ]
-  | `Strbefore
-  | `Strafter
-  | `Concat -> [ [`StringLiteral; `StringLiteral], `StringLiteral ]
-  | `UCase
-  | `LCase
-  | `Encode_for_URI -> [ [`StringLiteral], `StringLiteral ]
-  | `Replace -> [ [`StringLiteral; `String; `String], `StringLiteral ]
-  | `Integer -> [ [`Literal], `Integer ]
-  | `Decimal -> [ [`Literal], `Decimal ]
-  | `Double -> [ [`Literal], `Float ]
-  | `Indicator -> [ [`Boolean], `Integer ]
-  | `Add -> [ [`Integer; `Integer], `Integer;
+  | Str -> [ [`IRI_Literal], `String ]
+  | Lang -> [ [`StringLiteral], `String ]
+  | Datatype -> [ [`Literal], `IRI ]
+  | IRI -> [ [`IRI_Literal], `IRI ]
+  | STRDT -> [ [`Literal; `IRI], `Literal ]
+  | STRLANG -> [ [`Literal; `String], `StringLiteral ]
+  | Strlen -> [ [`StringLiteral], `Integer ]
+  | Substr2 -> [ [`StringLiteral; `Integer], `StringLiteral ]
+  | Substr3 -> [ [`StringLiteral; `Integer; `Integer], `StringLiteral ]
+  | Strbefore
+  | Strafter
+  | Concat -> [ [`StringLiteral; `StringLiteral], `StringLiteral ]
+  | UCase
+  | LCase
+  | Encode_for_URI -> [ [`StringLiteral], `StringLiteral ]
+  | Replace -> [ [`StringLiteral; `String; `String], `StringLiteral ]
+  | Integer -> [ [`Literal], `Integer ]
+  | Decimal -> [ [`Literal], `Decimal ]
+  | Double -> [ [`Literal], `Float ]
+  | Indicator -> [ [`Boolean], `Integer ]
+  | Add -> [ [`Integer; `Integer], `Integer;
 	      [`Decimal; `Decimal], `Decimal;
 	      [`Float; `Float], `Float;
 	      [`Duration; `Duration], `Duration;
 	      [`DateTime; `Duration], `DateTime;
 	      [`Date; `Duration], `Date;
 	      [`Time; `Duration], `Time ]
-  | `Sub -> [ [`Integer; `Integer], `Integer;
+  | Sub -> [ [`Integer; `Integer], `Integer;
 	      [`Decimal; `Decimal], `Decimal;
 	      [`Float; `Float], `Float;
 	      [`Duration; `Duration], `Duration;
@@ -246,59 +246,59 @@ let func_signatures : func -> (datatype list * datatype) list = function
 	      [`DateTime; `DateTime], `Duration;
 	      [`Date; `Date], `Duration;
 	      [`Time; `Time], `Duration ]
-  | `Mul -> [ [`Integer; `Integer], `Integer;
+  | Mul -> [ [`Integer; `Integer], `Integer;
 	      [`Decimal; `Decimal], `Decimal;
 	      [`Float; `Float], `Float;
 	      [`Duration; `Float], `Duration ]
-  | `Div -> [ [`Decimal; `Decimal], `Decimal;
+  | Div -> [ [`Decimal; `Decimal], `Decimal;
 	      [`Float; `Float], `Float ]
-  | `Neg
-  | `Abs
-  | `Round
-  | `Ceil
-  | `Floor -> [ [`Integer], `Integer;
+  | Neg
+  | Abs
+  | Round
+  | Ceil
+  | Floor -> [ [`Integer], `Integer;
 		[`Decimal], `Decimal;
 		[`Float], `Float ]
-  | `Random2 -> [ [`Float; `Float], `Float ]
-  | `Date -> [ [`DateTime], `Date ]
-  | `Time -> [ [`DateTime], `Time ]
-  | `Year
-  | `Month
-  | `Day -> [ [`Date], `Integer;
+  | Random2 -> [ [`Float; `Float], `Float ]
+  | Date -> [ [`DateTime], `Date ]
+  | Time -> [ [`DateTime], `Time ]
+  | Year
+  | Month
+  | Day -> [ [`Date], `Integer;
 	      [`Duration], `Integer ]
-  | `Hours
-  | `Minutes -> [ [`DateTime], `Integer;
+  | Hours
+  | Minutes -> [ [`DateTime], `Integer;
 		  [`Duration], `Integer ]
-  | `Seconds -> [ [`DateTime], `Float;
+  | Seconds -> [ [`DateTime], `Float;
 		  [`Duration], `Float ]
-  | `TODAY -> [ [], `Date ]
-  | `NOW -> [ [], `DateTime ]
-  | `And
-  | `Or -> [ [`Boolean; `Boolean], `Boolean ]
-  | `Not -> [ [`Boolean], `Boolean ]
-  | `EQ | `NEQ
-  | `GEQ | `GT
-  | `LEQ | `LT -> [ [`Float; `Float], `Boolean;
+  | TODAY -> [ [], `Date ]
+  | NOW -> [ [], `DateTime ]
+  | And
+  | Or -> [ [`Boolean; `Boolean], `Boolean ]
+  | Not -> [ [`Boolean], `Boolean ]
+  | EQ | NEQ
+  | GEQ | GT
+  | LEQ | LT -> [ [`Float; `Float], `Boolean;
 		    [`StringLiteral; `StringLiteral], `Boolean;
 		    [`DateTime; `DateTime], `Boolean;
 		    [`Date; `Date], `Boolean ]
-  | `BOUND -> [ [`Term], `Boolean ] (* should be `Var instead of `Term *)
-  | `IF ->
+  | BOUND -> [ [`Term], `Boolean ] (* should be `Var instead of `Term *)
+  | IF ->
     List.map (fun dt -> [`Boolean; dt; dt], dt)
       [`Integer; `Decimal; `Float;
        `String; `StringLiteral;
        `DateTime; `Date; `Boolean;
        `Literal; `Term]
-  | `IsIRI
-  | `IsBlank
-  | `IsLiteral
-  | `IsNumeric -> [ [`Term], `Boolean ]
-  | `StrStarts
-  | `StrEnds
-  | `Contains
-  | `LangMatches
-  | `REGEX
-  | `REGEX_i -> [ [`StringLiteral; `StringLiteral], `Boolean ]
+  | IsIRI
+  | IsBlank
+  | IsLiteral
+  | IsNumeric -> [ [`Term], `Boolean ]
+  | StrStarts
+  | StrEnds
+  | Contains
+  | LangMatches
+  | REGEX
+  | REGEX_i -> [ [`StringLiteral; `StringLiteral], `Boolean ]
 
 
 let is_predicate (func : func) : bool =
