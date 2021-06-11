@@ -85,9 +85,9 @@ let sparql_converter (conv_opt : num_conv option) : Sparql.converter =
   | Some (conv,b) ->
     let func_conv =
       match conv with
-      | `Integer -> "xsd:integer"
-      | `Decimal -> "xsd:decimal"
-      | `Double -> "xsd:double" in
+      | IntegerConv -> "xsd:integer"
+      | DecimalConv -> "xsd:decimal"
+      | DoubleConv -> "xsd:double" in
     (fun e ->
       Sparql.expr_func func_conv
 	[ if b

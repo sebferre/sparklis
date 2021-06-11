@@ -16,6 +16,8 @@
    limitations under the License.
 *)
 
+open Lisql
+   
 (* types *)
 
 type datatype =
@@ -34,7 +36,7 @@ type datatype =
 | `DateTime
 | `Duration
 | `Boolean
-| `Conversion of datatype * Lisql.num_conv * datatype (* (A,conv,B) : conv converts A to B *)
+| `Conversion of datatype * num_conv * datatype (* (A,conv,B) : conv converts A to B *)
 ]
 
 let inheritance : (datatype * datatype list) list =
@@ -62,7 +64,7 @@ let inheritance : (datatype * datatype list) list =
     [`Term; `IRI_Literal; `IRI; `Blank; `Literal; `StringLiteral; `String;
      `Float; `Decimal; `Integer; `Date; `Time; `DateTime; `Duration; `Boolean]
 
-type compatible = { bool : bool; conv_opt : Lisql.num_conv option }
+type compatible = { bool : bool; conv_opt : num_conv option }
 (* conv_opt field only well-defined when bool=true *)
 
 let compatible_true = { bool=true; conv_opt=None }
@@ -89,11 +91,11 @@ let lcs_num_conv_opt conv1_opt conv2_opt = match conv1_opt, conv2_opt with
   | _, None -> conv2_opt
   | Some conv1, Some conv2 ->
     match conv1, conv2 with
-    | (`Double, b1) , (_, b2)
-    | (_, b1), (`Double, b2) -> Some (`Double, b1||b2)
-    | (`Decimal, b1), (_,b2)
-    | (_,b1), (`Decimal,b2) -> Some (`Decimal, b1||b2)
-    | (_,b1), (_,b2) -> Some (`Integer, b1||b2)
+    | (DoubleConv, b1) , (_, b2)
+    | (_, b1), (DoubleConv, b2) -> Some (DoubleConv, b1||b2)
+    | (DecimalConv, b1), (_,b2)
+    | (_,b1), (DecimalConv,b2) -> Some (DecimalConv, b1||b2)
+    | (_,b1), (_,b2) -> Some (IntegerConv, b1||b2)
 
 let lcs_compatible (comp1 : compatible) (comp2 : compatible) : compatible =
   match comp1.bool, comp2.bool with
@@ -105,15 +107,15 @@ let lcs_compatible (comp1 : compatible) (comp2 : compatible) : compatible =
 
 (* typing functions *)
 
-let of_num_conv = function
-  | `Integer, _ -> `Integer
-  | `Decimal, _ -> `Decimal
-  | `Double, _ -> `Float
+let of_num_conv : num_conv -> datatype = function
+  | IntegerConv, _ -> `Integer
+  | DecimalConv, _ -> `Decimal
+  | DoubleConv, _ -> `Float
 
 let of_numeric_literal s src_dt apply_str =
-  if String.contains s 'E' || String.contains s 'e' then `Conversion (src_dt, (`Double, apply_str), `Float)
-  else if String.contains s '.' then `Conversion (src_dt, (`Decimal, apply_str), `Decimal)
-  else `Conversion (src_dt, (`Integer, apply_str), `Integer)
+  if String.contains s 'E' || String.contains s 'e' then `Conversion (src_dt, (DoubleConv, apply_str), `Float)
+  else if String.contains s '.' then `Conversion (src_dt, (DecimalConv, apply_str), `Decimal)
+  else `Conversion (src_dt, (IntegerConv, apply_str), `Integer)
 
 let rec of_term : Rdf.term -> datatype = function
   | Rdf.URI _ -> `IRI

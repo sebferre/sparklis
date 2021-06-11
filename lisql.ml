@@ -85,7 +85,8 @@ let reset_constr : constr -> constr = function
 
 (* LISQL modifiers *)
 
-type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
+type num_conv_type = IntegerConv | DecimalConv | DoubleConv
+type num_conv = num_conv_type * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
 (*let js_num_conv_map : num_conv Jsutils.js_map =
   Jsutils.js_map (`Tuple [| `Enum [| "Integer"; "Decimal"; "Double" |]; `Bool |])
 let _ = Jsutils.js_map_log "num_conv:" js_num_conv_map [(`Integer,false); (`Double,true)] (* TEST *)*)

@@ -93,12 +93,12 @@ let list_func_atom =
     `REGEX_i, "REGEX_i";
   ]
 let list_num_conv_atom =
-  [ (`Integer, false), "Integer";
-    (`Integer, true), "IntegerStr";
-    (`Decimal, false), "Decimal";
-    (`Decimal, true), "DecimalStr";
-    (`Double, false), "Double";
-    (`Double, true), "DoubleStr";
+  [ (IntegerConv, false), "Integer";
+    (IntegerConv, true), "IntegerStr";
+    (DecimalConv, false), "Decimal";
+    (DecimalConv, true), "DecimalStr";
+    (DoubleConv, false), "Double";
+    (DoubleConv, true), "DoubleStr";
   ]
 
 let atom_of_func func =
