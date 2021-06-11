@@ -99,13 +99,15 @@ type term =
 
 let js_term_map : term Jsutils.js_map =
   Jsutils.js_map
-    (`Sum [| "uri", [| "uri", `String|];
-             "number", [| "number", `Float; "str", `String; "datatype", `String|];
-             "typedLiteral", [| "str", `String; "datatype", `String|];
-             "plainLiteral", [| "str", `String; "lang", `String|];
-             "bnode", [| "id", `String|];
-             "var", [| "name", `String|] |])
-                   
+    (`Sum ([| |],
+           [| "uri", [| "uri", `String|];
+              "number", [| "number", `Float; "str", `String; "datatype", `String|];
+              "typedLiteral", [| "str", `String; "datatype", `String|];
+              "plainLiteral", [| "str", `String; "lang", `String|];
+              "bnode", [| "id", `String|];
+              "var", [| "name", `String|] |]))
+(*let _ = Jsutils.js_map_log "RDF term:" js_term_map [URI "http://example.org/"; Number (3.14, "3.14", "xsd:float")] (* TEST *)*)
+  
 let term_is_var = function
   | Var _ -> true
   | _ -> false

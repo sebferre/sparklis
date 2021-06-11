@@ -86,42 +86,111 @@ let reset_constr : constr -> constr = function
 (* LISQL modifiers *)
 
 type num_conv = [`Integer | `Decimal | `Double] * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
-
+(*let js_num_conv_map : num_conv Jsutils.js_map =
+  Jsutils.js_map (`Tuple [| `Enum [| "Integer"; "Decimal"; "Double" |]; `Bool |])
+let _ = Jsutils.js_map_log "num_conv:" js_num_conv_map [(`Integer,false); (`Double,true)] (* TEST *)*)
+  
 type id = int
+        
 type arg = S | P | O | Q of Rdf.uri (* qualifier *)
+let js_arg_map : arg Jsutils.js_map =
+  Jsutils.js_map
+    (`Sum ([| "S"; "P"; "O" |],
+           [| "Q", [| "uri", `String |] |]))
+(* let _ = Jsutils.js_map_log "arg:" js_arg_map [S; Q "http://example.org/q"] (* TEST *) *)
+                          
 type project = Unselect | Select
+                        
 type order = Unordered | Highest of num_conv option | Lowest of num_conv option
+(*let js_order_map : order Jsutils.js_map =
+  let open Jsutils in
+  js_map
+    (`Sum ([| "Unordered" |],
+           [| "Highest", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+              "Lowest", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])) *)
+                                                              
 type modif_s2 = project * order
+              
 type orientation = Fwd | Bwd
+let js_orientation_map : orientation Jsutils.js_map =
+  Jsutils.js_map (`Enum [| "Fwd"; "Bwd" |])
+                       
 type inverse = bool
 type modif_p2 = orientation
+              
 type pred = (* E = Event, S = Subject, O = Object *)
   | Class of Rdf.uri
   | Prop of Rdf.uri
   | SO of Rdf.uri * Rdf.uri (* properties: E -> S, E -> O *)
   | EO of Rdf.uri * Rdf.uri (* properties: S -> E, E -> O *)
+let js_pred_map : pred Jsutils.js_map =
+  Jsutils.js_map
+    (`Sum ([| |],
+           [| "Class", [| "uri", `String |];
+              "Prop", [| "uri", `String |];
+              "SO", [| "uriS", `String; "uriO", `String |];
+              "EO", [| "uriE", `String; "uriO", `String |] |]))
+        
 type latlong = [ `Custom of Rdf.uri * Rdf.uri | `Wikidata ]
+(*let js_latlong_map : latlong Jsutils.js_map =
+  Jsutils.js_map
+    (`Sum ([| "Wikidata" |],
+           [| "Custom", [| "uriLat", `String; "uriLong", `String |] |]))
+let _ = Jsutils.js_map_log "latlong:" js_latlong_map [`Wikidata; `Custom ("http://lat", "http://long")] (* TEST *)*)
+             
 type aggreg =
-| NumberOf | ListOf | Sample
-| Total of num_conv option | Average of num_conv option | Maximum of num_conv option | Minimum of num_conv option
+  | NumberOf
+  | ListOf
+  | Sample
+  | Total of num_conv option
+  | Average of num_conv option
+  | Maximum of num_conv option
+  | Minimum of num_conv option
+(*let js_aggreg_map : aggreg Jsutils.js_map =
+  Jsutils.(js_map
+    (`Sum ([| "NumberOf"; "listOf"; "Sample" |],
+           [|  "Total", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "Average", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "Maximum", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "Minimum", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))) *)
+             
 type func =
-[ `Str
-| `Lang | `Datatype
-| `IRI | `STRDT | `STRLANG
-| `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
-| `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
-| `Integer | `Decimal | `Double | `Indicator
-| `Add | `Sub | `Mul | `Div | `Neg
-| `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
-| `Date | `Time
-| `Year | `Month | `Day | `Hours | `Minutes | `Seconds
-| `TODAY | `NOW
-| `And | `Or | `Not
-| `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ
-| `BOUND | `IF
-| `IsIRI | `IsBlank | `IsLiteral | `IsNumeric
-| `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX | `REGEX_i (* case insensitive *) ]
+  [ `Str
+  | `Lang | `Datatype
+  | `IRI | `STRDT | `STRLANG
+  | `Strlen | `Substr2 | `Substr3 | `Strbefore | `Strafter
+  | `Concat | `UCase | `LCase | `Encode_for_URI | `Replace
+  | `Integer | `Decimal | `Double | `Indicator
+  | `Add | `Sub | `Mul | `Div | `Neg
+  | `Abs | `Round | `Ceil | `Floor | `Random2 (* from some range *)
+  | `Date | `Time
+  | `Year | `Month | `Day | `Hours | `Minutes | `Seconds
+  | `TODAY | `NOW
+  | `And | `Or | `Not
+  | `EQ | `NEQ | `GT | `GEQ | `LT | `LEQ
+  | `BOUND | `IF
+  | `IsIRI | `IsBlank | `IsLiteral | `IsNumeric
+  | `StrStarts | `StrEnds | `Contains | `LangMatches | `REGEX | `REGEX_i (* case insensitive *) ]
 (* missing: timezone, hash functions, BNODE *)
+(*let js_func_map : func Jsutils.js_map =
+  Jsutils.js_map
+    (`Enum
+       [| "Str";
+          "Lang"; "Datatype";
+          "IRI"; "STRDT"; "STRLANG";
+          "Strlen"; "Substr2"; "Substr3"; "Strbefore"; "Strafter";
+          "Concat"; "UCase"; "LCase"; "Encode_for_URI"; "Replace";
+          "Integer"; "Decimal"; "Double"; "Indicator";
+          "Add"; "Sub"; "Mul"; "Div"; "Neg";
+          "Abs"; "Round"; "Ceil"; "Floor"; "Random2";
+          "Date"; "Time";
+          "Year"; "Month"; "Day"; "Hours"; "Minutes"; "Seconds";
+          "TODAY"; "NOW";
+          "And"; "Or"; "Not";
+          "EQ"; "NEQ"; "GT"; "GEQ"; "LT"; "LEQ";
+          "BOUND"; "IF";
+          "IsIRI"; "IsBlank"; "IsLiteral"; "IsNumeric";
+          "StrStarts"; "StrEnds"; "Contains"; "LangMatches"; "REGEX"; "REGEX_i" |])*)
 
 (* LISQL elts : 'a param is for element annotations (hook) *)
 type 'a elt_p1 =
@@ -1245,11 +1314,16 @@ let home_focus () : focus * delta =
 
 (* increments *)
 
-type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime | `Duration ]
-(* a sub-type of Sparql.datatype *)
+type input_type =  [`IRI | `String | `Float | `Integer | `Date | `Time | `DateTime | `Duration ] (* a sub-type of Sparql.datatype *)
+(*let js_input_type_map : input_type Jsutils.js_map =
+  Jsutils.js_map
+    (`Enum [| "IRI"; "String"; "Float"; "Integer"; "Date"; "Time"; "DateTime"; "Duration" |]) *)
 
 type selection_op = [`And | `Or | `NAnd | `NOr | `Aggreg]
-		     
+(* let js_selection_op_map : selection_op Jsutils.js_map =
+  Jsutils.js_map
+    (`Enum [| "And"; "Or"; "NAnd"; "NOr"; "Aggreg" |]) *)
+  
 type increment =
   | IncrSelection of selection_op * increment list
   | IncrInput of string * input_type
@@ -1267,7 +1341,6 @@ type increment =
   | IncrTriplify
   | IncrHierarchy of bool (* trans_rel *)
   (* trans_rel: to indicate that relation in context can be made transitive *)
-  (* inv: to indicate whether to display inversed hierarchies *)
   | IncrSim of pred * arg * arg (* predicate, source/target roles *)
   | IncrSimRankIncr
   | IncrSimRankDecr
@@ -1288,6 +1361,63 @@ type increment =
   | IncrAggregId of aggreg * id
   | IncrFuncArg of bool (* is_pred *) * func * int (* arity *) * int (* arg position, starting at 1 *) * num_conv option (* function result *) * num_conv option (* argument *)
   | IncrName of string
+              
+(*let js_increment_map : increment Jsutils.js_map =
+  let open Jsutils in
+  js_map
+    (`Sum
+       ([| "IncrAnything";
+           "IncrThatIs";
+           "IncrSomethingThatIs";
+           "IncrTriplify";
+           "IncrSimRankIncr";
+           "IncrSimRankDecr";
+           "IncrAnd";
+           "IncrDuplicate";
+           "IncrOr";
+           "IncrChoice";
+           "IncrMaybe";
+           "IncrNot";
+           "IncrIn";
+           "IncrInWhichThereIs";
+           "IncrUnselect";
+           "IncrForeach";
+           "IncrForeachResult"
+        |],
+        [| "IncrSelection", [| "op", js_custom_spec js_selection_op_map;
+                               "items", `List `Rec |];
+           "IncrInput", [| "value", `String;
+                           "inputType", js_custom_spec js_input_type_map |];
+           "IncrTerm", [| "term", js_custom_spec Rdf.js_term_map |];
+           "IncrId", [| "id", `Int;
+                        "conv", `Option (js_custom_spec js_num_conv_map) |];
+           "IncrPred", [| "arg", js_custom_spec js_arg_map;
+                          "pred", js_custom_spec js_pred_map |];
+           "IncrArg", [| "uri", `String |];
+           "IncrTriple", [| "arg", js_custom_spec js_arg_map |];
+           "IncrType", [| "uri", `String |];
+           "IncrRel", [| "uri", `String;
+                         "orientation", js_custom_spec js_orientation_map |];
+           "IncrLatLong", [| "latlong", js_custom_spec js_latlong_map |];
+           "IncrHierarchy", [| "transitiveRelInCtx", `Bool |];
+           (* trans_rel: to indicate that relation in context can be made transitive *)
+           "IncrSim", [| "pred", js_custom_spec js_pred_map;
+                           "argS", js_custom_spec js_arg_map;
+                           "argO", js_custom_spec js_arg_map |];
+           "IncrOrder", [| "order", js_custom_spec js_order_map |];
+           "IncrAggreg", [| "aggreg", js_custom_spec js_aggreg_map |];
+           "IncrForeachId", [| "id", `Int |];
+           "IncrAggregId", [| "aggreg", js_custom_spec js_aggreg_map;
+                              "id", `Int |];
+           "IncrFuncArg", [| "boolResult", `Bool;
+                             "func", js_custom_spec js_func_map;
+                             "arity", `Int;
+                             "argPos", `Int;
+                             "resultConv", `Option (js_custom_spec js_num_conv_map);
+                             "argConv", `Option (js_custom_spec js_num_conv_map) |];
+           "IncrName", [| "name", `String |]
+          |])) *)
+  
 
 let datatype_of_input_type = function
   | `IRI -> invalid_arg "datatype_of_input_type: URI has no datatype"
