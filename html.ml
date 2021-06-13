@@ -392,9 +392,9 @@ let html_freq ?id ?classe ?title ~unit ~partial value =
     let s = string_of_int value in
     let s = if partial then s ^ "+" else s in
     ( match unit with
-      | `Results -> html_span ?id ~classe:(classe_prefix ^ "frequency-results") ?title s
-      | `Entities -> html_span ?id ~classe:(classe_prefix ^ "frequency-entities") ?title s
-      | `Concepts | `Modifiers -> " (" ^ s ^ ")" (* should not happen *)
+      | Lis.Results -> html_span ?id ~classe:(classe_prefix ^ "frequency-results") ?title s
+      | Entities -> html_span ?id ~classe:(classe_prefix ^ "frequency-entities") ?title s
+      | Concepts | Modifiers -> " (" ^ s ^ ")" (* should not happen *)
     )
 
 let html_delete ?id ~title () =
@@ -704,13 +704,13 @@ let html_index ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ ->
   let grammar = Lisql2nl.config_lang#grammar in
   let sort_node_list nodes =
     List.sort
-      (fun (`Node ((data1,_,_,_),_)) (`Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
+      (fun (Lis.Node ((data1,_,_,_),_)) (Lis.Node ((data2,_,_,_),_)) -> compare_incr ~use_freq:sort_by_frequency data1 data2)
       nodes in
   let rec aux buf_sel buf_tree ref_count nodes =
     let sorted_nodes = sort_node_list nodes in
     Buffer.add_string buf_tree "<ul>";
     List.iter
-      (fun (`Node ((_,key,is_selection_incr,html), children)) ->
+      (fun (Lis.Node ((_,key,is_selection_incr,html), children)) ->
        if is_selection_incr
        then begin
 	   Buffer.add_string buf_sel html end
@@ -838,7 +838,7 @@ let html_table_of_results (state : state) ~partial ~first_rank ~focus_var result
 	      html_freq ~id:key
 			?classe:(if partial then Some "partial-count" else None)
 			?title:(if partial then Some grammar#tooltip_header_exact_count else None)
-			~unit:`Entities
+			~unit:Entities
 			~partial
 			n) );
       Buffer.add_string buf "</th>")
@@ -927,7 +927,7 @@ let html_trees (state : state) ~partial ~(focus_var : Rdf.var option) (lv : Rdf.
 		html_freq ~id:key
 			  ?classe:(if partial then Some "partial-count" else None)
 			  ?title:(if partial then Some grammar#tooltip_header_exact_count else None)
-			  ~unit:`Entities
+			  ~unit:Entities
 			  ~partial
 			  n
 	     | None -> "" )

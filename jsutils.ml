@@ -307,8 +307,8 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
   | `String
   | `List of js_map_spec
   | `Array of js_map_spec
-  | `Tuple of js_map_spec array
-  | `Record of (string * js_map_spec) array
+  | `Tuple of js_map_spec array (* can be used for records *)
+  | `Record of (string * js_map_spec) array (* can be used for tuples *)
   | `Sum of (* WARNING: not for variants! *)
       string array (* constant constructors *)
       * (string * (string * js_map_spec) array) array (* non-constant constructors *)

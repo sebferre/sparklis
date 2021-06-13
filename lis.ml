@@ -34,7 +34,15 @@ let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
     res
 
 (* indices *)
-    
+
+type 'a forest = 'a tree list
+and 'a tree = Node of 'a * 'a forest
+let js_forest_map (m : 'a Jsutils.js_map) : 'a forest Jsutils.js_map =
+  Jsutils.js_map
+    (`List (`Sum ([| |],
+                  [| "Node", [| "item", Jsutils.js_custom_spec m;
+                                "children", `Rec |] |])))
+  
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
 object (self)
   val mutable organized : bool = false
@@ -100,7 +108,7 @@ object (self)
        | Some x -> x::res
        | None -> res)
       h []
-  method filter_map_tree : 'c. ?inverse:bool -> ('a * 'b -> 'c option) -> ([`Node of 'c * 'd list] as 'd) list =
+  method filter_map_tree : 'c. ?inverse:bool -> ('a * 'b -> 'c option) -> 'c forest =
     fun ?(inverse = false) f ->
       self#organize;
       if organized then
@@ -119,7 +127,7 @@ object (self)
 		    if inverse
 		    then aux (k::ancestors) !ref_parents
 		    else aux (k::ancestors) !ref_children in
-		  Some (`Node (x, node_children))
+		  Some (Node (x, node_children))
 	       | None -> None)
 	    keys
 	in
@@ -128,7 +136,7 @@ object (self)
 	Hashtbl.fold
 	  (fun k (v,_,_) res ->
 	   match f (k,v) with
-	   | Some x -> `Node (x, []) :: res
+	   | Some x -> Node (x, []) :: res
 	   | None -> res)
 	  h []
   method sample_list : 'c. int -> ('a * 'b -> 'c) -> int * 'c list =
@@ -150,9 +158,28 @@ let singleton_index elt_info =
 class ['a] int_index = ['a,int] index ()
 class ['a,'b] nested_int_index = ['a, int * 'b int_index] index ()
 
-type freq_unit = [`Results | `Entities | `Concepts | `Modifiers]
+type freq_unit = Results | Entities | Concepts | Modifiers
+let js_freq_unit_map : freq_unit Jsutils.js_map =
+  Jsutils.js_map
+    (`Enum [| "Results"; "Entities"; "Concepts"; "Modifiers"|])
+  
 type freq = { value : int; max_value : int option; partial : bool; unit : freq_unit }
+let js_freq_map : freq Jsutils.js_map =
+  let open Jsutils in
+  js_map
+    (`Record [| "value", `Int;
+                "maximum", `Option `Int;
+                "partialCount", `Bool;
+                "unit", js_custom_spec js_freq_unit_map |])
+
 class incr_freq_index = [Lisql.increment, freq option] index ()
+
+type incr_freq_forest = (Lisql.increment * freq option) forest
+let js_incr_freq_forest_map : incr_freq_forest Jsutils.js_map =
+  let open Jsutils in
+  js_forest_map
+    (js_map (`Record [| "suggestion", js_custom_spec Lisql.js_increment_map; (* Tuple and Record have same internal repr *)
+                        "frequency", `Option (js_custom_spec js_freq_map) |]))
 
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
@@ -912,7 +939,7 @@ object (self)
 	| None -> () ); *)
 	k_results None
     | Some sparql ->
-        let sparql = hook_sparql sparql in
+        let sparql = hook_sparql sparql in (* TODO: should the original query be hidden? *)
 	Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
 	  (fun res ->
             let res = hook_results res in
@@ -1043,7 +1070,7 @@ object (self)
       let value = if freq0 then 0 else 1 in
       let max_value = None in
       let partial = results_term.Sparql_endpoint.length = config_max_results#value in
-      let unit = `Results in
+      let unit = Results in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       List.iter
 	(fun t ->
@@ -1083,7 +1110,7 @@ object (self)
     else begin
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
-      let unit = `Results in
+      let unit = Results in
       let incr_index = new incr_freq_tree_index term_hierarchy in
     (* adding selection increments *)
       incr_index#add (Lisql.IncrSelection (NAndSel, []), None);
@@ -1165,7 +1192,7 @@ object (self)
       let partial_prop = results_prop.Sparql_endpoint.length = config_max_properties#value in
       let partial_pred = results_pred.Sparql_endpoint.length = config_max_properties#value in
       let partial = partial_class || partial_prop || partial_pred in
-      let unit = `Entities in
+      let unit = Entities in
       let int_index_class = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichClass.pattern_vars) results_class in
       let int_index_prop = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichProp.pattern_vars) results_prop in
       let int_index_pred = index_of_results_varterm_list (List.map (fun v -> Rdf.Var v) Lisql2sparql.WhichPred.pattern_vars) results_pred in
@@ -1313,7 +1340,7 @@ object (self)
     let process_wikidata results_class =
       let max_value = None in
       let partial = results_class.Sparql_endpoint.length = config_max_classes#value in
-      let unit = `Entities in
+      let unit = Entities in
       let int_index_class = index_of_results_varterm_list_count [Rdf.Var "c"] "n" results_class in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       int_index_class#iter
@@ -1332,7 +1359,7 @@ object (self)
       sync_concepts (fun () ->
 	  k ~partial (Some incr_index)) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
-      let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=`Entities } in
+      let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       let open Sparql_endpoint in
       ( match results_class.bindings with
@@ -1573,7 +1600,7 @@ object (self)
           (* focus_term_index is not empty *)
           let max_value_term, max_value_arg = None, None in
           let partial = self#partial_results in
-          let unit = `Results in
+          let unit = Results in
           let make_sparql (query_opt : Lisql2sparql.template option) filter_constr config_max =
 	    match query_opt with
 	    | None -> ""
@@ -1623,7 +1650,7 @@ object (self)
 	      (fun (t,(f,graph_index)) -> ([t],(f,graph_index))) in
           let max_value_term = Some nb_samples_term in
           let partial = self#partial_results || nb_samples_term < focus_term_index#length in
-          let unit = `Entities in
+          let unit = Entities in
           let make_sparql ((nb_samples, samples) : int * (Rdf.term list * (int * Rdf.term int_index)) list) config_max filter_constr (lv : Rdf.var list) (make_pattern : ?hook:(string Lisql2sparql.formula_hook) -> Rdf.term list -> Sparql.pattern (* maybe empty *)) =
 	    assert (lv <> []);
 	    match samples with

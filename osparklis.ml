@@ -723,7 +723,7 @@ object (self)
 		 elt_list##.scrollTop := term_scroll;
 		 jquery_set_innerHTML_fadeInOut
 		   "#count-terms"
-		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Entities } Lisql2nl.config_lang#grammar#entity_entities);
+		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=Entities } Lisql2nl.config_lang#grammar#entity_entities);
 		 self#restore_expanded_terms;
 		 term_selection#reset;
 		 jquery_hide "#selection-terms";
@@ -805,7 +805,7 @@ object (self)
 		 self#restore_expanded_properties;
 		 jquery_set_innerHTML_fadeInOut
 		   "#count-properties"
-		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=`Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
+		   (html_count_unit { Lis.value=count; max_value=None; partial; unit=Concepts } Lisql2nl.config_lang#grammar#concept_concepts);
 		 property_selection#reset;
 		 jquery_hide "#selection-properties";
 		 jquery_all_from elt_sel_items ".selection-increment" (onclick (fun elt ev -> apply_incr elt));
@@ -892,7 +892,7 @@ object (self)
 	   elt_list##.scrollTop := modifier_scroll;
 	   jquery_set_innerHTML_fadeInOut
 	     "#count-modifiers"
-	     (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=`Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
+	     (html_count_unit { Lis.value=count; max_value=None; partial=false; unit=Modifiers } Lisql2nl.config_lang#grammar#modifier_modifiers);
 	   modifier_selection#reset;
 	   jquery_hide "#selection-modifiers";
 	   stop_propagation_from elt_list ".term-input";
