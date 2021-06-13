@@ -700,7 +700,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
  end
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
-let html_index ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (index : Lis.incr_freq_index) ~(inverse : bool) ~(sort_by_frequency : bool): string * string * int =
+let html_incr_forest ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ -> true) focus (state : state) (incr_forest : Lis.incr_freq_forest) ~(sort_by_frequency : bool): string * string * int =
   let grammar = Lisql2nl.config_lang#grammar in
   let sort_node_list nodes =
     List.sort
@@ -710,26 +710,26 @@ let html_index ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ ->
     let sorted_nodes = sort_node_list nodes in
     Buffer.add_string buf_tree "<ul>";
     List.iter
-      (fun (Lis.Node ((_,key,is_selection_incr,html), children)) ->
-       if is_selection_incr
-       then begin
-	   Buffer.add_string buf_sel html end
-       else begin
-	 let check_id = collapse_of_key key in
-	 Buffer.add_string buf_tree (if dropdown then "<li>" else "<li class=\"col-xs-11\">");
-	 if children = [] then begin
-	     Buffer.add_string buf_tree "<label style=\"visibility:hidden;\">►&nbsp;</label>";
-	     Buffer.add_string buf_tree html
-	   end
-	 else begin
-	     Buffer.add_string buf_tree ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
-	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
-	     Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
-	     Buffer.add_string buf_tree html;
-	     aux buf_sel buf_tree ref_count children
-	   end;
-	 Buffer.add_string buf_tree "</li>";
-	 incr ref_count end)
+      (fun (Lis.Node ((_, key, is_selection_incr, html), children)) ->
+        if is_selection_incr
+        then begin
+	    Buffer.add_string buf_sel html end
+        else begin
+	    let check_id = collapse_of_key key in
+	    Buffer.add_string buf_tree (if dropdown then "<li>" else "<li class=\"col-xs-11\">");
+	    if children = [] then begin
+	        Buffer.add_string buf_tree "<label style=\"visibility:hidden;\">►&nbsp;</label>";
+	        Buffer.add_string buf_tree html
+	      end
+	    else begin
+	        Buffer.add_string buf_tree ("<input class=\"input-treeview\" type=\"checkbox\" id=\"" ^ check_id ^ "\">");
+	        Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-checked\">▼&nbsp;</label>");
+	        Buffer.add_string buf_tree ("<label for=\"" ^ check_id ^ "\" class=\"label-unchecked\">►&nbsp;</label>");
+	        Buffer.add_string buf_tree html;
+	        aux buf_sel buf_tree ref_count children
+	      end;
+	    Buffer.add_string buf_tree "</li>";
+	    incr ref_count end)
       sorted_nodes;
     if !ref_count = 0 then ( (* feedback for no suggestion *)
       Buffer.add_string buf_tree "<li class=\"col-xs-11\">";
@@ -740,11 +740,14 @@ let html_index ?(dropdown = false) ?(filter : Lisql.increment -> bool = fun _ ->
     ); 
     Buffer.add_string buf_tree "</ul>"
   in
-  let enriched_index_tree = index#filter_map_tree ~inverse (freq_text_html_increment_frequency ~filter focus state) in
+  let enriched_incr_forest =
+    Lis.forest_filter_map
+      (freq_text_html_increment_frequency ~filter focus state)
+      incr_forest in
   let buf_sel = Buffer.create 100 in
   let buf_tree = Buffer.create 1000 in
   let ref_count = ref 0 in
-  aux buf_sel buf_tree ref_count enriched_index_tree;
+  aux buf_sel buf_tree ref_count enriched_incr_forest;
   Buffer.contents buf_sel, Buffer.contents buf_tree, !ref_count
 
 let html_list_constr (state : state) (lc : Lisql.constr list) : string =

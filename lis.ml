@@ -42,6 +42,17 @@ let js_forest_map (m : 'a Jsutils.js_map) : 'a forest Jsutils.js_map =
     (`List (`Sum ([| |],
                   [| "Node", [| "item", Jsutils.js_custom_spec m;
                                 "children", `Rec |] |])))
+
+let rec forest_filter_map (f : 'a -> 'b option) : 'a forest -> 'b forest =
+  function
+  | [] -> []
+  | tree::forest1 -> tree_filter_map f tree @ forest_filter_map f forest1
+and tree_filter_map f : 'a tree -> 'b forest =
+  function
+  | Node (item, children) ->
+     match f item with
+     | None -> forest_filter_map f children
+     | Some item' -> [Node (item', forest_filter_map f children)]
   
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
 object (self)
@@ -108,8 +119,8 @@ object (self)
        | Some x -> x::res
        | None -> res)
       h []
-  method filter_map_tree : 'c. ?inverse:bool -> ('a * 'b -> 'c option) -> 'c forest =
-    fun ?(inverse = false) f ->
+  method filter_map_forest : 'c. inverse:bool -> ('a * 'b -> 'c option) -> 'c forest =
+    fun ~inverse f ->
       self#organize;
       if organized then
 	let rec aux ancestors (keys : 'a list) =
@@ -1064,7 +1075,7 @@ object (self)
 	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method private ajax_index_terms_init ?(freq0 = false) constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method private ajax_forest_terms_init ?(freq0 = false) ~(inverse : bool) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
       let value = if freq0 then 0 else 1 in
@@ -1083,7 +1094,8 @@ object (self)
 	(fun () ->
 	 term_hierarchy#sync
 	   (fun () ->
-	    k ~partial (Some incr_index)))
+             let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	     k ~partial (Some incr_forest)))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
@@ -1096,17 +1108,17 @@ object (self)
       (fun results_term -> process results_term)
       (fun code -> k ~partial:true None)
 
-  method ajax_index_terms_inputs_ids constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method ajax_forest_terms_inputs_ids ?(inverse = false) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
     if focus_descr#term = `Undefined then
-      k ~partial:false (Some (new incr_freq_index))
+      k ~partial:false (Some [])
     else if focus_descr#unconstrained then
-      self#ajax_index_terms_init constr elt k
+      self#ajax_forest_terms_init ~inverse constr elt k
     else if focus_term_index#is_empty
             (* except when it is expected to have an empty term index *)
             && not (some_focus_term_is_not_queryable
                     || Lisql.is_undef_expr_focus focus) then
       (* typically, when no match for query+constr, then show constr match with freq=0 *)
-      self#ajax_index_terms_init ~freq0:true constr elt k
+      self#ajax_forest_terms_init ~freq0:true ~inverse constr elt k
     else begin
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
@@ -1182,10 +1194,11 @@ object (self)
 	(fun () ->
 	 term_hierarchy#sync
 	   (fun () ->
-	    k ~partial (Some incr_index)))
+             let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	     k ~partial (Some incr_forest)))
       end
 
-  method private ajax_index_properties_init ?(freq0=false) constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
     let process results_class results_prop results_pred =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -1244,7 +1257,8 @@ object (self)
 	incr_index#add (Lisql.IncrTriple Lisql.O, None)
       );
       sync_concepts (fun () ->
-	  k ~partial (Some incr_index))
+          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	  k ~partial (Some incr_forest))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1357,7 +1371,8 @@ object (self)
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
       sync_concepts (fun () ->
-	  k ~partial (Some incr_index)) in
+          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	  k ~partial (Some incr_forest)) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
@@ -1380,7 +1395,8 @@ object (self)
 	     lx lt
 	| _ -> () );
       sync_concepts (fun () ->
-	  k ~partial:true (Some incr_index))
+          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	  k ~partial:true (Some incr_forest))
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
@@ -1425,11 +1441,11 @@ object (self)
       then ajax_intent ()
       else ajax_extent ()
 
-  method ajax_index_properties constr elt (k : partial:bool -> incr_freq_index option -> unit) =
+  method ajax_forest_properties ?(inverse = false) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
-      k ~partial:false (Some (new incr_freq_index)) (* only constraints on aggregations (HAVING clause) *)
+      k ~partial:false (Some []) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
-      self#ajax_index_properties_init constr elt k
+      self#ajax_forest_properties_init ~inverse constr elt k
     else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
       k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
     else begin
@@ -1458,7 +1474,7 @@ object (self)
 	     && int_index_prop#is_empty
 	     && int_index_pred#is_empty
 	     && int_index_arg#is_empty
-          then self#ajax_index_properties_init ~freq0:true constr elt k
+          then self#ajax_forest_properties_init ~freq0:true ~inverse constr elt k
           else (
             let incr_index = new incr_freq_tree_index term_hierarchy in
             let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
@@ -1592,7 +1608,8 @@ object (self)
 	        then incr_index#add (incr,None))
 	      [Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
             sync_concepts (fun () ->
-	        k ~partial (Some incr_index)))
+                let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+	        k ~partial (Some incr_forest)))
         in
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
         let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1782,14 +1799,14 @@ object (self)
         if focus_term_index#is_empty then
           if some_focus_term_is_not_queryable then ajax_intent ()
           else if not focus_pred_args_index#is_empty then ajax_extent ()
-          else self#ajax_index_properties_init ~freq0:true constr elt k
+          else self#ajax_forest_properties_init ~freq0:true ~inverse constr elt k
         else
           if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
           then ajax_intent ()
           else ajax_extent ()
       end
 
-  method index_modifiers : incr_freq_index =
+  method forest_modifiers : incr_freq_forest =
     let open Lisql in
     let incrs =
       if focus_descr#unconstrained
@@ -1927,9 +1944,13 @@ object (self)
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)
 	incrs in
-    let incr_index = new incr_freq_index in
-    List.iter (fun incr -> incr_index#add (incr,None)) valid_incrs;
-    incr_index
+(*    let incr_index = new incr_freq_index in
+    List.iter (fun incr -> incr_index#add (incr,None)) valid_incrs; *)
+    let incr_forest =
+      List.map
+        (fun incr -> Node ((incr, None), []))
+        valid_incrs in
+    incr_forest
 	  
   method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in

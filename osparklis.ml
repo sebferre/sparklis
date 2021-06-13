@@ -700,19 +700,18 @@ object (self)
        jquery "#list-terms" (fun elt_list ->
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
 	jquery_input "#input-inverse-terms" (fun input_inverse ->
-	  lis#ajax_index_terms_inputs_ids (norm_constr current_constr) [elt_list]
+	  lis#ajax_forest_terms_inputs_ids ~inverse:inverse_terms (norm_constr current_constr) [elt_list]
 	   (fun ~partial -> function
 	    | None ->
 	       refreshing_terms <- false;
 	       let new_constr = term_constr in
 	       self#refresh_new_term_constr current_constr new_constr
-	    | Some index ->
+	    | Some incr_forest ->
 	      input_inverse##.checked := bool inverse_terms;
 	      sel_sorting##.value := string sorting_terms;
 	      let html_sel, html_list, count =
-		let inverse = to_bool input_inverse##.checked in
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in 
-		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
+		html_incr_forest lis#focus html_state incr_forest ~sort_by_frequency in
 	      elt_sel_items##.innerHTML := string html_sel;
 	      if html_sel = "" (* disable multi-selection button if no sel item *)
 	      then elt_sel_button##.classList##add (string "disabled")
@@ -781,19 +780,18 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
-	   lis#ajax_index_properties (norm_constr current_constr) elt_list
+	   lis#ajax_forest_properties ~inverse:inverse_properties (norm_constr current_constr) elt_list
 	    (fun ~partial -> function
 	    | None ->
 	       refreshing_properties <- false;
 	       let new_constr = property_constr in
 	       self#refresh_new_property_constr current_constr new_constr    
-	    | Some index ->
+	    | Some forest ->
 	      input_inverse##.checked := bool inverse_properties;
 	      sel_sorting##.value := string sorting_properties;
 	      let html_sel, html_list, count =
-		let inverse = to_bool input_inverse##.checked in
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
-		html_index lis#focus html_state index ~inverse ~sort_by_frequency in
+		html_incr_forest lis#focus html_state forest ~sort_by_frequency in
 	      elt_sel_items##.innerHTML := string html_sel;
 	      if html_sel = "" (* disable multi-selection button if no sel item *)
 	      then elt_sel_button##.classList##add (string "disabled")
@@ -856,15 +854,15 @@ object (self)
 	 modifier_selection#toggle incr
       | _ -> ()
     in
-    let index = lis#index_modifiers in
+    let forest = lis#forest_modifiers in
     match mode with
     | `Dropdown ->
       jquery "#focus-dropdown-content" (fun elt_dropdown ->
 	let _, html_drop, _ =
-	  html_index
+	  html_incr_forest
 	    ~dropdown:true ~filter:filter_dropdown_increment
-	    lis#focus html_state index
-	    ~inverse:false ~sort_by_frequency:false in
+	    lis#focus html_state forest
+	    ~sort_by_frequency:false in
 	elt_dropdown##.innerHTML := string html_drop;
 	jquery "#focus-dropdown" (onclick (fun elt ev ->
 	  Dom_html.stopPropagation ev;
@@ -878,10 +876,10 @@ object (self)
       jquery "#selection-modifiers-items" (fun elt_sel_items ->
       jquery "#list-modifiers" (fun elt_list ->
         let html_sel, html_list, count =
-	  html_index
+	  html_incr_forest
 	    ~dropdown:false ~filter:(fun incr -> not (filter_dropdown_increment incr))
-	    lis#focus html_state index
-	    ~inverse:false ~sort_by_frequency:false in
+	    lis#focus html_state forest
+	    ~sort_by_frequency:false in
 	elt_sel_items##.innerHTML := string html_sel;
 	if html_sel = "" (* disable multi-selection button if no sel item *)
 	then elt_sel_button##.classList##add (string "disabled")
