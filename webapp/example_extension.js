@@ -17,3 +17,7 @@ sparklis_extension.hookResults =
 	results.rows = results.rows.slice(0,2);
 	return results
     };
+sparklis_extension.hookSuggestions =
+    function(suggestions) {
+	console.log("suggestions", suggestions.type, suggestions.forest.slice(0,2));
+    };

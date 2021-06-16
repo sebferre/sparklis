@@ -221,5 +221,6 @@ let sparklis_extension =
   object%js (self)
     val mutable hookSparql : hook = undefined (* data: string (SPARQL query) *)
     val mutable hookResults : hook = undefined (* data : Sparql_endpoint.results *)
+    val mutable hookSuggestions : hook = undefined (* data: Lis.incr_freq_forest option *)
   end
 let () = Js.export "sparklis_extension" sparklis_extension

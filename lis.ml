@@ -19,29 +19,14 @@
 open Js_of_ocaml
 open Js
 
-(* hooks for Sparklis extension *)
-   
-let hook_sparql (sparql : string) : string =
-  Config.apply_hook
-    Config.sparklis_extension##.hookSparql
-    Sparql.js_sparql_map
-    sparql
-
-let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
-  Config.apply_hook
-    Config.sparklis_extension##.hookResults
-    Sparql_endpoint.js_results_map
-    res
-
 (* indices *)
 
 type 'a forest = 'a tree list
 and 'a tree = Node of 'a * 'a forest
 let js_forest_map (m : 'a Jsutils.js_map) : 'a forest Jsutils.js_map =
   Jsutils.js_map
-    (`List (`Sum ([| |],
-                  [| "Node", [| "item", Jsutils.js_custom_spec m;
-                                "children", `Rec |] |])))
+    (`List (`Record [| "item", Jsutils.js_custom_spec m; (* singleton sum is like a record *)
+                       "children", `Rec |]))
 
 let rec forest_filter_map (f : 'a -> 'b option) : 'a forest -> 'b forest =
   function
@@ -53,7 +38,8 @@ and tree_filter_map f : 'a tree -> 'b forest =
      match f item with
      | None -> forest_filter_map f children
      | Some item' -> [Node (item', forest_filter_map f children)]
-  
+
+                   
 class ['a,'b] index ?(parents : ('a -> 'a list) option) () =
 object (self)
   val mutable organized : bool = false
@@ -192,6 +178,9 @@ let js_incr_freq_forest_map : incr_freq_forest Jsutils.js_map =
     (js_map (`Record [| "suggestion", js_custom_spec Lisql.js_increment_map; (* Tuple and Record have same internal repr *)
                         "frequency", `Option (js_custom_spec js_freq_map) |]))
 
+  
+(* increment hierarchies*)
+  
 let term_hierarchy_of_focus focus =
   match Lisql.hierarchy_of_focus focus with
   | None -> Ontology.no_relation
@@ -781,8 +770,35 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
   sync_terms
     (fun () -> k l)
 
-(* LIS navigation places *)
+(* hooks for Sparklis extension *)
+   
+let hook_sparql (sparql : string) : string =
+  Config.apply_hook
+    Config.sparklis_extension##.hookSparql
+    Sparql.js_sparql_map
+    sparql
 
+let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
+  Config.apply_hook
+    Config.sparklis_extension##.hookResults
+    Sparql_endpoint.js_results_map
+    res
+
+let hook_suggestions : (freq_unit * incr_freq_forest option) -> (freq_unit * incr_freq_forest option) =
+  let open Jsutils in
+  let js_suggestions_map =
+    js_map
+      (`Record [| "type", js_custom_spec js_freq_unit_map;
+                  "forest", `Option (js_custom_spec js_incr_freq_forest_map) |]) in
+  (fun suggestions ->
+    Jsutils.firebug "applying hook on suggestions";
+    Config.apply_hook
+      Config.sparklis_extension##.hookSuggestions
+      js_suggestions_map
+      suggestions)
+
+(* LIS navigation places *)
+  
 class place (endpoint : string) (focus : Lisql.focus) =
   let ids, focus_descr, s_annot = Lisql_annot.annot_focus focus in
   let _, path = Lisql.elt_s_path_of_focus focus in
@@ -1095,7 +1111,8 @@ object (self)
 	 term_hierarchy#sync
 	   (fun () ->
              let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	     k ~partial (Some incr_forest)))
+             let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
+	     k ~partial incr_forest_opt))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
@@ -1195,7 +1212,8 @@ object (self)
 	 term_hierarchy#sync
 	   (fun () ->
              let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	     k ~partial (Some incr_forest)))
+             let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
+	     k ~partial incr_forest_opt))
       end
 
   method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
@@ -1258,7 +1276,8 @@ object (self)
       );
       sync_concepts (fun () ->
           let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	  k ~partial (Some incr_forest))
+          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
+	  k ~partial incr_forest_opt)
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1372,7 +1391,8 @@ object (self)
 	     (fun incr -> incr_index#add (incr, Some freq)));
       sync_concepts (fun () ->
           let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	  k ~partial (Some incr_forest)) in
+          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
+	  k ~partial incr_forest_opt) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
@@ -1396,7 +1416,8 @@ object (self)
 	| _ -> () );
       sync_concepts (fun () ->
           let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	  k ~partial:true (Some incr_forest))
+          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
+	  k ~partial:true incr_forest_opt)
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
@@ -1609,7 +1630,8 @@ object (self)
 	      [Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
             sync_concepts (fun () ->
                 let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-	        k ~partial (Some incr_forest)))
+                let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
+	        k ~partial incr_forest_opt))
         in
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
         let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1950,7 +1972,9 @@ object (self)
       List.map
         (fun incr -> Node ((incr, None), []))
         valid_incrs in
-    incr_forest
+    match hook_suggestions (Modifiers, Some incr_forest) with
+    | _, None -> []
+    | _, Some incr_forest -> incr_forest
 	  
   method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in

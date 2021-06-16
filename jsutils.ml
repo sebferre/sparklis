@@ -307,8 +307,8 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
   | `String
   | `List of js_map_spec
   | `Array of js_map_spec
-  | `Tuple of js_map_spec array (* can be used for records *)
-  | `Record of (string * js_map_spec) array (* can be used for tuples *)
+  | `Tuple of js_map_spec array (* can be used for records, and singleton sum *)
+  | `Record of (string * js_map_spec) array (* can be used for tuples, and singleton sum *)
   | `Sum of (* WARNING: not for variants! *)
       string array (* constant constructors *)
       * (string * (string * js_map_spec) array) array (* non-constant constructors *)
@@ -384,7 +384,9 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
   | `List spec_elt ->
      let inject_elt = js_inject rec_spec spec_elt in
      (fun r ->
-       if Obj.is_block r && Obj.tag r < 2 then
+       if Obj.is_int r (* [] *) then
+         Inject.array [| |]
+       else if Obj.is_block r (* _::_ *) then
          let l = (Obj.obj r : _ list) in
          let ar = Array.of_list l in
          let ar_r = Array.map (fun elt -> inject_elt (Obj.repr elt)) ar in
