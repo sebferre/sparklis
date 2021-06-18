@@ -817,8 +817,8 @@ and vp_of_constr grammar annot = function
   | HasDatatype pat -> `Focus (annot, `Has (`Qu (`A, `Nil, `That (`Op grammar#datatype, `Ing (`Op grammar#matching, `PN (`Literal pat, top_rel), []))), []))
   | ExternalSearch (s,_) -> vp_of_search grammar annot s
 and vp_of_search grammar annot = function
-  | `Wikidata kwds
-  | `TextQuery kwds -> `Focus (annot, `VT (`Op grammar#matches, `PN (`Literal (String.concat " " kwds), `Nil), [])) (* TODO: make search kind explicit *)
+  | WikidataSearch kwds
+  | TextQuery kwds -> `Focus (annot, `VT (`Op grammar#matches, `PN (`Literal (String.concat " " kwds), `Nil), [])) (* TODO: make search kind explicit *)
 and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
   | Some (InWhichThereIs (annot,np)) -> `Focus (annot, `InWhich (`ThereIs (np_of_elt_s1 grammar ~id_labelling np)))

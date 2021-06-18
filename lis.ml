@@ -177,7 +177,9 @@ let js_incr_freq_forest_map : incr_freq_forest Jsutils.js_map =
   js_forest_map
     (js_map (`Record [| "suggestion", js_custom_spec Lisql.js_increment_map; (* Tuple and Record have same internal repr *)
                         "frequency", `Option (js_custom_spec js_freq_map) |]))
-
+let js_incr_freq_forest_option_map : incr_freq_forest option Jsutils.js_map =
+  let open Jsutils in
+  js_map (`Option (js_custom_spec js_incr_freq_forest_map))
   
 (* increment hierarchies*)
   
@@ -1091,7 +1093,7 @@ object (self)
 	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method private ajax_forest_terms_init ?(freq0 = false) ~(inverse : bool) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
+  method private ajax_forest_terms_init ?(freq0 = false) ~(inverse : bool) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
       let value = if freq0 then 0 else 1 in
@@ -1121,21 +1123,21 @@ object (self)
 	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs) :> string) ^
 	filter_hidden_URIs "term" ^
 	  " FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
-    Sparql_endpoint.ajax_in ~tentative:true elt ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
+    Sparql_endpoint.ajax_in ~tentative:true elts ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
       (fun code -> k ~partial:true None)
 
-  method ajax_forest_terms_inputs_ids ?(inverse = false) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
+  method ajax_forest_terms_inputs_ids ?(inverse = false) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
     if focus_descr#term = `Undefined then
       k ~partial:false (Some [])
     else if focus_descr#unconstrained then
-      self#ajax_forest_terms_init ~inverse constr elt k
+      self#ajax_forest_terms_init ~inverse constr elts k
     else if focus_term_index#is_empty
             (* except when it is expected to have an empty term index *)
             && not (some_focus_term_is_not_queryable
                     || Lisql.is_undef_expr_focus focus) then
       (* typically, when no match for query+constr, then show constr match with freq=0 *)
-      self#ajax_forest_terms_init ~freq0:true ~inverse constr elt k
+      self#ajax_forest_terms_init ~freq0:true ~inverse constr elts k
     else begin
       let max_value = None (*Some self#results_nb*) in
       let partial = self#partial_results in
@@ -1216,7 +1218,7 @@ object (self)
 	     k ~partial incr_forest_opt))
       end
 
-  method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
+  method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
     let process results_class results_prop results_pred =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -1321,7 +1323,7 @@ object (self)
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties
 	else "" in
-      Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
+      Sparql_endpoint.ajax_list_in elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	| [results_class; results_prop; results_pred] -> process results_class results_prop results_pred
 	| _ -> assert false)
@@ -1363,7 +1365,7 @@ object (self)
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties
 	else "" in
-      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
+      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	  | [results_class; results_prop; results_pred] ->
 	     process results_class results_prop results_pred
@@ -1446,7 +1448,7 @@ object (self)
       if sparql_class = "" then k ~partial:true None
       else
 	Sparql_endpoint.ajax_list_in
-	  [elt] ajax_pool endpoint [sparql_class]
+	  elts ajax_pool endpoint [sparql_class]
 	  (function
 	    | [results_class] ->
 	       ( match lt_opt with
@@ -1462,11 +1464,11 @@ object (self)
       then ajax_intent ()
       else ajax_extent ()
 
-  method ajax_forest_properties ?(inverse = false) constr elt (k : partial:bool -> incr_freq_forest option -> unit) =
+  method ajax_forest_properties ?(inverse = false) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
       k ~partial:false (Some []) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
-      self#ajax_forest_properties_init ~inverse constr elt k
+      self#ajax_forest_properties_init ~inverse constr elts k
     else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
       k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
     else begin
@@ -1495,7 +1497,7 @@ object (self)
 	     && int_index_prop#is_empty
 	     && int_index_pred#is_empty
 	     && int_index_arg#is_empty
-          then self#ajax_forest_properties_init ~freq0:true ~inverse constr elt k
+          then self#ajax_forest_properties_init ~freq0:true ~inverse constr elts k
           else (
             let incr_index = new incr_freq_tree_index term_hierarchy in
             let incr_sim_ok = config_incr_sim#value && Lisql.(insert_sim (Prop "dummy") S O focus) <> None in
@@ -1674,7 +1676,7 @@ object (self)
 			     s_sparql.Lisql2sparql.query_arg_opt
 			     Lisql2sparql.filter_constr_property
 			     config_max_properties in
-          Sparql_endpoint.ajax_list_in [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
+          Sparql_endpoint.ajax_list_in elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	    (function
 	     | [results_class; results_prop; results_pred; results_arg] ->
 		process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
@@ -1811,7 +1813,7 @@ object (self)
 		 (fun ?hook lt ->
 		   let args = List.map2 (fun (arg,_) t -> (arg,t)) args lt in
 		   Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
-          Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) [elt] ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
+          Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	    (function
 	     | [results_class; results_prop; results_pred; results_arg] ->
 	        process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
@@ -1821,7 +1823,7 @@ object (self)
         if focus_term_index#is_empty then
           if some_focus_term_is_not_queryable then ajax_intent ()
           else if not focus_pred_args_index#is_empty then ajax_extent ()
-          else self#ajax_forest_properties_init ~freq0:true ~inverse constr elt k
+          else self#ajax_forest_properties_init ~freq0:true ~inverse constr elts k
         else
           if Sparql_endpoint.config_method_get#value (* to avoid lengthy queries *)
           then ajax_intent ()
@@ -1994,7 +1996,7 @@ object (self)
 	HasDatatype "..." ] in
     let l_constr =
       if Rdf.config_wikidata_mode#value then
-	ExternalSearch (`Wikidata ["..."], None) :: l_constr
+	ExternalSearch (WikidataSearch ["..."], None) :: l_constr
       (*else if Lisql2sparql.config_fulltext_search#value = "text:query" then
 	ExternalSearch (`TextQuery ["..."], None) :: l_constr*)
       else l_constr in
@@ -2023,7 +2025,7 @@ object (self)
 	StartsWith "...";
 	EndsWith "..." ] in
     if Rdf.config_wikidata_mode#value && focus_descr#unconstrained then
-      ExternalSearch (`Wikidata ["..."], None) :: l_constr
+      ExternalSearch (WikidataSearch ["..."], None) :: l_constr
     (*else if Lisql2sparql.config_fulltext_search#value = "text:query" then
       ExternalSearch (`TextQuery ["..."], None) :: l_constr*)
     else l_constr

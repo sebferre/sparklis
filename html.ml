@@ -152,8 +152,8 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
       | "hasLang", pat::_ -> HasLang pat
       | "hasDatatype", [] -> HasDatatype ""
       | "hasDatatype", pat::_ -> HasDatatype pat
-      | "wikidata", _ -> ExternalSearch (`Wikidata lpat, None)
-      | "text:query", _ -> ExternalSearch (`TextQuery lpat, None)
+      | "wikidata", _ -> ExternalSearch (WikidataSearch lpat, None)
+      | "text:query", _ -> ExternalSearch (TextQuery lpat, None)
       | _ -> True (* in case of undefined option *) in
     input##.style##.color := string "black";
     match new_constr with
@@ -162,7 +162,7 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
 	 | ExternalSearch (s,_) when s = new_s -> k None
 	 | _ ->
 	    ( match new_s with
-	      | `Wikidata kwds ->
+	      | WikidataSearch kwds ->
 		 let query = String.concat "+" kwds in
 		 let limit = 20 in
 		 Jsutils.Wikidata.ajax_entity_search
@@ -176,7 +176,7 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
 				 (fun q -> Rdf.URI (Rdf.wikidata_entity q))
 				 lq) in
 		    k (Some (ExternalSearch (new_s, lt_opt))))
-	      | `TextQuery kwds ->
+	      | TextQuery kwds ->
 		 let lucene = Jsutils.lucene_query_of_kwds kwds in
 		 if lucene = ""
 		 then k (Some (ExternalSearch (new_s, None)))
@@ -227,8 +227,8 @@ let option_of_constr =
   | Between _ -> "between"
   | HasLang _ -> "hasLang"
   | HasDatatype _ -> "hasDatatype"
-  | ExternalSearch (`Wikidata _, _) -> "wikidata"
-  | ExternalSearch (`TextQuery _, _) -> "text:query"
+  | ExternalSearch (WikidataSearch _, _) -> "wikidata"
+  | ExternalSearch (TextQuery _, _) -> "text:query"
 
 let pattern_of_constr =
   let open Lisql in
@@ -249,8 +249,8 @@ let pattern_of_constr =
   | Between (pat1,pat2) -> pat1 ^ " " ^ pat2
   | HasLang pat -> pat
   | HasDatatype pat -> pat
-  | ExternalSearch (`Wikidata kwds, _) -> String.concat " " kwds
-  | ExternalSearch (`TextQuery kwds, _) -> String.concat " " kwds
+  | ExternalSearch (WikidataSearch kwds, _) -> String.concat " " kwds
+  | ExternalSearch (TextQuery kwds, _) -> String.concat " " kwds
 
 			 
   

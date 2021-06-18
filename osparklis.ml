@@ -103,8 +103,8 @@ let norm_constr = (* normalizing for empty patterns "" *)
   | Between (a,"") -> HigherThan a
   | HasLang "" -> True
   | HasDatatype "" -> True
-  | ExternalSearch (`Wikidata [], _) -> True
-  | ExternalSearch (`TextQuery [], _) -> True
+  | ExternalSearch (WikidataSearch [], _) -> True
+  | ExternalSearch (TextQuery [], _) -> True
   | c -> c
 
 let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
@@ -132,7 +132,7 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
   | HasDatatype pat ->
      let re = regexp_of_pat pat in
      (fun s_dt -> matches s_dt re)
-  | ExternalSearch ((`Wikidata kwds | `TextQuery kwds), _) ->
+  | ExternalSearch ((WikidataSearch kwds | TextQuery kwds), _) ->
      let lre = List.map regexp_of_pat kwds in
      (fun s -> List.for_all (fun re -> matches s re) lre)
 
@@ -181,8 +181,8 @@ let subsumed_constr constr1 constr2 : bool =
   | Between (s1a,s1b), Between (s2a,s2b) -> (s2a="" || leq s2a s1a) && (s2b="" || leq s1b s2b)
   | HasLang s1, HasLang s2 -> Common.has_prefix s1 s2
   | HasDatatype s1, HasDatatype s2 -> Common.has_prefix s1 s2
-  | ExternalSearch (`Wikidata kwds1, _), ExternalSearch (`Wikidata kwds2, _)
-  | ExternalSearch (`TextQuery kwds1, _), ExternalSearch (`TextQuery kwds2, _) ->
+  | ExternalSearch (WikidataSearch kwds1, _), ExternalSearch (WikidataSearch kwds2, _)
+  | ExternalSearch (TextQuery kwds1, _), ExternalSearch (TextQuery kwds2, _) ->
      List.for_all (fun s2 ->
       List.exists (fun s1 ->
 	Common.has_prefix s1 s2 (* 'has_prefix' used as an approximation of 'contains' *)
@@ -780,7 +780,7 @@ object (self)
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
 	 jquery_input "#input-inverse-properties" (fun input_inverse ->
-	   lis#ajax_forest_properties ~inverse:inverse_properties (norm_constr current_constr) elt_list
+	   lis#ajax_forest_properties ~inverse:inverse_properties (norm_constr current_constr) [elt_list]
 	    (fun ~partial -> function
 	    | None ->
 	       refreshing_properties <- false;
@@ -1303,12 +1303,44 @@ let make_js_sparklis (history : history) =
     object%js
       method permalink : js_string t =
         string history#present#permalink
+        
       method sparql : js_string opt =
         match history#present#lis#sparql with
         | None -> null
         | Some s -> some (string s)
       method results : Unsafe.any =
         Sparql_endpoint.js_results_map.inject history#present#lis#results
+
+      method termConstr : Unsafe.any =
+        Lisql.js_constr_map.inject history#present#term_constr
+      method conceptConstr : Unsafe.any =
+        Lisql.js_constr_map.inject history#present#property_constr
+        
+      method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
+               (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+        history#present#lis#ajax_forest_terms_inputs_ids
+          ~inverse:(to_bool inverse)
+          (Lisql.js_constr_map.extract constr)
+          []
+          (fun ~partial forest_opt ->
+            let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+            Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
+      method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any)
+               (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+        history#present#lis#ajax_forest_properties
+          ~inverse:(to_bool inverse)
+          (Lisql.js_constr_map.extract constr)
+          []
+          (fun ~partial forest_opt ->
+            let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+            Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
+      method getModifierSuggestions
+               (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+        let partial = false in
+        let forest_opt = Some (history#present#lis#forest_modifiers) in
+        let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+        Unsafe.fun_call callback [| Inject.bool partial; js_forest |]
+        
     end
   in
   object%js (self)

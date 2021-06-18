@@ -25,8 +25,15 @@ open Common
 type filter_type = [`OnlyIRIs|`OnlyLiterals|`Mixed]
 
 type search =
-  [ `Wikidata of string list
-  | `TextQuery of string list ]
+  | WikidataSearch of string list
+  | TextQuery of string list
+
+let js_search_map : search Jsutils.js_map =
+  Jsutils.js_map
+    (`Sum ([| |],
+           [| "WikidataSearch", [| "kwds", `List `String |];
+              "TextQuery", [| "kwds", `List `String |];
+           |]))
 
 type constr =
   | True
@@ -44,6 +51,27 @@ type constr =
   | HasLang of string
   | HasDatatype of string
   | ExternalSearch of search * Rdf.term list option (* search service and query, results (None means no constraint, Some lt means one of lt *)
+
+let js_constr_map : constr Jsutils.js_map =
+  let open Jsutils in
+  js_map
+    (`Sum ([| "True" |],
+           [| "MatchesAll", [| "kwds", `List `String |];
+              "MatchesAny", [| "kwds", `List `String |];
+              "IsExactly", [| "kwd", `String |];
+              "StartsWith", [| "kwd", `String |];
+              "EndsWith", [| "kwd", `String |];
+              "After", [| "kwd", `String |];
+              "Before", [| "kwd", `String |];
+              "FromTo", [| "kwdFrom", `String; "kwdTo", `String |];
+              "HigherThan", [| "value", `String |];
+              "LowerThan", [| "value", `String |];
+              "Between", [| "valueFrom", `String; "valueTo", `String |];
+              "HasLang", [| "lang", `String |];
+              "HasDatatype", [| "datatype", `String |];
+              "ExternalSearch", [| "searchQuery", js_custom_spec js_search_map;
+                                   "resultTerms", `Option (`List (js_custom_spec Rdf.js_term_map)) |]
+           |]))
 
 let constr_filter_type : constr -> filter_type = function
   | True -> `Mixed
@@ -63,8 +91,8 @@ let constr_filter_type : constr -> filter_type = function
   | ExternalSearch _ -> `OnlyIRIs
 					
 let reset_search = function
-  | `Wikidata _ -> `Wikidata ["..."]
-  | `TextQuery _ -> `TextQuery ["..."]
+  | WikidataSearch _ -> WikidataSearch ["..."]
+  | TextQuery _ -> TextQuery ["..."]
 				
 let reset_constr : constr -> constr = function
   | True -> True
