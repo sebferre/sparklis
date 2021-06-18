@@ -1340,12 +1340,13 @@ let make_js_sparklis (history : history) =
         let forest_opt = Some (history#present#lis#forest_modifiers) in
         let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
         Unsafe.fun_call callback [| Inject.bool partial; js_forest |]
-        
+
     end
   in
   object%js (self)
     method endpoint : js_string t =
       string config#get_endpoint
+      
     method evalSparql (sparql : js_string t)
              (callback : Unsafe.any (* results -> unit *))
              (on_error : Unsafe.top optdef (* HTTP error code -> unit*)) : unit =
@@ -1360,6 +1361,32 @@ let make_js_sparklis (history : history) =
             (fun f -> Unsafe.fun_call f [| Inject.int code|]))
 
     val place = place
+
+    method changeEndpoint (url : js_string t) : unit =
+      history#change_endpoint (to_string url)
+              
+    method focusUp : unit =
+      history#update_focus ~push_in_history:false Lisql.(focus_move up_focus)
+    method focusDown : unit =
+      history#update_focus ~push_in_history:false Lisql.(focus_move down_focus)
+    method focusLeft : unit =
+      history#update_focus ~push_in_history:false Lisql.(focus_move left_focus)
+    method focusRight : unit =
+      history#update_focus ~push_in_history:false Lisql.(focus_move right_focus)
+
+    method activateSuggestion (sugg : Unsafe.any) : unit =
+      let incr = Lisql.js_increment_map.extract sugg in
+      history#update_focus ~push_in_history:true
+        (Lisql.insert_increment incr)
+    method deleteFocus : unit =
+      history#update_focus ~push_in_history:true
+        Lisql.delete_focus
+
+    method home : unit = history#home
+    method back : unit = history#back
+    method forward : unit = history#forward
+                          
+    method refresh : unit = history#refresh
   end
 
 (* main *)

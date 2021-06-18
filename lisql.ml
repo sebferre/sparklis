@@ -1317,6 +1317,12 @@ type delta =
 
 let delta_ids ids = if ids=[] then DeltaNil else DeltaIds ids
 							  
+let focus_move (f : focus -> focus option) : focus -> (focus * delta) option =
+  fun foc ->
+  match f foc with
+  | None -> None
+  | Some foc2 -> Some (foc2, DeltaNil)
+                    
 let focus_start ?(delta = DeltaNil) (foc : focus) : focus * delta = foc, delta
 									   
 let focus_opt_start ?(delta = DeltaNil) (foc_opt : focus option) : (focus * delta) option =
