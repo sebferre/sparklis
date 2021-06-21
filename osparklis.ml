@@ -336,6 +336,7 @@ class navigation =
 object
   method change_endpoint (url : string) : unit = ()
   method update_focus ~(push_in_history : bool) (f : Lisql.focus -> (Lisql.focus * Lisql.delta) option) : unit = ()
+  method insert_increment ?(focus : Lisql.focus option) (incr : Lisql.increment) : unit = ()
 end
 
 class increment_selection (sel_selection : string) =
@@ -557,11 +558,10 @@ object (self)
 			  elt##.className := string "frequency-entities"
 		       | None -> ())));
 	jquery_all_from elt_table ".cell[id]" (onclick (fun elt ev ->
-	  navigation#update_focus ~push_in_history:true (fun current_focus ->
-	    let key = to_string elt##.id in
-	    let _view, _rank, id, term = html_state#dico_results#get key in
-	    let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
-	    Lisql.insert_term term id_focus)))
+	  let key = to_string elt##.id in
+	  let _view, _rank, id, term = html_state#dico_results#get key in
+	  let id_focus = html_state#get_focus (Html.focus_key_of_id id) in
+          navigation#insert_increment ~focus:id_focus (IncrTerm term)))
       in
       (* CSV download dialog *)
       jquery_input "#input-csv-max-results" (fun input ->
@@ -682,9 +682,7 @@ object (self)
     let apply_incr elt =
       match get_incr_opt elt with
       | None -> ()
-      | Some incr ->
-	 navigation#update_focus ~push_in_history:true
-				 (Lisql.insert_increment incr) in
+      | Some incr -> navigation#insert_increment incr in
     let toggle_incr elt =
       match get_incr_opt elt with
       | Some (Lisql.IncrTerm _ | Lisql.IncrId _ as incr) ->
@@ -758,13 +756,11 @@ object (self)
       match get_incr_opt elt with
       | None -> ()
       | Some incr ->
-	 navigation#update_focus
-	   ~push_in_history:true
-	   (let _ =
-	      match incr with
-	      | Lisql.IncrLatLong _ -> jquery_click "#nav-tab-map"
-	      | _ -> () in
-	    Lisql.insert_increment incr) in
+         let _ =
+	   match incr with
+	   | Lisql.IncrLatLong _ -> jquery_click "#nav-tab-map"
+	   | _ -> () in
+	 navigation#insert_increment incr in
     let toggle_incr elt =
       match get_incr_opt elt with
       | Some (Lisql.IncrType _ | Lisql.IncrRel _ | Lisql.IncrLatLong _ | Lisql.IncrPred _ as incr) ->
@@ -843,10 +839,7 @@ object (self)
     let apply_incr elt =
       match get_incr_opt elt with
       | None -> ()
-      | Some incr ->
-	 navigation#update_focus
-	   ~push_in_history:true
-	   (Lisql.insert_increment incr) in
+      | Some incr -> navigation#insert_increment incr in
     let toggle_incr elt =
       match get_incr_opt elt with
       | Some (Lisql.IncrForeachId _ | Lisql.IncrAggregId _ as incr) ->
@@ -1165,6 +1158,79 @@ object (self)
 
 end
 
+(* JS API for places *)
+let rec make_js_place (place : place) =
+  object%js
+    val __place = place
+                
+    method permalink : js_string t =
+      string place#permalink
+        
+    method sparql : js_string opt = (* TODO: lazy eval *)
+      match place#lis#sparql with
+      | None -> null
+      | Some s -> some (string s)
+    method results : Unsafe.any = (* TODO: lazy eval *)
+      Sparql_endpoint.js_results_map.inject place#lis#results
+
+    method termConstr : Unsafe.any =
+      Lisql.js_constr_map.inject place#term_constr
+    method conceptConstr : Unsafe.any =
+      Lisql.js_constr_map.inject place#property_constr
+
+    method getResults (term_constr : Unsafe.any)
+             (callback : Unsafe.any (* bool -> results -> unit *)) : unit =
+      place#lis#ajax_sparql_results
+        (Lisql.js_constr_map.extract term_constr)
+        []
+        ~k_results:(function
+          | None -> ()
+          | Some _sparql ->
+             let js_results = Sparql_endpoint.js_results_map.inject place#lis#results in
+             let partial = place#lis#partial_results in
+             Unsafe.fun_call callback [| Inject.bool partial; js_results |])
+    method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
+             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+      place#lis#ajax_forest_terms_inputs_ids
+        ~inverse:(to_bool inverse)
+        (Lisql.js_constr_map.extract constr)
+        []
+        (fun ~partial forest_opt ->
+          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
+    method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any)
+             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+      place#lis#ajax_forest_properties
+        ~inverse:(to_bool inverse)
+        (Lisql.js_constr_map.extract constr)
+        []
+        (fun ~partial forest_opt ->
+          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
+    method getModifierSuggestions
+             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+      let partial = false in
+      let forest_opt = Some (place#lis#forest_modifiers) in
+      let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
+      Unsafe.fun_call callback [| Inject.bool partial; js_forest |]
+
+    method applySuggestion (sugg : Unsafe.any) : Unsafe.any (* place, without computed results *) =
+      let incr = Lisql.js_increment_map.extract sugg in
+      match Lisql.insert_increment incr place#lis#focus with
+      | None -> Inject.null
+      | Some (new_focus, delta) ->
+         let p = place#new_place place#lis#endpoint new_focus in
+         js_place_map.inject p
+  end
+  
+and js_place_map : place Jsutils.js_map =
+  let str__place = string "_place" in
+  { spec = `Abstract;
+    inject = (fun place -> Unsafe.inject (make_js_place place));
+    extract = (fun js_place -> Unsafe.get js_place str__place);
+  }
+  
+
 module Endpoint_log =
   struct
     type record = { timestamp : string;
@@ -1250,18 +1316,39 @@ object (self)
     Ontology.sync_endpoint (fun () -> (* loading ontological facts *)
         self#refresh_present)
 
-  method update_focus ~push_in_history f =
+  method update_place ~push_in_history (p : place) =
+    present#abort_all_ajax;
+    present#save_ui_state;
+    p#set_navigation (self :> navigation);
+    if push_in_history then self#push p else present <- p;
+    self#refresh_present
+
+  method update_focus ~push_in_history (f : Lisql.focus -> (Lisql.focus * Lisql.delta) option) =
     match f present#lis#focus with
       | None -> ()
       | Some (foc,delta) ->
-	 firebug ("delta = " ^ string_of_delta delta);
-	 present#abort_all_ajax;
-	 present#save_ui_state;
+	 (*firebug ("delta = " ^ string_of_delta delta);*)
 	 let p = present#new_place present#lis#endpoint foc in
-	 p#set_navigation (self :> navigation);
-	 if push_in_history then self#push p else present <- p;
-	 self#refresh_present
+         self#update_place ~push_in_history p
 
+  method insert_increment ?(focus : Lisql.focus option) incr =
+    let foc_start, p_start = (* starting place *)
+      match focus with
+      | None -> present#lis#focus, present (* is current place by default *)
+      | Some foc -> foc, present#new_place present#lis#endpoint foc in
+    match Config.apply_hook_opt
+            Config.sparklis_extension##.hookApplySuggestion
+            [| js_place_map.inject p_start;
+               Lisql.js_increment_map.inject incr |] with
+    | Some js_p_end ->
+       self#update_place ~push_in_history:true (js_place_map.extract js_p_end)
+    | None ->
+       match Lisql.insert_increment incr foc_start with
+       | Some (foc_end, delta) ->
+          let p_end = p_start#new_place p_start#lis#endpoint foc_end in
+          self#update_place ~push_in_history:true p_end
+       | None -> ()
+    
   method home =
     self#update_focus ~push_in_history:true
       (fun _ -> Lisql.factory#reset; Some (Lisql.home_focus ()))
@@ -1296,71 +1383,7 @@ object (self)
 end
 
 
-(* JS API *)
-
-let rec make_js_place (place : place) =
-  object%js
-    val __place = place
-                
-    method permalink : js_string t =
-      string place#permalink
-        
-    method sparql : js_string opt = (* TODO: lazy eval *)
-      match place#lis#sparql with
-      | None -> null
-      | Some s -> some (string s)
-    method results : Unsafe.any = (* TODO: lazy eval *)
-      Sparql_endpoint.js_results_map.inject place#lis#results
-
-    method termConstr : Unsafe.any =
-      Lisql.js_constr_map.inject place#term_constr
-    method conceptConstr : Unsafe.any =
-      Lisql.js_constr_map.inject place#property_constr
-
-    method getResults (term_constr : Unsafe.any)
-             (callback : Unsafe.any (* bool -> results -> unit *)) : unit =
-      place#lis#ajax_sparql_results
-        (Lisql.js_constr_map.extract term_constr)
-        []
-        ~k_results:(function
-          | None -> ()
-          | Some _sparql ->
-             let js_results = Sparql_endpoint.js_results_map.inject place#lis#results in
-             let partial = place#lis#partial_results in
-             Unsafe.fun_call callback [| Inject.bool partial; js_results |])
-    method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
-      place#lis#ajax_forest_terms_inputs_ids
-        ~inverse:(to_bool inverse)
-        (Lisql.js_constr_map.extract constr)
-        []
-        (fun ~partial forest_opt ->
-          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
-    method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any)
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
-      place#lis#ajax_forest_properties
-        ~inverse:(to_bool inverse)
-        (Lisql.js_constr_map.extract constr)
-        []
-        (fun ~partial forest_opt ->
-          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
-    method getModifierSuggestions
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
-      let partial = false in
-      let forest_opt = Some (place#lis#forest_modifiers) in
-      let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-      Unsafe.fun_call callback [| Inject.bool partial; js_forest |]
-
-    method applySuggestion (sugg : Unsafe.any) : Unsafe.any (* place, without computed results *) =
-      let incr = Lisql.js_increment_map.extract sugg in
-      match Lisql.insert_increment incr place#lis#focus with
-      | None -> Inject.null
-      | Some (new_focus, delta) ->
-         let p = place#new_place place#lis#endpoint new_focus in
-         Unsafe.inject (make_js_place p)
-  end
+(* JS API for Sparklis/history *)
 
 let make_js_sparklis (history : history) =
   object%js
@@ -1405,8 +1428,7 @@ let make_js_sparklis (history : history) =
 
     method activateSuggestion (sugg : _ t) : unit =
       let incr = Lisql.js_increment_map.extract sugg in
-      history#update_focus ~push_in_history:true
-        (Lisql.insert_increment incr)
+      history#insert_increment incr
     method deleteFocus : unit =
       history#update_focus ~push_in_history:true
         Lisql.delete_focus

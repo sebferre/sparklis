@@ -59,3 +59,11 @@ sparklis_extension.hookSuggestions =
 		})
 	}
     };
+// example apply-suggestion hook: just logging and applying the suggestion
+sparklis_extension.hookApplySuggestion =
+    function(place,sugg) {
+	console.log("applied suggestion", sugg);
+	new_place = place.applySuggestion(sugg);
+	//console.log("new place", new_place);
+	return new_place
+    };

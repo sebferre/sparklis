@@ -315,7 +315,8 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
   | `Enum of string array
   | `Option of js_map_spec
   | `Custom of Obj.t js_map
-  | `Rec ]
+  | `Rec
+  | `Abstract ]
 
 let sum_spec_of_enum constr_names =
   `Sum (constr_names, [| |])
@@ -352,7 +353,8 @@ let rec string_of_js_map_spec = function
      string_of_js_map_spec (sum_spec_of_enum constr_names)
   | `Option spec -> string_of_js_map_spec spec ^ " option"
   | `Custom { spec } -> string_of_js_map_spec spec
-  | `Rec -> "rec"
+  | `Rec -> "<rec>"
+  | `Abstract -> "<abstract>"
 
 exception InconsistentMapSpec
 
@@ -463,6 +465,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
   | `Custom { inject } -> inject
   | `Rec ->
      (fun r -> js_inject rec_spec rec_spec r)
+  | `Abstract -> invalid_arg "Jsutils.js_inject: abstract"
              
 let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any -> Obj.t =
   match spec with
@@ -563,6 +566,7 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
   | `Custom { extract } -> extract
   | `Rec ->
      (fun js -> js_extract rec_spec rec_spec js)
+  | `Abstract -> invalid_arg "Jsutils.js_extract: abstract"
 
 let js_map (spec : js_map_spec) : 'a js_map =
   let inject = js_inject spec spec in

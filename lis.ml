@@ -775,13 +775,13 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 (* hooks for Sparklis extension *)
    
 let hook_sparql (sparql : string) : string =
-  Config.apply_hook
+  Config.apply_hook_data
     Config.sparklis_extension##.hookSparql
     Sparql.js_sparql_map
     sparql
 
 let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
-  Config.apply_hook
+  Config.apply_hook_data
     Config.sparklis_extension##.hookResults
     Sparql_endpoint.js_results_map
     res
@@ -794,7 +794,7 @@ let hook_suggestions : (freq_unit * incr_freq_forest option) -> (freq_unit * inc
                   "forest", `Option (js_custom_spec js_incr_freq_forest_map) |]) in
   (fun suggestions ->
     Jsutils.firebug "applying hook on suggestions";
-    Config.apply_hook
+    Config.apply_hook_data
       Config.sparklis_extension##.hookSuggestions
       js_suggestions_map
       suggestions)
