@@ -310,9 +310,9 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
   | `Tuple of js_map_spec array (* can be used for records, and singleton sum *)
   | `Record of (string * js_map_spec) array (* can be used for tuples, and singleton sum *)
   | `Sum of (* WARNING: not for variants! *)
-      string array (* constant constructors *)
+      string array (* constant constructors, "null" encoded as Js.null *)
       * (string * (string * js_map_spec) array) array (* non-constant constructors *)
-  | `Enum of string array
+  | `Enum of string array (* special case of Sum, only constant constructors *)
   | `Option of js_map_spec
   | `Custom of Obj.t js_map
   | `Rec
@@ -441,7 +441,10 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
          constructors_non_cst in
      (fun r ->
        if Obj.is_int r then
-         Inject.string constructors_cst.((Obj.obj r : int))
+         let constr = constructors_cst.((Obj.obj r : int)) in
+         if constr = "null"
+         then Inject.null
+         else Inject.string constr
        else if Obj.is_block r && Obj.tag r < Array.length constructors_non_cst then
          let constr, fields_inject = constructors_non_cst_inject.(Obj.tag r) in
          let fields_js =
@@ -526,8 +529,11 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
              fields)
          constructors_non_cst in
      (fun js ->
-       if typeof js = Extract.str_string then (
-         let c = Extract.as_string js in
+       if some js = null || typeof js = Extract.str_string then (
+         let c =
+           match Extract.as_option js with
+           | None -> "null"
+           | Some js -> Extract.as_string js in
          let i_ref = ref 0 in
          Array.iteri (* TODO: compute hashtable for this *)
            (fun i constr ->

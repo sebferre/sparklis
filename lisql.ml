@@ -116,7 +116,8 @@ let reset_constr : constr -> constr = function
 type num_conv_type = IntegerConv | DecimalConv | DoubleConv
 type num_conv = num_conv_type * bool (* [bool] indicates whether 'str()' must be applied before the numeric converter *)
 let js_num_conv_map : num_conv Jsutils.js_map =
-  Jsutils.js_map (`Tuple [| `Enum [| "Integer"; "Decimal"; "Double" |]; `Bool |])
+  Jsutils.js_map (`Record [| "targetType", `Enum [| "Integer"; "Decimal"; "Double" |];
+                             "forgetOriginalDatatype", `Bool |])
 (*let _ = Jsutils.js_map_log "num_conv:" js_num_conv_map [(IntegerConv,false); (DoubleConv,true)] (* TEST *) *)
 
 type id = int
@@ -134,9 +135,9 @@ type order = Unordered | Highest of num_conv option | Lowest of num_conv option
 let js_order_map : order Jsutils.js_map =
   let open Jsutils in
   js_map
-    (`Sum ([| "Unordered" |],
-           [| "Highest", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-              "Lowest", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))
+    (`Sum ([| "null" |],
+           [| "DESC", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+              "ASC", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))
                                                               
 type modif_s2 = project * order
               
@@ -163,13 +164,13 @@ let js_pred_map : pred Jsutils.js_map =
 type latlong = CustomLatLong of Rdf.uri * Rdf.uri | WikidataLatLong
 let js_latlong_map : latlong Jsutils.js_map =
   Jsutils.js_map
-    (`Sum ([| "Wikidata" |],
-           [| "Custom", [| "uriLat", `String; "uriLong", `String |] |]))
+    (`Sum ([| "WikidataGeolocation" |],
+           [| "LatLong", [| "uriLat", `String; "uriLong", `String |] |]))
 (* let _ = Jsutils.js_map_log "latlong:" js_latlong_map [WikidataLatLong; CustomLatLong ("http://lat", "http://long")] (* TEST *) *)
              
 type aggreg =
   | NumberOf
-  | ListOf
+  | ListOf (* TODO: add an explicit separator *)
   | Sample
   | Total of num_conv option
   | Average of num_conv option
@@ -177,11 +178,11 @@ type aggreg =
   | Minimum of num_conv option
 let js_aggreg_map : aggreg Jsutils.js_map =
   Jsutils.(js_map
-    (`Sum ([| "NumberOf"; "listOf"; "Sample" |],
-           [|  "Total", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-               "Average", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-               "Maximum", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
-               "Minimum", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])))
+    (`Sum ([| "COUNT_DISTINCT"; "LIST"; "SAMPLE" |],
+           [|  "SUM", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "AVG", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "MAX", [| "conv", `Option (js_custom_spec js_num_conv_map) |];
+               "MIN", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |])))
              
 type func =
   | Str
