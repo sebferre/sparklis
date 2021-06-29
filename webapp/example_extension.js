@@ -26,6 +26,7 @@ window.addEventListener(
 sparklis_extension.hookSparql =
     function(sparql) {
 	console.log("endpoint:", sparklis.endpoint());
+	//throw "an error thrown in SPARQL hook";
 	console.log("permalink:", sparklis.currentPlace().permalink());
 	console.log("SPARQL query:", sparql);
 	console.log("Here a dummy PREFIX is added.");

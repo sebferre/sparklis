@@ -208,23 +208,31 @@ let apply_hook_opt (hook : hook) (js_args : Unsafe.any array) : Unsafe.any optio
   Optdef.case hook
     (fun () -> None) (* if hook undefined *)
     (fun callback ->
-      let js_res = Unsafe.fun_call callback js_args in
-      if js_res = Jsutils.Inject.undefined
-      then None (* undefined result (side-effect only extension) *)
-      else Some js_res)
+      try
+        let js_res = Unsafe.fun_call callback js_args in
+        if js_res = Jsutils.Inject.undefined
+        then None (* undefined result (side-effect only extension) *)
+        else Some js_res
+      with error -> (* catching any error thrown by callback *)
+        Jsutils.firebug (Printexc.to_string error); (* logging the error *)
+        None) (* and falling back to default behavior *)
 
 (* apply a hook, if defined, to some Sparklis data [x], given functions for injection to and extraction from JS objects. *)
 let apply_hook_data (hook : hook) (map : 'a js_map) (x : 'a) : 'a =
   Optdef.case hook
     (fun () -> x) (* identity if hook undefined *)
     (fun callback ->
-      let js_x = map.inject x in
-      (*Firebug.console##log_2 (string "BEFORE hook: ") js_x;*)
-      let js_y = Unsafe.fun_call callback [|js_x|] in
-      (*Firebug.console##log_2 (string "AFTER hook: ") js_x;*)
-      if js_y = Jsutils.Inject.undefined
-      then x (* use original result if undefined result (side-effect only extension) *)
-      else map.extract js_y)
+      try
+        let js_x = map.inject x in
+        (*Firebug.console##log_2 (string "BEFORE hook: ") js_x;*)
+        let js_y = Unsafe.fun_call callback [|js_x|] in
+        (*Firebug.console##log_2 (string "AFTER hook: ") js_x;*)
+        if js_y = Jsutils.Inject.undefined
+        then x (* use original result if undefined result (side-effect only extension) *)
+        else map.extract js_y
+      with error -> (* catching any error thrown by callback *)
+        Jsutils.firebug (Printexc.to_string error); (* logging the error *)
+        x) (* and falling back to default data *)
 
 let sparklis_extension =
   object%js (self)
