@@ -136,6 +136,13 @@ let compile_constr ?(on_modifiers = false) constr : (string -> bool) =
      let lre = List.map regexp_of_pat kwds in
      (fun s -> List.for_all (fun re -> matches s re) lre)
 
+let refresh_constr ~select ~input constr =
+  let op = Html.option_of_constr constr in
+  let pat = Html.pattern_of_constr constr in
+  select##.value := string op;
+  if select##.selectedIndex < 0 then select##.selectedIndex := 0;
+  input##.value := string pat
+     
 let replace_symbol_by_ascii = (* for constraint matching on modifiers *)
   let l_re_by =
     List.map
@@ -509,11 +516,7 @@ object (self)
 	    let html_select_options =
 	      html_list_constr html_state l_constr in
 	    select##.innerHTML := string html_select_options;
-	    let op = Html.option_of_constr constr in
-	    let pat = Html.pattern_of_constr constr in
-	    select##.value := string op;
-	    if select##.selectedIndex < 0 then select##.selectedIndex := 0;
-	    input##.value := string pat)))
+            refresh_constr ~select ~input constr)))
       [("#select-terms", "#pattern-terms", term_constr, lis#list_term_constraints);
        ("#select-properties", "#pattern-properties", property_constr, lis#list_property_constraints);
        ("#select-modifiers", "#pattern-modifiers", Lisql.MatchesAll [], lis#list_modifier_constraints)]
@@ -697,7 +700,9 @@ object (self)
       jquery "#selection-terms-items" (fun elt_sel_items ->
        jquery "#list-terms" (fun elt_list ->
 	jquery_select "#select-sorting-terms" (fun sel_sorting ->
-	jquery_input "#input-inverse-terms" (fun input_inverse ->
+	 jquery_input "#input-inverse-terms" (fun input_inverse ->
+	  input_inverse##.checked := bool inverse_terms;
+	  sel_sorting##.value := string sorting_terms;
 	  lis#ajax_forest_terms_inputs_ids ~inverse:inverse_terms (norm_constr current_constr) [elt_list]
 	   (fun ~partial -> function
 	    | None ->
@@ -705,10 +710,8 @@ object (self)
 	       let new_constr = term_constr in
 	       self#refresh_new_term_constr current_constr new_constr
 	    | Some incr_forest ->
-	      input_inverse##.checked := bool inverse_terms;
-	      sel_sorting##.value := string sorting_terms;
 	      let html_sel, html_list, count =
-		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in 
+		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_incr_forest lis#focus html_state incr_forest ~sort_by_frequency in
 	      elt_sel_items##.innerHTML := string html_sel;
 	      if html_sel = "" (* disable multi-selection button if no sel item *)
@@ -775,7 +778,9 @@ object (self)
        jquery "#selection-properties-items" (fun elt_sel_items ->
 	jquery "#list-properties" (fun elt_list ->
 	 jquery_select "#select-sorting-properties" (fun sel_sorting ->
-	 jquery_input "#input-inverse-properties" (fun input_inverse ->
+	  jquery_input "#input-inverse-properties" (fun input_inverse ->
+	   input_inverse##.checked := bool inverse_properties;
+	   sel_sorting##.value := string sorting_properties;
 	   lis#ajax_forest_properties ~inverse:inverse_properties (norm_constr current_constr) [elt_list]
 	    (fun ~partial -> function
 	    | None ->
@@ -783,8 +788,6 @@ object (self)
 	       let new_constr = property_constr in
 	       self#refresh_new_property_constr current_constr new_constr    
 	    | Some forest ->
-	      input_inverse##.checked := bool inverse_properties;
-	      sel_sorting##.value := string sorting_properties;
 	      let html_sel, html_list, count =
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_incr_forest lis#focus html_state forest ~sort_by_frequency in
@@ -1173,11 +1176,6 @@ let rec make_js_place (place : place) =
     method results : Unsafe.any = (* TODO: lazy eval *)
       Sparql_endpoint.js_results_map.inject place#lis#results
 
-    method termConstr : Unsafe.any =
-      Lisql.js_constr_map.inject place#term_constr
-    method conceptConstr : Unsafe.any =
-      Lisql.js_constr_map.inject place#property_constr
-
     method getResults (term_constr : Unsafe.any)
              (callback : Unsafe.any (* bool -> results -> unit *)) : unit =
       place#lis#ajax_sparql_results
@@ -1438,6 +1436,39 @@ let make_js_sparklis (history : history) =
     method forward : unit = history#forward
                           
     method refresh : unit = history#refresh
+
+    method termConstr : Unsafe.any =
+      Lisql.js_constr_map.inject history#present#term_constr
+    method conceptConstr : Unsafe.any =
+      Lisql.js_constr_map.inject history#present#property_constr
+    method modifierConstr : Unsafe.any =
+      Lisql.js_constr_map.inject history#present#modifier_constr
+
+    method setTermConstr (constr : Unsafe.any) : unit =
+      let old_constr = history#present#term_constr in
+      let new_constr = Lisql.js_constr_map.extract constr in
+      jquery_select "#select-terms" (fun select ->
+          jquery_input "#pattern-terms" (fun input ->
+              refresh_constr ~select ~input new_constr));      
+      history#present#set_term_constr new_constr;
+      history#present#refresh_new_term_constr old_constr new_constr
+    method setConceptConstr (constr : Unsafe.any) : unit =
+      let old_constr = history#present#property_constr in
+      let new_constr = Lisql.js_constr_map.extract constr in
+      jquery_select "#select-properties" (fun select ->
+          jquery_input "#pattern-properties" (fun input ->
+              refresh_constr ~select ~input new_constr));
+      history#present#set_property_constr new_constr;
+      history#present#refresh_new_property_constr old_constr new_constr
+    method setModifierConstr (constr : Unsafe.any) : unit =
+      let old_constr = history#present#modifier_constr in
+      let new_constr = Lisql.js_constr_map.extract constr in
+      jquery_select "#select-modifiers" (fun select ->
+          jquery_input "#pattern-modifiers" (fun input ->
+              refresh_constr ~select ~input new_constr));
+      history#present#set_modifier_constr new_constr;
+      history#present#refresh_new_modifier_constr old_constr new_constr
+      
   end
 
 (* main *)

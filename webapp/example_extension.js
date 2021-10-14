@@ -21,6 +21,20 @@ window.addEventListener(
 		//window.alert("The new place has been computed and will now be displayed");
 		//sparklis.setCurrentPlace(p);
 	    };
+	var qa = document.getElementById("qa");
+	qa.addEventListener("keyup", function(event) {
+	    if (event.keyCode == 13) { // ENTER
+		console.log("qa kwd entered: [" + qa.value + "]");
+		var constr = { type: "MatchesAll", kwds: [qa.value] };
+		var char0 = qa.value.charAt(0);
+		if (char0 === char0.toUpperCase()) {
+		    sparklis.setTermConstr(constr);
+		} else {
+		    sparklis.setConceptConstr(constr);
+		};
+		qa.value = "";
+	    }});
+	
     });
 // example SPARQL hook: adding a dummy PREFIX
 sparklis_extension.hookSparql =
