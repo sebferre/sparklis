@@ -29,9 +29,37 @@ Access to the endpoint:
 
   returns the current endpoint URL
 
-- **`sparklis.evalSparql(query: string, callback: sparklis-results => void, onError: int => void) : void`**
+- **`sparklis.evalSparql(query: string, callback: sparklis-results => void, onError: int => void): void`**
 
   sends `query` to the current endpoint according to the current Sparklis configuration. If successful, `callback` is called on the *Sparklis results* (see datatypes), otherwise `onError` is called on the HTTP error code.
+
+
+Access and control of the current constraints
+
+- **`p.termConstr(): sparklis-constr`**
+
+  returns the current *Sparklis constraint* on term suggestions
+
+- **`p.conceptConstr(): sparklis-constr`**
+
+  returns the current *Sparklis constraint* on concept suggestions (classes and properties)
+
+- **`p.modifierConstr(): sparklis-constr`**
+
+  returns the current *Sparklis constraint* on modifier suggestions
+
+- **`p.setTermConstr(constr: sparklis-constr): void`**
+
+  sets the current *Sparklis constraint* on term suggestions
+
+- **`p.setConceptConstr(constr: sparklis-constr): void`**
+
+  sets the current *Sparklis constraint* on concept suggestions (classes and properties)
+
+- **`p.setModifierConstr(constr: sparklis-constr): void`**
+
+  sets the current *Sparklis constraint* on modifier suggestions
+
 
 Access and control of the current navigation place:
 
@@ -111,14 +139,6 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 - **`p.results(): sparklis-results`**
 
   returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values).
-
-- **`p.termConstr(): sparklis-constr`**
-
-  returns the current *Sparklis constraint* on term suggestions
-
-- **`p.conceptConstr(): sparklis-constr`**
-
-  returns the current *Sparklis constraint* on concept suggestions (classes and proprties)
 
 - **`p.getResults(termConstr: sparklis-constr, callback: (partial: bool, results: sparklis-results) => void): void`**
 
