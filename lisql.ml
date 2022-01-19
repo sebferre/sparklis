@@ -387,6 +387,7 @@ object (self)
   method home_focus = let np, id = self#top_s1 in AtS1 (np, ReturnX Root), [id]
 end
 
+  
 let is_top_p1 = function IsThere _ -> true | _ -> false
 let is_top_p1_opt = function None -> true | Some f -> is_top_p1 f
 let is_top_s2 = function An (_, (Select, Unordered), Thing) -> true | _ -> false
@@ -1316,6 +1317,14 @@ type delta =
   | DeltaDuplicate of id_map
   | DeltaSelection of delta * delta list
 
+let js_delta_map : delta Jsutils.js_map =
+  Jsutils.js_map
+    (`Sum  ([| "nil" |],
+            [| "ids", [| "ids", `List `Int |];
+               "duplicate", [| "map", `List (`Tuple [| `Int; `Int |]) |];
+               "selection", [| "whole", `Rec; "parts", `List `Rec |] |]))
+
+  
 let delta_ids ids = if ids=[] then DeltaNil else DeltaIds ids
 							  
 let focus_move (f : focus -> focus option) : focus -> (focus * delta) option =

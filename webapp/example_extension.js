@@ -28,9 +28,27 @@ window.addEventListener(
 		var constr = { type: "MatchesAll", kwds: [qa.value] };
 		var char0 = qa.value.charAt(0);
 		if (char0 === char0.toUpperCase()) {
-		    sparklis.setTermConstr(constr);
+		    //sparklis.setTermConstr(constr);
+		    sparklis
+			.currentPlace()
+			.getTermSuggestions(false, constr, function(partial,suggs) {
+			    console.log("got suggestions for constraint");
+			    console.log(suggs);
+			    var fst_sugg = suggs[0].item.suggestion;
+			    console.log("choosing suggestion: " + fst_sugg);
+			    sparklis.activateSuggestion(fst_sugg);
+			})
 		} else {
-		    sparklis.setConceptConstr(constr);
+		    //sparklis.setConceptConstr(constr);
+		    sparklis
+			.currentPlace()
+			.getConceptSuggestions(false, constr, function(partial,suggs) {
+			    console.log("got suggestions for constraint");
+			    console.log(suggs);
+			    var fst_sugg = suggs[0].item.suggestion;
+			    console.log("choosing suggestion: " + fst_sugg);
+			    sparklis.activateSuggestion(fst_sugg);
+			})
 		};
 		qa.value = "";
 	    }});
@@ -41,6 +59,7 @@ sparklis_extension.hookSparql =
     function(sparql) {
 	console.log("endpoint:", sparklis.endpoint());
 	//throw "an error thrown in SPARQL hook";
+	console.log("delta: ", sparklis.currentPlace().delta());
 	console.log("permalink:", sparklis.currentPlace().permalink());
 	console.log("SPARQL query:", sparql);
 	console.log("Here a dummy PREFIX is added.");

@@ -370,11 +370,14 @@ let term_selection = new increment_selection "#selection-terms"
 let property_selection = new increment_selection "#selection-properties"
 let modifier_selection = new increment_selection "#selection-modifiers"
 
-class place (endpoint : string) (foc : Lisql.focus) =
+class place (endpoint : string) (foc : Lisql.focus) (delta : Lisql.delta) =
   let lis0 = new Lis.place endpoint foc in
 object (self)
   val mutable lis = lis0
   method lis = lis
+
+  val mutable delta = delta
+  method delta = delta
 
   val mutable offset = 0
   val mutable limit = 10
@@ -1141,11 +1144,12 @@ object (self)
     html_state <- new Html.state lis;
     permalink <- permalink_of_place lis
       
-  method new_place endpoint focus =
+  method new_place endpoint focus delta =
     let lis = new Lis.place endpoint focus in
     let html_state = new Html.state lis in
     let val_html_query = html_query html_state lis#query in
     {< lis = lis;
+       delta = delta;
        html_state = html_state;
        permalink = permalink_of_place lis;
        val_html_query = val_html_query;
@@ -1165,6 +1169,9 @@ end
 let rec make_js_place (place : place) =
   object%js
     val __place = place
+
+    method delta : Unsafe.any =
+      Lisql.js_delta_map.inject place#delta
                 
     method permalink : js_string t =
       string place#permalink
@@ -1217,7 +1224,7 @@ let rec make_js_place (place : place) =
       match Lisql.insert_increment incr place#lis#focus with
       | None -> Inject.null
       | Some (new_focus, delta) ->
-         let p = place#new_place place#lis#endpoint new_focus in
+         let p = place#new_place place#lis#endpoint new_focus delta in
          js_place_map.inject p
   end
   
@@ -1271,10 +1278,10 @@ module Endpoint_log =
         
   end
   
-class history (endpoint : string) (foc : Lisql.focus) =
+class history (endpoint : string) (foc : Lisql.focus) (delta : Lisql.delta) =
 object (self)
   val mutable past : place list = []
-  val mutable present : place = new place endpoint foc
+  val mutable present : place = new place endpoint foc delta
   val mutable future : place list = []
 
   initializer
@@ -1307,8 +1314,8 @@ object (self)
     config#set_endpoint url;
     jquery_set_innerHTML_fadeInOut "#sparql-endpoint-title" dummy_title;
     let focus, delta = Lisql.factory#reset; Lisql.home_focus () in
-    firebug ("delta = " ^ string_of_delta delta);
-    let p = present#new_place url focus in
+    (*firebug ("delta = " ^ string_of_delta delta);*)
+    let p = present#new_place url focus delta in
     p#set_navigation (self :> navigation);
     self#push p;
     Ontology.sync_endpoint (fun () -> (* loading ontological facts *)
@@ -1326,14 +1333,14 @@ object (self)
       | None -> ()
       | Some (foc,delta) ->
 	 (*firebug ("delta = " ^ string_of_delta delta);*)
-	 let p = present#new_place present#lis#endpoint foc in
+	 let p = present#new_place present#lis#endpoint foc delta in
          self#update_place ~push_in_history p
 
   method insert_increment ?(focus : Lisql.focus option) incr =
     let foc_start, p_start = (* starting place *)
       match focus with
       | None -> present#lis#focus, present (* is current place by default *)
-      | Some foc -> foc, present#new_place present#lis#endpoint foc in
+      | Some foc -> foc, present#new_place present#lis#endpoint foc Lisql.DeltaNil (* undefined *) in
     match Config.apply_hook_opt
             Config.sparklis_extension##.hookApplySuggestion
             [| js_place_map.inject p_start;
@@ -1343,7 +1350,7 @@ object (self)
     | None ->
        match Lisql.insert_increment incr foc_start with
        | Some (foc_end, delta) ->
-          let p_end = p_start#new_place p_start#lis#endpoint foc_end in
+          let p_end = p_start#new_place p_start#lis#endpoint foc_end delta in
           self#update_place ~push_in_history:true p_end
        | None -> ()
     
@@ -1490,8 +1497,8 @@ let translate () =
   jquery_set_innerHTML "#select-sorting-terms" options;
   jquery_set_innerHTML "#select-sorting-properties" options
 
-let initialize endpoint focus =
-  let history = new history endpoint focus in
+let initialize endpoint focus delta =
+  let history = new history endpoint focus delta in
   (* exporting the JS API *)
   Jsutils.firebug "Exporting JS API as global variable 'sparklis'";
   Js.export "sparklis" (make_js_sparklis history);
@@ -1743,15 +1750,16 @@ let _ =
     Permalink.to_query
       arg_query
       (fun query_opt ->
-       let focus =
+       let focus, ids =
 	 match query_opt with
 	 | Some query ->
 	    let path =
 	      try Permalink.to_path (List.assoc "sparklis-path" args)
 	      with Not_found -> [] in
-	    Lisql.focus_of_query_path query path
-	 | None -> fst Lisql.factory#home_focus in
-       initialize endpoint focus);
+	    Lisql.focus_of_query_path query path, [] (* actually undefined *)
+	 | None -> Lisql.factory#home_focus in
+       let delta = Lisql.delta_ids ids in
+       initialize endpoint focus delta);
     bool true))
 
 (*    

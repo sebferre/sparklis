@@ -128,6 +128,10 @@ Control of the navigation history:
 
 Let us assume a Sparklis place `p`, representing a navigation state. The following methods are available.
 
+- **`p.delta(): sparklis-delta`**
+
+  returns the delta relative to the previous place. The previous place is the place from which place `p` was created. The delta describes the new focus ids introduced (see the description of `sparklis-delta`).
+
 - **`p.permalink(): string`**
 
   returns a permalink to this place
@@ -179,7 +183,7 @@ A common form of customization is a *hook*, i.e. a custom function that is calle
 
   can hold a function that will be called on each set of suggestions (terms, concepts, and modifiers), and may return a modified set of suggestions, which will be the one displayed to the user. This can be used to filter out some suggestions or to forcibly add some suggestions.
 
-- **`sparklis_extension.hookApplySuggestion: ((place: sparklis-place, sugg: sparklis-suggestion) => sparkis-place or undefined) or undefined`**
+- **`sparklis_extension.hookApplySuggestion: ((place: sparklis-place, sugg: sparklis-suggestion) => sparklis-place or undefined) or undefined`**
 
   can hold a function that will be called each time when a suggestion is applied to some Sparklis place. Given the place and the suggestion, the function may return a new Sparklis place, as a substitute for the default target place. This can be used to customize the application of suggestions, e.g. applying automatic focus moves after suggestion application.
 
@@ -213,6 +217,18 @@ When the values of a datatype fall into different cases, we provide the list of 
 
 The datatype for RDF terms covers usual kinds (URIs, typed literals, plain literals, and blank nodes), and adds numbers and SPARQL variables.
 For numbers, property `number` holds a JS numeric value, property `str` is the lexical representation, and property `datatype` holds the RDF datatype (e.g., xsd:integer).
+
+### Datatype `sparklis-delta`
+
+- `"nil"`
+- `{ type: "ids", ids: [number ..] }`
+- `{ type: "duplicate", map: [ [number, number] ..] }`
+- `{ type: "selection", whole: sparklis-delta, parts: [sparklis-delta ..] }`
+
+Delta `"nil"` represents an empty delta, no new focus id is introduced.
+Delta with type `"ids"` provides a list of new focus ids (integer numbers).
+Delta with type `"duplicate"` happens when part of the query was duplicated with suggestion "_ and _". It provides a mapping from existing ids to new ids.
+Delta with type `"selection"` happends when several suggestions were selected at once (as a selection). It provides the delta of each selected suggestion (field `parts`) as well as the delta resulting from their insertion into the query (field `whole`).
 
 ### Datatype `sparklis-results`
 
@@ -270,7 +286,7 @@ This datatype is involved in various other datatypes, and helps to tackle the of
 Property `targetType` specifies to which datatype the literal should be converted to (SPARQL functions `xsd:integer`, `xsd:decimal` and `xsd:double` will be applied).
 Property `forgetOriginalDatatype` tells whether the original datatype must be ignored, applying the 'str' function, before applying the conversion. In case of doubt, set this property to `true`.
 
-### Datatype `sparkis-pred`
+### Datatype `sparklis-pred`
 
 This datatype is used in datatype `sparklis-suggestion`. It describes possible predicates (in the logical sense) with arities 1, 2, and beyond.
 
