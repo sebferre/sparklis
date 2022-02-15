@@ -36,27 +36,27 @@ Access to the endpoint:
 
 Access and control of the current constraints
 
-- **`p.termConstr(): sparklis-constr`**
+- **`sparklis.termConstr(): sparklis-constr`**
 
   returns the current *Sparklis constraint* on term suggestions
 
-- **`p.conceptConstr(): sparklis-constr`**
+- **`sparklis.conceptConstr(): sparklis-constr`**
 
   returns the current *Sparklis constraint* on concept suggestions (classes and properties)
 
-- **`p.modifierConstr(): sparklis-constr`**
+- **`sparklis.modifierConstr(): sparklis-constr`**
 
   returns the current *Sparklis constraint* on modifier suggestions
 
-- **`p.setTermConstr(constr: sparklis-constr): void`**
+- **`sparklis.setTermConstr(constr: sparklis-constr): void`**
 
   sets the current *Sparklis constraint* on term suggestions
 
-- **`p.setConceptConstr(constr: sparklis-constr): void`**
+- **`sparklis.setConceptConstr(constr: sparklis-constr): void`**
 
   sets the current *Sparklis constraint* on concept suggestions (classes and properties)
 
-- **`p.setModifierConstr(constr: sparklis-constr): void`**
+- **`sparklis.setModifierConstr(constr: sparklis-constr): void`**
 
   sets the current *Sparklis constraint* on modifier suggestions
 
