@@ -184,12 +184,13 @@ let rec term : Rdf.term -> term = function
 
     
 type aggreg =
-| DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
+| COUNT | DistinctCOUNT | DistinctCONCAT | SAMPLE | ID
 | SUM of converter | AVG of converter | MAX of converter | MIN of converter
 
 let term_aggreg (g : aggreg) (term : _ any_term) : term = (* assuming aggregates are terms (not expr) to simplify compilation of HAVING clauses *)
   let make_aggreg prefix_g expr suffix_g : term = prefix_g ^< expr ^> suffix_g in
   match g with
+  | COUNT -> make_aggreg "COUNT(" term ")"
   | DistinctCOUNT -> make_aggreg "COUNT(DISTINCT " term ")"
   | DistinctCONCAT -> make_aggreg "GROUP_CONCAT(DISTINCT " term " ; separator='  /  ')"
   | SUM conv -> make_aggreg "SUM(" (conv (term :> expr)) ")"

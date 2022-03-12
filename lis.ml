@@ -1124,12 +1124,16 @@ object (self)
 	     k ~partial incr_forest_opt))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
-    let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
     let sparql_term =
-      "SELECT DISTINCT ?term " ^ sparql_froms ^ "WHERE { " ^
-	(Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs) :> string) ^
-	filter_hidden_URIs "term" ^
-	  " FILTER (!IsBlank(?term)) } LIMIT " ^ string_of_int config_max_results#value in
+      Sparql.((select
+                 ~froms:Sparql_endpoint.config_default_graphs#froms
+                 ~distinct:true
+                 ~projections:[`Bare, "term"]
+                 ~limit:config_max_results#value
+                 (join [ Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs);
+                         pattern_hidden_URIs "term";
+                         filter (log_not (expr_func "isBlank" [var "term"])) ])
+               :> string)) in
     Sparql_endpoint.ajax_in ~tentative:true elts ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
       (fun code -> k ~partial:true None)
@@ -1435,26 +1439,33 @@ object (self)
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
-      (*let sparql_genvar = new Lisql2sparql.genvar in*)
-      let sparql_froms = Sparql_endpoint.config_default_graphs#sparql_froms in
       let sparql_class, lt_opt =
 	let open Sparql in
 	match constr with
 	| Lisql.True ->
-	   ("SELECT DISTINCT ?c (COUNT(?x) AS ?n) " ^< sparql_froms ^< "WHERE { " ^<
-	     (rdf_type (var "x") (var "c")) ^>
-	       (* (pattern_of_formula (Lisql2sparql.filter_constr_class sparql_genvar (var "c") constr) : pattern) ^> *)
-		 " } GROUP BY ?c ORDER BY DESC(?n) LIMIT 1000" : 'a sparql :> string), (*^ string_of_int config_max_classes#value*)
-	   None
+           Sparql.((select
+                      ~distinct:true
+                      ~projections:[`Bare, "c"; `Aggreg (COUNT, (var "x" :> term)), "n"]
+                      ~froms:Sparql_endpoint.config_default_graphs#froms
+                      ~groupings:[var "c"]
+                      ~orderings:[DESC (fun e -> e), var "n"]
+                      ~limit:1000
+                      (rdf_type (var "x") (var "c"))
+                    :> string)),
+           None
 	| Lisql.ExternalSearch (_, Some lt) ->
 	   let lx = List.mapi (fun i t -> "x" ^ string_of_int (i+1)) lt in
-	   ("SELECT " ^< concat " " (List.map var lx) ^^ sparql_froms ^< " WHERE { " ^<
-	     concat " "
-		    (List.map2
-		       (fun x t -> optional (rdf_type (var x) (term t)))
-		       lx lt) ^>
-	       " } LIMIT 1" : 'a sparql :> string),
-	   Some (lx,lt)
+           Sparql.((select
+                      ~distinct:false
+                      ~projections:(List.map (fun x -> `Bare, x) lx)
+                      ~froms:Sparql_endpoint.config_default_graphs#froms
+                      ~limit:1
+                      (join
+                         (List.map2
+                            (fun x t -> optional (rdf_type (var x) (term t)))
+                            lx lt))
+                    :> string)),
+           Some (lx,lt)
 	| _ -> "", None in (* avoiding timeouts in evaluations *)
       Jsutils.firebug sparql_class;
       if sparql_class = "" then k ~partial:true None
