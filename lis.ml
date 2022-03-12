@@ -873,11 +873,13 @@ object (self)
   val ajax_pool = new Sparql_endpoint.ajax_pool
   method abort_all_ajax = ajax_pool#abort_all
 
-  (* SPARQL query and results *)
-
+  (* place state *)
+  val mutable current_term_constr = Lisql.True
+  val mutable current_limit = config_max_results#value
+                        
+  (* SPARQL derived state: query and results *)
+  val mutable results_ok = false (* to know whether mutable vars below are defined *)
   val mutable sparql_opt : string option = None
-	
-  val mutable max_results = config_max_results#value
   val mutable results = Sparql_endpoint.empty_results
   val mutable results_shape = Unit
   val mutable results_typing : Lisql_type.datatype list array = [||]
@@ -898,25 +900,54 @@ object (self)
     | false, true -> `OnlyLiterals
     | false, false -> `OnlyIRIs
 
-  method define_sparql term_constr ~limit =
-    match s_sparql.Lisql2sparql.query_opt with
-    | None ->
-       sparql_opt <- None
-    | Some query ->
-       let ft = self#filter_type in
-       let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
-       let froms = Sparql_endpoint.config_default_graphs#froms in
-       let sparql = query
-		      ~hook:(fun tx form ->
-			     let form_constr = Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr ft in
-			     if Lisql.hierarchy_of_focus focus = None (* TODO: improve this rough hack *)
-			     then Sparql.formula_and form_constr form
-			     else Sparql.formula_and form form_constr)
-		      ~froms ~limit () in
-       sparql_opt <- Some sparql
-
-  method sparql : string option = sparql_opt
-						  
+  method ajax_sparql_results ?limit term_constr elts (k : unit -> unit) : unit =
+  (* if limit or term_constr new, then redefine SPARQL query and results, and continue when ready *)
+    if results_ok && (limit = None || limit = Some current_limit) && term_constr = current_term_constr
+    then k ()
+    else (
+      (* define the new SPARQL query *)
+      let limit =
+        match limit with
+        | None -> config_max_results#value
+        | Some n -> n in
+      let new_sparql_opt =
+        match s_sparql.Lisql2sparql.query_opt with
+        | None -> None
+        | Some query ->
+           let ft = self#filter_type in
+           let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
+           let froms = Sparql_endpoint.config_default_graphs#froms in
+           let sparql = query
+		          ~hook:(fun tx form ->
+			    let form_constr = Lisql2sparql.filter_constr_entity sparql_genvar tx term_constr ft in
+			    if Lisql.hierarchy_of_focus focus = None (* TODO: improve this rough hack *)
+			    then Sparql.formula_and form_constr form
+			    else Sparql.formula_and form form_constr)
+		          ~froms ~limit () in
+           Some sparql in
+      (* define the query results, and continue when ready *)
+      match new_sparql_opt with
+      | None ->
+         results_ok <- true;
+         sparql_opt <- new_sparql_opt;
+         results <- Sparql_endpoint.empty_results;
+         self#define_results_views;
+         k ()
+      | Some sparql ->
+         let sparql = hook_sparql sparql in (* TODO: should the original query be hidden? *)
+	 Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
+	   (fun res ->
+             let res = hook_results res in
+             results_ok <- true;
+             sparql_opt <- new_sparql_opt;
+	     results <- res;
+             self#define_results_views;
+             k ())
+           (fun code ->
+             (* no state update *)
+             k ())
+    )
+               
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
     try
       let v = id_labelling#get_id_var id in
@@ -926,19 +957,19 @@ object (self)
       Jsutils.firebug ("No datatype for id #" ^ string_of_int id);
       []
 
-  method ajax_results elts
-    ~(k_results : string option -> unit) =
-    (* re-initializing *)
+  method private define_results_views =
+    (* requires results_ok = true *)
+    (* update state derived from sparql and results, if not up to date *) 
     let filter_term =
       function
       | Rdf.URI uri when String.contains uri ' ' ->
-        (* URIs with spaces inside are not allowed in SPARQL queries *)
+         (* URIs with spaces inside are not allowed in SPARQL queries *)
          some_focus_term_is_not_queryable <- true; false
       | Rdf.Bnode _ ->
-        (* blank nodes are not allowed in SPARQL queries *)
+         (* blank nodes are not allowed in SPARQL queries *)
          some_focus_term_is_not_queryable <- true; false
       | (Rdf.TypedLiteral (s,_) | Rdf.PlainLiteral (s,_)) when String.length s > 100 ->
-        (* long literals can clutter term suggestions and queries retrieving concept suggestions *)
+         (* long literals can clutter term suggestions and queries retrieving concept suggestions *)
          some_focus_term_is_not_queryable <- true; false
       | _ -> true in
     let mapfilter_term_opt =
@@ -946,78 +977,65 @@ object (self)
       | Some t -> if filter_term t then Some t else None
       | None -> None
     in
-    results <- Sparql_endpoint.empty_results;
     results_shape <- Unit;
     results_typing <- [||];
     focus_term_index <- new nested_int_index;
     focus_graph_index <- new int_index;
     focus_pred_args_index <- new nested_int_index;
     some_focus_term_is_not_queryable <- false;
-    (* computing results and derived attributes *)
+    (* computing derived attributes from results *)
     match sparql_opt with
     | None ->
-	focus_type_constraints <-
-	  Lisql_type.of_focus
-	    (fun id -> Some [`IRI])
-	    focus focus_descr;
-	( match s_sparql.Lisql2sparql.focus_term_opt with
-	  | None -> ()
-	  | Some vt -> focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt None results );
+       focus_type_constraints <-
+	 Lisql_type.of_focus
+	   (fun id -> Some [`IRI])
+	   focus focus_descr;
+       ( match s_sparql.Lisql2sparql.focus_term_opt with
+	 | None -> ()
+	 | Some vt -> focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt None results )
 (*	| Some (Rdf.Var _) -> ()
 	| Some term -> focus_term_index#add (term, (1, new int_index))
 	| None -> () ); *)
-	k_results None
     | Some sparql ->
-        let sparql = hook_sparql sparql in (* TODO: should the original query be hidden? *)
-	Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
-	  (fun res ->
-            let res = hook_results res in
-	    results <- res;
-	    results_shape <- results_shape_of_deps
-			       s_sparql.Lisql2sparql.deps
-			       s_sparql.Lisql2sparql.state#geolocs
-			       (Sparql_endpoint.results_vars res);
-	    Jsutils.firebug ("DEPS: " ^ Lisql2sparql.string_of_deps s_sparql.Lisql2sparql.deps);
-	    Jsutils.firebug ("SHAPE: " ^ string_of_results_shape results_shape);
-	    results_typing <- Lisql_type.of_sparql_results res;
-	    focus_type_constraints <-
-	      Lisql_type.union_focus_type_constraints
-		focus_type_constraints
-		(Lisql_type.of_focus
-		   (fun id -> Some (self#id_typing id))
-		   focus focus_descr);
-	    (* defining focus_term_index and focus_graph_index *)
-	    ( match
-		(if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
-	        s_sparql.Lisql2sparql.focus_graph_opt
-	      with
-	      | None, None -> ()
-	      | None, Some vtg ->
-		 focus_graph_index <- index_of_results_varterm ~filter:filter_term vtg results
-	      | Some vt, vtg_opt ->
-		 focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt vtg_opt results
-	    );
-	    ( match s_sparql.Lisql2sparql.focus_pred_args_opt with
-	      | None -> ()
-	      | Some (pred,args) ->
-		 let keys_vt = List.map snd args in
-		 (*		 let _ = Jsutils.firebug ("pred_args_vt: " ^ String.concat ", " (List.map Rdf.string_of_term keys_vt)) in *)
-		 focus_pred_args_index <- nested_index_of_results_varterm_list
-					    ~mapfilter:mapfilter_term_opt
-					    keys_vt s_sparql.Lisql2sparql.focus_graph_opt results
-	    );
-	    (* callback *)
-	    k_results (Some sparql))
-	  (fun code -> k_results (Some sparql))
+       results_shape <- results_shape_of_deps
+			  s_sparql.Lisql2sparql.deps
+			  s_sparql.Lisql2sparql.state#geolocs
+			  (Sparql_endpoint.results_vars results);
+       Jsutils.firebug ("DEPS: " ^ Lisql2sparql.string_of_deps s_sparql.Lisql2sparql.deps);
+       Jsutils.firebug ("SHAPE: " ^ string_of_results_shape results_shape);
+       results_typing <- Lisql_type.of_sparql_results results;
+       focus_type_constraints <-
+	 Lisql_type.union_focus_type_constraints
+	   focus_type_constraints
+	   (Lisql_type.of_focus
+	      (fun id -> Some (self#id_typing id))
+	      focus focus_descr);
+       (* defining focus_term_index and focus_graph_index *)
+       ( match
+	   (if focus_descr#unconstrained then None else s_sparql.Lisql2sparql.focus_term_opt),
+	   s_sparql.Lisql2sparql.focus_graph_opt
+	 with
+	 | None, None -> ()
+	 | None, Some vtg ->
+	    focus_graph_index <- index_of_results_varterm ~filter:filter_term vtg results
+	 | Some vt, vtg_opt ->
+	    focus_term_index <- nested_index_of_results_varterm ~filter:filter_term vt vtg_opt results
+       );
+       ( match s_sparql.Lisql2sparql.focus_pred_args_opt with
+	 | None -> ()
+	 | Some (pred,args) ->
+	    let keys_vt = List.map snd args in
+	    (*		 let _ = Jsutils.firebug ("pred_args_vt: " ^ String.concat ", " (List.map Rdf.string_of_term keys_vt)) in *)
+	    focus_pred_args_index <- nested_index_of_results_varterm_list
+				       ~mapfilter:mapfilter_term_opt
+				       keys_vt s_sparql.Lisql2sparql.focus_graph_opt results
+       )
 
-  method ajax_sparql_results term_constr elts
-	   ~(k_results : string option -> unit) =
-    self#define_sparql term_constr ~limit:config_max_results#value;
-    self#ajax_results elts ~k_results
 
+  method sparql : string option = sparql_opt						  
   method results = results
   method results_shape = results_shape
-  method partial_results = (results.Sparql_endpoint.length = max_results)
+  method partial_results = (results.Sparql_endpoint.length = current_limit)
   method results_dim = results.Sparql_endpoint.dim
   method results_nb = results.Sparql_endpoint.length
   method results_page offset limit k = page_of_results offset limit s_sparql.Lisql2sparql.state#geolocs results k
@@ -1025,32 +1043,19 @@ object (self)
   method results_geolocations k = geolocations_of_results s_sparql.Lisql2sparql.state#geolocs results k
   method results_slides k = slides_of_results results k
 
+                          
   method ajax_get_more_results ?limit term_constr elts
-	   ~(k_results : string option -> unit)
+	   ~(k_new_results : unit -> unit)
            ~(k_trivial : unit -> unit) =
     let limit =
       match limit with
       | Some n -> n
-      | None -> max_results + config_max_results#value in
-    if self#partial_results && limit > max_results then
-      begin
-	max_results <- limit;
-	self#define_sparql term_constr ~limit;
-	match sparql_opt with
-	| None -> ()
-	| Some sparql ->
-           let sparql = hook_sparql sparql in
-	   Sparql_endpoint.ajax_in
-	     ~update_yasgui:true
-	     elts ajax_pool endpoint sparql
-	     (fun res ->
-               let res = hook_results res in
-               results <- res;
-               k_results (Some sparql))
-	     (fun code -> ())
-      end
+      | None -> current_limit + config_max_results#value in
+    if self#partial_results && limit > current_limit
+    then self#ajax_sparql_results ~limit term_constr elts
+           k_new_results
     else k_trivial ()
-
+    
   (* counts: must be called after [ajax_sparql_results] has terminated *)
   method estimate_count_var (var : Rdf.var) : (int * bool (* partial *)) option =
     let partial = self#partial_results in
@@ -1138,85 +1143,90 @@ object (self)
                     || Lisql.is_undef_expr_focus focus) then
       (* typically, when no match for query+constr, then show constr match with freq=0 *)
       self#ajax_forest_terms_init ~freq0:true ~inverse constr elts k
-    else begin
-      let max_value = None (*Some self#results_nb*) in
-      let partial = self#partial_results in
-      let unit = Results in
-      let incr_index = new incr_freq_tree_index term_hierarchy in
-    (* adding selection increments *)
-      incr_index#add (Lisql.IncrSelection (NAndSel, []), None);
-      incr_index#add (Lisql.IncrSelection (NOrSel, []), None);
-    (* adding increment 'anything' *)
-      if focus_term_index#length > 1 && Lisql.insert_increment Lisql.IncrAnything focus <> None then
-	incr_index#add (Lisql.IncrAnything, None);
-    (* adding term increments *)
-      focus_term_index#iter (*rev_map*)
-	(fun (t, (freq,_)) ->
-	  enqueue_term t;
-	  (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
-	  incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
-    (* adding input increments *)
-      if Lisql.is_undef_expr_focus focus then
-	List.iter
-	  (fun (dt : Lisql.input_type) ->
-	    if Lisql_type.is_insertable_input (Lisql_type.of_input_type dt) focus_type_constraints then
-	      incr_index#add (Lisql.IncrInput ("",dt), None))
-	  [IRIInput; StringInput; FloatInput; IntegerInput; DateInput; TimeInput; DateTimeInput; DurationInput];
-    (* adding ids *)
-      ( match s_sparql.Lisql2sparql.focus_term_opt with
-      | Some term ->
-	if focus_descr#incr then
-	  begin
-	    let dim = results.Sparql_endpoint.dim in
-	    let vars = results.Sparql_endpoint.vars in
-	    let freqs = Array.make dim 0 in
-	    List.iter
-	      (fun binding ->
-		let t_focus_opt =
-		  match term with
-		  | Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
-		  | t -> Some t in
-		Array.iteri
-		  (fun i t_opt ->
-		    match t_opt, t_focus_opt with
-		    | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
-		    | _ -> ())
-		  binding)
-	      results.Sparql_endpoint.bindings;
-	    List.iter
-	      (fun i ->
-		if freqs.(i) <> 0 then
-		  let v = try Common.list_rev_assoc i vars with _ -> assert false in
-		  if term <> (Rdf.Var v) then
-		    (try
-		       let id = id_labelling#get_var_id v in
-		       incr_index#add (Lisql.IncrId (id, None), Some { value=freqs.(i); max_value; partial; unit })
-		     with _ -> ()))  (* ex: aggregation variables *)
-	      (Common.from_downto (dim-1) 0)
-	  end;
-	if Lisql.is_undef_expr_focus focus then
-	  begin
-	    List.iter
-	      (fun id -> (* TODO: filter according to empirical type *)
-		let ldt = self#id_typing id in
-		let comp_arg, comp_res =
-		  Lisql_type.compatibles_insertion_list
-		    (List.map (fun dt -> (None,dt)) ldt)
-		    focus_type_constraints in
-		if comp_res.Lisql_type.bool then
-		  incr_index#add (Lisql.IncrId (id, comp_res.Lisql_type.conv_opt), None))
-	      (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
-	  end
-      | _ -> () );
-      (* synchronizing hierarchies and lexicons and continuing *)
-      sync_terms (* datatypes and entities *)
-	(fun () ->
-	 term_hierarchy#sync
-	   (fun () ->
-             let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-             let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
-	     k ~partial incr_forest_opt))
-      end
+    else
+      let process () =
+        let max_value = None (*Some self#results_nb*) in
+        let partial = self#partial_results in
+        let unit = Results in
+        let incr_index = new incr_freq_tree_index term_hierarchy in
+        (* adding selection increments *)
+        incr_index#add (Lisql.IncrSelection (NAndSel, []), None);
+        incr_index#add (Lisql.IncrSelection (NOrSel, []), None);
+        (* adding increment 'anything' *)
+        if focus_term_index#length > 1 && Lisql.insert_increment Lisql.IncrAnything focus <> None then
+	  incr_index#add (Lisql.IncrAnything, None);
+        (* adding term increments *)
+        focus_term_index#iter (*rev_map*)
+	  (fun (t, (freq,_)) ->
+	    enqueue_term t;
+	    (match t with Rdf.URI uri -> term_hierarchy#enqueue uri | _ -> ());
+	    incr_index#add (Lisql.IncrTerm t, Some { value=freq; max_value; partial; unit }));
+        (* adding input increments *)
+        if Lisql.is_undef_expr_focus focus then
+	  List.iter
+	    (fun (dt : Lisql.input_type) ->
+	      if Lisql_type.is_insertable_input (Lisql_type.of_input_type dt) focus_type_constraints then
+	        incr_index#add (Lisql.IncrInput ("",dt), None))
+	    [IRIInput; StringInput; FloatInput; IntegerInput; DateInput; TimeInput; DateTimeInput; DurationInput];
+        (* adding ids *)
+        ( match s_sparql.Lisql2sparql.focus_term_opt with
+          | Some term ->
+	     if focus_descr#incr then
+	       begin
+	         let dim = results.Sparql_endpoint.dim in
+	         let vars = results.Sparql_endpoint.vars in
+	         let freqs = Array.make dim 0 in
+	         List.iter
+	           (fun binding ->
+		     let t_focus_opt =
+		       match term with
+		       | Rdf.Var v -> (try binding.(List.assoc v vars) with Not_found -> None)
+		       | t -> Some t in
+		     Array.iteri
+		       (fun i t_opt ->
+		         match t_opt, t_focus_opt with
+		         | Some t1, Some t2 when t1=t2 -> freqs.(i) <- freqs.(i) + 1
+		         | _ -> ())
+		       binding)
+	           results.Sparql_endpoint.bindings;
+	         List.iter
+	           (fun i ->
+		     if freqs.(i) <> 0 then
+		       let v = try Common.list_rev_assoc i vars with _ -> assert false in
+		       if term <> (Rdf.Var v) then
+		         (try
+		            let id = id_labelling#get_var_id v in
+		            incr_index#add (Lisql.IncrId (id, None), Some { value=freqs.(i); max_value; partial; unit })
+		          with _ -> ()))  (* ex: aggregation variables *)
+	           (Common.from_downto (dim-1) 0)
+	       end;
+	     if Lisql.is_undef_expr_focus focus then
+	       begin
+	         List.iter
+	           (fun id -> (* TODO: filter according to empirical type *)
+		     let ldt = self#id_typing id in
+		     let comp_arg, comp_res =
+		       Lisql_type.compatibles_insertion_list
+		         (List.map (fun dt -> (None,dt)) ldt)
+		         focus_type_constraints in
+		     if comp_res.Lisql_type.bool then
+		       incr_index#add (Lisql.IncrId (id, comp_res.Lisql_type.conv_opt), None))
+	           (Lisql_annot.seq_view_defs s_sparql.Lisql2sparql.seq_view)
+	       end
+          | _ -> () );
+        (* synchronizing hierarchies and lexicons and continuing *)
+        sync_terms (* datatypes and entities *)
+	  (fun () ->
+	    term_hierarchy#sync
+	      (fun () ->
+                let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+                let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
+	        k ~partial incr_forest_opt))
+      in
+      if constr = current_term_constr
+      then process ()
+      else self#ajax_sparql_results constr elts
+             (fun () -> process ())
 
   method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
     let process results_class results_prop results_pred =
@@ -1717,7 +1727,7 @@ object (self)
 	            Sparql.union
 		      (List.map
 		         (fun (key,(_, graph_index)) ->
-		           let pat = graph_opt graph_index (make_pattern ?hook:None key) in
+		           let pat = graph_opt graph_index (make_pattern ?hook:None key) in (* hook:None prevents the use of the profile, TODO: use VALUES *)
 		           if Rdf.config_wikidata_mode#value
                               || config_avoid_lengthy_queries#value
                               || pat = Sparql.empty

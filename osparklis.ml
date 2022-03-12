@@ -459,7 +459,7 @@ object (self)
     | None -> k (process None)
     | Some limit ->
        lis#ajax_get_more_results ~limit (norm_constr term_constr) []
-         ~k_results:(fun sparql_opt -> k (process (Some limit)))
+         ~k_new_results:(fun () -> k (process (Some limit)))
          ~k_trivial:(fun () -> k (process (Some limit)))
     
   val mutable val_html_query = ""
@@ -920,26 +920,26 @@ object (self)
 	let term_constr = term_constr in (* BECAUSE state term_constr can change any time *)
 	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
-	  ~k_results:
-	  (function
-	  | None ->
-	      (*Jsutils.yasgui#set_response "";
-	      elt_res##.style##.display := string "none";*)
-	      self#refresh_extension;
-	      self#refresh_constrs term_constr property_constr;
-	      (*jquery_input "#pattern-terms" (fun input -> input##.disabled := bool true);*)
-	      jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
-	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
-	      self#refresh_modifier_increments `List;
-	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr
-	  | Some sparql ->
-	      self#refresh_extension;
-	      self#refresh_constrs term_constr property_constr;
-	      jquery_input "#pattern-terms" (fun input -> input##.disabled := bool false);
-	      self#refresh_modifier_increments `List;
-	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr)))
+	  (fun () ->
+            match lis#sparql with
+	    | None ->
+	       (*Jsutils.yasgui#set_response "";
+	         elt_res# #.style##.display := string "none";*)
+	       self#refresh_extension;
+	       self#refresh_constrs term_constr property_constr;
+	       (*jquery_input "#pattern-terms" (fun input -> input##.disabled := bool true);*)
+	       jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
+	       jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
+	       self#refresh_modifier_increments `List;
+	       self#refresh_property_increments property_constr;
+	       self#refresh_term_increments term_constr
+	    | Some sparql ->
+	       self#refresh_extension;
+	       self#refresh_constrs term_constr property_constr;
+	       jquery_input "#pattern-terms" (fun input -> input##.disabled := bool false);
+	       self#refresh_modifier_increments `List;
+	       self#refresh_property_increments property_constr;
+	       self#refresh_term_increments term_constr)))
 
   method refresh_for_term_constr term_constr =
     (* same as method refresh, but assuming same query and focus *)
@@ -947,27 +947,27 @@ object (self)
       jquery "#list-results" (fun elt_res ->
 	let property_constr = property_constr in (* BECAUSE state property_constr can change any time *)
 	lis#ajax_sparql_results (norm_constr term_constr) [elt_incrs; elt_res]
-	  ~k_results:
-	  (function
-	  | None ->
-	      self#refresh_extension;
-	      jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
-	      jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
-	      self#refresh_modifier_increments `List;
-	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr
-	  | Some sparql ->
-	      self#refresh_extension;
-	      self#refresh_modifier_increments `List;
-	      self#refresh_property_increments property_constr;
-	      self#refresh_term_increments term_constr)))
+	  (fun () ->
+            match lis#sparql with
+	    | None ->
+	       self#refresh_extension;
+	       jquery_all ".list-incrs" (fun elt -> set_innerHTML_fadeInOut elt "");
+	       jquery_all ".count-incrs" (fun elt -> set_innerHTML_fadeInOut elt "---");
+	       self#refresh_modifier_increments `List;
+	       self#refresh_property_increments property_constr;
+	       self#refresh_term_increments term_constr
+	    | Some sparql ->
+	       self#refresh_extension;
+	       self#refresh_modifier_increments `List;
+	       self#refresh_property_increments property_constr;
+	       self#refresh_term_increments term_constr)))
 
   method private get_more_results (k : unit -> unit) =
     jquery "#list-results"
 	   (fun elt_res ->
 	    lis#ajax_get_more_results
 	      (norm_constr term_constr) [elt_res]
-	      ~k_results:(fun _ -> k ())
+	      ~k_new_results:k
               ~k_trivial:(fun () -> ()))
 	   
   method private filter_increments ?on_modifiers elt_list constr =
@@ -1183,17 +1183,15 @@ let rec make_js_place (place : place) =
     method results : Unsafe.any = (* TODO: lazy eval *)
       Sparql_endpoint.js_results_map.inject place#lis#results
 
-    method getResults (term_constr : Unsafe.any)
+    method getResults (term_constr : Unsafe.any) (* TODO: add optional limit *)
              (callback : Unsafe.any (* bool -> results -> unit *)) : unit =
       place#lis#ajax_sparql_results
         (Lisql.js_constr_map.extract term_constr)
         []
-        ~k_results:(function
-          | None -> ()
-          | Some _sparql ->
-             let js_results = Sparql_endpoint.js_results_map.inject place#lis#results in
-             let partial = place#lis#partial_results in
-             Unsafe.fun_call callback [| Inject.bool partial; js_results |])
+        (fun () ->
+          let js_results = Sparql_endpoint.js_results_map.inject place#lis#results in
+          let partial = place#lis#partial_results in
+          Unsafe.fun_call callback [| Inject.bool partial; js_results |])
     method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
              (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
       place#lis#ajax_forest_terms_inputs_ids
