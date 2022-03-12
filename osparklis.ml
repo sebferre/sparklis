@@ -1175,23 +1175,22 @@ let rec make_js_place (place : place) =
                 
     method permalink : js_string t =
       string place#permalink
-        
-    method sparql : js_string opt = (* TODO: lazy eval *)
+
+    method onEvaluated (callback : Unsafe.any (* unit -> unit *)) : unit = (* TODO: add optional limit *)
+      place#lis#ajax_sparql_results Lisql.True []
+        (fun () ->
+          Unsafe.fun_call callback [||])
+
+    (* the following methods have to be called when the place is evaluated *)
+    method sparql : js_string opt =
       match place#lis#sparql with
       | None -> null
       | Some s -> some (string s)
-    method results : Unsafe.any = (* TODO: lazy eval *)
+    method results : Unsafe.any =
       Sparql_endpoint.js_results_map.inject place#lis#results
+    method hasPartialResults : bool t =
+      bool place#lis#partial_results
 
-    method getResults (term_constr : Unsafe.any) (* TODO: add optional limit *)
-             (callback : Unsafe.any (* bool -> results -> unit *)) : unit =
-      place#lis#ajax_sparql_results
-        (Lisql.js_constr_map.extract term_constr)
-        []
-        (fun () ->
-          let js_results = Sparql_endpoint.js_results_map.inject place#lis#results in
-          let partial = place#lis#partial_results in
-          Unsafe.fun_call callback [| Inject.bool partial; js_results |])
     method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
              (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
       place#lis#ajax_forest_terms_inputs_ids

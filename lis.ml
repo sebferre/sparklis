@@ -889,6 +889,7 @@ object (self)
   val mutable focus_pred_args_index : (Rdf.term list, Rdf.term) nested_int_index = new nested_int_index (* used when some focus-pred-args *)
   val mutable some_focus_term_is_not_queryable : bool = false
 
+                                                      
   method filter_type : Lisql.filter_type =
     let has_IRI =
       Lisql_type.(check_input_constraint focus_type_constraints.input_constr `IRI) in
@@ -948,6 +949,7 @@ object (self)
              k ())
     )
                
+
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
     try
       let v = id_labelling#get_id_var id in
@@ -1031,8 +1033,8 @@ object (self)
 				       keys_vt s_sparql.Lisql2sparql.focus_graph_opt results
        )
 
-
-  method sparql : string option = sparql_opt						  
+  (* the following methods are valid when results_ok = true *)
+  method sparql : string option = sparql_opt
   method results = results
   method results_shape = results_shape
   method partial_results = (results.Sparql_endpoint.length = current_limit)
