@@ -136,29 +136,33 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 
   returns a permalink to this place
 
+- **`p.onEvaluated(callback: () => void): void`**
+
+  calls `callback` when the place has been evaluated, i.e. when the SPARQL query, its results, and other related information is available.
+
 - **`p.sparql(): string`**
 
-  returns the SPARQL translation of the current query and focus
+  returns the SPARQL translation of the current query and focus. The place must be evaluated.
 
 - **`p.results(): sparklis-results`**
 
-  returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values).
+  returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values). The place must be evaluated.
 
-- **`p.getResults(termConstr: sparklis-constr, callback: (partial: bool, results: sparklis-results) => void): void`**
+- ** `p.hasPartialResults(): bool`**
 
-  calls `callback` on the query results for the given term constraint (see datatype `sparklis-constr`) that applies to the entity under focus. The `partial` argument of the callback indicates whether the passed results are partial or not. 
+  returns whether the Sparklis results are partial or not. The place must be evaluated.
 
 - **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr, callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
 
-  calls `callback` on the term suggestions (see datatype `sparklis-suggestions`) matching the given term constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not.
+  calls `callback` on the term suggestions (see datatype `sparklis-suggestions`) matching the given term constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not. The place must be evaluated.
 
 - **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr, callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
 
-  calls `callback` on the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not.
+  calls `callback` on the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not. The place must be evaluated.
 
 - **`p.getModifierSuggestions(callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
 
-  calls `callback` on the modifier suggestions (see datatype `sparklis-suggestions`). The `partial` argument of the callback indicates wheter the passed suggestions are partial or not (in practice, should always be false).
+  calls `callback` on the modifier suggestions (see datatype `sparklis-suggestions`). The `partial` argument of the callback indicates wheter the passed suggestions are partial or not (in practice, should always be false). The place must be evaluated.
 
 - **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
 
