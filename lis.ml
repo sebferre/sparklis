@@ -240,8 +240,6 @@ let formula_hidden_URIs (v : string) : Sparql.formula =
   formula_hidden_URIs_term (Sparql.var v)
 let pattern_hidden_URIs (v : string) : Sparql.pattern =
   Sparql.pattern_of_formula (formula_hidden_URIs v)
-let filter_hidden_URIs (v : string) : string =
-  (Sparql.pattern_of_formula (formula_hidden_URIs v) :> string)
     
 (* private intermediate functions, used to produce index *)
 let nested_hashtbl_of_results_varterm_list
@@ -1130,7 +1128,7 @@ object (self)
                  ~distinct:true
                  ~projections:[`Bare, "term"]
                  ~limit:config_max_results#value
-                 (join [ Sparql.pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (Sparql.var "term") constr `OnlyIRIs);
+                 (join [ pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (var "term") constr `OnlyIRIs);
                          pattern_hidden_URIs "term";
                          filter (log_not (expr_func "isBlank" [var "term"])) ])
                :> string)) in
@@ -1312,15 +1310,17 @@ object (self)
 	  Sparql.formula_and_list
 	    [formula_concept_profile v;
 	     filter_constr sparql_genvar (Sparql.var v) constr;
-	     form] in
+	     form;
+             formula_hidden_URIs v] in
 	let g_pat = graph_opt (make_pattern ~hook ()) in
 	Sparql.((select
 		  ~froms
 		  ~distinct:true
 		  ~projections:(List.map (fun v -> `Bare, v) lv)
 		  ~limit:config_max#value
-		  (join (g_pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
-	:> string)) in
+                  g_pat
+                (*		  (join (g_pat :: List.map (fun v -> pattern_hidden_URIs v) lv)) *)
+	         :> string)) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
 			   (fun ?hook () -> Lisql2sparql.WhichClass.pattern_of_term ?hook None)
@@ -1354,15 +1354,17 @@ object (self)
 	  Sparql.formula_and_list
 	    [ formula_concept_profile v;
 	      filter_constr sparql_genvar (Sparql.var v) constr;
-	      form ] in
+	      form;
+              formula_hidden_URIs v ] in
 	let pat = make_pattern ~hook () in
 	Sparql.((select
 		  ~froms
 		  ~distinct:true
 		  ~projections:(List.map (fun v -> `Bare, v) lv)
 		  ~limit:config_max#value
-		  (join (pat :: List.map (fun v -> pattern_hidden_URIs v) lv))
-		:> string)) in
+                  pat
+                 (*		  (join (pat :: List.map (fun v -> pattern_hidden_URIs v) lv))*)
+		 :> string)) in
       let sparql_class = make_sparql
 			   Lisql2sparql.WhichClass.pattern_vars
 			   (fun ?hook () -> Lisql2sparql.WhichClass.intent_pattern ?hook ())
@@ -1674,8 +1676,8 @@ object (self)
 		   Sparql.formula_and_list
 		     [formula_concept_profile_term tx;
 		      filter_constr sparql_genvar tx constr;
-		      formula_hidden_URIs_term tx;
-		      form])
+                      form;
+		      formula_hidden_URIs_term tx])
 	         ~froms ~limit:config_max#value () in
           let sparql_class = make_sparql
 		               s_sparql.Lisql2sparql.query_class_opt
@@ -1721,80 +1723,82 @@ object (self)
 	    | [] -> ""
 	    | (key0, (_, graph_index0))::_ ->
 	       let projections = List.map (fun v -> `Bare, v) lv in
-	       let hook v form =
-	         Sparql.formula_and_list
-	           [formula_concept_profile v;
-	            filter_constr sparql_genvar (Sparql.var v) constr;
-	            form] in
-	       let gp =
-	         match hook "_" Sparql.True with
-	         | Sparql.True -> (* when no constraint, use this to have a better sample of properties *)
-	            let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
-		      if gp = Sparql.empty then gp
-                      else
-                        match s_sparql.Lisql2sparql.focus_graph_opt with
-		        | Some _ when not graph_index#is_empty ->
-		           Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
-		        | _ -> gp
-	            in
-	            Sparql.union
-		      (List.map
-		         (fun (key,(_, graph_index)) ->
-		           let pat = graph_opt graph_index (make_pattern ?hook:None key) in (* hook:None prevents the use of the profile, TODO: use VALUES *)
-		           if Rdf.config_wikidata_mode#value
-                              || config_avoid_lengthy_queries#value
-                              || pat = Sparql.empty
-		           then pat
-		           else Sparql.subquery
-			          (Sparql.select
-			             ~distinct:true ~projections
-			             ~limit:config_max#value
-			             pat))
-		         samples)
-	         | _ -> (* when constraint, use this to avoid Garguanta queries (repeats of constraints) *)
-	            let key_vars = List.map (fun _ -> sparql_genvar#new_var "key") key0 in
-	            let graph_var_opt =
-		      match s_sparql.Lisql2sparql.focus_graph_opt with
-		      | Some _ when not graph_index0#is_empty -> Some (sparql_genvar#new_var "graph")
-		      | _ -> None in
-	            let pat_values =
-		      match graph_var_opt with
-		      | None ->
-		         Sparql.(values_tuple
-			           (List.map Sparql.var key_vars)
-			           (List.map
-				      (fun (key,_) -> List.map Sparql.term key)
-				      samples))
-		      | Some gv ->
-		         Sparql.(values_tuple
-			           (List.map Sparql.var (gv::key_vars))
-			           (List.concat
-				      (List.map
-				         (fun (key,(_, graph_index)) ->
-				           (graph_index : Rdf.term int_index)#filter_map_list
-				             (fun (tg,_) -> Some (List.map Sparql.term (tg::key) : Sparql.term list)))
-				         samples))) in
-	            let pat_incr =
-		      let pat = make_pattern ~hook (List.map (fun v -> Rdf.Var v) key_vars) in
-		      if pat = Sparql.empty then pat
-                      else
-                        match graph_var_opt with
-		        | None -> pat
-		        | Some gv -> Sparql.(graph (var gv) pat) in
-                    if pat_incr = Sparql.empty then pat_incr
-                    else
-	              Sparql.(subquery
-			        (select
-			           ~distinct:true
-			           ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
-			           ~limit:(config_max#value * min 10 nb_samples)
-			           (join [pat_values; pat_incr]))) in
-               if gp = Sparql.empty
-               then Sparql.((empty :> string))
-               else Sparql.((select
-		               ~froms ~projections ~limit:(config_max#value * min 10 nb_samples)
-		               (join (gp :: List.map (fun v -> pattern_hidden_URIs v) lv))
-		             :> string))
+               if not Rdf.config_wikidata_mode#value (* not in Wikidata *)
+                  && not config_avoid_lengthy_queries#value (* lengthy queries OK *)
+                  && config_concept_profile#value = "" (* no profile *)
+                  && constr = Lisql.True (* no constraint *)
+               then (* use this to have a better sample of properties *)
+	         let graph_opt (graph_index : Rdf.term int_index) (gp : Sparql.pattern) : Sparql.pattern =
+		   if gp = Sparql.empty then gp
+                   else
+                     match s_sparql.Lisql2sparql.focus_graph_opt with
+		     | Some _ when not graph_index#is_empty ->
+		        Sparql.union (graph_index#filter_map_list (fun (tg,_) -> Some (Sparql.graph (Sparql.term tg) gp)))
+		     | _ -> gp
+	         in
+	         Sparql.((select
+		            ~froms
+                            ~projections
+                            ~limit:(config_max#value * min 10 nb_samples)
+                            (join
+                               (union
+		                  (List.map
+		                     (fun (key,(_, graph_index)) ->
+		                       let pat = graph_opt graph_index (make_pattern ?hook:None key) in
+		                       if pat = Sparql.empty then pat
+		                       else subquery
+			                      (select
+			                         ~distinct:true ~projections
+			                         ~limit:config_max#value
+			                         pat))
+		                     samples)
+                                :: List.map (fun v -> pattern_hidden_URIs v) lv))
+                          :> string))
+               else (* use this to avoid Garguanta queries (repeats of filters) *)
+	         let key_vars = List.map (fun _ -> sparql_genvar#new_var "key") key0 in
+	         let graph_var_opt =
+		   match s_sparql.Lisql2sparql.focus_graph_opt with
+		   | Some _ when not graph_index0#is_empty -> Some (sparql_genvar#new_var "graph")
+		   | _ -> None in
+	         let pat_values =
+		   match graph_var_opt with
+		   | None ->
+		      Sparql.(values_tuple
+			        (List.map Sparql.var key_vars)
+			        (List.map
+				   (fun (key,_) -> List.map Sparql.term key)
+				   samples))
+		   | Some gv ->
+		      Sparql.(values_tuple
+			        (List.map Sparql.var (gv::key_vars))
+			        (List.concat
+				   (List.map
+				      (fun (key,(_, graph_index)) ->
+				        (graph_index : Rdf.term int_index)#filter_map_list
+				          (fun (tg,_) -> Some (List.map Sparql.term (tg::key) : Sparql.term list)))
+				      samples))) in
+	         let pat_incr =
+	           let hook v form =
+	             Sparql.formula_and_list
+	               [formula_concept_profile v;
+	                filter_constr sparql_genvar (Sparql.var v) constr;
+	                form;
+                        formula_hidden_URIs v] in
+		   let pat = make_pattern ~hook (List.map (fun v -> Rdf.Var v) key_vars) in
+		   if pat = Sparql.empty then pat
+                   else
+                     match graph_var_opt with
+		     | None -> pat
+		     | Some gv -> Sparql.(graph (var gv) pat) in
+                 if pat_incr = Sparql.empty then (Sparql.empty :> string)
+                 else
+                   Sparql.((select
+		              ~froms
+			      ~distinct:true
+			      ~projections:(List.map (fun k -> `Bare, k) key_vars @ projections)
+                              ~limit:(config_max#value * min 10 nb_samples)
+			      (join [pat_values; pat_incr])
+                            :> string))
           in
           let sparql_class =
 	    make_sparql (nb_samples_term, samples_term)
