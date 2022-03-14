@@ -1392,6 +1392,9 @@ let make_js_sparklis (history : history) =
     method endpoint : js_string t =
       string config#get_endpoint
       
+    method changeEndpoint (url : js_string t) : unit =
+      history#change_endpoint (to_string url)
+              
     method evalSparql (sparql : js_string t)
              (callback : Unsafe.any (* results -> unit *))
              (on_error : Unsafe.top optdef (* HTTP error code -> unit*)) : unit =
@@ -1405,6 +1408,31 @@ let make_js_sparklis (history : history) =
             (fun () -> ())
             (fun f -> Unsafe.fun_call f [| Inject.int code|]))
 
+    method termLabels : Unsafe.any =
+      Cache.make_js_cache
+        (Jsutils.js_map `String) (* URI *)
+        (Jsutils.js_map `String) (* label *)
+        Lexicon.config_entity_lexicon#value
+    method classLabels : Unsafe.any =
+      Cache.make_js_cache
+        (Jsutils.js_map `String) (* URI *)
+        (Jsutils.js_map `String) (* label *)
+        Lexicon.config_concept_lexicon#value.classes
+    method propertyLabels : Unsafe.any =
+      Cache.make_js_cache
+        (Jsutils.js_map `String) (* URI *)
+        (Jsutils.js_map
+           (`Record [| "syntagm", `Custom (js_custom_map Lexicon.js_property_syntagm_map);
+                       "label", `String |])) (* label *)
+        Lexicon.config_concept_lexicon#value.properties
+    method argLabels : Unsafe.any =
+      Cache.make_js_cache
+        (Jsutils.js_map `String) (* URI *)
+        (Jsutils.js_map
+           (`Record [| "syntagm", `Custom (js_custom_map Lexicon.js_arg_syntagm_map);
+                       "label", `String |])) (* label *)
+        Lexicon.config_concept_lexicon#value.args
+      
     method currentPlace = make_js_place history#present
 
     method setCurrentPlace (js_p : _ t) : unit = (* TODO: add ~push_in_history optional arg *)
@@ -1416,9 +1444,6 @@ let make_js_sparklis (history : history) =
       history#push p;
       history#refresh_present
                         
-    method changeEndpoint (url : js_string t) : unit =
-      history#change_endpoint (to_string url)
-              
     method focusUp : unit =
       history#update_focus ~push_in_history:false Lisql.(focus_move up_focus)
     method focusDown : unit =

@@ -16,12 +16,30 @@
    limitations under the License.
 *)
 
+open Js_of_ocaml
+   
 class virtual ['a,'b] cache =
 object
   method virtual info : 'a -> 'b
   method virtual enqueue : 'a -> unit
   method virtual sync : (unit -> unit) -> unit
 end
+
+let make_js_cache (js_key_map : 'a Jsutils.js_map) (js_val_map : 'b Jsutils.js_map) (cache : ('a,'b) cache) =
+  object%js
+    (*val __cache = cache*)
+    method info (js_key : Js.Unsafe.any) : Js.Unsafe.any =
+      let key = js_key_map.extract js_key in
+      let v = cache#info key in
+      js_val_map.inject v
+    method enqueue (js_key : Js.Unsafe.any) : unit =
+      let key = js_key_map.extract js_key in
+      cache#enqueue key
+    method sync (callback : Js.Unsafe.any (* unit -> unit *)) : unit =
+      cache#sync
+        (fun () -> Js.Unsafe.fun_call callback [||])
+  end
+
 
 class ['a,'b] pure_cache ~(get : 'a -> 'b) =
 object

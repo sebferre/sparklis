@@ -21,17 +21,37 @@ The Sparklis JS API is available through two JS objects:
 
 The available properties and methods on those objects are described in the following sections. The last section below describes the Sparklis-specific datatypes used by those methods and properties.
 
+
 ## Introspection with object `sparklis`
 
-Access to the endpoint:
+Access and control of the endpoint:
 
 - **`sparklis.endpoint(): string`**
 
   returns the current endpoint URL
 
+- **`sparklis.changeEndpoint(url: string): void`**
+
+  changes the current endpoint to the one specified by `url`
+
 - **`sparklis.evalSparql(query: string, callback: sparklis-results => void, onError: int => void): void`**
 
   sends `query` to the current endpoint according to the current Sparklis configuration. If successful, `callback` is called on the *Sparklis results* (see datatypes), otherwise `onError` is called on the HTTP error code.
+
+
+Access and control of the current navigation place:
+
+- **`sparklis.currentPlace(): sparklis-place`**
+
+  returns the current *Sparklis place* (see below for the API of Sparklis places)
+
+- **`sparklis.setCurrentPlace(p: sparklis-place): void`**
+
+  sets `p` as the new current place. This triggers the necessary computations and drawings to display the query, suggestions and results of the new place. The new place is pushed on top of the navigation history.
+
+- **`sparklis.refresh(): void`**
+
+  forces to refresh the Sparklis view
 
 
 Access and control of the current constraints
@@ -61,25 +81,16 @@ Access and control of the current constraints
   sets the current *Sparklis constraint* on modifier suggestions
 
 
-Access and control of the current navigation place:
+Modifying the current query. The new place is pushed on top of the navigation history.
 
-- **`sparklis.currentPlace(): sparklis-place`**
+- **`sparklis.activateSuggestion(sugg: sparklis-suggestion): void`**
 
-  returns the current *Sparklis place* (see below for the API of Sparklis places)
+  is the programmatic equivalent of clickling a *Sparklis suggestion* (see datatypes) to insert or apply it in the query at the current focus
 
-- **`sparklis.setCurrentPlace(p: sparklis-place): void`**
+- **`sparklis.deleteFocus(): void`**
 
-  sets `p` as the new current place. This triggers the necessary computations and drawings to display the query, suggestions and results of the new place. The new place is pushed on top of the navigation history.
+  is the programmatic equivalent of clicking the deletion cross at the right of the highlighted focus to delete the whole highlighted part of the query
 
-- **`sparklis.refresh(): void`**
-
-  forces to refresh the Sparklis view
-
-Changing the endpoint:
-
-- **`sparklis.changeEndpoint(url: string): void`**
-
-  changes the current endpoint to the one specified by `url`
 
 Moving the focus in the syntactic tree structure of the query. The new place replaces the current place in the navigation history.
 
@@ -99,15 +110,6 @@ Moving the focus in the syntactic tree structure of the query. The new place rep
 
   moves the focus right, if possible
 
-Modifying the current query. The new place is pushed on top of the navigation history.
-
-- **`sparklis.activateSuggestion(sugg: sparklis-suggestion): void`**
-
-  is the programmatic equivalent of clickling a *Sparklis suggestion* (see datatypes) to insert or apply it in the query at the current focus
-
-- **`sparklis.deleteFocus(): void`**
-
-  is the programmatic equivalent of clicking the deletion cross at the right of the highlighted focus to delete the whole highlighted part of the query
 
 Control of the navigation history:
 
@@ -124,7 +126,26 @@ Control of the navigation history:
   moves forward in navigation history, if possible
 
 
-## JS API of Sparklis places (datatype `sparklis-place`)
+Access to the labels of terms and concepts (lexicons):
+
+- **`sparklis.termLabels(): sparklis-lexicon`**
+
+  returns the lexicon for terms (labels)
+
+- **`sparklis.classLabels(): sparklis-lexicon`**
+
+  returns the lexicon for classes (labels)
+
+- **`sparklis.propertyLabels(): sparklis-lexicon-syntagm`**
+
+  returns the lexicon for properties (labels + syntagms)
+
+- **`sparklis.argLabels(): sparklis-lexicon-syntagm`**
+
+  returns the lexicon for property arguments (labels + syntagms)
+
+
+## Sparklis places (datatype `sparklis-place`)
 
 Let us assume a Sparklis place `p`, representing a navigation state. The following methods are available.
 
@@ -167,7 +188,32 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 - **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
 
   generates a new Sparklis place resulting from the application of the given suggestion to place `p`. To allow for efficient chaining of this method, no call to the SPARQL endpoint is triggered before results and suggestions are explicitly asked for with methods `getResults` and `getXXXSuggestions`.
-  
+
+
+## Sparklis lexicons (datatypes `sparklis-lexicon` and `sparklis-lexicon-syntagm`)
+
+Let us assume a Sparklis lexicon `lex`, which provides access to a
+collection of labels. The following methods are available.
+
+- **`lex.info(uri: string): string or { label: string, syntagm: ("Noun" | "InvNoun" | "TransVerb" | "TransAdj")}`**
+
+  returns the labelling information for the passed URI. For datatype `sparklis-lexicon`, that information is a simple string. For datatype `sparklis-lexicon-syntagm`, that information is an object with two fields:
+  - `label`: a string
+  - `syntagm`: the part-of-speech tag of the label, which is one of
+    - `"Noun"`: a noun (e.g., [has] child)
+    - `"InvNoun"`: an inverse noun (e.g., [is] parent [of])
+    - `"TransVerb"`: a transitive verb (e.g., knows, lives in)
+    - `"TransAdj"`: a transitive adjective (e.g., next to)
+
+- **`lex.enqueue(uri: string): void`**
+
+  enqueues the passed URI in the next batch to retrieve labels
+
+- **`lex.sync(callback: () => void): void`**
+
+  synchronizes the lexicon by retrieving the labelling information for
+  all queued URIs, and calls the callback function when done
+
 
 ## Customization with object `sparklis_extension`
 

@@ -49,7 +49,8 @@ window.addEventListener(
 			    console.log(suggs);
 			    let best_sugg = select_sugg(suggs);
 			    //var fst_sugg = suggs[0].item.suggestion;
-			    console.log("choosing suggestion: " + best_sugg);
+			    let labels = sparklis.termLabels();
+			    console.log("choosing suggestion: " + best_sugg + " => " + labels.info(best_sugg.term.uri));
 			    sparklis.activateSuggestion(best_sugg);
 			})
 		} else {

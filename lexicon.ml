@@ -27,6 +27,33 @@ class ['a] tabled_lexicon default_label bind_labels = [Rdf.uri,'a] Cache.tabled_
 type property_syntagm = [ `Noun | `InvNoun | `TransVerb | `TransAdj ]
 type arg_syntagm = [ `Noun | `TransAdj ]
 
+let js_property_syntagm_map =
+  let open Jsutils in
+  { spec = `Abstract;
+    inject = (function
+              | `Noun -> Inject.string "Noun"
+              | `InvNoun -> Inject.string "InvNoun"
+              | `TransVerb -> Inject.string "TransVerb"
+              | `TransAdj -> Inject.string "TransAdj");
+    extract = (fun js ->
+      match Extract.as_string js with
+      | "Noun" -> `Noun
+      | "InvNoun" -> `InvNoun
+      | "TransVerb" -> `TransVerb
+      | "TransAdj" -> `TransAdj
+      | _ -> assert false) }
+let js_arg_syntagm_map =
+  let open Jsutils in
+  { spec = `Abstract;
+    inject = (function
+              | `Noun -> Inject.string "Noun"
+              | `TransAdj -> Inject.string "TransAdj");
+    extract = (fun js ->
+      match Extract.as_string js with
+      | "Noun" -> `Noun
+      | "TransAdj" -> `TransAdj
+      | _ -> assert false) }
+                 
 type entity_lexicon = string lexicon
 type class_lexicon = string lexicon
 type property_lexicon = (property_syntagm * string) lexicon
