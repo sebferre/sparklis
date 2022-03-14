@@ -458,7 +458,7 @@ This datatype is used to represent a *forest* of suggestions, i.e. a list of sug
 
 ```
 [ { item: { suggestion: sparklis-suggestion,
-            frequency: sparklis-suggestion-frequency },
+            frequency: sparklis-suggestion-frequency or null },
     children: sparklis-suggestion-forest } ...]
 ```
 
