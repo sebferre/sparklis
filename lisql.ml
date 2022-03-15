@@ -22,12 +22,14 @@ open Common
 
 (* LISQL constraints *)
 
-type filter_type = [`OnlyIRIs|`OnlyLiterals|`Mixed]
+type filter_type = OnlyIRIs | OnlyLiterals | Mixed
+let js_filter_type_map : filter_type Jsutils.js_map =
+  Jsutils.js_map
+    (`Enum [| "OnlyIRIs"; "OnlyLiterals"; "Mixed" |])
 
 type search =
   | WikidataSearch of string list
   | TextQuery of string list
-
 let js_search_map : search Jsutils.js_map =
   Jsutils.js_map
     (`Sum ([| |],
@@ -74,12 +76,12 @@ let js_constr_map : constr Jsutils.js_map =
            |]))
 
 let constr_filter_type : constr -> filter_type = function
-  | True -> `Mixed
+  | True -> Mixed
   | MatchesAll _
   | MatchesAny _
   | IsExactly _
   | StartsWith _
-  | EndsWith _ -> `Mixed
+  | EndsWith _ -> Mixed
   | After _
   | Before _
   | FromTo _
@@ -87,8 +89,8 @@ let constr_filter_type : constr -> filter_type = function
   | LowerThan _
   | Between _
   | HasLang _
-  | HasDatatype _ -> `OnlyLiterals
-  | ExternalSearch _ -> `OnlyIRIs
+  | HasDatatype _ -> OnlyLiterals
+  | ExternalSearch _ -> OnlyIRIs
 					
 let reset_search = function
   | WikidataSearch _ -> WikidataSearch ["..."]
@@ -140,6 +142,10 @@ let js_order_map : order Jsutils.js_map =
               "ASC", [| "conv", `Option (js_custom_spec js_num_conv_map) |] |]))
                                                               
 type modif_s2 = project * order
+let js_modif_s2_map : modif_s2 Jsutils.js_map =
+  let open Jsutils in
+  js_map (`Record [| "select", `Bool; (* Unselect = 0 = false, Select = 1 = true *)
+                     "order", js_custom_spec js_order_map |])
               
 type orientation = Fwd | Bwd
 let js_orientation_map : orientation Jsutils.js_map =
@@ -283,7 +289,109 @@ and 'a elt_s =
   | SFilter of 'a * id * 'a elt_expr (* Boolean expr *)
   | Seq of 'a * 'a elt_s list (* we will avoid unnecessary nestings of Seq, but we keep it for future extensions of elt_s *)
 
+let (js_elt_p1_map : unit elt_p1 Jsutils.js_map),
+    (js_elt_sn_map : unit elt_sn Jsutils.js_map),
+    (js_elt_s1_map : unit elt_s1 Jsutils.js_map),
+    (js_elt_s2_map : elt_s2 Jsutils.js_map),
+    (js_elt_aggreg_map : unit elt_aggreg Jsutils.js_map),
+    (js_elt_expr_map : unit elt_expr Jsutils.js_map),
+    (js_elt_s_map : unit elt_s Jsutils.js_map) =
+  let open Jsutils in
+  let custom = js_custom_spec in
+  let js_annot_map : unit js_map = (* abstract map for ignoring annotations *)
+    { spec = `Abstract;
+      inject = (fun _ -> Inject.null);
+      extract = (fun _ -> ()) } in
+  let spec_annot = js_custom_spec js_annot_map in    
+  let js_head_map =
+    { spec = `Abstract;
+      inject = (function Thing -> Inject.null | Class uri -> Inject.string uri);
+      extract = (fun js -> match Extract.as_option js with None -> Thing | Some js1 -> Class (Extract.as_string js1)) } in
+  let spec_p1 =
+    `Sum ([| |],
+          [| "Is", [| "annot", spec_annot; "np", `Rec "s1" |];
+             "Pred", [| "annot", spec_annot; "arg", custom js_arg_map; "pred", custom js_pred_map; "cp", `Rec "sn" |];
+             "Type", [| "annot", spec_annot; "class", `String |];
+             "Rel", [| "annot", spec_annot; "property", `String; "orientation", custom js_orientation_map; "np", `Rec "s1" |];
+             "Hier", [| "annot", spec_annot; "id", `Int; "pred", custom js_pred_map; "arg1", custom js_arg_map; "arg2", custom js_arg_map; "np", `Rec "s1" |];
+             "Sim", [| "annot", spec_annot; "np", `Rec "s1"; "pred", custom js_pred_map; "arg1", custom js_arg_map; "arg2", custom js_arg_map; "rank", `Int |];
+             "Triple", [| "annot", spec_annot; "arg", custom js_arg_map; "np1", `Rec "s1"; "np2", `Rec "s2" |];
+             "LatLong", [| "annot", spec_annot; "latlong", custom js_latlong_map; "idlat", `Int; "idlong", `Int |];
+             "Search", [| "annot", spec_annot; "constr", custom js_constr_map |];
+             "Filter", [| "annot", spec_annot; "constr", custom js_constr_map; "filterType", custom js_filter_type_map |];
+             "And", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "Or", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "Maybe", [| "annot", spec_annot; "child", `Rec "self" |];
+             "Not", [| "annot", spec_annot; "child", `Rec "self" |];
+             "In", [| "annot", spec_annot; "npg", `Rec "s1"; "child", `Rec "self" |];
+             "InWhichThereIs", [| "annot", spec_annot; "np", `Rec "s1" |];
+             "IsThere", [| "annot", spec_annot |];
+          |]) in
+  let spec_sn =
+    `Sum ([| |],
+          [| "CNil", [| "annot", spec_annot |];
+             "CCons", [| "annot", spec_annot; "arg", custom js_arg_map; "np", `Rec "s1"; "cp", `Rec "sn" |];
+             "CAnd", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "COr", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "CMaybe", [| "annot", spec_annot; "child", `Rec "self" |];
+             "CNot", [| "annot", spec_annot; "child", `Rec "self" |];
+          |]) in
+  let spec_s1 =
+    `Sum ([| |],
+          [| "Det", [| "annot", spec_annot; "det", `Rec "s2"; "rel", `Option (`Rec "p1") |];
+             "AnAggreg", [| "annot", spec_annot; "id", `Int; "modif", custom js_modif_s2_map; "aggreg", custom js_aggreg_map; "rel", `Option (`Rec "p1"); "child", `Rec "self" |];
+             "NAnd", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "NOr", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+             "NMaybe", [| "annot", spec_annot; "child", `Rec "self" |];
+             "NNot", [| "annot", spec_annot; "child", `Rec "self" |];
+          |]) in
+  let spec_s2 =
+    `Sum ([| |],
+          [| "Term", [| "term", custom Rdf.js_term_map |];
+             "An", [| "id", `Int; "modif", custom js_modif_s2_map; "class", custom js_head_map |];
+             "The", [| "id", `Int |];
+          |]) in
+  let spec_aggreg =
+    `Sum ([| |],
+          [| "ForEachResult", [| "annot", spec_annot |];
+             "ForEach", [| "annot", spec_annot; "id", `Int; "modif", custom js_modif_s2_map; "rel", `Option (`Rec "p1"); "id2", `Int |];
+             "ForTerm", [| "annot", spec_annot; "term", custom Rdf.js_term_map; "id2", `Int |];
+             "TheAggreg", [| "annot", spec_annot; "id", `Int; "modif", custom js_modif_s2_map; "aggreg", custom js_aggreg_map; "rel", `Option (`Rec "p1"); "id2", `Int |];
+          |]) in
+  let spec_expr =
+    `Sum ([| |],
+          [| "Undef", [| "annot", spec_annot |];
+             "Const", [| "annot", spec_annot; "term", custom Rdf.js_term_map |];
+             "Var", [| "annot", spec_annot; "id", `Int |];
+             "Apply", [| "annot", spec_annot; "func", custom js_func_map; "args", `List (`Record [| "conv", `Option (custom js_num_conv_map); "expr", `Rec "expr" |]) |];
+             "Choice", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+          |]) in
+  let spec_s =
+    `Sum ([| |],
+          [| "Return", [| "annot", spec_annot; "np", `Rec "s1" |];
+             "SAggreg", [| "annot", spec_annot; "items", `List (`Rec "aggreg") |];
+             "SExpr", [| "annot", spec_annot; "name", `String; "id", `Int; "modif", custom js_modif_s2_map; "expr", `Rec "expr"; "rel", `Option (`Rec "p1") |];
+             "SFilter", [| "annot", spec_annot; "id", `Int; "expr", `Rec "expr" |];
+             "Seq", [| "annot", spec_annot; "children", `List (`Rec "self") |];
+          |]) in
+  let rec_specs =
+    [ "p1", spec_p1;
+      "sn", spec_sn;
+      "s1", spec_s1;
+      "s2", spec_s2;
+      "aggreg", spec_aggreg;
+      "expr", spec_expr;
+      "s", spec_s;
+    ] in
+  js_map ~rec_specs spec_p1,
+  js_map ~rec_specs spec_sn,
+  js_map ~rec_specs spec_s1,
+  js_map ~rec_specs spec_s2,
+  js_map ~rec_specs spec_aggreg,
+  js_map ~rec_specs spec_expr,
+  js_map ~rec_specs spec_s
 
+         
 (* list context *)
 
 type 'a ctx_list = 'a list * 'a list
@@ -702,6 +810,9 @@ and annot_s = function
 
 type step = DOWN | RIGHT
 type path = step list
+let js_path_map : path Jsutils.js_map =
+  let open Jsutils in
+  js_map (`List (`Enum [| "DOWN"; "RIGHT" |]))
 
 let path_of_list_ctx (ll,rr) path =
   List.fold_left
@@ -1322,7 +1433,7 @@ let js_delta_map : delta Jsutils.js_map =
     (`Sum  ([| "nil" |],
             [| "ids", [| "ids", `List `Int |];
                "duplicate", [| "map", `List (`Tuple [| `Int; `Int |]) |];
-               "selection", [| "whole", `Rec; "parts", `List `Rec |] |]))
+               "selection", [| "whole", `Rec "self"; "parts", `List (`Rec "self") |] |]))
 
   
 let delta_ids ids = if ids=[] then DeltaNil else DeltaIds ids
@@ -1430,7 +1541,7 @@ let js_increment_map : increment Jsutils.js_map =
            "IncrForeachResult"
         |],
         [| "IncrSelection", [| "op", js_custom_spec js_selection_op_map;
-                               "items", `List `Rec |];
+                               "items", `List (`Rec "self") |];
            "IncrInput", [| "value", `String;
                            "inputType", js_custom_spec js_input_type_map |];
            "IncrTerm", [| "term", js_custom_spec Rdf.js_term_map |];

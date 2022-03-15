@@ -463,7 +463,7 @@ object (self)
          ~k_trivial:(fun () -> k (process (Some limit)))
     
   val mutable val_html_query = ""
-  initializer val_html_query <- html_query html_state lis#query
+  initializer val_html_query <- html_query html_state lis#query_annot
   method html_query = val_html_query
 
   method private refresh_lisql (k : unit -> unit) =
@@ -1147,7 +1147,7 @@ object (self)
   method new_place endpoint focus delta =
     let lis = new Lis.place endpoint focus in
     let html_state = new Html.state lis in
-    let val_html_query = html_query html_state lis#query in
+    let val_html_query = html_query html_state lis#query_annot in
     {< lis = lis;
        delta = delta;
        html_state = html_state;
@@ -1169,6 +1169,11 @@ end
 let rec make_js_place (place : place) =
   object%js
     val __place = place
+
+    method query : Unsafe.any (* elt_s *) =
+      Lisql.js_elt_s_map.inject place#lis#query
+    method focusPath : Unsafe.any (* path *) =
+      Lisql.js_path_map.inject place#lis#path
 
     method delta : Unsafe.any =
       Lisql.js_delta_map.inject place#delta

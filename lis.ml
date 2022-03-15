@@ -26,7 +26,7 @@ and 'a tree = Node of 'a * 'a forest
 let js_forest_map (m : 'a Jsutils.js_map) : 'a forest Jsutils.js_map =
   Jsutils.js_map
     (`List (`Record [| "item", Jsutils.js_custom_spec m; (* singleton sum is like a record *)
-                       "children", `Rec |]))
+                       "children", `Rec "self" |]))
 
 let rec forest_filter_map (f : 'a -> 'b option) : 'a forest -> 'b forest =
   function
@@ -801,7 +801,7 @@ let hook_suggestions : (freq_unit * incr_freq_forest option) -> (freq_unit * inc
   
 class place (endpoint : string) (focus : Lisql.focus) =
   let ids, focus_descr, s_annot = Lisql_annot.annot_focus focus in
-  let _, path = Lisql.elt_s_path_of_focus focus in
+  let query, path = Lisql.elt_s_path_of_focus focus in
 object (self)
   (* essential state *)
 
@@ -809,7 +809,8 @@ object (self)
   method endpoint = endpoint
 
   method focus : Lisql.focus = focus (* focus-centric query representation *)
-  method query : Lisql_annot.annot Lisql.elt_s = s_annot (* annotated query *)
+  method query_annot : Lisql_annot.annot Lisql.elt_s = s_annot (* annotated query *)
+  method query : unit Lisql.elt_s = query (* query *)
   method path : Lisql.path = path (* focus path *)
   method query_ids : Lisql_annot.Ids.t = ids (* defined entity ids in query *)
   method focus_entity : Lisql_annot.focus_term = focus_descr#term (* entity at focus, if any *)
@@ -894,10 +895,10 @@ object (self)
     let has_Literal =
       Lisql_type.(check_input_constraint focus_type_constraints.input_constr `String) in
     match has_IRI, has_Literal with
-    | true, true -> `Mixed
-    | true, false -> `OnlyIRIs
-    | false, true -> `OnlyLiterals
-    | false, false -> `OnlyIRIs
+    | true, true -> Mixed
+    | true, false -> OnlyIRIs
+    | false, true -> OnlyLiterals
+    | false, false -> OnlyIRIs
 
   method ajax_sparql_results ?limit term_constr elts (k : unit -> unit) : unit =
   (* if limit or term_constr new, then redefine SPARQL query and results, and continue when ready *)
@@ -1128,7 +1129,7 @@ object (self)
                  ~distinct:true
                  ~projections:[`Bare, "term"]
                  ~limit:config_max_results#value
-                 (join [ pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (var "term") constr `OnlyIRIs);
+                 (join [ pattern_of_formula (Lisql2sparql.search_constr_entity sparql_genvar (var "term") constr OnlyIRIs);
                          pattern_hidden_URIs "term";
                          filter (log_not (expr_func "isBlank" [var "term"])) ])
                :> string)) in

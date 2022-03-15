@@ -150,7 +150,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
        if lucene_query = ""
        then `NoFilter
        else `Filter (Sparql.Pattern (Sparql.text_query t lucene_query))
-    | (`All | `Any as op), "bif:contains", (`Terms,`OnlyIRIs,`Bind) -> (* only efficient in this context; TODO: check *)
+    | (`All | `Any as op), "bif:contains", (`Terms,OnlyIRIs,`Bind) -> (* only efficient in this context; TODO: check *)
        if label_props = []
        then `Undefined
        else
@@ -187,9 +187,9 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
     | `NoFilter -> Sparql.True (* kwds not specific enough *)
     | `Filter label_filter ->
        ( match ctx with
-	 | _, `OnlyIRIs, _ -> label_filter
-	 | _, `OnlyLiterals, _ -> str_filter
-	 | _, `Mixed, _ -> Sparql.formula_or_list [str_filter; label_filter] ) in
+	 | _, OnlyIRIs, _ -> label_filter
+	 | _, OnlyLiterals, _ -> str_filter
+	 | _, Mixed, _ -> Sparql.formula_or_list [str_filter; label_filter] ) in
   f
 
 let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_langs : string list * string list) (t : _ Sparql.any_term) (c : constr) : Sparql.formula =
@@ -244,8 +244,8 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
        Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
 					
 let filter_constr_entity gv t c (ft : Lisql.filter_type) = filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
-let filter_constr_class gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
-let filter_constr_property gv t c = filter_constr_gen (`Properties,`OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
+let filter_constr_class gv t c = filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
+let filter_constr_property gv t c = filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
 
 let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft : Lisql.filter_type) : Sparql.formula =
   let label_properties_langs = Lexicon.config_entity_lexicon#properties_langs in
@@ -255,10 +255,10 @@ let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft 
   let open Sparql in
   let binding_pat =
     match ft with
-    | `OnlyIRIs -> something t
-    | `OnlyLiterals -> triple (bnode "") (var (gv#new_var "p")) t
-    | `Mixed -> union [something t;
-		       triple (bnode "") (var (gv#new_var "p")) t] in
+    | OnlyIRIs -> something t
+    | OnlyLiterals -> triple (bnode "") (var (gv#new_var "p")) t
+    | Mixed -> union [something t;
+		      triple (bnode "") (var (gv#new_var "p")) t] in
   match f with
   | Pattern _ -> f
   | Subquery _ -> f
@@ -809,7 +809,7 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
     (fun x -> q_np1 (fun y -> q_np2 (fun z -> triple_arg arg x y z)))
   | Search (annot,c) ->
      (fun x -> []),
-     (fun x -> search_constr_entity state#genvar x c `OnlyIRIs)
+     (fun x -> search_constr_entity state#genvar x c OnlyIRIs)
   | Filter (annot,c,ft) ->
      (fun x -> []),
      (fun x -> filter_constr_entity state#genvar x c ft)

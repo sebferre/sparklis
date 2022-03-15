@@ -149,6 +149,14 @@ Access to the labels of terms and concepts (lexicons):
 
 Let us assume a Sparklis place `p`, representing a navigation state. The following methods are available.
 
+- **`p.query(): sparklis-query`**
+
+  returns the abstract syntax tree (AST) of the NL query
+
+- **`p.focusPath(): sparklis-focus-path`**
+
+  returns the path in the query AST that leads to the current focus
+
 - **`p.delta(): sparklis-delta`**
 
   returns the delta relative to the previous place. The previous place is the place from which place `p` was created. The delta describes the new focus ids introduced (see the description of `sparklis-delta`).
@@ -521,3 +529,73 @@ This datatype is used to represent the differents sets of suggestions in the JS 
   ```
 
 Property `type` indicates the category of suggestions, while property `forest` provides the actual forest of suggestions.
+
+
+### Datatype `sparklis-query`
+
+This datatype is used for Sparklis queries. It represents them as
+Abstract Syntax Trees (AST). It is defined as a set of mutually
+recursive datatypes.
+
+- `sparklis-query` = `query-s` (sentences)
+  - `{ type: "Return", np: query-s1 }`
+  - `{ type: "SAggreg", items: [query-aggreg ..] }`
+  - `{ type: "SExpr", name: string, id: int, modif: query-modif, expr: query-expr, rel: query-p1 or null }`
+  - `{ type: "SFilter", id: int, expr: query-expr }`
+  - `{ type: "Seq", children: [query-s ..] }`
+- `query-s1` (noun phrases)
+  - `{ type: "Det", det: query-s2, rel: query-p1 or null }`
+  - `{ type: "NAnd", children: [query-s1 ..] }`
+  - `{ type: "NOr", children: [query-s1 ..] }`
+  - `{ type: "NMaybe", child: query-s1 }`
+  - `{ type: "NNot", child: query-s1 }`
+- `query-s2` (noun phrase heads)
+  - `{ type: "Term", term: sparklis-rdfterm }`
+  - `{ type: "An", id: int, modif: query-modif, class: string or null }`
+  - `{ type: "The", id: int }`
+- `query-sn` (multi-complement phrases)
+  - `{ type: "CNil" }`
+  - `{ type: "CCons", arg: sparklis-arg, np: query-s1, cp: query-sn }`
+  - `{ type: "CAnd", children: [query-sn ..] }`
+  - `{ type: "COr", children: [query-sn ..] }`
+  - `{ type: "CMaybe", child: query-sn }`
+  - `{ type: "CNot", child: query-sn }`
+- `query-p1` (verb phrases and relative clauses)
+  - `{ type: "Is", np: query-s1 }`
+  - `{ type: "Pred", arg: sparklis-arg, pred: sparklis-pred, cp: query-sn }`
+  - `{ type: "Type", class: string }`
+  - `{ type: "Rel", property: string, orientation: ("Fwd" | "Bwd"), np: query-s1 }`
+  - `{ type: "Hier", id: int, pred: sparklis-pred, arg1: int, arg2: int, np: query-s1 }`
+  - `{ type: "Triple", arg: sparklis-arg, np1: query-s1, np2: query-s1 }`
+  - `{ type: "LatLong", latlong: sparklis-latlong, idlat: int, idlong: int }`
+  - `{ type: "Search", constr: sparklis-constr }`
+  - `{ type: "Filter", constr: sparklis-constr, filterType: ("OnlyIRIs" | "OnlyLiterals" | "Mixed" ) }`
+  - `{ type: "And", children: [query-p1 ..] }`
+  - `{ type: "Or", children: [query-p1 ..] }`
+  - `{ type: "Maybe", child: query-p1 }`
+  - `{ type: "Not", child: query-p1 }`
+  - `{ type: "In", npg: query-s1, child: query-p1 }`
+  - `{ type: "InWhichThereIs", np: query-s1 }`
+  - `{ type: "IsThere" }`
+- `query-aggreg` (grouping and aggregation phrases)
+  - `{ type: "ForEachResult" }`
+  - `{ type: "ForEach", id: int, modif: query-modif, rel: query-p1 or null, id2: int }`
+  - `{ type: "ForTerm", term: sparklis-rdfterm, id2: int }`
+  - `{ type: "TheAggreg", id: int, modif: query-modif, aggreg: sparklis-aggreg, rel: query-p1 or null, id2: int }`
+- `query-expr` (expression phrases)
+  - `{ type: "Undef" }`
+  - `{ type: "Const", term: sparklis-rdfterm }`
+  - `{ type: "Var", id: int }`
+  - `{ type: "Apply", func: sparklis-func, args: [{expr: query-expr, conv: sparklis-numconv or null} ...] }`
+  - `{ type: "Choice", children: [query-expr ..] }`
+- `query-modif` = `{ select: bool, order: sparklis-order }`
+
+
+### Datatype `sparklis-path`
+
+This datatype specifies navigation paths in query ASTs, for instance
+to locate the focus in a query. It is simply a list of instructions to
+either go down in the tree (on the leftmost element), or to go right
+to the next sibling element.
+
+`[("DOWN" | "RIGHT") ...]`

@@ -245,9 +245,9 @@ and print_order = function
   | Highest conv_opt -> print_un "HighestConv" (print_opt print_num_conv conv_opt)
   | Lowest conv_opt -> print_un "LowestConv" (print_opt print_num_conv conv_opt)
 and print_filter_type = function
-  | `OnlyIRIs -> print_atom "OnlyIRIs"
-  | `OnlyLiterals -> print_atom "OnlyLiterals"
-  | `Mixed -> print_atom "Mixed"
+  | OnlyIRIs -> print_atom "OnlyIRIs"
+  | OnlyLiterals -> print_atom "OnlyLiterals"
+  | Mixed -> print_atom "Mixed"
 and print_constr = function
   | True -> print_atom "True"
   | MatchesAll lw -> print_list print_string "MatchesAll" lw
@@ -376,8 +376,8 @@ and parse_p1 ~version = parser
   | [< ll, id1, id2 = parse_ter ~version "LatLong3" parse_latlong parse_id parse_id >] -> LatLong ((),ll,id1,id2)
   | [< c = parse_un ~version "Search" parse_constr >] -> Search ((),c)
   | [< c, ft = parse_bin ~version "Filter2" parse_constr parse_filter_type >] -> Filter ((),c,ft)
-  | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c,`Mixed)
-  | [< c = parse_un ~version "Constr" parse_constr >] -> Filter ((),c,`Mixed) (* for backward compatibility *)
+  | [< c = parse_un ~version "Filter" parse_constr >] -> Filter ((),c,Mixed)
+  | [< c = parse_un ~version "Constr" parse_constr >] -> Filter ((),c,Mixed) (* for backward compatibility *)
   | [< lr = parse_lr parse_p1 ~version "And" >] -> And ((),lr)
   | [< lr = parse_lr parse_p1 ~version "Or" >] -> Or ((),lr)
   | [< f = parse_un ~version "Maybe" parse_p1 >] -> Maybe ((),f)
@@ -475,9 +475,9 @@ and parse_order ~version = parser
     | [< () = parse_atom ~version "Lowest" >] -> Lowest None (* backward compat *)
     | [<>] -> syntax_error "invalid order"
 and parse_filter_type ~version = parser
-  | [< () = parse_atom ~version "OnlyIRIs" >] -> `OnlyIRIs
-  | [< () = parse_atom ~version "OnlyLiterals" >] -> `OnlyLiterals
-  | [< () = parse_atom ~version "Mixed" >] -> `Mixed
+  | [< () = parse_atom ~version "OnlyIRIs" >] -> OnlyIRIs
+  | [< () = parse_atom ~version "OnlyLiterals" >] -> OnlyLiterals
+  | [< () = parse_atom ~version "Mixed" >] -> Mixed
 and parse_constr ~version = parser
   | [< () = parse_atom ~version "True" >] -> True
   | [< lw = parse_list parse_string ~version "MatchesAll" >] -> MatchesAll lw

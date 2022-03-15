@@ -315,7 +315,7 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
   | `Enum of string array (* special case of Sum, only constant constructors *)
   | `Option of js_map_spec
   | `Custom of Obj.t js_map
-  | `Rec
+  | `Rec of string
   | `Abstract ]
 
 let sum_spec_of_enum constr_names =
@@ -353,7 +353,7 @@ let rec string_of_js_map_spec = function
      string_of_js_map_spec (sum_spec_of_enum constr_names)
   | `Option spec -> string_of_js_map_spec spec ^ " option"
   | `Custom { spec } -> string_of_js_map_spec spec
-  | `Rec -> "<rec>"
+  | `Rec name -> "<rec:" ^ name ^ ">"
   | `Abstract -> "<abstract>"
 
 exception InconsistentMapSpec
@@ -362,7 +362,7 @@ let raise_inconsistent_map_spec spec r =
   Firebug.console##log_4 (string "inconsistent js_map_spec") (string (string_of_js_map_spec spec)) (string "on") r;
   raise InconsistentMapSpec
                                
-let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsafe.any =
+let rec js_inject (rec_specs : (string * js_map_spec) list) (spec : js_map_spec) : Obj.t -> Unsafe.any =
   match spec with
   | `Bool ->
      (fun r ->
@@ -384,7 +384,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
        if Obj.is_block r && Obj.tag r = Obj.string_tag then Inject.string (Obj.obj r : string)
        else raise_inconsistent_map_spec spec r)
   | `List spec_elt ->
-     let inject_elt = js_inject rec_spec spec_elt in
+     let inject_elt = js_inject rec_specs spec_elt in
      (fun r ->
        if Obj.is_int r (* [] *) then
          Inject.array [| |]
@@ -395,7 +395,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
          Inject.array ar_r
        else raise_inconsistent_map_spec spec r)
   | `Array spec_elt ->
-     let inject_elt = js_inject rec_spec spec_elt in
+     let inject_elt = js_inject rec_specs spec_elt in
      (fun r ->
        if Obj.is_block r && Obj.tag r = 0 then
          let ar = (Obj.obj r : _ array) in
@@ -405,7 +405,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
   | `Tuple fields ->
      let fields_inject =
        Array.map
-         (fun spec_field -> js_inject rec_spec spec_field)
+         (fun spec_field -> js_inject rec_specs spec_field)
          fields in
      (fun r ->
        if Obj.is_block r && Obj.size r = Array.length fields then
@@ -419,7 +419,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
   | `Record fields ->
      let fields_inject =
        Array.map
-         (fun (name,spec_field) -> name, js_inject rec_spec spec_field)
+         (fun (name,spec_field) -> name, js_inject rec_specs spec_field)
          fields in
      (fun r ->
        if Obj.is_block r && Obj.size r = Array.length fields then
@@ -436,7 +436,7 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
          (fun (constr, fields) ->
            constr,
            Array.map
-             (fun (name, spec_field) -> name, js_inject rec_spec spec_field)
+             (fun (name, spec_field) -> name, js_inject rec_specs spec_field)
              fields)
          constructors_non_cst in
      (fun r ->
@@ -458,19 +458,20 @@ let rec js_inject (rec_spec : js_map_spec) (spec : js_map_spec) : Obj.t -> Unsaf
          Inject.obj fields_js
        else raise_inconsistent_map_spec spec r)
   | `Enum constr_names ->
-     js_inject rec_spec (sum_spec_of_enum constr_names)
+     js_inject rec_specs (sum_spec_of_enum constr_names)
   | `Option spec_contents ->
-     let inject_contents = js_inject rec_spec spec_contents in
+     let inject_contents = js_inject rec_specs spec_contents in
      (fun r ->
        match Obj.obj r with
        | None -> Inject.null
        | Some x -> inject_contents (Obj.repr x))
   | `Custom { inject } -> inject
-  | `Rec ->
-     (fun r -> js_inject rec_spec rec_spec r)
+  | `Rec name ->
+     let rec_spec = try List.assoc name rec_specs with _ -> assert false in
+     (fun r -> js_inject rec_specs rec_spec r)
   | `Abstract -> invalid_arg "Jsutils.js_inject: abstract"
              
-let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any -> Obj.t =
+let rec js_extract (rec_specs : (string * js_map_spec) list) (spec : js_map_spec) : Unsafe.any -> Obj.t =
   match spec with
   | `Bool ->
      (fun js -> Obj.repr (Extract.as_bool js))
@@ -481,14 +482,14 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
   | `String ->
      (fun js -> Obj.repr (Extract.as_string js))
   | `List spec_elt ->
-     let extract_elt = js_extract rec_spec spec_elt in
+     let extract_elt = js_extract rec_specs spec_elt in
      (fun js ->
        let ar_js = Extract.as_array js in
        let ar = Array.map extract_elt ar_js in
        let l = Array.to_list ar in
        Obj.repr l)
   | `Array spec_elt ->
-     let extract_elt = js_extract rec_spec spec_elt in
+     let extract_elt = js_extract rec_specs spec_elt in
      (fun js ->
        let ar_js = Extract.as_array js in
        let ar = Array.map extract_elt ar_js in
@@ -497,7 +498,7 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
      let tag = 0 in
      let fields_extract =
        Array.map
-         (fun spec_field -> js_extract rec_spec spec_field)
+         (fun spec_field -> js_extract rec_specs spec_field)
          fields in
      (fun js ->
        let bl = Obj.new_block tag (Array.length fields) in
@@ -510,7 +511,7 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
      let tag = 0 in
      let fields_extract =
        Array.map
-         (fun (name,spec_field) -> name, js_extract rec_spec spec_field)
+         (fun (name,spec_field) -> name, js_extract rec_specs spec_field)
          fields in
      (fun js ->
        let bl = Obj.new_block tag (Array.length fields) in
@@ -525,7 +526,7 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
          (fun (constr, fields) ->
            constr,
            Array.map
-             (fun (name, spec_field) -> name, js_extract rec_spec spec_field)
+             (fun (name, spec_field) -> name, js_extract rec_specs spec_field)
              fields)
          constructors_non_cst in
      (fun js ->
@@ -560,9 +561,9 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
          bl
      ))
   | `Enum constr_names ->
-     js_extract rec_spec (sum_spec_of_enum constr_names)
+     js_extract rec_specs (sum_spec_of_enum constr_names)
   | `Option spec_contents ->
-     let extract_contents = js_extract rec_spec spec_contents in
+     let extract_contents = js_extract rec_specs spec_contents in
      (fun js ->
        let opt =
          match Extract.as_option js with
@@ -570,13 +571,15 @@ let rec js_extract (rec_spec : js_map_spec) (spec : js_map_spec) : Unsafe.any ->
          | Some js_c -> Some (extract_contents js_c) in
        Obj.repr opt)
   | `Custom { extract } -> extract
-  | `Rec ->
-     (fun js -> js_extract rec_spec rec_spec js)
+  | `Rec name ->
+     let rec_spec = try List.assoc name rec_specs with _ -> assert false in
+     (fun js -> js_extract rec_specs rec_spec js)
   | `Abstract -> invalid_arg "Jsutils.js_extract: abstract"
 
-let js_map (spec : js_map_spec) : 'a js_map =
-  let inject = js_inject spec spec in
-  let extract = js_extract spec spec in
+let js_map ?(rec_specs : (string * js_map_spec) list = []) (spec : js_map_spec) : 'a js_map =
+  let rec_specs = ("self",spec)::rec_specs in
+  let inject = js_inject rec_specs spec in
+  let extract = js_extract rec_specs spec in
   { spec;
     inject = (fun x -> inject (Obj.repr x));
     extract = (fun r -> Obj.obj (extract r)) }
