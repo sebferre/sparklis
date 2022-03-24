@@ -31,16 +31,19 @@ We recommend to visit the [*Examples page*](http://www.irisa.fr/LIS/ferre/sparkl
 It is enough to have a SPARQL endpoint for your dataset that is visible from your machine. It can be a publicly open endpoint (like for DBpedia or Wikidata), or a localhost endpoint (I personally use Apache Jena Fuseki but other stores should work too). The one important condition is that the endpoint server be [CORS-enabled](https://www.w3.org/wiki/CORS_Enabled) so that HTTP requests can be made to it from your browser, where Sparklis runs.
 
 Here a few recommendations about the contents of your store for best results:
+
 * include RDFS/OWL triples declaring classes (`rdfs:Class`, `owl:Class`) and properties (`rdf:Property`, `owl:ObjectProperty`, `owl:DataProperty`), as well as their labels (`rdfs:label`) and their hierarchy (`rdfs:subClassOf`, `rdfs:subPropertyOf`)
 * ensure that all URI-resources have their label defined, preferably with `rdfs:label` and possibly with other standard properties (e.g., `skos:prefLabel`)
 * if named graphs are used, make sure to configure your store so that the default graphs contains the union of those named graphs
 
 The *Configure* menu offers a number of options to adapt Sparklis to your endpoint, and control the display. Here is a non-exhaustive list:
+
 * Endpoint and queries: max numbers of results/suggestions, GET vs POST, credentials
 * Ontology: display of class/property hierarchies, filtering of classes/properties, use of Sparklis-specific schema properties (see below)
 * Language and labels: interface language, labelling properties, fulltext search support
 
 Sparklis makes use of standard and non-standard properties to get more control on the building of queries, and on the display of suggestions and results. For ech property, there is generally a configuration option to activate its use.
+
 * `sdo:position` (`sdo: = https://schema.org/`): it is possible to control the ordering of suggestions (classes, properties, and individuals) by setting this property with the desired rank of the suggestion. The related option is in *Configure advanced features*.
 * `sdo:logo`: it is possible to have small icons in front of entity labels by setting this property with URLs to those icons. Several icons can be attached to a same entity. The related option is in *Configure advanced features*, where the size of icons can be defined.
 * `rdfs:inheritsThrough`: suppose you have a `ex:location` property whose range `ex:Place` is organized into a hierarchy through the property `ex:isPartOf`. By adding to your dataset the triple `ex:location rdfs:inheritsThrough ex:isPartOf`, you get that whenever property `ex:location` is inserted into the query, inheritance through the place hierarchy is performed, and place suggestions are displayed as a tree. This is a generalization of the well-known `rdf:type` inheritance through `rdfs:subClassOf`. By adding triple `ex:Place rdfs:inheritsThrough ex:isPartOf`, the same effect is obtained when inserting class `ex:Place`. The related option in *Configure the ontology* must be activated.
@@ -59,6 +62,22 @@ As Sparklis is only client-side code, it is possible to integrate Sparklis into 
 You can adapt the appearance of the main HTML file (`osparklis.html`, `osparklis.css`) as long as you retain the *Sparklis* name, and the credits in the page footer. You can for instance hide some configuration options and elements, you can change the look-and-feel, and the layout of elements. Be careful not to delete element ids and classes that are used by the JS code of Sparklis.
 
 Let me know of successful integrations, and also of problems you encounter in the process.
+
+# Compiling Sparklis from the source code
+
+Sparklis is developed in [OCaml](https://ocaml.org), and compiled to Javascript with the [js_of_ocaml](https://ocsigen.org/js_of_ocaml/latest/manual/overview) tool. It is strongly recommended to use the [opam](https://opam.ocaml.org/) tool to manage OCaml dependencies.
+
+The following build steps were found to work on Ubuntu (20.04 LTS) by [waldenn](https://github.com/waldenn):
+
+```
+    bash -c "sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)"
+    opam install csv lwt js_of_ocaml js_of_ocaml-lwt lwt_ppx js_of_ocaml-ppx str unix num xmlm xml-light lablgtk2
+    eval $(opam env)
+    sudo apt-get install camlp5
+    git clone https://github.com/sebferre/sparklis.git
+    cd sparklis
+    make
+```
 
 # Credits
 
