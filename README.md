@@ -65,13 +65,13 @@ Let me know of successful integrations, and also of problems you encounter in th
 
 # Compiling Sparklis from the source code
 
-Sparklis is developed in [OCaml](https//ocaml.org), and compiled to Javascript with the [js_of_ocaml](https://ocsigen.org/js_of_ocaml/latest/manual/overview) tool. It is strongly recommended to use the [opam](https://opam.ocaml.org/) tool to manage OCaml dependencies.
+Sparklis is developed in [OCaml](https://ocaml.org), and compiled to Javascript with the [js_of_ocaml](https://ocsigen.org/js_of_ocaml/latest/manual/overview) tool. It is strongly recommended to use the [opam](https://opam.ocaml.org/) tool to manage OCaml dependencies.
 
 The following build steps were found to work on Ubuntu (20.04 LTS) by [waldenn](https://github.com/waldenn):
 
 ```
     bash -c "sh <(curl -fsSL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)"
-    opam install csv lwt js_of_ocaml js_of_ocaml-lwt lwt_ppx js_of_ocaml str unix num xmlm xml-light lablgtk2
+    opam install csv lwt js_of_ocaml js_of_ocaml-lwt lwt_ppx js_of_ocaml-ppx str unix num xmlm xml-light lablgtk2
     eval $(opam env)
     sudo apt-get install camlp5
     git clone https://github.com/sebferre/sparklis.git
