@@ -1247,21 +1247,31 @@ module Endpoint_log =
     let endpoint_key (endpoint : string) : record (* list *) Jsutils.storage_key =
       "sparklis@" ^ endpoint
                 
-    let record (p : place) : unit =
-      let key = endpoint_key p#lis#endpoint in (* log by endpoint *)
-      let timestamp = to_string (new%js Js.date_now)##toISOString in
-      let permalink = p#permalink in
-      let html_query = p#html_query in
-      let record = {timestamp; permalink; html_query} in
-      Jsutils.update_localStorage key
-        (function
-         | None -> Some [record]
-         | Some log -> Some (record::log))
-
+    let recording = ref true (* whether log recording is active *)
+      
     let clear (endpoint : string) : unit =
       let key = endpoint_key endpoint in
       Jsutils.update_localStorage key
-        (fun _ -> None)
+        (fun _ -> recording := true; None)
+        (fun _ -> recording := false) (* should not happen *)
+
+    let record (p : place) : unit =
+      if !recording then (
+        let endpoint = p#lis#endpoint in
+        let key = endpoint_key endpoint in (* log by endpoint *)
+        let timestamp = to_string (new%js Js.date_now)##toISOString in
+        let permalink = p#permalink in
+        let html_query = p#html_query in
+        let record = {timestamp; permalink; html_query} in
+        Jsutils.update_localStorage key
+          (function
+           | None -> Some [record]
+           | Some log -> Some (record::log))
+          (fun err -> (* local storage full *)
+            if Jsutils.confirm Lisql2nl.config_lang#grammar#msg_full_log
+            then clear endpoint
+            else recording := false) (* stop recording for this session *)
+      )
 
     let html_table (endpoint : string) : string =
       let key = endpoint_key endpoint in

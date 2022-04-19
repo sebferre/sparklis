@@ -206,7 +206,7 @@ let get_localStorage (key : 'a storage_key) : 'a option =
              Json.unsafe_input)
       with _ -> None)
   
-let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) : unit =
+let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) (ferr : error t -> unit) : unit =
   Optdef.case
     Dom_html.window##.localStorage
     (fun () -> firebug "Your browser has no local storage")
@@ -220,9 +220,14 @@ let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) : un
                Json.unsafe_input)
         with _ -> None in
       let res_opt = f arg_opt in
-      match res_opt with
-      | Some res -> storage##setItem jkey (Json.output res)
-      | None -> storage##removeItem jkey)
+      try
+        match res_opt with
+        | Some res ->
+           storage##setItem jkey (Json.output res)
+        | None -> storage##removeItem jkey
+      with Error err ->
+        firebug (string_of_error err);
+        ferr err)
   
 
 (* helping injection of OCaml values to JSON values *)
