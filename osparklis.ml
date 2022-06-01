@@ -1423,6 +1423,17 @@ let make_js_sparklis (history : history) =
             (fun () -> ())
             (fun f -> Unsafe.fun_call f [| Inject.int code|]))
 
+    method externalSearchConstr (js_search : _ t)
+             (callback : Unsafe.any (* constr option -> unit *)) : unit =
+      let search = Lisql.js_search_map.extract js_search in
+      Lis.ajax_external_search_constr ~endpoint:config#get_endpoint search
+        (fun constr_opt ->
+          let js_constr_opt =
+            match constr_opt with
+            | None -> Jsutils.Inject.null
+            | Some constr -> Lisql.js_constr_map.inject constr in
+          Unsafe.fun_call callback [|js_constr_opt|])
+
     method termLabels : Unsafe.any =
       Cache.make_js_cache
         (Jsutils.js_map `String) (* URI *)

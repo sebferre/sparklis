@@ -38,6 +38,10 @@ Access and control of the endpoint:
 
   sends `query` to the current endpoint according to the current Sparklis configuration. If successful, `callback` is called on the *Sparklis results* (see datatypes), otherwise `onError` is called on the HTTP error code.
 
+- **`sparklis.externalSearchConstr(search: sparklis-search, callback: sparklis-constr or null => void): void`**
+
+  calls `callback` on the constraint `ExternalSearch(search,terms)`, where `terms` is the list of result terms from the external search, if successful, otherwise `callback` is called on `null`. With `TextQuery`, the search is done on the current endpoint.
+  
 
 Access and control of the current navigation place:
 

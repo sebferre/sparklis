@@ -160,48 +160,7 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
     | ExternalSearch (new_s,_) ->
        ( match current_constr with
 	 | ExternalSearch (s,_) when s = new_s -> k None
-	 | _ ->
-	    ( match new_s with
-	      | WikidataSearch kwds ->
-		 let query = String.concat "+" kwds in
-		 let limit = 20 in
-		 Jsutils.Wikidata.ajax_entity_search
-		   query limit
-		   (fun lq_opt ->
-		    let lt_opt =
-		      match lq_opt with
-		      | None -> None
-		      | Some lq ->
-			 Some (List.map
-				 (fun q -> Rdf.URI (Rdf.wikidata_entity q))
-				 lq) in
-		    k (Some (ExternalSearch (new_s, lt_opt))))
-	      | TextQuery kwds ->
-		 let lucene = Jsutils.lucene_query_of_kwds kwds in
-		 if lucene = ""
-		 then k (Some (ExternalSearch (new_s, None)))
-		 else (
-		   let sparql =
-		     let x = "x" in
-		     Sparql.(select
-			       ~distinct:true
-			       ~projections:[`Bare, x]
-			       ~limit:Lis.config_max_increment_samples#value
-			       (text_query (var x) lucene)) in
-		   Sparql_endpoint.(ajax_in
-				      [] (new ajax_pool) (* TODO: define element(s) *)
-				      endpoint (sparql :> string)
-				      (fun results ->
-				       let lt =
-					 List.fold_left
-					   (fun lt binding ->
-					    match binding with
-					    | [| Some t |] -> t::lt
-					    | _ -> lt)
-					   [] results.bindings in
-				       k (Some (ExternalSearch (new_s, Some lt))))
-				      (fun code -> k (Some (ExternalSearch (new_s, None))))
-		 ) ) ) )
+	 | _ -> Lis.ajax_external_search_constr ~endpoint new_s k ) (* get matched entities if new search *)
     | _ ->
        if new_constr = current_constr
        then k None
