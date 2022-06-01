@@ -481,6 +481,7 @@ This is the datatype of individual suggestions, whatever their category (terms, 
 - `{ type: "IncrType", uri: string }`
 - `{ type: "IncrRel, uri: string, orientation: ("Fwd" | "Bwd") }`
 - `{ type: "IncrLatLong", latlong: sparklis-latlong }`
+- `{ type: "IncrConstr", constr: sparklis-constr, filterType: ("OnlyIRIs" | "OnlyLiterals" | "Mixed" ) }`
 - `{ type: "IncrHierarchy", transitiveRelInCtx: bool }`
 - `{ type: "IncrSim", pred: sparklis-pred, argS: sparklis-arg, argO: sparklis-arg }`
 - `{ type: "IncrOrder", order: sparklis-order }`

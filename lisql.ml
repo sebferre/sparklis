@@ -1494,6 +1494,7 @@ type increment =
   | IncrType of Rdf.uri
   | IncrRel of Rdf.uri * modif_p2
   | IncrLatLong of latlong
+  | IncrConstr of constr * filter_type
   | IncrTriplify
   | IncrHierarchy of bool (* trans_rel *)
   (* trans_rel: to indicate that relation in context can be made transitive *)
@@ -1555,6 +1556,7 @@ let js_increment_map : increment Jsutils.js_map =
            "IncrRel", [| "uri", `String;
                          "orientation", js_custom_spec js_orientation_map |];
            "IncrLatLong", [| "latlong", js_custom_spec js_latlong_map |];
+           "IncrConstr", [| "constr", js_custom_spec js_constr_map; "filterType", js_custom_spec js_filter_type_map |];
            "IncrHierarchy", [| "transitiveRelInCtx", `Bool |];
            (* trans_rel: to indicate that relation in context can be made transitive *)
            "IncrSim", [| "pred", js_custom_spec js_pred_map;
@@ -2473,6 +2475,7 @@ let insert_increment (incr : increment) (focus : focus) : (focus * delta) option
     | IncrType c -> insert_type c focus
     | IncrRel (p,m) -> insert_rel p m focus
     | IncrLatLong ll -> insert_latlong ll focus
+    | IncrConstr (constr,ft) -> insert_constr constr ft focus
     | IncrTriple arg -> insert_triple arg focus
     | IncrTriplify -> insert_triplify focus
     | IncrHierarchy trans_rel -> toggle_hierarchy trans_rel focus

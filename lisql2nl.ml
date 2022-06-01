@@ -296,8 +296,24 @@ let word_of_selection_op grammar  = function
   | AndSel | NAndSel -> `Op grammar#and_
   | OrSel | NOrSel -> `Op grammar#or_
   | AggregSel -> `Op ""
-		 
-let word_of_incr grammar = function
+
+let word_of_constr grammar = function
+  | True -> `Op grammar#all
+  | MatchesAll _ | MatchesAny _ -> `Op grammar#matches
+  | IsExactly _ -> `Op grammar#is_exactly
+  | StartsWith _ -> `Op grammar#starts_with
+  | EndsWith _ -> `Op grammar#ends_with
+  | After _ -> `Op grammar#after
+  | Before _ -> `Op grammar#before
+  | FromTo _ -> `Op grammar#interval_from
+  | HigherThan _ -> `Op grammar#higher_or_equal_to
+  | LowerThan _ -> `Op grammar#lower_or_equal_to
+  | Between _ -> `Op grammar#interval_between
+  | HasLang _ -> `Op grammar#language
+  | HasDatatype _ -> `Op grammar#datatype
+  | ExternalSearch _ -> `Op grammar#matches
+               
+let word_of_incr grammar = function (* to serve in filtering increments by kwd *)
   | IncrSelection (selop,_) -> word_of_selection_op grammar selop
   | IncrInput (s,dt) -> `Op (string_of_input_type grammar dt)
   | IncrTerm t -> word_of_term t
@@ -307,6 +323,7 @@ let word_of_incr grammar = function
   | IncrType c -> word_of_class c
   | IncrRel (p,_) -> fst (word_syntagm_of_property grammar p)
   | IncrLatLong _ -> `Op grammar#geolocation
+  | IncrConstr (constr,ft) -> word_of_constr grammar constr
   | IncrTriple _ -> `Relation
   | IncrTriplify -> `Relation
   | IncrHierarchy trans_rel -> `Op grammar#in_
@@ -1603,7 +1620,10 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
 	 | `TransAdj -> xml_ellipsis @ Kwd grammar#is :: Word word :: []))
   | IncrLatLong _ll ->
      xml_incr_coordinate grammar focus
-      (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])
+       (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word (`Op grammar#geolocation)])
+  | IncrConstr (constr,ft) ->
+     xml_incr_coordinate grammar focus
+       (Kwd grammar#relative_that :: xml_of_constr grammar ~id_labelling constr)
   | IncrTriple (S | O as arg) ->
     xml_incr_coordinate grammar focus
       (Kwd grammar#relative_that :: Kwd grammar#has :: xml_a_an grammar [Word `Relation] @ (if arg = S then Kwd grammar#rel_to :: xml_ellipsis else Kwd grammar#rel_from :: xml_ellipsis))

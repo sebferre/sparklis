@@ -645,6 +645,7 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
       | IncrId _ -> 2, None
       | IncrInput _ -> 3, None
       | IncrTerm _ -> 4, None
+      | IncrConstr _ -> 5, None (* not expected to appear in increment list *)
       (* modifier increments *)
       | IncrName _ -> 1, Some grammar#tooltip_input_name
       | IncrOrder (Highest _) -> 2, Some grammar#tooltip_highest
