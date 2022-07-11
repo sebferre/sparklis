@@ -44,7 +44,9 @@ window.addEventListener(
 		    //sparklis.setTermConstr(constr);
 		    sparklis
 			.currentPlace()
-			.getTermSuggestions(false, constr, function(partial,suggs) {
+			.getTermSuggestions(false, constr)
+			.then(res => {
+			    let suggs = res.suggs;
 			    console.log("got suggestions for constraint");
 			    console.log(suggs);
 			    let best_sugg = select_sugg(suggs);
@@ -53,11 +55,14 @@ window.addEventListener(
 			    console.log("choosing suggestion: " + best_sugg + " => " + labels.info(best_sugg.term.uri));
 			    sparklis.activateSuggestion(best_sugg);
 			})
+			.catch(() => console.log("FAILED setTermSuggestions"))
 		} else {
 		    //sparklis.setConceptConstr(constr);
 		    sparklis
 			.currentPlace()
-			.getConceptSuggestions(false, constr, function(partial,suggs) {
+			.getConceptSuggestions(false, constr)
+			.then(res => {
+			    let suggs = res.suggs;
 			    console.log("got suggestions for constraint");
 			    console.log(suggs);
 			    //var fst_sugg = suggs[0].item.suggestion;
@@ -65,6 +70,7 @@ window.addEventListener(
 			    console.log("choosing suggestion: " + best_sugg);
 			    sparklis.activateSuggestion(best_sugg);
 			})
+			.catch(() => console.log("FAILED setConceptSuggestions"))
 		};
 		qa.value = "";
 	    }});
@@ -87,9 +93,9 @@ sparklis_extension.hookResults =
     function(results) {
 	console.log("results", results);
 	// testing direct SPARQL call to the endpoint
-	sparklis.evalSparql("SELECT * WHERE { ?x a ?c } LIMIT 10",
-			    function(res) { console.log("other results:", res); },
-			    function(code) { console.log("failed to get the other results, error", code); });
+	sparklis.evalSparql("SELECT * WHERE { ?x a ?c } LIMIT 10")
+	    .then(res => console.log("PROMISE: other results:", res))
+	    .catch(code => console.log("PROMISE: failed to get the other results, error", code));
 	console.log("Here the first two rows of the results will be selected.");
 	//results.rows = results.rows.slice(0,2);
 	return results
@@ -102,12 +108,15 @@ sparklis_extension.hookSuggestions =
 	if (suggestions.type == "Concepts" && flag) {
 	    flag = false;
 	    constr = { "type": "MatchesAll", "kwds": ["city"] };
-	    sparklis.currentPlace().getConceptSuggestions(
-		false, constr,
-		function(partial,suggs) {
+	    sparklis
+		.currentPlace()
+		.getConceptSuggestions(false, constr)
+		.then(res => {
+		    let suggs = res.suggs;
 		    console.log("all suggestions matching 'city'", suggs);
 		    flag = true;
 		})
+		.catch(() => console.log("FAILED search of 'city' concepts"))
 	}
     };
 // example apply-suggestion hook: just logging and applying the suggestion

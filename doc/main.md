@@ -34,14 +34,14 @@ Access and control of the endpoint:
 
   changes the current endpoint to the one specified by `url`
 
-- **`sparklis.evalSparql(query: string, callback: sparklis-results => void, onError: int => void): void`**
+- **`sparklis.evalSparql(query: string): Promise(sparklis-results, int)`**
 
-  sends `query` to the current endpoint according to the current Sparklis configuration. If successful, `callback` is called on the *Sparklis results* (see datatypes), otherwise `onError` is called on the HTTP error code.
+  returns a promise of the *Sparklis results* (see datatypes) of the `query` on the current endpoint, according to the current Sparklis configuration; in case of error, the HTTP error code is thrown.
 
-- **`sparklis.externalSearchConstr(search: sparklis-search, callback: sparklis-constr or null => void): void`**
+- **`sparklis.externalSearchConstr(search: sparklis-search): Promise(sparklis-constr, ())`**
 
-  calls `callback` on the constraint `ExternalSearch(search,terms)`, where `terms` is the list of result terms from the external search, if successful, otherwise `callback` is called on `null`. With `TextQuery`, the search is done on the current endpoint.
-  
+  returns a promise of the constraint `ExternalSearch(search,terms)`, where `terms` is the list of result terms from the external search. With `TextQuery`, the search is done on the current endpoint.
+
 
 Access and control of the current navigation place:
 
@@ -171,31 +171,31 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 
 - **`p.onEvaluated(callback: () => void): void`**
 
-  calls `callback` when the place has been evaluated, i.e. when the SPARQL query, its results, and other related information is available.
+  calls `callback` when the place has been evaluated, i.e. when the SPARQL query, its results, and other related information are available.
 
 - **`p.sparql(): string`**
 
-  returns the SPARQL translation of the current query and focus. The place must be evaluated.
+  returns the SPARQL translation of the current query and focus. The place must have bene evaluated.
 
 - **`p.results(): sparklis-results`**
 
-  returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values). The place must be evaluated.
+  returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values). The place must have been evaluated.
 
 - **`p.hasPartialResults(): bool`**
 
-  returns whether the Sparklis results are partial or not. The place must be evaluated.
+  returns whether the Sparklis results are partial or not. The place must have been evaluated.
 
-- **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr, callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
+- **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
 
-  calls `callback` on the term suggestions (see datatype `sparklis-suggestions`) matching the given term constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not. The place must be evaluated.
+  returns a promise of the term suggestion forest (see datatype `sparklis-suggestion-forest`) matching the given term constraint. The `partial` field of the returned data indicates whether the suggestions are partial or not. The place must have been evaluated.
 
-- **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr, callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
+- **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
 
-  calls `callback` on the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The `partial` argument of the callback indicates wheter the passed suggestions are partial or not. The place must be evaluated.
+  returns a promise of the concept suggestion forest (see datatype `sparklis-suggestion-forest`) matching the given concept constraint. The `partial` field of the returned data indicates whether the suggestions are partial or not. The place must have been evaluated.
 
-- **`p.getModifierSuggestions(callback: (partial: bool, suggs: sparklis-suggestions) => void): void`**
+- **`p.getModifierSuggestions(): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
 
-  calls `callback` on the modifier suggestions (see datatype `sparklis-suggestions`). The `partial` argument of the callback indicates wheter the passed suggestions are partial or not (in practice, should always be false). The place must be evaluated.
+  returns a promise of the modifier suggestion forest (see datatype `sparklis-suggestion-forest`). The `partial` field of the returned result indicates whether the passed suggestions are partial or not (in practice, should always be false). The place must have been evaluated.
 
 - **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
 
@@ -221,10 +221,10 @@ collection of labels. The following methods are available.
 
   enqueues the passed URI in the next batch to retrieve labels
 
-- **`lex.sync(callback: () => void): void`**
+- **`lex.sync(): Promise((), ())`**
 
   synchronizes the lexicon by retrieving the labelling information for
-  all queued URIs, and calls the callback function when done
+  all queued URIs, and resolving the returned promise when done
 
 
 ## Customization with object `sparklis_extension`
@@ -264,6 +264,7 @@ We describe each datatype used in Sparklis JS API. Each datatype is a set of JSO
 * `[T ..]` denotes the variable-length arrays whose items have type *T*
 * `{p1: T1, p2: T2}` denotes the objects with properties *p1* of type *T1*, and *p2* of type *T2* (this generalizes to any set of property names and types)
 * `T or null` denotes an optional value of type *T*
+* `Promise(T1,T2)` denotes a promise with *T1* as the type of the resolve argument (data), and *T2* as the type of the reject argument (error)
 * `sparklis-rdfterm` or any sparklis datatype denotes the set of values defined for that datatype
 
 When the values of a datatype fall into different cases, we provide the list of possible cases. Each case is either a string or an object with a `type` property identifying the case.

@@ -35,9 +35,10 @@ let make_js_cache (js_key_map : 'a Jsutils.js_map) (js_val_map : 'b Jsutils.js_m
     method enqueue (js_key : Js.Unsafe.any) : unit =
       let key = js_key_map.extract js_key in
       cache#enqueue key
-    method sync (callback : Js.Unsafe.any (* unit -> unit *)) : unit =
+    method sync : Unsafe.any = (* Promise *)
+      Jsutils.new_promise (fun resolve reject -> (* unit, unit *)
       cache#sync
-        (fun () -> Js.Unsafe.fun_call callback [||])
+        (fun () -> Js.Unsafe.fun_call resolve [||]))
   end
 
 

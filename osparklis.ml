@@ -1196,30 +1196,36 @@ let rec make_js_place (place : place) =
     method hasPartialResults : bool t =
       bool place#lis#partial_results
 
-    method getTermSuggestions (inverse : bool t) (constr : Unsafe.any)
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+    method getTermSuggestions (inverse : bool t) (constr : Unsafe.any) : Unsafe.any (* Promise *) =
+      Jsutils.new_promise (fun resolve reject -> (* {partial: bool, suggs: incr_freq_forest}, unit *)
       place#lis#ajax_forest_terms_inputs_ids
         ~inverse:(to_bool inverse)
         (Lisql.js_constr_map.extract constr)
         []
         (fun ~partial forest_opt ->
-          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
-    method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any)
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+          match forest_opt with
+          | None -> Unsafe.fun_call reject [||]
+          | Some forest ->
+             let js_forest = Lis.js_incr_freq_forest_map.inject forest in
+             Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |]))
+    method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any) : Unsafe.any (* Promise *) =
+      Jsutils.new_promise (fun resolve reject -> (* {partial: bool, suggs: incr_freq_forest}, unit *)
       place#lis#ajax_forest_properties
         ~inverse:(to_bool inverse)
         (Lisql.js_constr_map.extract constr)
         []
         (fun ~partial forest_opt ->
-          let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-          Unsafe.fun_call callback [| Inject.bool partial; js_forest|])
-    method getModifierSuggestions
-             (callback : Unsafe.any (* bool -> incr_freq_forest option -> unit *)) : unit =
+          match forest_opt with
+          | None -> Unsafe.fun_call reject [||]
+          | Some forest ->
+             let js_forest = Lis.js_incr_freq_forest_map.inject forest in
+             Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |]))
+    method getModifierSuggestions : Unsafe.any (* Promise *) =
+      Jsutils.new_promise (fun resolve _reject -> (* {partial: bool, suggs: incr_freq_forest}, none *)
       let partial = false in
-      let forest_opt = Some (place#lis#forest_modifiers) in
-      let js_forest = Lis.js_incr_freq_forest_option_map.inject forest_opt in
-      Unsafe.fun_call callback [| Inject.bool partial; js_forest |]
+      let forest = place#lis#forest_modifiers in
+      let js_forest = Lis.js_incr_freq_forest_map.inject forest in
+      Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |])
 
     method applySuggestion (sugg : Unsafe.any) : Unsafe.any (* place, without computed results *) =
       let incr = Lisql.js_increment_map.extract sugg in
@@ -1410,29 +1416,26 @@ let make_js_sparklis (history : history) =
     method changeEndpoint (url : js_string t) : unit =
       history#change_endpoint (to_string url)
               
-    method evalSparql (sparql : js_string t)
-             (callback : Unsafe.any (* results -> unit *))
-             (on_error : Unsafe.top optdef (* HTTP error code -> unit*)) : unit =
+    method evalSparql (sparql : js_string t) : Unsafe.any (* Promise *) =
+      Jsutils.new_promise (fun resolve reject -> (* results, HTTP error code *)
       let ajax_pool = new Sparql_endpoint.ajax_pool in
       Sparql_endpoint.ajax_in [] ajax_pool config#get_endpoint (to_string sparql)
         (fun res ->
           let js_res = Sparql_endpoint.js_results_map.inject res in
-          Unsafe.fun_call callback [|js_res|])
+          Unsafe.fun_call resolve [|js_res|])
         (fun code ->
-          Optdef.case on_error
-            (fun () -> ())
-            (fun f -> Unsafe.fun_call f [| Inject.int code|]))
+          Unsafe.fun_call reject [| Inject.int code|]))
 
-    method externalSearchConstr (js_search : _ t)
-             (callback : Unsafe.any (* constr option -> unit *)) : unit =
+    method externalSearchConstr (js_search : _ t) : Unsafe.any (* Promise *) =
+      Jsutils.new_promise (fun resolve reject -> (* constr, unit *)
       let search = Lisql.js_search_map.extract js_search in
       Lis.ajax_external_search_constr ~endpoint:config#get_endpoint search
         (fun constr_opt ->
-          let js_constr_opt =
-            match constr_opt with
-            | None -> Jsutils.Inject.null
-            | Some constr -> Lisql.js_constr_map.inject constr in
-          Unsafe.fun_call callback [|js_constr_opt|])
+          match constr_opt with
+          | None -> Unsafe.fun_call reject [||]
+          | Some constr ->
+             let js_constr = Lisql.js_constr_map.inject constr in
+             Unsafe.fun_call resolve [|js_constr|]))
 
     method termLabels : Unsafe.any =
       Cache.make_js_cache

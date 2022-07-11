@@ -42,6 +42,11 @@ let trigger_download ~mime contents : unit =
 let timeout (dur : float) (k : unit -> unit) : unit =
   ignore (Dom_html.window##setTimeout (wrap_callback k) dur)
 
+let _Promise = Unsafe.global##._Promise
+
+let new_promise (executor : Unsafe.any (* data -> void *) -> Unsafe.any (* error -> void *) -> unit) : Unsafe.any (* Promise *) =
+  Unsafe.new_obj _Promise [|Unsafe.inject (Unsafe.callback executor)|]
+  
 let set_innerHTML elt s = elt##.innerHTML := string s
 						   
 let set_innerHTML_fadeInOut_then elt (s : string) (k : unit -> unit) : unit =
