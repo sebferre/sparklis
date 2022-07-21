@@ -433,20 +433,19 @@ object (self)
 			  hu_arguments = url.fu_arguments;
 			  hu_fragment = "" }))
 	| _ -> permalink in
-      Lwt.ignore_result
-	(Lwt.bind
-	   (XmlHttpRequest.perform_raw
-	      ~headers:["Content-Type", "application/json";
-			"apikey", "4ac1772b3b4749748bec9ffc66044157"]
-	      ~get_args:["destination", permalink]
-	      ~response_type:XmlHttpRequest.JSON
-	      "https://api.rebrandly.com/v1/links/new")
-	   (fun http_frame ->
-	    let open XmlHttpRequest in
-	    Opt.case http_frame.content
-		     (fun () -> show permalink)
-		     (fun js -> show js##.shortUrl);
-	    Lwt.return ()))
+      Lwt.async (fun () ->
+	let%lwt http_frame =
+	  XmlHttpRequest.perform_raw
+	    ~headers:["Content-Type", "application/json";
+		      "apikey", "4ac1772b3b4749748bec9ffc66044157"]
+	    ~get_args:["destination", permalink]
+	    ~response_type:XmlHttpRequest.JSON
+	    "https://api.rebrandly.com/v1/links/new" in
+	let open XmlHttpRequest in
+	Opt.case http_frame.content
+	  (fun () -> show permalink)
+	  (fun js -> show js##.shortUrl);
+	Lwt.return ())
     else show permalink
 
   method csv_of_results ?(raw_terms = false) ?(max_results : int option = None) (k : string -> unit) : unit =
@@ -1309,12 +1308,14 @@ object (self)
 
   method push (p : place) : unit =
     if logging_on () then
-      Lwt.ignore_result
-	(XmlHttpRequest.perform_raw_url
-	   ~get_args:[("session", session_id);
-		      ("endpoint", p#lis#endpoint);
-		      ("query", Permalink.of_query p#lis#query)]
-	   url_querylog_php); (* counting hits *)
+      Lwt.async (fun () ->
+	let%lwt _frame =
+          XmlHttpRequest.perform_raw_url
+	    ~get_args:[("session", session_id);
+		       ("endpoint", p#lis#endpoint);
+		       ("query", Permalink.of_query p#lis#query)]
+	    url_querylog_php in
+        Lwt.return ()); (* counting hits *)
     past <- present::past;
     present <- p;
     future <- []
@@ -1770,7 +1771,9 @@ let initialize endpoint focus delta =
 let _ =
   Jsutils.firebug "Starting Sparklis";
   if logging_on () then
-    Lwt.ignore_result (XmlHttpRequest.get url_log_php); (* counting hits *)
+    Lwt.async (fun () ->
+      let%lwt _frame = XmlHttpRequest.get url_log_php in  (* counting hits *)
+      Lwt.return ());
   Dom_html.window##.onload := Dom.handler (fun ev ->
    Jsutils.google#set_on_load_callback (fun () -> (* initializing Google charts *)
     (* initializing YASGUI and other libs *)

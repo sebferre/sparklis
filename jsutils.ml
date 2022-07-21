@@ -52,8 +52,6 @@ let new_promise (executor : Unsafe.any (* data -> void *) -> Unsafe.any (* error
 let () = (* for handling uncaught exceptions in lwt async sections *)
   Lwt.async_exception_hook := (fun exn -> firebug (Printexc.to_string exn))
 
-let async_bind (p : 'a Lwt.t) (k : 'a -> unit) : unit =
-  Lwt.async (fun () -> Lwt.bind p (fun x -> k x; Lwt.return ()))
   
 let set_innerHTML elt s = elt##.innerHTML := string s
 						   
@@ -771,16 +769,17 @@ module Wikidata =
 	    (*"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=%d&search=%s" (* type=item|property *) NOTE: less flexible search *)
 	    limit
 	    (Url.urlencode query) in
-        async_bind
-          (try%lwt
+        Lwt.async (fun () ->
+           try%lwt
              let%lwt json =
 	       Jsonp.call_custom_url (*~timeout:0.5*)
 	         (fun name -> query_url ^ "&callback=" ^ name) in
              let res_le = entities_of_json json in
-             Lwt.return res_le
+             k res_le;
+             Lwt.return ()
            with Lwt.Canceled ->
-             Lwt.return (Result.Error (Failure "Wikidata entity search: timeout")))
-          k
+             k (Result.Error (Failure "Wikidata entity search: timeout"));
+             Lwt.return ())
                   
   end
 
