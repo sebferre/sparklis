@@ -772,26 +772,25 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 
 (* external search *)
 
-let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : Lisql.constr option -> unit) : unit =
+let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.constr, exn) Result.t -> unit) : unit =
   match search with
   | WikidataSearch kwds ->
      let query = String.concat "+" kwds in
      let limit = 20 in
      Jsutils.Wikidata.ajax_entity_search
        query limit
-       (fun lq_opt ->
-	 let lt_opt =
-	   match lq_opt with
-	   | None -> None
-	   | Some lq ->
-	      Some (List.map
-		      (fun q -> Rdf.URI (Rdf.wikidata_entity q))
-		      lq) in
-	 k (Some (ExternalSearch (search, lt_opt))))
+       (function
+        | Result.Ok lq ->
+           let lt =
+             List.map
+	       (fun q -> Rdf.URI (Rdf.wikidata_entity q))
+	       lq in
+           k (Result.Ok (Lisql.ExternalSearch (search, Some lt)))
+        | (Result.Error _ as err) -> k err)
   | TextQuery kwds ->
      let lucene = Jsutils.lucene_query_of_kwds kwds in
      if lucene = ""
-     then k (Some (ExternalSearch (search, None)))
+     then k (Result.Error (Failure "The Lucene query derived from keywords is empty"))
      else (
        let sparql =
 	 let x = "x" in
@@ -800,7 +799,7 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : Lisql.con
 		   ~projections:[`Bare, x]
 		   ~limit:config_max_increment_samples#value
 		   (text_query (var x) lucene)) in
-       Sparql_endpoint.(ajax_in
+       Sparql_endpoint.(ajax_in (* TODO: change this function for promises *)
 			  [] (new ajax_pool)
 			  endpoint (sparql :> string)
 			  (fun results ->
@@ -811,10 +810,11 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : Lisql.con
 				  | [| Some t |] -> t::lt
 				  | _ -> lt)
 				[] results.bindings in
-			    k (Some (ExternalSearch (search, Some lt))))
-			  (fun code -> k (Some (ExternalSearch (search, None))))))
+			    k (Result.Ok (Lisql.ExternalSearch (search, Some lt))))
+	                  (fun code ->
+                            k (Result.Error (Failure ("The SPARQL query for retrieving entities matching a Lucene query failed with code " ^ string_of_int code))))))
 
-  
+
 (* hooks for Sparklis extension *)
    
 let hook_sparql (sparql : string) : string =

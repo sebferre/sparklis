@@ -160,13 +160,19 @@ let make_new_constr ~endpoint (current_constr : Lisql.constr) select input (k : 
     | ExternalSearch (new_s,_) ->
        ( match current_constr with
 	 | ExternalSearch (s,_) when s = new_s -> k None
-	 | _ -> Lis.ajax_external_search_constr ~endpoint new_s k ) (* get matched entities if new search *)
+	 | _ -> Lis.ajax_external_search_constr ~endpoint new_s
+                  (function (* get matched entities if new search *)
+                   | Result.Ok new_constr -> k (Some new_constr)
+                   | Result.Error exn ->
+                      Jsutils.firebug (Printexc.to_string exn);
+                      k None))
     | _ ->
        if new_constr = current_constr
        then k None
        else k (Some new_constr)
-  with Invalid_argument _msg ->
+  with Invalid_argument msg ->
     input##.style##.color := string "red";
+    Jsutils.firebug msg;
     k None
     
 let option_of_constr =

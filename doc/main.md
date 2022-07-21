@@ -38,7 +38,7 @@ Access and control of the endpoint:
 
   returns a promise of the *Sparklis results* (see datatypes) of the `query` on the current endpoint, according to the current Sparklis configuration; in case of error, the HTTP error code is thrown.
 
-- **`sparklis.externalSearchConstr(search: sparklis-search): Promise(sparklis-constr, ())`**
+- **`sparklis.externalSearchConstr(search: sparklis-search): Promise(sparklis-constr, error)`**
 
   returns a promise of the constraint `ExternalSearch(search,terms)`, where `terms` is the list of result terms from the external search. With `TextQuery`, the search is done on the current endpoint.
 

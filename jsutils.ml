@@ -22,7 +22,9 @@ open Js_of_ocaml_lwt
 open Js
 open XmlHttpRequest
 
-let raise_error msg = raise_js_error (new%js error_constr (string msg))
+let error msg = new%js error_constr (string msg)
+
+let raise_error msg = raise_js_error (error msg)
    
 let alert msg = Dom_html.window##alert (string msg)
 
@@ -46,6 +48,12 @@ let _Promise = Unsafe.global##._Promise
 
 let new_promise (executor : Unsafe.any (* data -> void *) -> Unsafe.any (* error -> void *) -> unit) : Unsafe.any (* Promise *) =
   Unsafe.new_obj _Promise [|Unsafe.inject (Unsafe.callback executor)|]
+
+let () = (* for handling uncaught exceptions in lwt async sections *)
+  Lwt.async_exception_hook := (fun exn -> firebug (Printexc.to_string exn))
+
+let async_bind (p : 'a Lwt.t) (k : 'a -> unit) : unit =
+  Lwt.async (fun () -> Lwt.bind p (fun x -> k x; Lwt.return ()))
   
 let set_innerHTML elt s = elt##.innerHTML := string s
 						   
@@ -250,6 +258,12 @@ struct
   let string (s : string) : Unsafe.any = Unsafe.inject (string s)
   let array (ar : Unsafe.any array) : Unsafe.any = Unsafe.inject (array ar)
   let obj (ar : (string * Unsafe.any) array) : Unsafe.any = Unsafe.obj ar
+  let exn (exn : exn) : Unsafe.any =
+    let msg =
+      match exn with
+      | Failure msg -> msg
+      | _ -> Printexc.to_string exn in
+    Unsafe.inject (error msg)
 end
 
 module Extract =
@@ -730,7 +744,7 @@ end
 (* Wikidata services *)
 module Wikidata =
   struct
-    let entities_of_json ojson : string list option =
+    let entities_of_json ojson : (string list, exn) Result.t =
       try
 	let oquery = Unsafe.get ojson (string "query") in
 	let osearch = Unsafe.get oquery (string "search") in
@@ -742,29 +756,32 @@ module Wikidata =
 	  le := (Js.to_string otitle)::!le
 	done;
 	firebug (string_of_int n ^ " wikidata entities found");
-	Some !le
-      with _ ->
-	None
+	Result.Ok !le
+      with exn ->
+	Result.Error (Failure ("Wikidata entity search: unexpected JSON: " ^ Printexc.to_string exn))
 
-    let ajax_entity_search (query : string) (limit : int) (k : string list option -> unit) : unit =
+    let ajax_entity_search (query : string) (limit : int) (k : (string list, exn) Result.t -> unit) : unit =
       if String.length query < 3
-      then k None
+      then k (Result.Error (Failure "Wikidata entity search: query too short (less than 3 cars)"))
       else
-	let _ = firebug ("Wikidata search: " ^ query) in
+	let _ = firebug ("Wikidata entity search: " ^ query) in
 	let query_url =
 	  Printf.sprintf
 	    "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
 	    (*"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=%d&search=%s" (* type=item|property *) NOTE: less flexible search *)
 	    limit
 	    (Url.urlencode query) in
-	Lwt.ignore_result
-	  (Lwt.bind
-	     (Jsonp.call_custom_url (*~timeout:0.5*)
-		(fun name -> query_url ^ "&callback=" ^ name))
-	     (fun json ->
-	      k (entities_of_json json);
-	      Lwt.return ()))
-	
+        async_bind
+          (try%lwt
+             let%lwt json =
+	       Jsonp.call_custom_url (*~timeout:0.5*)
+	         (fun name -> query_url ^ "&callback=" ^ name) in
+             let res_le = entities_of_json json in
+             Lwt.return res_le
+           with Lwt.Canceled ->
+             Lwt.return (Result.Error (Failure "Wikidata entity search: timeout")))
+          k
+                  
   end
 
 
