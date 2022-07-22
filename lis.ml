@@ -177,9 +177,15 @@ let js_incr_freq_forest_map : incr_freq_forest Jsutils.js_map =
   js_forest_map
     (js_map (`Record [| "suggestion", js_custom_spec Lisql.js_increment_map; (* Tuple and Record have same internal repr *)
                         "frequency", `Option (js_custom_spec js_freq_map) |]))
-let js_incr_freq_forest_option_map : incr_freq_forest option Jsutils.js_map =
+
+type suggestions =
+  { partial : bool;
+    forest : incr_freq_forest }
+let js_suggestions_map : suggestions Jsutils.js_map =
   let open Jsutils in
-  js_map (`Option (js_custom_spec js_incr_freq_forest_map))
+  js_map
+    (`Record [| "partial", `Bool;
+                "forest", js_custom_spec js_incr_freq_forest_map |])
   
 (* increment hierarchies*)
   
@@ -829,18 +835,18 @@ let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
     Sparql_endpoint.js_results_map
     res
 
-let hook_suggestions : (freq_unit * incr_freq_forest option) -> (freq_unit * incr_freq_forest option) =
+let hook_suggestions : (freq_unit * suggestions) -> (freq_unit * suggestions) =
   let open Jsutils in
-  let js_suggestions_map =
+  let js_unit_suggestions_map =
     js_map
       (`Record [| "type", js_custom_spec js_freq_unit_map;
-                  "forest", `Option (js_custom_spec js_incr_freq_forest_map) |]) in
-  (fun suggestions ->
+                  "suggestions", js_custom_spec js_suggestions_map |]) in
+  (fun unit_suggestions ->
     Jsutils.firebug "applying hook on suggestions";
     Config.apply_hook_data
       Config.sparklis_extension##.hookSuggestions
-      js_suggestions_map
-      suggestions)
+      js_unit_suggestions_map
+      unit_suggestions)
 
 (* LIS navigation places *)
   
@@ -1144,7 +1150,7 @@ object (self)
 	
   (* indexes: must be called in the continuation of [ajax_sparql_results] *)
 
-  method private ajax_forest_terms_init ?(freq0 = false) ~(inverse : bool) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
+  method private ajax_forest_terms_init ?(freq0 = false) ~(inverse : bool) constr elts (k : (suggestions, exn) Result.t -> unit) =
     let process results_term =
       let list_term = list_of_results_column "term" results_term in
       let value = if freq0 then 0 else 1 in
@@ -1163,9 +1169,10 @@ object (self)
 	(fun () ->
 	 term_hierarchy#sync
 	   (fun () ->
-             let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-             let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
-	     k ~partial incr_forest_opt))
+             let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+             let suggestions = {partial; forest} in
+             let _, suggestions = hook_suggestions (Entities, suggestions) in
+	     k (Result.Ok suggestions)))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_term =
@@ -1180,11 +1187,11 @@ object (self)
                :> string)) in
     Sparql_endpoint.ajax_in ~tentative:true elts ajax_pool endpoint sparql_term (* tentative because uses a non-standard feature 'bif:contains' *)
       (fun results_term -> process results_term)
-      (fun code -> k ~partial:true None)
+      (fun code -> k (Result.Error (Failure ("Initial term suggestions: HTTP error code " ^ string_of_int code))))
 
-  method ajax_forest_terms_inputs_ids ?(inverse = false) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
+  method ajax_forest_terms_inputs_ids ?(inverse = false) constr elts (k : (suggestions, exn) Result.t -> unit) =
     if focus_descr#term = `Undefined then
-      k ~partial:false (Some [])
+      k (Result.Ok ({partial = false; forest = []}))
     else if focus_descr#unconstrained then
       self#ajax_forest_terms_init ~inverse constr elts k
     else if focus_term_index#is_empty
@@ -1269,16 +1276,17 @@ object (self)
 	  (fun () ->
 	    term_hierarchy#sync
 	      (fun () ->
-                let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-                let _, incr_forest_opt = hook_suggestions (Entities, Some incr_forest) in
-	        k ~partial incr_forest_opt))
+                let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+                let suggestions = {partial; forest} in
+                let _, suggestions = hook_suggestions (Entities, suggestions) in
+	        k (Result.Ok suggestions)))
       in
       if constr = current_term_constr
       then process ()
       else self#ajax_sparql_results constr elts
              (fun () -> process ())
 
-  method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
+  method private ajax_forest_properties_init ?(freq0=false) ~(inverse : bool) constr elts (k : (suggestions, exn) Result.t -> unit) =
     let process results_class results_prop results_pred =
       let max_value = None in
       let partial_class = results_class.Sparql_endpoint.length = config_max_classes#value in
@@ -1337,9 +1345,10 @@ object (self)
 	incr_index#add (Lisql.IncrTriple Lisql.O, None)
       );
       sync_concepts (fun () ->
-          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
-	  k ~partial incr_forest_opt)
+          let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+          let suggestions = {partial; forest} in
+          let _, suggestions = hook_suggestions (Concepts, suggestions) in
+	  k (Result.Ok suggestions))
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1389,7 +1398,7 @@ object (self)
 	(function
 	| [results_class; results_prop; results_pred] -> process results_class results_prop results_pred
 	| _ -> assert false)
-	(fun code -> k ~partial:true None)
+	(fun code -> k (Result.Error (Failure ("Initial concept suggestions: HTTP error code " ^ string_of_int code))))
     in
     let ajax_intent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1456,9 +1465,10 @@ object (self)
 	   List.iter
 	     (fun incr -> incr_index#add (incr, Some freq)));
       sync_concepts (fun () ->
-          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
-	  k ~partial incr_forest_opt) in
+          let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+          let suggestions = {partial; forest} in
+          let _, suggestions = hook_suggestions (Concepts, suggestions) in
+	  k (Result.Ok suggestions)) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
@@ -1481,9 +1491,10 @@ object (self)
 	     lx lt
 	| _ -> () );
       sync_concepts (fun () ->
-          let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-          let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
-	  k ~partial:true incr_forest_opt)
+          let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+          let suggestions = {partial = true; forest} in
+          let _, suggestions = hook_suggestions (Concepts, suggestions) in
+	  k (Result.Ok suggestions))
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
@@ -1516,7 +1527,8 @@ object (self)
            Some (lx,lt)
 	| _ -> "", None in (* avoiding timeouts in evaluations *)
       Jsutils.firebug sparql_class;
-      if sparql_class = "" then k ~partial:true None
+      if sparql_class = ""
+      then k (Result.Error (Failure "Initial concept suggestions: only external constraints are supported on Wikidata"))
       else
 	Sparql_endpoint.ajax_list_in
 	  elts ajax_pool endpoint [sparql_class]
@@ -1526,7 +1538,7 @@ object (self)
 		 | Some (lx,lt) -> process_wikidata_with_external_search lx lt results_class
 		 | None -> process_wikidata results_class )
 	    | _ -> assert false)
-	  (fun code -> k ~partial:true None)
+	  (fun code -> k (Result.Error (Failure ("Initial concept suggestions: HTTP error code " ^ string_of_int code))))
     in
     if Rdf.config_wikidata_mode#value
     then ajax_wikidata ()
@@ -1535,13 +1547,13 @@ object (self)
       then ajax_intent ()
       else ajax_extent ()
 
-  method ajax_forest_properties ?(inverse = false) constr elts (k : partial:bool -> incr_freq_forest option -> unit) =
+  method ajax_forest_properties ?(inverse = false) constr elts (k : (suggestions, exn) Result.t -> unit) =
     if (focus_descr#term = `Undefined && focus_descr#pred_args = `Undefined) || not focus_descr#incr then
-      k ~partial:false (Some []) (* only constraints on aggregations (HAVING clause) *)
+      k (Result.Ok {partial = false; forest = []}) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_forest_properties_init ~inverse constr elts k
     else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
-      k ~partial:true None (* not computing properties with constraints in Wikidata: timeouts *)
+      k (Result.Error (Failure "Concept suggestions: constraint not supported on Wikidata, except for initial suggestions")) (* timeout pbs *)
     else begin
         let hierarchy_focus_as_incr_opt =
           let open Lisql in
@@ -1702,9 +1714,10 @@ object (self)
 	        then incr_index#add (incr,None))
 	      [Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
             sync_concepts (fun () ->
-                let incr_forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
-                let _, incr_forest_opt = hook_suggestions (Concepts, Some incr_forest) in
-	        k ~partial incr_forest_opt))
+                let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
+                let suggestions = {partial; forest} in
+                let _, suggestions = hook_suggestions (Concepts, suggestions) in
+	        k (Result.Ok suggestions)))
         in
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
         let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1752,7 +1765,7 @@ object (self)
 	     | [results_class; results_prop; results_pred; results_arg] ->
 		process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
 	     | _ -> assert false)
-	    (fun code -> k ~partial:true None)
+	    (fun code -> k (Result.Error (Failure ("Concept suggestions: HTTP error code " ^ string_of_int code))))
         in
         let ajax_extent () =
           (* focus_term_index is not empty *)
@@ -1903,7 +1916,7 @@ object (self)
           else ajax_extent ()
       end
 
-  method forest_modifiers : incr_freq_forest =
+  method forest_modifiers : suggestions =
     let open Lisql in
     let incrs =
       if focus_descr#unconstrained
@@ -2041,15 +2054,13 @@ object (self)
       List.filter
 	(fun incr -> Lisql.insert_increment incr focus <> None)
 	incrs in
-(*    let incr_index = new incr_freq_index in
-    List.iter (fun incr -> incr_index#add (incr,None)) valid_incrs; *)
-    let incr_forest =
+    let forest =
       List.map
         (fun incr -> Node ((incr, None), []))
         valid_incrs in
-    match hook_suggestions (Modifiers, Some incr_forest) with
-    | _, None -> []
-    | _, Some incr_forest -> incr_forest
+    let suggestions = {partial = false; forest} in
+    let _, suggestions = hook_suggestions (Modifiers, suggestions) in
+    suggestions
 	  
   method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in

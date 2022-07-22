@@ -185,17 +185,17 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 
   returns whether the Sparklis results are partial or not. The place must have been evaluated.
 
-- **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
+- **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr): Promise(sparklis-suggestions, error)`**
 
-  returns a promise of the term suggestion forest (see datatype `sparklis-suggestion-forest`) matching the given term constraint. The `partial` field of the returned data indicates whether the suggestions are partial or not. The place must have been evaluated.
+  returns a promise of the term suggestions (see datatype `sparklis-suggestions`) matching the given term constraint. The place must have been evaluated.
 
-- **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
+- **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr): Promise(sparklis-suggestions, error)`**
 
-  returns a promise of the concept suggestion forest (see datatype `sparklis-suggestion-forest`) matching the given concept constraint. The `partial` field of the returned data indicates whether the suggestions are partial or not. The place must have been evaluated.
+  returns a promise of the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The place must have been evaluated.
 
-- **`p.getModifierSuggestions(): Promise({partial: bool, suggs: sparklis-suggestion-forest}, ())`**
+- **`p.getModifierSuggestions(): Promise(sparklis-suggestions, ())`**
 
-  returns a promise of the modifier suggestion forest (see datatype `sparklis-suggestion-forest`). The `partial` field of the returned result indicates whether the passed suggestions are partial or not (in practice, should always be false). The place must have been evaluated.
+  returns a promise of the modifier suggestions (see datatype `sparklis-suggestions`). The place must have been evaluated.
 
 - **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
 
@@ -241,7 +241,7 @@ A common form of customization is a *hook*, i.e. a custom function that is calle
 
   can hold a function that will be called on each Sparklis results, and that may return modified results, which will be the one displayed to the user. Side effects can here be used to generate and display an alternative view of results to the user (e.g., charts, a custom map). In combination with `hookSparql`, this can be used to post-process the results of a modified SPARQL query so that they align with the user query (e.g., removing some columns).
 
-- **`sparklis_extension.hookSuggestions: (sparklis-suggestions => sparklis-suggestions or undefined) or undefined`**
+- **`sparklis_extension.hookSuggestions: (sparklis-typed-suggestions => sparklis-typed-suggestions or undefined) or undefined`**
 
   can hold a function that will be called on each set of suggestions (terms, concepts, and modifiers), and may return a modified set of suggestions, which will be the one displayed to the user. This can be used to filter out some suggestions or to forcibly add some suggestions.
 
@@ -527,14 +527,22 @@ Each item is composed of a suggestion and its frequency.
 
 ### Datatype `sparklis-suggestions`
 
-This datatype is used to represent the differents sets of suggestions in the JS API.
+This datatype is essentially a `sparklis-suggestion-forest`, along with a flag `partial` to indicate whether the set of suggestions is only partial or complete.
+
+```
+{ partial: bool, forest : sparklis-suggestion-forest }
+```
+
+### Datatype `sparklis-typed-suggestions`
+
+This datatype is used to represent the differents sets of suggestions in the JS API. It is essentially a set of suggestions, along with an indication of the type of suggestions.
 
 ```
 { type: ("Entities" | "Concepts" | "Modifiers"),
-  forest: sparklis-suggestion-forest or null }
+  suggestions: sparklis-suggestion-forest or null }
   ```
 
-Property `type` indicates the category of suggestions, while property `forest` provides the actual forest of suggestions.
+Property `type` indicates the category of suggestions, while property `suggestions` provides the actual set of suggestions.
 
 
 ### Datatype `sparklis-query`

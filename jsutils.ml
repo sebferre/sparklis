@@ -33,6 +33,7 @@ let confirm msg = to_bool (Dom_html.window##confirm (string msg))
 let prompt msg text = Dom_html.window##prompt (string msg) (string text)
 
 let firebug msg = Firebug.console##log (string msg)
+let firebug_exn (e : exn) = Firebug.console##log (string (Printexc.to_string e))
 
 let make_data_url mime contents =
   "data:" ^ mime ^ "," ^ Url.urlencode contents				       

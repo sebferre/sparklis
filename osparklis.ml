@@ -706,12 +706,13 @@ object (self)
 	  input_inverse##.checked := bool inverse_terms;
 	  sel_sorting##.value := string sorting_terms;
 	  lis#ajax_forest_terms_inputs_ids ~inverse:inverse_terms (norm_constr current_constr) [elt_list]
-	   (fun ~partial -> function
-	    | None ->
+	   (function
+	    | Result.Error exn ->
+               Jsutils.firebug_exn exn;
 	       refreshing_terms <- false;
 	       let new_constr = term_constr in
 	       self#refresh_new_term_constr current_constr new_constr
-	    | Some incr_forest ->
+	    | Result.Ok {partial; forest=incr_forest} ->
 	      let html_sel, html_list, count =
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_incr_forest lis#focus html_state incr_forest ~sort_by_frequency in
@@ -784,12 +785,13 @@ object (self)
 	   input_inverse##.checked := bool inverse_properties;
 	   sel_sorting##.value := string sorting_properties;
 	   lis#ajax_forest_properties ~inverse:inverse_properties (norm_constr current_constr) [elt_list]
-	    (fun ~partial -> function
-	    | None ->
+	    (function
+	    | Result.Error exn ->
+               Jsutils.firebug_exn exn;
 	       refreshing_properties <- false;
 	       let new_constr = property_constr in
 	       self#refresh_new_property_constr current_constr new_constr    
-	    | Some forest ->
+	    | Result.Ok {partial; forest} ->
 	      let html_sel, html_list, count =
 		let sort_by_frequency = to_string sel_sorting##.value = sorting_frequency in
 		html_incr_forest lis#focus html_state forest ~sort_by_frequency in
@@ -852,7 +854,7 @@ object (self)
 	 modifier_selection#toggle incr
       | _ -> ()
     in
-    let forest = lis#forest_modifiers in
+    let {Lis.partial; forest} = lis#forest_modifiers in
     match mode with
     | `Dropdown ->
       jquery "#focus-dropdown-content" (fun elt_dropdown ->
@@ -1196,35 +1198,34 @@ let rec make_js_place (place : place) =
       bool place#lis#partial_results
 
     method getTermSuggestions (inverse : bool t) (constr : Unsafe.any) : Unsafe.any (* Promise *) =
-      Jsutils.new_promise (fun resolve reject -> (* {partial: bool, suggs: incr_freq_forest}, unit *)
+      Jsutils.new_promise (fun resolve reject -> (* suggestions, exn *)
       place#lis#ajax_forest_terms_inputs_ids
         ~inverse:(to_bool inverse)
         (Lisql.js_constr_map.extract constr)
         []
-        (fun ~partial forest_opt ->
-          match forest_opt with
-          | None -> Unsafe.fun_call reject [||]
-          | Some forest ->
-             let js_forest = Lis.js_incr_freq_forest_map.inject forest in
-             Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |]))
+        (function
+         | Result.Error exn ->
+            Unsafe.fun_call reject [|Jsutils.Inject.exn exn|]
+         | Result.Ok suggs ->
+             let js_suggs = Lis.js_suggestions_map.inject suggs in
+             Unsafe.fun_call resolve [|js_suggs|]))
     method getConceptSuggestions (inverse : bool t) (constr : Unsafe.any) : Unsafe.any (* Promise *) =
-      Jsutils.new_promise (fun resolve reject -> (* {partial: bool, suggs: incr_freq_forest}, unit *)
+      Jsutils.new_promise (fun resolve reject -> (* suggestions, exn *)
       place#lis#ajax_forest_properties
         ~inverse:(to_bool inverse)
         (Lisql.js_constr_map.extract constr)
         []
-        (fun ~partial forest_opt ->
-          match forest_opt with
-          | None -> Unsafe.fun_call reject [||]
-          | Some forest ->
-             let js_forest = Lis.js_incr_freq_forest_map.inject forest in
-             Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |]))
+        (function
+         | Result.Error exn ->
+            Unsafe.fun_call reject [| Jsutils.Inject.exn exn |]
+         | Result.Ok suggs ->
+            let js_suggs = Lis.js_suggestions_map.inject suggs in
+            Unsafe.fun_call resolve [|js_suggs|]))
     method getModifierSuggestions : Unsafe.any (* Promise *) =
-      Jsutils.new_promise (fun resolve _reject -> (* {partial: bool, suggs: incr_freq_forest}, none *)
-      let partial = false in
-      let forest = place#lis#forest_modifiers in
-      let js_forest = Lis.js_incr_freq_forest_map.inject forest in
-      Unsafe.fun_call resolve [| Inject.(obj [|"partial", bool partial; "suggs", js_forest|]) |])
+      Jsutils.new_promise (fun resolve _reject -> (* suggestions, none *)
+      let suggs = place#lis#forest_modifiers in
+      let js_suggs = Lis.js_suggestions_map.inject suggs in
+      Unsafe.fun_call resolve [|js_suggs|])
 
     method applySuggestion (sugg : Unsafe.any) : Unsafe.any (* place, without computed results *) =
       let incr = Lisql.js_increment_map.extract sugg in
