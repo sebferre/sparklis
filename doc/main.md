@@ -26,182 +26,182 @@ The available properties and methods on those objects are described in the follo
 
 Access and control of the endpoint:
 
-- **`sparklis.endpoint(): string`**
+- **sparklis.endpoint(): string**
 
   returns the current endpoint URL
 
-- **`sparklis.changeEndpoint(url: string): void`**
+- **sparklis.changeEndpoint(url: string): void**
 
   changes the current endpoint to the one specified by `url`
 
-- **`sparklis.evalSparql(query: string): Promise(sparklis-results, int)`**
+- **sparklis.evalSparql(query: string): Promise([sparklis-results](#datatype-sparklis-results), int)**
 
   returns a promise of the *Sparklis results* (see datatypes) of the `query` on the current endpoint, according to the current Sparklis configuration; in case of error, the HTTP error code is thrown.
 
-- **`sparklis.externalSearchConstr(search: sparklis-search): Promise(sparklis-constr, error)`**
+- **sparklis.externalSearchConstr(search: [sparklis-search](#datatype-sparklis-search)): Promise([sparklis-constr](#datatype-sparklis-constr), error)**
 
   returns a promise of the constraint `ExternalSearch(search,terms)`, where `terms` is the list of result terms from the external search. With `TextQuery`, the search is done on the current endpoint.
 
 
 Access and control of the current navigation place:
 
-- **`sparklis.currentPlace(): sparklis-place`**
+- **sparklis.currentPlace(): [sparklis-place](#datatype-sparklis-place)**
 
   returns the current *Sparklis place* (see below for the API of Sparklis places)
 
-- **`sparklis.setCurrentPlace(p: sparklis-place): void`**
+- **sparklis.setCurrentPlace(p: [sparklis-place](#datatype-sparklis-place)): void**
 
   sets `p` as the new current place. This triggers the necessary computations and drawings to display the query, suggestions and results of the new place. The new place is pushed on top of the navigation history.
 
-- **`sparklis.refresh(): void`**
+- **sparklis.refresh(): void**
 
   forces to refresh the Sparklis view
 
 
 Access and control of the current constraints
 
-- **`sparklis.termConstr(): sparklis-constr`**
+- **sparklis.termConstr(): [sparklis-constr](#datatype-sparklis-constr)**
 
   returns the current *Sparklis constraint* on term suggestions
 
-- **`sparklis.conceptConstr(): sparklis-constr`**
+- **sparklis.conceptConstr(): [sparklis-constr](#datatype-sparklis-constr)**
 
   returns the current *Sparklis constraint* on concept suggestions (classes and properties)
 
-- **`sparklis.modifierConstr(): sparklis-constr`**
+- **sparklis.modifierConstr(): [sparklis-constr](#datatype-sparklis-constr)**
 
   returns the current *Sparklis constraint* on modifier suggestions
 
-- **`sparklis.setTermConstr(constr: sparklis-constr): void`**
+- **sparklis.setTermConstr(constr: [sparklis-constr](#datatype-sparklis-constr)): void**
 
   sets the current *Sparklis constraint* on term suggestions
 
-- **`sparklis.setConceptConstr(constr: sparklis-constr): void`**
+- **sparklis.setConceptConstr(constr: [sparklis-constr](#datatype-sparklis-constr)): void**
 
   sets the current *Sparklis constraint* on concept suggestions (classes and properties)
 
-- **`sparklis.setModifierConstr(constr: sparklis-constr): void`**
+- **sparklis.setModifierConstr(constr: [sparklis-constr](#datatype-sparklis-constr)): void**
 
   sets the current *Sparklis constraint* on modifier suggestions
 
 
 Modifying the current query. The new place is pushed on top of the navigation history.
 
-- **`sparklis.activateSuggestion(sugg: sparklis-suggestion): void`**
+- **sparklis.activateSuggestion(sugg: [sparklis-suggestion](#datatype-sparklis-suggestion)): void**
 
   is the programmatic equivalent of clickling a *Sparklis suggestion* (see datatypes) to insert or apply it in the query at the current focus
 
-- **`sparklis.deleteFocus(): void`**
+- **sparklis.deleteFocus(): void**
 
   is the programmatic equivalent of clicking the deletion cross at the right of the highlighted focus to delete the whole highlighted part of the query
 
 
 Moving the focus in the syntactic tree structure of the query. The new place replaces the current place in the navigation history.
 
-- **`sparklis.focusUp(): void`**
+- **sparklis.focusUp(): void**
 
   moves the focus up, if possible
 
-- **`sparklis.focusDown(): void`**
+- **sparklis.focusDown(): void**
 
   moves the focus down (leftmost), if possible
 
-- **`sparklis.focusLeft(): void`**
+- **sparklis.focusLeft(): void**
 
   moves the focus left, if possible
 
-- **`sparklis.focusRight(): void`**
+- **sparklis.focusRight(): void**
 
   moves the focus right, if possible
 
 
 Control of the navigation history:
 
-- **`sparklis.home(): void`**
+- **sparklis.home(): void**
 
   resets the Sparklis view with the initial query
 
-- **`sparklis.back(): void`**
+- **sparklis.back(): void**
 
   moves back in navigation history, if possible
 
-- **`sparklis.forward(): void`**
+- **sparklis.forward(): void**
 
   moves forward in navigation history, if possible
 
 
 Access to the labels of terms and concepts (lexicons):
 
-- **`sparklis.termLabels(): sparklis-lexicon`**
+- **sparklis.termLabels(): [sparklis-lexicon](#datatypes-sparklis-lexicon-and-sparklis-lexicon-syntagm)**
 
   returns the lexicon for terms (labels)
 
-- **`sparklis.classLabels(): sparklis-lexicon`**
+- **sparklis.classLabels(): [sparklis-lexicon](#datatypes-sparklis-lexicon-and-sparklis-lexicon-syntagm)**
 
   returns the lexicon for classes (labels)
 
-- **`sparklis.propertyLabels(): sparklis-lexicon-syntagm`**
+- **sparklis.propertyLabels(): [sparklis-lexicon-syntagm](#datatypes-sparklis-lexicon-and-sparklis-lexicon-syntagm)**
 
   returns the lexicon for properties (labels + syntagms)
 
-- **`sparklis.argLabels(): sparklis-lexicon-syntagm`**
+- **sparklis.argLabels(): [sparklis-lexicon-syntagm](#datatypes-sparklis-lexicon-and-sparklis-lexicon-syntagm)**
 
   returns the lexicon for property arguments (labels + syntagms)
 
 
-## Sparklis places (datatype `sparklis-place`)
+## Datatype `sparklis-place`
 
 Let us assume a Sparklis place `p`, representing a navigation state. The following methods are available.
 
-- **`p.query(): sparklis-query`**
+- **p.query(): [sparklis-query](#datatype-sparklis-query)**
 
   returns the abstract syntax tree (AST) of the NL query
 
-- **`p.focusPath(): sparklis-focus-path`**
+- **p.focusPath(): [sparklis-path](#datatype-sparklis-path)**
 
   returns the path in the query AST that leads to the current focus
 
-- **`p.focusId(): number or null`**
+- **p.focusId(): number or null**
 
   returns the defined id at focus, if any.
 
-- **`p.delta(): sparklis-delta`**
+- **p.delta(): [sparklis-delta](#datatype-sparklis-delta)**
 
   returns the delta relative to the previous place. The previous place is the place from which place `p` was created. The delta describes the new focus ids introduced (see the description of `sparklis-delta`).
 
-- **`p.permalink(): string`**
+- **p.permalink(): string**
 
   returns a permalink to this place
 
-- **`p.onEvaluated(callback: () => void): void`**
+- **p.onEvaluated(callback: () => void): void**
 
   calls `callback` when the place has been evaluated, i.e. when the SPARQL query, its results, and other related information are available.
 
-- **`p.sparql(): string`**
+- **p.sparql(): string**
 
   returns the SPARQL translation of the current query and focus. The place must have bene evaluated.
 
-- **`p.results(): sparklis-results`**
+- **p.results(): [sparklis-results](#datatype-sparklis-results)**
 
   returns the *Sparklis results* (see datatypes) of the current query focus, as retrieved from the endpoint. They are structured as a table filled with RDF terms (and null values). The place must have been evaluated.
 
-- **`p.hasPartialResults(): bool`**
+- **p.hasPartialResults(): bool**
 
   returns whether the Sparklis results are partial or not. The place must have been evaluated.
 
-- **`p.getTermSuggestions(inverse: bool, termConstr: sparklis-constr): Promise(sparklis-suggestions, error)`**
+- **p.getTermSuggestions(inverse: bool, termConstr: [sparklis-constr](#datatype-sparklis-constr)): Promise([sparklis-suggestions](#datatype-sparklis-suggestions), error)**
 
   returns a promise of the term suggestions (see datatype `sparklis-suggestions`) matching the given term constraint. The place must have been evaluated.
 
-- **`p.getConceptSuggestions(inverse: bool, conceptConstr: sparklis-constr): Promise(sparklis-suggestions, error)`**
+- **p.getConceptSuggestions(inverse: bool, conceptConstr: [sparklis-constr](#datatype-sparklis-constr)): Promise([sparklis-suggestions](#datatype-sparklis-suggestions), error)**
 
   returns a promise of the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The place must have been evaluated.
 
-- **`p.getModifierSuggestions(): Promise(sparklis-suggestions, ())`**
+- **p.getModifierSuggestions(): Promise([sparklis-suggestions](#datatype-sparklis-suggestions), ())**
 
   returns a promise of the modifier suggestions (see datatype `sparklis-suggestions`). The place must have been evaluated.
 
-- **`p.focusAtPath(path: sparklis-path): sparklis-place`**
+- **p.focusAtPath(path: [sparklis-path](#datatype-sparklis-path)): [sparklis-place](#datatype-sparklis-place)**
 
   generates a new Sparklis place resulting from moving the focus at
   the specified focus path. To allow for efficient chaining of this
@@ -209,17 +209,17 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
   and suggestions are explicitly asked for with methods `getResults`
   and `getXXXSuggestions`.
 
-- **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
+- **p.applySuggestion(sugg: [sparklis-suggestion](#datatype-sparklis-suggestion)): [sparklis-place](#datatype-sparklis-place)**
 
   generates a new Sparklis place resulting from the application of the given suggestion to place `p`. To allow for efficient chaining of this method, no call to the SPARQL endpoint is triggered before results and suggestions are explicitly asked for with methods `getResults` and `getXXXSuggestions`.
 
 
-## Sparklis lexicons (datatypes `sparklis-lexicon` and `sparklis-lexicon-syntagm`)
+## Datatypes `sparklis-lexicon` and `sparklis-lexicon-syntagm`
 
 Let us assume a Sparklis lexicon `lex`, which provides access to a
 collection of labels. The following methods are available.
 
-- **`lex.info(uri: string): string or { label: string, syntagm: ("Noun" | "InvNoun" | "TransVerb" | "TransAdj")}`**
+- **lex.info(uri: string): string or { label: string, syntagm: ("Noun" | "InvNoun" | "TransVerb" | "TransAdj")}**
 
   returns the labelling information for the passed URI. For datatype `sparklis-lexicon`, that information is a simple string. For datatype `sparklis-lexicon-syntagm`, that information is an object with two fields:
   - `label`: a string
@@ -229,11 +229,11 @@ collection of labels. The following methods are available.
     - `"TransVerb"`: a transitive verb (e.g., knows, lives in)
     - `"TransAdj"`: a transitive adjective (e.g., next to)
 
-- **`lex.enqueue(uri: string): void`**
+- **lex.enqueue(uri: string): void**
 
   enqueues the passed URI in the next batch to retrieve labels
 
-- **`lex.sync(): Promise((), ())`**
+- **lex.sync(): Promise((), ())**
 
   synchronizes the lexicon by retrieving the labelling information for
   all queued URIs, and resolving the returned promise when done
@@ -245,19 +245,19 @@ This object has a number of properties that are undefined by default. By definin
 
 A common form of customization is a *hook*, i.e. a custom function that is called by Sparklis at some step in the data workflow. That function can have both side effects and a result. If the result is undefined, then only side effects occur and the data workflow is left unchanged.
 
-- **`sparklis_extension.hookSparql: (string => string or undefined) or undefined`**
+- **sparklis_extension.hookSparql: (string => string or undefined) or undefined**
 
   can hold a function that will be called on each SPARQL translation of the user query, and that may return a modified SPARQL query, which will be the one sent to the SPARQL endpoint for evaluation. This can be used to handle features that are specific to the target endpoint.
 
-- **`sparklis_extension.hookResults: (sparklis-results => sparklis-results or undefined) or undefined`**
+- **sparklis_extension.hookResults: ([sparklis-results](#datatype-sparklis-results) => sparklis-results or undefined) or undefined**
 
   can hold a function that will be called on each Sparklis results, and that may return modified results, which will be the one displayed to the user. Side effects can here be used to generate and display an alternative view of results to the user (e.g., charts, a custom map). In combination with `hookSparql`, this can be used to post-process the results of a modified SPARQL query so that they align with the user query (e.g., removing some columns).
 
-- **`sparklis_extension.hookSuggestions: (sparklis-typed-suggestions => sparklis-typed-suggestions or undefined) or undefined`**
+- **sparklis_extension.hookSuggestions: ([sparklis-typed-suggestions](#datatype-sparklis-typed-suggestions) => sparklis-typed-suggestions or undefined) or undefined**
 
   can hold a function that will be called on each set of suggestions (terms, concepts, and modifiers), and may return a modified set of suggestions, which will be the one displayed to the user. This can be used to filter out some suggestions or to forcibly add some suggestions.
 
-- **`sparklis_extension.hookApplySuggestion: ((place: sparklis-place, sugg: sparklis-suggestion) => sparklis-place or undefined) or undefined`**
+- **sparklis_extension.hookApplySuggestion: ((place: [sparklis-place](#datatype-sparklis-place), sugg: [sparklis-suggestion](#datatype-sparklis-suggestion)) => sparklis-place or undefined) or undefined`**
 
   can hold a function that will be called each time when a suggestion is applied to some Sparklis place. Given the place and the suggestion, the function may return a new Sparklis place, as a substitute for the default target place. This can be used to customize the application of suggestions, e.g. applying automatic focus moves after suggestion application.
 
