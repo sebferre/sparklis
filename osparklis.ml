@@ -1175,6 +1175,10 @@ let rec make_js_place (place : place) =
       Lisql.js_elt_s_map.inject place#lis#query
     method focusPath : Unsafe.any (* path *) =
       Lisql.js_path_map.inject place#lis#path
+    method focusId : Unsafe.any (* id *) =
+      match Lisql.id_of_focus place#lis#focus with
+      | Some id -> Jsutils.Inject.int id
+      | None -> Jsutils.Inject.null
 
     method delta : Unsafe.any =
       Lisql.js_delta_map.inject place#delta
@@ -1227,6 +1231,15 @@ let rec make_js_place (place : place) =
       let js_suggs = Lis.js_suggestions_map.inject suggs in
       Unsafe.fun_call resolve [|js_suggs|])
 
+    method focusAtPath (js_path : Unsafe.any) : Unsafe.any (* place after focus move *) =
+      try
+        let path = Lisql.js_path_map.extract js_path in
+        let new_focus = Lisql.focus_of_elt_s_path (place#lis#query, path) in
+        let p = place#new_place place#lis#endpoint new_focus Lisql.DeltaNil in
+        js_place_map.inject p
+      with _ -> (* invalid path *)
+        Jsutils.raise_error "Invalid focus path"
+      
     method applySuggestion (sugg : Unsafe.any) : Unsafe.any (* place, without computed results *) =
       let incr = Lisql.js_increment_map.extract sugg in
       match Lisql.insert_increment incr place#lis#focus with

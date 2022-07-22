@@ -161,6 +161,10 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 
   returns the path in the query AST that leads to the current focus
 
+- **`p.focusId(): number or null`**
+
+  returns the defined id at focus, if any.
+
 - **`p.delta(): sparklis-delta`**
 
   returns the delta relative to the previous place. The previous place is the place from which place `p` was created. The delta describes the new focus ids introduced (see the description of `sparklis-delta`).
@@ -196,6 +200,14 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 - **`p.getModifierSuggestions(): Promise(sparklis-suggestions, ())`**
 
   returns a promise of the modifier suggestions (see datatype `sparklis-suggestions`). The place must have been evaluated.
+
+- **`p.focusAtPath(path: sparklis-path): sparklis-place`**
+
+  generates a new Sparklis place resulting from moving the focus at
+  the specified focus path. To allow for efficient chaining of this
+  method, no call to the SPARQL endpoint is triggered before results
+  and suggestions are explicitly asked for with methods `getResults`
+  and `getXXXSuggestions`.
 
 - **`p.applySuggestion(sugg: sparklis-suggestion): sparklis-place`**
 
