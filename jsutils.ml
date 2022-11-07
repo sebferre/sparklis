@@ -654,7 +654,7 @@ object (self)
     | Some yasgui ->
       let yasqe = self#yasqe yasgui in
       yasqe##.options##.sparql##.endpoint := string endpoint;
-      jquery_set_innerHTML ".yasgui .endpointText .item" endpoint
+      jquery_set_innerHTML ".yasgui .endpointText .item" (escapeHTML endpoint)
 
   method set_requestMethod (meth : [`GET | `POST]) : unit =
     match this_opt with
