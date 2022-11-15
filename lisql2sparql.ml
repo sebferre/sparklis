@@ -158,7 +158,7 @@ let filter_kwds_gen (ctx : filter_context) (gv : genvar) ~(label_properties_lang
 	   Common.mapfilter
 	     (fun kwd ->
 	      let n = String.length kwd in
-	      if n < 4 then None
+	      if n < 4 then Some ("'" ^ kwd ^ "'") (* wildcard must be at least 4 chars long in Virtuoso *)
 	      else Some ("'" ^ kwd ^ "*'"))
 	     kwds in
 	 let sql_query =
