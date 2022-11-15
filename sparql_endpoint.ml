@@ -76,6 +76,9 @@ let unit_results = { dim=0; vars=[]; length=1; bindings=[ [||] ]; }
 
 let results_vars (res : results) =
   List.map fst res.vars
+
+let results_are_empty (res : results) : bool =
+  res.length = 0
 		     
 let float_of_results (res: results) : float option =
 (* useful for simple aggregations returning a single number cell *)
@@ -390,7 +393,7 @@ let cache_eval (endpoint : string) (sparql : string) : results option =
   | None -> None
 
 (* query evaluation, by AJAX call if required *)
-let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(update_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
+let rec ajax_in ?(tentative = false) ?(update_yasgui = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
     (k1 : results -> unit) (k0 : int -> unit) =
  if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
@@ -475,12 +478,8 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(update_y
 		      Firebug.console##log (string "No XML content");
 		      k0 code
 		    | Some (response_text, results) ->
-		      if fail_on_empty_results && results.length = 0
-		      then k0 code
-		      else begin
-			cache#replace real_endpoint prologue_sparql (response_text, results);
-			k1 results
-		      end)
+		       cache#replace real_endpoint prologue_sparql (response_text, results);
+		       k1 results)
 		| 0 ->
 		  if config_proxy#value (* proxy was used *)
 		  then begin
@@ -513,7 +512,7 @@ let rec ajax_in ?(fail_on_empty_results = false) ?(tentative = false) ?(update_y
       then req##send Js.null
       else req##send (Js.some (string (encode_fields fields)))
 
-let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpoint sparql_list k1 k0 =
+let rec ajax_list_in ?tentative elts pool endpoint sparql_list k1 k0 =
   match sparql_list with
     | [] -> k1 []
     | s::ls ->
@@ -522,9 +521,7 @@ let rec ajax_list_in ?(fail_on_empty_results = false) ?tentative elts pool endpo
 	  ajax_list_in ?tentative elts pool endpoint ls
 	    (fun rs1 ->
 	      let rs = r::rs1 in
-	      if fail_on_empty_results && List.for_all (fun r -> r.length = 0) rs
-	      then k0 200
-	      else k1 rs)
+	      k1 rs)
 	    (fun code -> k0 code))
 	(fun code -> k0 code)
 

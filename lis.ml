@@ -1438,12 +1438,15 @@ object (self)
 	       Lisql2sparql.filter_constr_property
 	       config_max_properties
 	else "" in
-      Sparql_endpoint.ajax_list_in ~tentative:true ~fail_on_empty_results:false(*true*) elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
+      Sparql_endpoint.ajax_list_in ~tentative:true elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred]
 	(function
 	  | [results_class; results_prop; results_pred] ->
-	     process results_class results_prop results_pred
+             (*if partial && List.for_all Sparql_endpoint.results_are_empty lres
+             then ajax_extent () (* looking at facts *)
+	     else*) (* rather rely on configuration to choose extent/intent *)
+             process results_class results_prop results_pred
 	  | _ -> assert false)
-	(fun _ -> ajax_extent ()) (* looking at facts *)
+        (fun code -> k (Result.Error (Failure ("Initial concept suggestions: HTTP error code " ^ string_of_int code))))
     in
     let process_wikidata results_class =
       let max_value = None in
@@ -1899,12 +1902,14 @@ object (self)
 		 (fun ?hook lt ->
 		   let args = List.map2 (fun (arg,_) t -> (arg,t)) args lt in
 		   Lisql2sparql.WhichArg.pattern_of_pred_args ?hook pred args) in
-          Sparql_endpoint.ajax_list_in ~fail_on_empty_results:false(*true*) elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
+          Sparql_endpoint.ajax_list_in elts ajax_pool endpoint [sparql_class; sparql_prop; sparql_pred; sparql_arg]
 	    (function
-	     | [results_class; results_prop; results_pred; results_arg] ->
-	        process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
+	     | ([results_class; results_prop; results_pred; results_arg] as lres) ->
+                if partial && List.for_all Sparql_endpoint.results_are_empty lres
+                then ajax_intent ()
+	        else process ~max_value_term ~max_value_arg ~partial ~unit results_class results_prop results_pred results_arg
 	     | _ -> assert false)
-	    (fun _ -> ajax_intent ())
+            (fun code -> k (Result.Error (Failure ("Concept suggestions: HTTP error code " ^ string_of_int code))))
         in
         if focus_term_index#is_empty then
           if some_focus_term_is_not_queryable then ajax_intent ()
