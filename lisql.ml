@@ -113,6 +113,17 @@ let reset_constr : constr -> constr = function
   | HasDatatype _ -> HasDatatype "..."
   | ExternalSearch (s, _) -> ExternalSearch (reset_search s, None)
 
+let filter_external_search (f : Rdf.uri -> bool) : constr -> constr = function
+  | ExternalSearch (s, Some lt) ->
+     let lt = (* TODO: should handle empty list *)
+       List.filter
+         (function
+          | Rdf.URI uri -> f uri
+          | t -> true) (* should not happen *)
+         lt in
+     ExternalSearch (s, Some lt)
+  | c -> c
+                           
 (* LISQL modifiers *)
 
 type num_conv_type = IntegerConv | DecimalConv | DoubleConv

@@ -743,6 +743,8 @@ end
 (* Wikidata services *)
 module Wikidata =
   struct
+    let prefix_property = "Property:"
+    let prefix_property_len = String.length prefix_property
     let entities_of_json ojson : (string list, exn) Result.t =
       try
 	let oquery = Unsafe.get ojson (string "query") in
@@ -752,21 +754,29 @@ module Wikidata =
 	for i = n-1 downto 0 do
 	  let oresult = Unsafe.get osearch (string (string_of_int i)) in
 	  let otitle = Unsafe.get oresult (string "title") in
-	  le := (Js.to_string otitle)::!le
+          let title = Js.to_string otitle in
+          let e =
+            let title_len = String.length title in
+            if Common.has_prefix title prefix_property
+            then (* Pxxx *) String.sub title prefix_property_len (title_len - prefix_property_len)
+            else (* Qxxx *) title in
+	  le := e::!le
 	done;
-	firebug (string_of_int n ^ " wikidata entities found");
+	firebug (string_of_int n ^ " wikidata entities (items and properties) found");
 	Result.Ok !le
       with exn ->
 	Result.Error (Failure ("Wikidata entity search: unexpected JSON: " ^ Printexc.to_string exn))
 
-    let ajax_entity_search (query : string) (limit : int) (k : (string list, exn) Result.t -> unit) : unit =
+    let ajax_entity_search (query : string) (limit : int) (k : (string list, exn) Result.t -> unit) : unit = (* the returned list is made of Pxxx and Qxxx, property and item identifiers *)
       if String.length query < 3
       then k (Result.Error (Failure "Wikidata entity search: query too short (less than 3 cars)"))
       else
 	let _ = firebug ("Wikidata entity search: " ^ query) in
 	let query_url =
 	  Printf.sprintf
-	    "https://www.wikidata.org/w/api.php?action=query&list=search&format=json&srlimit=%d&srsearch=%s"
+	    "https://www.wikidata.org/w/api.php?action=query&list=search&srnamespace=0|120&format=json&srlimit=%d&srsearch=%s"
+            (* namespace 0 is for items, and namespace 120 is for properties *)
+            (* SEE https://www.mediawiki.org/w/api.php?action=help&modules=query%2Bsearch for for doc *)
 	    (*"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=%d&search=%s" (* type=item|property *) NOTE: less flexible search *)
 	    limit
 	    (Url.urlencode query) in

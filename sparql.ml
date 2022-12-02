@@ -102,6 +102,7 @@ object (self)
        ("http://www.wikidata.org/prop/statement/","ps:");
        ("http://www.wikidata.org/prop/","p:");
        ("http://www.wikidata.org/prop/direct/","wdt:");
+       ("http://www.wikidata.org/entity/","wd:");
        ("http://wikiba.se/ontology#","wikibase:");
        ("http://purl.org/dc/terms/", "dcterms:");
        ("http://purl.org/dc/elements/1.1/", "dc:");

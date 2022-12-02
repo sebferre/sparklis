@@ -242,10 +242,34 @@ let filter_constr_gen (ctx : filter_context) (gv : genvar) ~(label_properties_la
     | ExternalSearch (_, None) -> Sparql.True
     | ExternalSearch (_, Some lt) ->
        Sparql.formula_term_in_term_list t (List.map Sparql.term lt)
-					
-let filter_constr_entity gv t c (ft : Lisql.filter_type) = filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
-let filter_constr_class gv t c = filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
-let filter_constr_property gv t c = filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
+
+let filter_constr_entity gv t c (ft : Lisql.filter_type) =
+  let c =
+    if Rdf.config_wikidata_mode#value
+    then
+      Lisql.filter_external_search
+        (fun uri -> Common.has_prefix uri Rdf.wikidata_entity_base)
+        c
+    else c in
+  filter_constr_gen (`Terms,ft,`Filter) gv ~label_properties_langs:Lexicon.config_entity_lexicon#properties_langs t c
+let filter_constr_class gv t c =
+  let c =
+    if Rdf.config_wikidata_mode#value
+    then
+      Lisql.filter_external_search
+        (fun uri -> Common.has_prefix uri Rdf.wikidata_entity_base)
+        c
+    else c in
+  filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
+let filter_constr_property gv t c =
+  let c =
+    if Rdf.config_wikidata_mode#value
+    then
+      Lisql.filter_external_search
+        (fun uri -> not (Common.has_prefix uri Rdf.wikidata_entity_base))
+        c
+    else c in
+  filter_constr_gen (`Properties,OnlyIRIs,`Filter) gv ~label_properties_langs:Lexicon.config_concept_lexicon#properties_langs t c
 
 let search_constr_entity (gv : genvar) (t : _ Sparql.any_term) (c : constr) (ft : Lisql.filter_type) : Sparql.formula =
   let label_properties_langs = Lexicon.config_entity_lexicon#properties_langs in
@@ -507,13 +531,12 @@ module WhichPred =
 	| Some t -> false, t in
       if Rdf.config_wikidata_mode#value
       then
-	let make_pat p1 p2 pat =
-	  let pat = Sparql.join [pat; filter_wikidata p1 p2] in
-	  make_pat ?hook p1 pat in
-	let pat_wikidata =
-	  Sparql.(union
+        let pat_wikidata p1 p2 pat =
+          Sparql.join [pat; filter_wikidata p1 p2] in
+        let pat =
+          Sparql.(union
 		    [ if Rdf.term_can_be_subject t
-                      then make_pat "pe" "po"
+                      then pat_wikidata "pe" "po"
 			     (triple (* forward: pe, po *)
 				(term t)
 				(var "pe")
@@ -523,25 +546,13 @@ module WhichPred =
                       
 		      if init
 		      then empty
-		      else join (* backward: pe, ps, po *)
-			     [ make_pat "pe" "ps"
-					(triple
-					   (bnode "")
-					   (var "pe")
-					   (bnode_triples
-					      [ var "ps", term t ])) ] (* binding 'ps' to distinguish orientation *)
-		    (*join (* qualifier: pe, po, pq *)
-		      [ triple
-			  (bnode "")
-			  (var "pe")
-			  (bnode_triples
-			     [ var "po", bnode "";
-			       var "pq", term t ]);
-			filter
-			  (expr_infix "!=" [var "pq"; var "po"])
-		      ]*)
-		    ]) in
-	pat_wikidata
+		      else pat_wikidata "pe" "ps"
+			     (triple  (* backward: pe, ps, po *)
+				(bnode "")
+				(var "pe")
+				(bnode_triples
+				   [ var "ps", term t ])) ]) in (* binding 'ps' to distinguish orientation *)
+        make_pat ?hook "pe" pat
       else
 	let pat_SO =
 	  Sparql.(join

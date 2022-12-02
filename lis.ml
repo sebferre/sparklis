@@ -786,11 +786,17 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.co
      Jsutils.Wikidata.ajax_entity_search
        query limit
        (function
-        | Result.Ok lq ->
+        | Result.Ok le ->
            let lt =
              List.map
-	       (fun q -> Rdf.URI (Rdf.wikidata_entity q))
-	       lq in
+	       (fun e ->
+                 match e.[0] with
+                 | 'P' ->
+                    if config_nary_relations#value (* see Lisq2sparql.WhichProp/Pred *)
+                    then Rdf.URI (Rdf.wikidata_prop e)
+                    else Rdf.URI (Rdf.wikidata_prop_direct e)
+                 | _ (* 'Q' *) -> Rdf.URI (Rdf.wikidata_entity e))
+	       le in
            k (Result.Ok (Lisql.ExternalSearch (search, Some lt)))
         | (Result.Error _ as err) -> k err)
   | TextQuery kwds ->
@@ -1472,10 +1478,11 @@ object (self)
           let suggestions = {partial; forest} in
           let _, suggestions = hook_suggestions (Concepts, suggestions) in
 	  k (Result.Ok suggestions)) in
-    let process_wikidata_with_external_search (lx : Rdf.var list) (lt : Rdf.term list) results_class =
+    let process_wikidata_with_external_search (lx : Rdf.var list) (ltq : Rdf.term list) (ltp : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
       let open Sparql_endpoint in
+      (* adding class increments *)
       ( match results_class.bindings with
 	| binding::_ -> (* LIMIT 1 => at most one binding *)
 	   List.iter2
@@ -1491,8 +1498,26 @@ object (self)
 		       (fun incr -> incr_index#add (incr, Some freq))
 		| _ -> ()
 	      with Not_found -> assert false)
-	     lx lt
+	     lx ltq
 	| _ -> () );
+      (* adding property increments *)
+      List.iter
+        (fun t ->
+          match t with
+          | Rdf.URI uri ->
+             Ontology.enqueue_property uri;
+             Lexicon.enqueue_property uri;
+             let incrs =
+               if config_nary_relations#value
+               then
+                 let uri_stat = Rdf.wikidata_rebase uri Rdf.wikidata_prop_base Rdf.wikidata_prop_statement_base in
+                 Lisql2sparql.WhichPred.increments_of_terms ~init:true [Some t; None; Some (Rdf.URI uri_stat); None]
+               else Lisql2sparql.WhichProp.increments_of_terms ~init:true [Some t; None] in
+             List.iter
+               (fun incr -> incr_index#add (incr, Some freq))
+               incrs
+          | _ -> ())
+        ltp;
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
           let suggestions = {partial = true; forest} in
@@ -1516,7 +1541,13 @@ object (self)
                     :> string)),
            None
 	| Lisql.ExternalSearch (_, Some lt) ->
-	   let lx = List.mapi (fun i t -> "x" ^ string_of_int (i+1)) lt in
+           let ltq, ltp = (* separating Qxxx and Pxxx *)
+             List.partition
+               (function
+                | Rdf.URI uri -> Common.has_prefix uri Rdf.wikidata_entity_base
+                | _ -> true) (* should not happen *)
+             lt in
+	   let lx = List.mapi (fun i t -> "x" ^ string_of_int (i+1)) ltq in
            Sparql.((select
                       ~distinct:false
                       ~projections:(List.map (fun x -> `Bare, x) lx)
@@ -1525,9 +1556,9 @@ object (self)
                       (join
                          (List.map2
                             (fun x t -> optional (rdf_type (var x) (term t)))
-                            lx lt))
+                            lx ltq))
                     :> string)),
-           Some (lx,lt)
+           Some (lx,ltq,ltp)
 	| _ -> "", None in (* avoiding timeouts in evaluations *)
       Jsutils.firebug sparql_class;
       if sparql_class = ""
@@ -1538,7 +1569,7 @@ object (self)
 	  (function
 	    | [results_class] ->
 	       ( match lt_opt with
-		 | Some (lx,lt) -> process_wikidata_with_external_search lx lt results_class
+		 | Some (lx,ltq,ltp) -> process_wikidata_with_external_search lx ltq ltp results_class
 		 | None -> process_wikidata results_class )
 	    | _ -> assert false)
 	  (fun code -> k (Result.Error (Failure ("Initial concept suggestions: HTTP error code " ^ string_of_int code))))
@@ -1555,8 +1586,6 @@ object (self)
       k (Result.Ok {partial = false; forest = []}) (* only constraints on aggregations (HAVING clause) *)
     else if focus_descr#unconstrained then
       self#ajax_forest_properties_init ~inverse constr elts k
-    else if Rdf.config_wikidata_mode#value && constr <> Lisql.True then
-      k (Result.Error (Failure "Concept suggestions: constraint not supported on Wikidata, except for initial suggestions")) (* timeout pbs *)
     else begin
         let hierarchy_focus_as_incr_opt =
           let open Lisql in
@@ -2113,7 +2142,7 @@ object (self)
 	IsExactly "...";
 	StartsWith "...";
 	EndsWith "..." ] in
-    if Rdf.config_wikidata_mode#value && focus_descr#unconstrained then
+    if Rdf.config_wikidata_mode#value then
       ExternalSearch (WikidataSearch ["..."], None) :: l_constr
     (*else if Lisql2sparql.config_fulltext_search#value = "text:query" then
       ExternalSearch (`TextQuery ["..."], None) :: l_constr*)

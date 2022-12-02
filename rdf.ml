@@ -66,10 +66,27 @@ let wikibase_Property = "http://wikiba.se/ontology#Property"
 let wikibase_directClaim = "http://wikiba.se/ontology#directClaim"
 let wikibase_claim = "http://wikiba.se/ontology#claim"
 let wikibase_statementProperty = "http://wikiba.se/ontology#statementProperty"
-let wikidata_entity (q : string) = "http://www.wikidata.org/entity/" ^ q
+let wikidata_entity_base = "http://www.wikidata.org/entity/"
+let wikidata_entity (q : string) = wikidata_entity_base ^ q
+let wikidata_prop_base = "http://www.wikidata.org/prop/"
+let wikidata_prop (p : string) = wikidata_prop_base ^ p
+let wikidata_prop_statement_base = "http://www.wikidata.org/prop/statement/"
+let wikidata_prop_statement (p : string) = wikidata_prop_statement_base ^ p
+let wikidata_prop_direct_base = "http://www.wikidata.org/prop/direct/"
+let wikidata_prop_direct (p : string) = wikidata_prop_direct_base ^ p
 let wikidata_Q (n : int) = "http://www.wikidata.org/entity/Q" ^ string_of_int n
 let wikidata_P (n : int) = "http://www.wikidata.org/prop/P" ^ string_of_int n
 let p_P625 = wikidata_P 625 (* Wikidata: geographical coordinates *)
+let wikidata_rebase uri base new_base =
+  if Common.has_prefix uri base
+  then
+    let k = String.length base in
+    let name = String.sub uri k (String.length uri - k) in
+    new_base ^ name
+  else (
+    Jsutils.firebug ("Rdf.wikidata_rebase: unexpected URI: " ^ uri);
+    uri)
+
 
 let lat_long_properties =
   [ "http://www.w3.org/2003/01/geo/wgs84_pos#lat", "http://www.w3.org/2003/01/geo/wgs84_pos#long";
