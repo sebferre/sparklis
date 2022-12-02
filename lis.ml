@@ -780,9 +780,10 @@ let geolocations_of_results (geolocs : (Sparql.term * (Rdf.var * Rdf.var)) list)
 
 let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.constr, exn) Result.t -> unit) : unit =
   match search with
+  | WikidataSearch [] -> k (Result.Ok Lisql.True)
   | WikidataSearch kwds ->
      let query = String.concat "+" kwds in
-     let limit = 20 in
+     let limit = 30 in
      Jsutils.Wikidata.ajax_entity_search
        query limit
        (function
@@ -799,6 +800,7 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.co
 	       le in
            k (Result.Ok (Lisql.ExternalSearch (search, Some lt)))
         | (Result.Error _ as err) -> k err)
+  | TextQuery [] -> k (Result.Ok Lisql.True)
   | TextQuery kwds ->
      let lucene = Jsutils.lucene_query_of_kwds kwds in
      if lucene = ""
@@ -958,11 +960,7 @@ object (self)
     | false, false -> OnlyIRIs
 
   method ajax_sparql_results ?limit term_constr elts (k : unit -> unit) : unit =
-  (* if limit or term_constr new, then redefine SPARQL query and results, and continue when ready *)
-    if results_ok && (limit = None || limit = Some current_limit) && term_constr = current_term_constr
-    then k ()
-    else (
-      (* define the new SPARQL query *)
+    (* define the new SPARQL query *)
       let limit =
         match limit with
         | None -> config_max_results#value
@@ -1003,8 +1001,7 @@ object (self)
            (fun code ->
              (* no state update *)
              k ())
-    )
-               
+
 
   method id_typing (id : Lisql.id) : Lisql_type.datatype list =
     try
