@@ -1,0 +1,1619 @@
+<!--
+  Copyright 2013 Sébastien Ferré, IRISA, Université de Rennes 1
+
+  This file is part of Sparklis.
+  -->
+<!DOCTYPE html>
+<html>
+<head>
+<title>Sparklis</title>
+<meta charset="UTF-8"/>
+<meta name="author" content="Sébastien Ferré"/>
+<meta name="description" content="Sparklis lets you explore a RDF dataset through a SPARQL endpoint without the need to read or write SPARQL queries. Queries are displayed in natural language syntax, and are incrementally built by clicking suggested query elements, and by inserting them at the current focus. Only relevant suggestions are made, so that empty results are avoided."/>
+<meta name="keywords" content="SPARQL, faceted search, semantic search, exploratory search, complex queries, natural language interface, logical information systems"/>
+
+<!-- Google Charts -->
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+  google.charts.load('current', { 'packages': ['map'], mapsApiKey: 'AIzaSyC1lxqo51Ivm0BrOc0ogkOBUFjHcoczqNo' });
+</script>
+<!-- YASGUI -->
+<link href="https://cdn.jsdelivr.net/yasgui/2.6.1/yasgui.min.css" rel="stylesheet" type="text/css"/>
+<script src="https://cdn.jsdelivr.net/yasgui/2.6.1/yasgui.min.js"></script>
+<!-- jQuery library -->
+<script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+<!-- Bootstrap -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"/>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+<!-- Sparklis -->
+<link href="osparklis.css?v=2" rel="stylesheet" type="text/css"/>
+<script src="osparklis.js"></script>
+<!-- TEST JS API - example extension -->
+<!-- <script src="example_extension.js"></script> -->
+</head>
+
+<body>
+  <nav class="navbar navbar-inverse">
+    <div class="container-fluid">
+      <div class="navbar-header">
+	<button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#myNavbar">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>                        
+	</button>
+	<a class="navbar-brand">Sparklis</a>
+      </div>
+
+      <div class="collapse navbar-collapse" id="myNavbar">
+
+	<ul class="nav navbar-nav navbar-left">
+
+	  <li>      
+	    <span class="navbar-form">
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URL of the desired SPARQL endpoint</span>
+		<span class="tooltip lang-fr">Entrer ici l'URL du point d'accès SPARQL souhaité</span>
+		<span class="tooltip lang-es">Ingrese aquí la URL del SPARQL endpoint requerido</span>
+		<span class="tooltip lang-nl">Vul hier de URL van de gewenste SPARQL endpoint in</span>
+		<input id="sparql-endpoint-input" class="form-control no-padding" type="url"
+		       value="http://servolis.irisa.fr/dbpedia/sparql">  <!-- default endpoint -->
+	      </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Click to connect to the entered SPARQL endpoint</span>
+		<span class="tooltip lang-fr">Cliquer pour se connecter au point d'accès SPARQL choisi</span>
+		<span class="tooltip lang-es">Haga clic para conectarse a el SPARQL endpoint ingresado</span>
+		<span class="tooltip lang-nl">Klik om te verbinden met de SPARQL endpoint</span>
+		<button id="sparql-endpoint-button" class="btn btn-primary navbar-btn">Go</button>
+	      </span>
+	    </span>
+	  </li>
+
+	  <li>
+	    <span class="tooltiped">
+	      <span class="tooltip lang-en">Click here to edit the title of the endpoint</span>
+		<span class="tooltip lang-fr">Cliquer ici pour éditer le titre du point d'accès</span>
+		<span class="tooltip lang-es">Haga clic aquí para editar el título de el endpoint</span>
+		<span class="tooltip lang-nl">Klik hier om de titel van het endpoint te bewerken</span>
+		<span id="sparql-endpoint-title" class="navbar-text" contenteditable="true"></span> <!-- default title -->
+	    </span>
+	  </li>
+	</ul>
+
+	<ul class="nav navbar-nav navbar-right">
+	  <!--
+	  <li class="dropdown">
+	    <a class="dropdown-toggle" data-toggle="dropdown">
+	      <span class="texte lang-en">Issues</span>
+	      <span class="texte lang-fr">Problèmes</span>
+	      <span class="texte lang-es">Problemas</span>
+	      <span class="texte lang-nl">Problemen</span>
+	      <span class="caret"></span>
+	    </a>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a target="_blank" href="https://bitbucket.org/sebferre/sparklis/issues/new">
+		  <span class="texte lang-en">Create an issue</span>
+		  <span class="texte lang-fr">Déclarer un problème</span>
+		  <span class="texte lang-es">Reportar un problema</span>
+		  <span class="texte lang-nl">Creëer een probleem</span>
+		</a>
+	      </li>
+	    </ul>
+	  </li>
+	  -->
+
+	  <li class="dropdown">
+	    <a class="dropdown-toggle" data-toggle="dropdown">
+	      <span class="texte lang-en">Configure</span>
+	      <span class="texte lang-fr">Configurer</span>
+	      <span class="texte lang-es">Configurar</span>
+		  <span class="texte lang-nl">Configureren</span>
+	      <span class="caret"></span>
+	    </a>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a data-toggle="modal" data-target="#config-endpoint-modal">
+		  <span class="texte lang-en">Endpoint and queries</span>
+		  <span class="texte lang-fr">Points d'accès et requêtes</span>
+		  <span class="texte lang-es">Endpoint y consultas</span>
+		  <span class="texte lang-nl">Endpoint en queries</span>
+		</a>
+	      </li>
+	      <li>
+		<a data-toggle="modal" data-target="#config-ontology-modal">
+		  <span class="texte lang-en">Ontology</span>
+		  <span class="texte lang-fr">Ontologie</span>
+		  <span class="texte lang-es">Ontología</span>
+		  <span class="texte lang-nl">Ontologie</span>
+		</a>
+	      </li>
+	      <li>
+		<a data-toggle="modal" data-target="#config-language-modal">
+		  <span class="texte lang-en">Language and labels</span>
+		  <span class="texte lang-fr">Langue et étiquettes</span>
+		  <span class="texte lang-es">Idioma y etiquetas</span>
+		  <span class="texte lang-nl">Taal en labels</span>
+		</a>
+	      </li>
+	      <li>
+		<a data-toggle="modal" data-target="#config-advanced-modal">
+		  <span class="texte lang-en">Advanced features</span>
+		  <span class="texte lang-fr">Fonctionnalités avancées</span>
+		  <span class="texte lang-es">Características avanzadas</span>
+		  <span class="texte lang-nl">Geavanceerde functies</span>
+		</a>
+	      </li>
+	      <li>
+		<a data-toggle="modal" data-target="#config-privacy-modal">
+		  <span class="texte lang-en">Privacy</span>
+		  <span class="texte lang-fr">Vie privée</span>
+		  <span class="texte lang-es">Privacidad</span>
+		  <span class="texte lang-nl">Privacy</span>
+		</a>
+	      </li>
+	      <li class="divider"></li>
+	      <li>
+		<a id="config-reset-button">
+		  <span class="texte lang-en">Reset</span>
+		  <span class="texte lang-fr">Réinitialiser</span>
+		  <span class="texte lang-es">Restaurar</span>
+		  <span class="texte lang-nl">Reset</span>
+		</a>
+<!--
+	  <span class="tooltip lang-en">Click to restore default configuration</span>
+	  <span class="tooltip lang-fr">Cliquer pour restaurer la configuration par défaut</span>
+	  <span class="tooltip lang-es">Haga clic para restaurar la configuración por defecto</span>
+	  <span class="tooltip lang-nl">Klik hier om de standaardconfiguratie te herstellen</span>
+-->
+	      </li>
+	    </ul>
+	  </li>
+	  
+	  <li class="dropdown">
+	    <a class="dropdown-toggle" data-toggle="dropdown">
+	      <span class="texte lang-en">Learn</span>
+	      <span class="texte lang-fr">Apprendre</span>
+	      <span class="texte lang-es">Aprender</span>
+		  <span class="texte lang-nl">Leer meer</span>
+	      <span class="caret"></span>
+	    </a>
+	    <ul class="dropdown-menu">
+	      <li>
+		<a target="_blank" href="https://youtu.be/O999FVXn8Qc">
+		  <span class="texte lang-en">Demo/Tutorial</span>
+		  <span class="texte lang-fr">Démo/Tutoriel</span>
+		  <span class="texte lang-es">Demo/Tutorial</span>
+		  <span class="texte lang-nl">Demo/Tutorial</span>
+		</a>
+	      </li>
+	      <li>
+		<a target="_blank" href="examples.html">
+		  <span class="texte lang-en">Examples</span>
+		  <span class="texte lang-fr">Exemples</span>
+		  <span class="texte lang-es">Ejemplos</span>
+		  <span class="texte lang-nl">Voorbeelden</span>
+		</a>
+	      </li>
+	      <li>
+		<a target="_blank" href="release_notes.html">
+		  Release Notes
+		</a>
+	      </li>
+	      <li>
+		<a target="_blank" href="https://github.com/sebferre/sparklis">
+		  GitHub
+		</a>
+	      </li>
+	      <!--
+	      <li>
+		<a target="_blank" href="http://tinyurl.com/kxozx9r">
+		  <span class="texte lang-en">Usability survey</span>
+		  <span class="texte lang-fr">Enquête d'utilisabilité</span>
+		  <span class="texte lang-es">Encuesta de usabilidad</span>
+		  <span class="texte lang-nl">Gebruiksvriendelijkheid enquête</span>
+		</a>
+	      </li>
+	      -->
+	    </ul>
+	  </li>
+	</ul>
+      </div>
+    </div>
+  </nav>
+
+<!--
+    <h2 class="texte lang-en">Sparklis - <small><em>Complex queries and exploratory search on SPARQL endpoints at your fingertips!</em></small></h2>
+    <h2 class="texte lang-fr">Sparklis - <small><em>Requêtes complexes et recherche exploratoire du bout des doigts!</em></small></h2>
+    <h2 class="texte lang-es">Sparklis - <small><em>Consultas complejas y búsqueda exploratoria sobre SPARQL endpoints en la punta de tus dedos!</em></small></h2>
+	<h2 class="texte lang-nl">Sparklis - <small><em>Complexe queries en exploratief zoeken in SPARQL endpoints binnen handbereik!</em></small></h2>
+
+      <span class="texte lang-en">NEW in 2016: nested aggregations, and computation/filtering expressions !!</span>
+      <span class="texte lang-fr">NOUVEAU en 2016 : agrégations imbriquées et expressions de calcul/filtrage !!</span>
+      <span class="texte lang-es">NUEVO en 2016 : agregaciones anidadas y expresiones de cómputo/filtrado !!</span>
+	  <span class="texte lang-nl">Nieuw in 2016: nested aggregations en berekening/filtering expressions !!</span>
+-->
+
+<div id="config-endpoint-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure the endpoint and queries</span>
+	  <span class="texte lang-fr">Configurer le point d'accès et les requêtes</span>
+	  <span class="texte lang-es">Configurar el endpoint y las consultas</span>
+	  <span class="texte lang-nl">Configureer de endpoint en queries</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-proxy" class="config-param">
+	      <input id="input-proxy" type="checkbox">
+	      <span class="texte lang-en">Use as a proxy the following endpoint </span>
+	      <span class="texte lang-fr">Utiliser comme proxy le point d'accès suivant </span>	  
+	      <span class="texte lang-es">Utilizar como proxy el siguiente endpoint</span>
+		  <span class="texte lang-nl">Gebruik een proxy naar de volgende endpoint</span>
+	      <input id="input-proxy-url" type="text" value="http://servolis.irisa.fr/dbpedia/sparql"> <!-- default value -->
+	      <span class="texte lang-en"> (useful to avoid cross-domain blocking by Web browsers)</span>
+	      <span class="texte lang-fr"> (utile pour éviter le blocage des requêtes cross-domain par les navigateurs)</span>
+	      <span class="texte lang-es"> (útil para evitar el bloqueo de peticiones entre dominios por los navegadores)</span>
+		  <span class="texte lang-nl"> (handig om cross-domain blocking door Web browsers te vermijden)</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-method-get" class="config-param">
+	      <input id="input-method-get" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Use method GET instead of method POST to send requests to endpoint (less efficient)</span> 
+	      <span class="texte lang-fr">Utiliser la méthode GET au lieu de la méthode POST pour envoyer les requêtes au point d'accès (moins efficace)</span>
+	      <span class="texte lang-es">Utilizar el método GET en lugar del método POST para enviar las peticiones al endpoint (menos eficiente)</span>
+		  <span class="texte lang-nl">Gebruik de GET methode in plaats van POST om requests naar de endpoint te versturen (minder efficient)</span>		  
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-withCredentials" class="config-param">
+	      <input id="input-withCredentials" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Send requests with credentials to the endpoint</span> 
+	      <span class="texte lang-fr">Envoyer les requêtes avec certificats (with credentials) au point d'accès</span>
+	      <span class="texte lang-es">Enviar peticiones con credenciales al endpoint</span>
+		  <span class="texte lang-nl">Verstuur requests met credentials naar de endpoint</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-caching" class="config-param">
+	      <input id="input-caching" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Caching SPARQL query results (uncheck for frequently changing data)</span>
+	      <span class="texte lang-fr">Mettre en cache les résultats des requêtes SPARQL (décocher pour des données changeant fréquemment)</span>
+	      <span class="texte lang-es">Almacenar en caché los resultados de las consultas SPARQL (deseleccionar para datos que cambien frequentemente)</span>
+	      <span class="texte lang-nl">Cachen van SPARQL query resultaten (niet aanvinken voor frequent veranderende data)</span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Click to clear the cache</span>
+		<span class="tooltip lang-fr">Cliquer pour vider le cache</span>
+		<span class="tooltip lang-es">Haga clic para la limpiar la caché</span>
+		<span class="tooltip lang-nl">Klik hier om de cache te legen</span>
+		<button id="button-clear-cache" class="btn btn-primary">
+		  <span class="texte lang-en">Clear the cache</span>
+		  <span class="texte lang-fr">Vider le cache</span>
+		  <span class="texte lang-es">Limpiar la caché</span>
+		  <span class="texte lang-nl">Leeg de cache</span>
+		</button>
+	      </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-default-graph" class="config-param">
+	      <span class="texte lang-en">Default graph URI</span>
+	      <span class="texte lang-fr">URI du graphe par défaut</span>
+	      <span class="texte lang-es">URI del grafo por defecto</span>
+		  <span class="texte lang-nl">Standaard graph URI</span>
+	      <input id="input-default-graph" type="text"  value=""> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-max-results" class="config-param">
+	      <span class="texte lang-en">Compute at most </span>
+	      <span class="texte lang-fr">Calculer au plus </span>
+	      <span class="texte lang-es">Calcular como máximo </span>
+	      <span class="texte lang-nl">Bereken hooguit </span>
+	      <input id="input-max-results" type="number" value="200"> <!-- default value -->
+	      <span class="texte lang-en"> query results</span>
+	      <span class="texte lang-fr"> résultats à la requête</span>
+	      <span class="texte lang-es"> resultados de la consulta</span>
+	      <span class="texte lang-nl"> query resultaten</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-max-increment-samples" class="config-param">
+	      <span class="texte lang-en">Use at most </span>
+	      <span class="texte lang-fr">Utiliser au plus </span>
+	      <span class="texte lang-es">Utilizar como máximo </span>
+	      <span class="texte lang-nl">Gebruik hooguit </span>
+	      <input id="input-max-increment-samples" type="number" value="200"> <!-- default value -->
+	      <span class="texte lang-en"> query results for computing suggestions</span>
+	      <span class="texte lang-fr"> résultats de la requête pour calculer les suggestions</span>
+	      <span class="texte lang-es"> resultados de la consulta para calcular las sugerencias</span>
+	      <span class="texte lang-nl"> query resultaten om de suggesties te berekenen</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-max-classes" class="config-param">
+	      <span class="texte lang-en">Suggest at most </span>
+	      <span class="texte lang-fr">Suggérer au plus </span>
+	      <span class="texte lang-es">Sugerir como máximo </span>
+	      <span class="texte lang-nl">Suggereer hoogstens </span>
+	      <input id="input-max-classes" type="number" value="200"> <!-- default value -->
+	      <span class="texte lang-en"> <span class="classURI">classes</span></span>
+	      <span class="texte lang-fr"> <span class="classURI">classes</span></span>
+	      <span class="texte lang-es"> <span class="classURI">clases</span></span>
+	      <span class="texte lang-nl"> <span class="classURI">classes</span></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-max-properties" class="config-param">
+	      <span class="texte lang-en">Suggest at most </span>
+	      <span class="texte lang-fr">Suggérer au plus </span>
+	      <span class="texte lang-es">Sugerir como máximo </span>
+	      <span class="texte lang-nl">Suggereer hoogstens</span>
+	      <input id="input-max-properties" type="number" value="200"> <!-- default value -->
+	      <span class="texte lang-en"> <span class="propURI">properties</span></span>
+	      <span class="texte lang-fr"> <span class="propURI">propriétés</span></span>
+	      <span class="texte lang-es"> <span class="propURI">propiedades</span></span>
+	      <span class="texte lang-nl"> <span class="propURI">eigenschappen</span></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-avoid-lengthy-queries" class="config-param">
+	      <input id="input-avoid-lengthy-queries" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Avoid very long queries, which are used to better sample suggestions</span>
+	      <span class="texte lang-fr">Évitez les requêtes très longues, qui sont utilisées pour mieux sélectionner les suggestions</span>
+	      <span class="texte lang-es">Evite las consultas muy largas, que se utilizan para seleccionar mejor las sugerencias</span>
+	      <span class="texte lang-nl">Vermijd zeer lange query's, die worden gebruikt om suggesties beter te selecteren</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-short-permalink" class="config-param">
+	      <input id="input-short-permalink" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Generate short URLs for permanent links</span> 
+	      <span class="texte lang-fr">Générer des URLs courtes pour les liens permanents</span>
+	      <span class="texte lang-es">Generar URL cortas para enlaces permanentes</span>
+	      <span class="texte lang-nl">Genereer korte URL's voor permanente links</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzigingen op te slaan</span>
+	  <button id="config-endpoint-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cerrar</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="config-ontology-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure the ontology</span>
+	  <span class="texte lang-fr">Configurer l'ontologie</span>
+	  <span class="texte lang-es">Configurar la ontología</span>
+	  <span class="texte lang-nl">Configureer de ontologie</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-schema-graph" class="config-param">
+	      <span class="texte lang-en">Schema graph URI (if different from default graph)</span>
+	      <span class="texte lang-fr">URI du graphe contenant le schéma (si différent du graphe par défaut)</span>
+	      <span class="texte lang-es">URI del grafo que contiene el esquema (si difiere del grafo por defecto)</span>
+	      <span class="texte lang-nl">Schema graph URI (als deze afwijkt van de standaard graph)</span>
+	      <input id="input-schema-graph" type="text" value=""> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-intentional-init-concepts" class="config-param">
+	      <input id="input-intentional-init-concepts" type="checkbox" checked>
+	      <span class="texte lang-en">Get initial concepts as instances of <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, and <code>owl:DatatypeProperty</code> (more efficient), instead of from fact triples (more accurate)</span>
+	      <span class="texte lang-fr">Obtenir les concepts initiaux en tant qu'instances de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code> et <code>owl:DatatypeProperty</code> (plus efficace), plutôt qu'à partir des triplets de faits (plus précis)</span>
+	      <span class="texte lang-es">Obtener los conceptos iniciales como instancias de <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, y <code>owl:DatatypeProperty</code> (más eficiente), en lugar de a partir de las tripletas de datos (más preciso)</span>
+	      <span class="texte lang-nl">Verkrijg originele concepten als instances van <code>rdfs:Class</code>, <code>owl:Class</code>, <code>rdf:Property</code>, <code>owl:ObjectProperty</code>, and <code>owl:DatatypeProperty</code> (more efficient), in plaats van fact triples (meer accuracy)</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <span class="texte lang-en">Include only classes and properties that are instances of the following meta-classes: </span>
+	    <span class="texte lang-fr">Inclure seulement les classes et propriétés qui sont instances des méta-classes suivantes : </span>
+	    <span class="texte lang-es">Incluya solo las clases y propiedades que son instancias de las siguientes metaclases</span>
+	    <span class="texte lang-nl">Neem alleen klassen en eigenschappen op die instanties zijn van de volgende metaklassen</span>
+	    <div id="config-concept-profile" class="config-param">
+	      <input id="input-concept-profile" type="text" size="60" value="" placeholder="uri1, uri2, ..."> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <span class="texte lang-en">Exclude suggestions whose URI matches regexp: </span>
+	    <span class="texte lang-fr">Exclure les suggestions dont l'URI matche la regexp: </span>
+	    <span class="texte lang-es">Excluir sugerencias cuya URI coincida con la expresión regular: </span>
+	    <span class="texte lang-nl">Sluit suggesties uit waar de URI matcht met regexp: </span>
+	    <div id="config-regexp-hidden-uris" class="config-param">
+	      <input id="input-regexp-hidden-uris" type="text" size="60" value="^(http://www.w3.org/2002/07/owl#|http://www.openlinksw.com/|nodeID://)"> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-class-hierarchy" class="config-param">
+	      <input id="input-class-hierarchy" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Organize <span class="classURI">classes</span> into a hierarchy using <code>rdfs:subClassOf</code> </span>
+	      <span class="texte lang-fr">Organiser les <span class="classURI">classes</span> en une hiérarchie utilisant <code>rdfs:subClassOf</code></span>
+	      <span class="texte lang-es">Organizar las <span class="classURI">clases</span> en una jerarquía usando <code>rdfs:subClassOf</code></span>
+	      <span class="texte lang-nl">Organiseer <span class="classURI">classes</span> in een hiërarchie met <code>rdfs:subClassOf</code> </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-property-hierarchy" class="config-param">
+	      <input id="input-property-hierarchy" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Organize <span class="propURI">properties</span> into a hierarchy using <code>rdfs:subPropertyOf</code> </span>
+	      <span class="texte lang-fr">Organiser les <span class="propURI">propriétés</span> en une hiérarchie utilisant <code>rdfs:subPropertyOf</code></span>
+	      <span class="texte lang-es">Organizar las <span class="propURI">propiedades</span> en una jerarquía usando <code>rdfs:subPropertyOf</code></span>
+	      <span class="texte lang-nl">Organiseer <span class="propURI">properties</span> in een hiërarchie met <code>rdfs:subPropertyOf</code> </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-hierarchy-inheritance" class="config-param">
+	      <input id="input-hierarchy-inheritance" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Organize property values into a hierarchy according to <code>rdfs:inheritsThrough</code> </span>
+	      <span class="texte lang-fr">Organiser les valeurs d'une propriété en une hiérarchie selon <code>rdfs:inheritsThrough</code></span>
+	      <span class="texte lang-es">Organizar los valores de una  propiedad en una jerarquía de acuerdo a <code>rdfs:inheritsThrough</code></span>
+	      <span class="texte lang-nl">Organiseer waarden van de eigenschappen in een hiërarchie zoals <code>rdfs:inheritsThrough</code></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-transitive-closure" class="config-param">
+	      <input id="input-transitive-closure" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Use materialized transitive closures declared with property <code title="http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf">lis-owl:transitiveOf</code></span>
+	      <span class="texte lang-fr">Utiliser les fermetures transitives matérialisées, déclarées avec la propriété <code title="http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf">lis-owl:transitiveOf</code></span>
+	      <span class="texte lang-es">Utilizar cierres transitivos materializados, declarados con la propiedad <code title="http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf">lis-owl:transitiveOf</code></span>
+	      <span class="texte lang-nl">Gebruik gematerialiseerde transitieve sluitingen, gedeclareerd met de eigenschap <code title="http://www.irisa.fr/LIS/ferre/vocab/owl#transitiveOf">lis-owl:transitiveOf</code></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-nary-relations" class="config-param">
+	      <input id="input-nary-relations" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Suggest <span class="naryURI">n-ary relations (reified triples)</span> according to: </span>
+	      <span class="texte lang-fr">Suggérer des <span class="naryURI">relations n-aires (triplets réifiés)</span> selon : </span>
+	      <span class="texte lang-es">Sugerir <span class="naryURI">relaciones n-arias (tripletas reificadas)</span> de acuerdo a: </span>
+	      <code title="http://www.irisa.fr/LIS/ferre/vocab/nary#subjectObject">nary:subjectObject</code>, <code title="http://www.irisa.fr/LIS/ferre/vocab/nary#eventObject">nary:eventObject</code>
+	      <span class="texte lang-nl"> Suggereer <span class="naryURI"> n-ary relaties (geconcretiseerde triples) </span> volgens:
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-wikidata-mode" class="config-param">
+	      <input id="input-wikidata-mode" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Specific configuration for Wikidata model</span>
+	      <span class="texte lang-fr">Configuration spéciale pour le modèle Wikidata</span>
+	      <span class="texte lang-es">Configuración especial para el modelo Wikidata</span>
+	      <span class="texte lang-nl"> Specifieke configuratie voor het Wikidata model</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan. </span>
+	  <button id="config-ontology-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cerrar</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+      
+<div id="config-language-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure the language and labels</span>
+	  <span class="texte lang-fr">Configurer la langue et les étiquettes</span>
+	  <span class="texte lang-es">Configurar el idioma y las etiquetas</span>
+	  <span class="texte lang-nl">Configureer de taal en labels</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-lang" class="config-param">
+	      <span class="texte lang-en">Set the page and query <strong>language</strong> as </span>
+	      <span class="texte lang-fr">Définir la <strong>langue</strong> de la page et des requêtes </span>
+	      <span class="texte lang-es">Cambiar el <strong>idioma</strong> de la página y las consultas a </span>
+	      <span class="texte lang-nl"> Stel de pagina en query <strong>taal</strong> in als</span>
+	      <select id="lang-select">
+		<option value="en">English</option>
+		<option value="fr">français</option>
+		<option value="es">Español</option>
+		<option value="nl">Nederlands</option>
+	      </select>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-label-entity" class="config-param">
+	      <span class="texte lang-en">For the <strong>labels</strong> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>étiquettes</strong> d'<span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para las <strong>etiquetas</strong> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor <strong>labels</strong> van <span class="URI">entity</span>, gebruik eigenschap </span>
+	      <select id="config-label-entity-select">
+		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-label-entity-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-entity-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+	      </span>
+	      <span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+	      <span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+	      <span class="texte lang-es"> (ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-label-concept" class="config-param">
+	      <span class="texte lang-en">For the <strong>labels</strong> of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les <strong>étiquettes</strong> de <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para las <strong>etiquetas</strong> de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor <strong>labels</strong> van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <select id="config-label-concept-select">
+		<option value=""></option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URI of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-label-concept-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span class="texte lang-en"> with languages (optional)</span>
+	      <span class="texte lang-fr"> avec les langues (optionnel)</span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel)</span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-label-concept-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+	      </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	    </div>
+	  </li>
+	  
+	  <li class="list-group-item">
+	    <div id="config-entity-tooltips" class="config-param">
+	      <span class="texte lang-en">For the <strong>tooltips</strong> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>info-bulles</strong> d'<span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los <strong>tooltips</strong> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de <strong>tooltips</strong> van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <select id="config-entity-tooltips-select">
+		<option value="">(URI)</option>
+		<option value="void">(void)</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-entity-tooltips-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span class="texte lang-en"> with languages (optional) </span>
+	      <span class="texte lang-fr"> avec les langues (optionnel) </span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel) </span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-entity-tooltips-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+	      </span>
+	      <span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+	      <span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+	      <span class="texte lang-es"> (ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-concept-tooltips" class="config-param">
+	      <span class="texte lang-en">For the <strong>tooltips</strong> of <span class="classURI">classes</span>, <span class="propURI">properties</span>, and <span class="naryURI">qualifiers</span>, use property</span>
+	      <span class="texte lang-fr">Pour les <strong>info-bulles</strong> des <span class="classURI">classes</span>, <span class="propURI">propriétés</span> et <span class="naryURI">qualifieurs</span>, utiliser la propriété</span>
+	      <span class="texte lang-es">Para los <strong>tooltips</strong> de las <span class="classURI">clases</span>, <span class="propURI">propiedades</span> y <span class="naryURI">calificadores</span>, utilizar la propiedad</span>
+	      <span class="texte lang-nl">Voor de <strong>tooltips</strong> van <span class="classURI">klassen</span>, <span class="propURI">eigenschappen</span>, en <span class="naryURI">qualifiers</span>, gebruik de eigenschap</span>
+	      <select id="config-concept-tooltips-select">
+		<option value="">(URI)</option>
+		<option value="void">(void)</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#comment">rdfs:comment</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#label">rdfs:label</option>
+		<option value="http://www.w3.org/2004/02/skos/core#prefLabel">skos:prefLabel</option>
+		<option value="http://purl.org/dc/elements/1.1/title">dc:title</option>
+		<option value="http://purl.org/dc/terms/title">dct:title</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URI of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-concept-tooltips-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span class="texte lang-en"> with languages (optional)</span>
+	      <span class="texte lang-fr"> avec les langues (optionnel)</span>
+	      <span class="texte lang-es"> con los idiomas (opcional) </span>
+	      <span class="texte lang-nl"> met talen (optioneel)</span>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the desired language tags</span>
+		<span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		<span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		<input id="config-concept-tooltips-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+	      </span>
+	      <span class="texte lang-en">(e.g., 'en,fr' for English or French)</span>
+	      <span class="texte lang-fr">(ex., 'en,fr' pour l'anglais ou le français)</span>
+	      <span class="texte lang-es">(ej., 'en,fr' para inglés o francés) </span>
+	      <span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	    </div>
+	  </li>
+
+	  <li class="list-group-item">
+	    <div id="config-open-links" class="config-param">
+	      <span class="texte lang-en">For the <strong>hyperlinks</strong> <span class="glyphicon glyphicon-new-window"></span> of <span class="URI">entities</span>, use property </span>
+	      <span class="texte lang-fr">Pour les <strong>hyperliens</strong> <span class="glyphicon glyphicon-new-window"></span> des <span class="URI">entités</span>, utiliser la propriété </span>
+	      <span class="texte lang-es">Para los <strong>hipervínculos</strong> <span class="glyphicon glyphicon-new-window"></span> de las <span class="URI">entidades</span>, utilizar la propiedad </span>
+	      <span class="texte lang-nl"> Voor de <strong>hyperlinks</strong> <span class="glyphicon glyphicon-new-window"></span> van <span class="URI">entities</span>, gebruik eigenschap </span>
+	      <select id="config-open-links-select">
+		<option value="">(URI)</option>
+		<option value="void">(void)</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#seeAlso">rdfs:seeAlso</option>
+		<option value="http://www.w3.org/2000/01/rdf-schema#isDefinedBy">rdfs:isDefinedBy</option>
+		<option value="http://xmlns.com/foaf/0.1/homepage">foaf:homepage</option>
+		<option value="http://xmlns.com/foaf/0.1/isPrimaryTopicOf">foaf:isPrimaryTopicOf</option>
+		<option value="other">prop1, prop2, ...</option>
+	      </select>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Enter here the URIs of the desired properties</span>
+		<span class="tooltip lang-fr">Entrer ici les URI des propriétés souhaitées</span>
+		<span class="tooltip lang-es">Introduzca aquí las URIs de las propiedades requeridas</span>
+		<span class="tooltip lang-nl">Voer hier de URIs in van de gewenste eigenschappen</span>
+		<input id="config-open-links-input" type="text" size="50" placeholder="uri1, uri2, ...">
+	      </span>
+	      <span style="display:none"> <!-- no need for language tag with open links -->
+		<span class="texte lang-en"> with languages (optional) </span>
+		<span class="texte lang-fr"> avec les langues (optionnel) </span>
+		<span class="texte lang-es"> con los idiomas (opcional) </span>
+		<span class="texte lang-nl"> met talen (optioneel) </span>
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Enter here the desired language tags</span>
+		  <span class="tooltip lang-fr">Entrer ici les tags des langues souhaitées</span>
+		  <span class="tooltip lang-es">Introduzca aquí los tags de los idiomas requeridos</span>
+		  <span class="tooltip lang-nl">Voer hier de gewenste taaltags in</span>
+		  <input id="config-open-links-input-lang" type="text" size="10" placeholder="tag1, tag2, ...">
+		</span>
+		<span class="texte lang-en"> (e.g., 'en,fr' for English or French) </span>
+		<span class="texte lang-fr"> (ex., 'en,fr' pour l'anglais ou le français) </span>
+		<span class="texte lang-es"> (ej., 'en,fr' para inglés o francés) </span>
+		<span class="texte lang-nl"> (bijv., 'en,fr' voor Engels of Frans) </span>
+	      </span>
+	    </div>
+	  </li>
+
+	  <li class="list-group-item">
+	    <div id="config-show-datatypes" class="config-param">
+	      <input id="input-show-datatypes" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">For <span class="Literal">literals</span>, show datatypes and language tags </span>
+	      <span class="texte lang-fr">Pour les <span class="Literal">littéraux</span>, montrer les types de données et les tags de langues </span>
+	      <span class="texte lang-es">Para los <span class="Literal">literales</span>, mostrar los tipos de datos y tags de idioma </span>
+	      <span class="texte lang-nl">Voor <span class="Literal">literals</span>, laat de datatypes en taaltags zien </span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-fulltext-search" class="config-param">
+	      <span class="texte lang-en">For suggestion filtering, use </span>
+	      <span class="texte lang-fr">Pour le filtrage des suggestions, utiliser </span>
+	      <span class="texte lang-es">Para filtrar las sugerencias, use </span>
+	      <span class="texte lang-nl">Voor het filteren van suggesties, gebruik </span>
+	      <select id="input-fulltext-search-select"> <!-- Move 'selected' to change default value -->
+		<option value="regex" selected>SPARQL's REGEX</option>
+		<option value="text:query">Jena's <code>text:query</code></option>
+		<option value="bif:contains">Virtuoso's <code>bif:contains</code></option>
+	      </select>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan.</span>
+	  <button id="config-language-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cerrar</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="config-advanced-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure advanced features</span>
+	  <span class="texte lang-fr">Configurer les fonctionnalités avancées</span>
+	  <span class="texte lang-es">Configurar las características avanzadas</span>
+	  <span class="texte lang-nl">Configureer geavanceerde functies</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-auto-filtering" class="config-param">
+	      <input id="input-auto-filtering" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Filter suggestions as soon as characters are input rather than on Enter</span>
+	      <span class="texte lang-fr">Filter les suggestions dès que des caractères sont entrés plutôt qu'avec la touche Entrée</span>
+	      <span class="texte lang-es">Filtrar sugerencias conforme se introduzcan los caracteres en lugar de al prestionar Enter</span>
+	      <span class="texte lang-nl">Filter suggesties zodra tekens worden ingevoerd in plaats van op Enter</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-sort-by-position" class="config-param">
+	      <input id="input-sort-by-position" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Sort concepts and entities according to their value of <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-fr">Trier les concepts et les entités en fonction de leur valeur de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-es">Ordenar conceptos y entidades de acuerdo a su valor de <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	      <span class="texte lang-nl">Sorteer concepten en entiteiten op basis van hun waarde van <a target="_blank" href="https://schema.org/position"><code>schema:position</code></a></span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-show-logo" class="config-param">
+	      <input id="input-show-logo" type="checkbox"> <!-- default value -->
+	      <span class="texte lang-en">Label concepts and entities with icons according to their value of <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Icon height </span>
+	      <span class="texte lang-fr">Étiqueter les concepts et les entités avec des icônes en fonction de leur valeur de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Hauteur des icônes </span>
+	      <span class="texte lang-es">Etiquetar conceptos y entidades con iconos de acuerdo a su valor de <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Altura de los iconos </span>
+	      <span class="texte lang-nl">Label concepten en entiteiten met pictogrammen op basis van hun waarde van <a target="_blank" href="https://schema.org/logo"><code>schema:logo</code></a>. Pictogram hoogte </span>
+	      <input id="input-logo-height" type="number" value="20"> <!-- default value -->
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div id="config-incr-sim" class="config-param">
+	      <input id="input-incr-sim" type="checkbox">
+	      <span class="texte lang-en">Show similarity suggestions (covers SPARQL optional paths)</span>
+	      <span class="texte lang-fr">Afficher les suggestions de similarité (couvre les chemins optionnels de SPARQL)</span>
+	      <span class="texte lang-es">Mostrar sugerencias de similitud (cubre los caminos opcionales de SPARQL)</span>
+	      <span class="texte lang-nl">Toon suggesties voor overeenkomsten (omvat SPARQL optionele paden)</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan.</span>
+	  <button id="config-privacy-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cerrar</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="config-privacy-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Configure privacy</span>
+	  <span class="texte lang-fr">Configurer la vie privée</span>
+	  <span class="texte lang-es">Configurar la privacidad</span>
+	  <span class="texte lang-nl">Configureer privacy</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div id="config-logging" class="config-param">
+	      <input id="input-logging" type="checkbox" checked> <!-- default value -->
+	      <span class="texte lang-en">Reporting query history for usability improvement (only client IP, session ID, and queries are reported, not query results)</span>
+	      <span class="texte lang-fr">Rapporter l'historique des requêtes à des fins d'amélioration de l'utilisabilité (seuls l'IP client, l'identifiant de session et les requêtes sont rapportées, pas les résultats des requêtes)</span>
+	      <span class="texte lang-es">Reportar el historial de consultas para la mejora de la usabilidad (sólo se recogen la IP del cliente, el ID de sesión y las consultas, no los resultados de las mismas) </span>
+	       <span class="texte lang-nl">Rapporteren van de query geschiedenis voor het verbeteren van de gebruiksvriendelijkheid (alleen de client IP, sessie ID, en queries zijn gerapporteerd, niet de query resultaten)</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Close configuration panel to apply changes.</span>
+	  <span class="tooltip lang-fr">Fermer le panneau de configuration pour appliquer les changements.</span>
+	  <span class="tooltip lang-es">Cierre el panel de configuración para aplicar los cambios.</span>
+	  <span class="tooltip lang-nl">Sluit het configuratie paneel om de wijzingen op te slaan.</span>
+	  <button id="config-privacy-close" type="button" class="config-close btn btn-primary" data-dismiss="modal">
+	    <span class="texte lang-en">Close</span>
+	    <span class="texte lang-fr">Fermer</span>
+	    <span class="texte lang-es">Cerrar</span>
+	    <span class="texte lang-nl">Sluiten</span>
+	  </button>
+	</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="download-results-modal" class="modal fade" role="dialog">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+	<strong>
+	  <span class="texte lang-en">Download results as a CSV file</span>
+	  <span class="texte lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	  <span class="texte lang-es">Descargar los resultados en un archivo CSV</span>
+	  <span class="texte lang-nl">Resultaten downloaden als CSV-bestand</span>
+	</strong>
+      </div>
+      <div class="modal-body">
+	<ul class="list-group">
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <input id="input-csv-raw-terms" type="checkbox">
+	      <span class="texte lang-en">Fill cells with raw URIs and literals rather than as displayed in the table</span>
+	      <span class="texte lang-fr">Remplir les cellules avec des URI et des littéraux bruts plutôt que comme indiqué dans le tableau</span>
+	      <span class="texte lang-es">Rellenar las celdas con URIs y literales en bruto en lugar de como se muestra en la tabla</span>
+	      <span class="texte lang-nl">Vul cellen met ruwe URI's en literalen in plaats van zoals weergegeven in de tabel</span>
+	    </div>
+	  </li>
+	  <li class="list-group-item">
+	    <div class="config-param">
+	      <span class="texte lang-en">Compute at most </span>
+	      <span class="texte lang-fr">Calculer au plus </span>
+	      <span class="texte lang-es">Calcular como máximo </span>
+	      <span class="texte lang-nl">Bereken hooguit </span>
+	      <input id="input-csv-max-results" type="number" value="">
+	      <span class="texte lang-en"> query results</span>
+	      <span class="texte lang-fr"> résultats à la requête</span>
+	      <span class="texte lang-es"> resultados de la consulta</span>
+	      <span class="texte lang-nl"> query resultaten</span>
+	    </div>
+	  </li>
+	</ul>
+      </div>
+      <div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-remove"></span>
+	</button>
+	<button id="ok-download-results" type="button" class="btn btn-primary" data-dismiss="modal">
+	  <span class="glyphicon glyphicon-ok"></span>
+	</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="control-navig" class="navbar" data-spy="affix" data-offset-top="75">
+  <div class="nav navbar-nav navbar-left">
+    <span class="btn-group">
+      <button id="button-home" class="btn btn-primary btn-md navbar-btn">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Click to reset the query</span>
+	  <span class="tooltip lang-fr">Cliquer pour réinitialiser la requête</span>
+	  <span class="tooltip lang-es">Haga clic para restablecer la consulta</span>
+	  <span class="tooltip lang-nl">Klik om de query opnieuw in te stellen</span>
+	  <span class="glyphicon glyphicon-home"></span>
+	</span>
+      </button>
+      <button id="button-back" class="btn btn-primary btn-md navbar-btn">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Click to go back in navigation history</span>
+	  <span class="tooltip lang-fr">Cliquer pour revenir à la requête précédente</span>
+	  <span class="tooltip lang-es">Haga clic para volver a la anterior consulta</span>
+	  <span class="tooltip lang-nl">Klik om terug te gaan in de navigatie geschiedenis</span>
+	  <span class="glyphicon glyphicon-arrow-left"></span>
+	</span>
+      </button>
+      <button id="button-forward" class="btn btn-primary btn-md navbar-btn">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Click to go forward in navigation history</span>
+	  <span class="tooltip lang-fr">Cliquer pour retourner à la requête suivante</span>
+	  <span class="tooltip lang-es">Haga clic aquí para volver a la siguiente consulta</span>
+	  <span class="tooltip lang-nl">Klik om verder te gaan in de navigatie geschiedenis</span>
+	  <span class="glyphicon glyphicon-arrow-right"></span>
+	</span>
+      </button>
+      <button id="button-refresh" class="btn btn-primary btn-md navbar-btn">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Click to refresh the current view, e.g. after changing the configuration</span>
+	  <span class="tooltip lang-fr">Cliquer pour rafraîchir la vue actuelle, ex. après avoir changer la configuration</span>
+	  <span class="tooltip lang-es">Haga clic para refrescar la vista actual, ej., después de cambiar la configuración</span>
+	  <span class="tooltip lang-nl">Klik om de huidige weergave te vernieuwen, bijv. na het wijzigen van de configuratie</span>
+	  <span class="glyphicon glyphicon-refresh"></span>
+	</span>
+      </button>
+    </span>
+
+    <span class="tooltiped">
+      <span class="tooltip lang-en">Click to display the permanent link to the current view</span>
+      <span class="tooltip lang-fr">Cliquer pour afficher le lien permanent vers la vue actuelle</span>
+      <span class="tooltip lang-es">Haga clic para mostrar el enlace permanente a la vista actual</span>
+      <span class="tooltip lang-nl">Klik om de permanente link naar de huidige weergave weer te geven </span>
+      <button id="permalink" class="btn btn-info btn-md navbar-btn">Permalink</button>
+    </span>
+
+    <div class="btn-group btn-group-toggle" data-toggle="buttons">
+      <label  id="button-sparklis-view" class="btn btn-default btn-md navbar-btn active">
+	<input type="radio" name="options" autocomplete="off" checked>
+	Sparklis
+      </label>
+      <label  id="button-yasgui-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	YASGUI
+      </label>
+      <label  id="button-log-view" class="btn btn-default btn-md navbar-btn">
+	<input type="radio" name="options" autocomplete="off">
+	<span class="texte lang-en">History</span>
+	<span class="texte lang-fr">Historique</span>
+	<span class="texte lang-es">Historial</span>
+	<span class="texte lang-nl">Geschiedenis</span>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<div class="container-fluid">
+
+  <div id="sparklis-view" class="panel-group">
+
+    <div id="query" class="panel panel-info">
+      <div class="panel-heading">
+	<h5 class="panel-title">
+	  <a data-toggle="collapse" data-target="#collapse-query">
+	    <span class="texte lang-en">Your query and its <span class="highlighted">current focus</span></span>
+	    <span class="texte lang-fr">Votre requête et son <span class="highlighted">focus actuel</span></span>
+	    <span class="texte lang-es">Tu consulta y su <span class="highlighted">foco actual</span></span>
+	    <span class="texte lang-nl">Uw query en zijn <span class="highlighted">huidige focus</span></span>
+
+	    <span class="texte lang-en"> (click on different parts of the query to change it)</span>
+	    <span class="texte lang-fr"> (cliquer sur différentes parties de la requêtes pour le changer)</span>
+	    <span class="texte lang-es"> (Haga clic sobre las diferentes partes de la consulta para cambiarlo)</span>
+	    <span class="texte lang-nl"> (Klik op verschillende delen van de query om deze te wijzingen)</span>
+	  </a>
+	</h5>
+      </div>
+      <div id="collapse-query" class="panel-collapse collapse in">
+	<div id="query-body" class="panel-body">
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Click on a query element to change focus</span>
+	    <span class="tooltip lang-fr">Cliquer sur un élément de requête pour changer le focus</span>
+	    <span class="tooltip lang-es">Haga clic en un elemento de consulta para cambiar el foco</span>
+	    <span class="tooltip lang-nl">Klik op een query-element om de focus te wijzigen</span>
+	    <div id="lisql">
+	    </div>
+	  </span>
+	</div>
+      </div>
+    </div>
+
+    <div id="increments" class="panel panel-info">
+      <div class="panel-heading">
+	<!--	<button id="show-hide-increments" class="btn btn-default btn-md"><span class="glyphicon glyphicon-collapse-up"></span></button> -->
+	<h5 class="panel-title">
+	  <a data-toggle="collapse" data-target="#collapse-increments">
+	    <span class="texte lang-en">Sparklis suggestions to refine your query</span>
+	    <span class="texte lang-fr">Suggestions de Sparklis pour affiner votre requête</span>
+	    <span class="texte lang-es">Sugerencias de Sparklis para refinar tu consulta</span>
+	    <span class="texte lang-nl">Sparklis suggesties om uw query te verfijnen</span>
+	  </a>
+	</h5>
+      </div>
+      <div id="collapse-increments" class="panel-collapse collapse in">
+	<div id="increments-body" class="panel-body">
+	  <!--
+	  <div id="current-focus">
+	    <span class="texte lang-en">The current focus is </span>
+	    <span class="texte lang-fr">Le focus actuel est </span>
+	    <span class="texte lang-es">El foco actual es </span>
+	    <span class="texte lang-nl">De huidige focus is </span>
+	    <span class="increments-focus highlighted">the thing</span>
+	    <em>The following suggestions are relative to</em> ''<span class="focus-np">the thing</span>'' <em>(the focus entity) and the <span class="highlighted">highlighted subquery</span></em>
+	  </div>
+	  -->
+
+	<div class="row">
+	  <div class="incr-box col-sm-4">
+	    <div class="panel panel-default">
+	      <div class="panel-heading">
+		<span class="texte lang-en">Types and Relations of</span>
+		<span class="texte lang-fr">Types et Relations de</span>
+		<span class="texte lang-es">Tipos y Relaciones de</span>
+		<span class="texte lang-nl">Typen en Relaties van</span>
+		<span class="focus-np">the thing</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click a concept to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer un concept pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic para insertar un concepto en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een concept om deze toe te voegen aan de focus van de query</span>
+		<div class="row">
+		  <div class="col-xs-4 no-padding">
+		    <select id="select-properties" class="select-incrs form-control">
+		      <option value="matchesAll">matches all</option>
+		      <option value="matchesAny">matches any</option>
+		    </select>
+		  </div>
+		  <div class="tooltiped col-xs-8 no-padding">
+		    <span class="tooltip lang-en">Input keywords to filter concepts</span>
+		    <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les concepts</span>
+		    <span class="tooltip lang-es">Introduzca palabras clave para filtrar los conceptos</span>
+		    <span class="tooltip lang-nl">Voer trefwoorden in om concepten te filteren</span>
+		    <input id="pattern-properties" class="pattern-incrs form-control" type="text">
+		  </div>
+		</div>
+
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Click to activate multi-selection</span>
+		  <span class="tooltip lang-fr">Cliquer pour activer la multi-sélection</span>
+		  <span class="tooltip lang-es">Haga clic para activar la multiselección</span>
+		  <span class="tooltip lang-nl">Klik om multi-selectie te activeren</span>
+		  <button id="selection-properties-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		    <span class="texte lang-en">multi-selection</span>
+		    <span class="texte lang-fr">multi-sélection</span>
+		    <span class="texte lang-es">multiselección</span>
+		    <span class="texte lang-nl">multi-selectie</span>
+		  </button>
+		</span>
+		<div id="selection-properties" class="selection-incrs" style="display:none">
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
+		  <span class="selection-count"></span> 
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">elementos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
+		  <span id="selection-properties-items"></span>
+		</div>
+		<div id="list-properties" class="list-incrs css-treeview">
+		</div>
+	      </span>
+	      <div class="panel-footer">
+		<div class="container-fluid">
+		  <div class="row">
+		    <div class="col-xs-4 btn-group buttons-incrs">
+		      <span class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Turn the hierarchy upside-down</span>
+			<span class="tooltip lang-fr">Retourner la hiérarchie à l'envers</span>
+			<span class="tooltip lang-es">Darle la vuelta a la jerarquía</span>
+			<span class="tooltip lang-nl">Breng de hiërarchie ondersteboven</span>
+			<input id="input-inverse-properties" class="input-inverse" type="checkbox">
+			<label for="input-inverse-properties" class="label-checked glyphicon glyphicon-chevron-up"></label>
+			<label for="input-inverse-properties" class="label-unchecked glyphicon glyphicon-chevron-down"></label>
+		      </span>
+		      <span id="button-expand-properties" type="button" class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Expand all items</span>
+			<span class="tooltip lang-fr">Développer tous les éléments</span>
+			<span class="tooltip lang-es">Expandir todos los elementos</span>
+			<span class="tooltip lang-nl">Vouw alle items uit</span>
+			▼
+		      </span>
+		      <span id="button-collapse-properties" type="button" class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Collapse all items</span>
+			<span class="tooltip lang-fr">Réduire tous les éléments</span>
+			<span class="tooltip lang-es">Contraer todos los elementos</span>
+			<span class="tooltip lang-nl">Alle items samenvouwen</span>
+			►
+		      </span>
+		    </div>
+		    <div class="col-xs-4 no-padding">
+		      <select id="select-sorting-properties" class="select-sorting-incrs form-control">
+			<!-- dynamically generated
+			<option value="frequency">decreasing frequency</option>
+			<option value="alphanum">alphanumeric order</option>
+			-->
+		      </select>
+		    </div>
+		    <div id="count-properties" class="col-xs-4 count-incrs pull-right">
+		      <span class="texte lang-en">No concept</span>
+		      <span class="texte lang-fr">Aucun concept</span>
+		      <span class="texte lang-es">Ningún concepto</span>
+		      <span class="texte lang-nl">Geen concept</span>
+		    </div>
+		  </div>
+		</div>
+	      </div>
+	    </div>
+	  </div>
+	
+	  <div class="incr-box col-sm-4">
+	    <div class="panel panel-default">
+	      <div class="panel-heading">
+		<span class="texte lang-en">Identities or Values of</span>
+		<span class="texte lang-fr">Identités ou Valeurs de</span>
+		<span class="texte lang-es">Identidades o Valores de</span>
+		<span class="texte lang-nl">Identiteiten of Waarden van</span>
+		<span class="focus-np">the thing</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click an entity to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic en una entidad para insertarla en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een entiteit om deze toe te voegen aan de focus van de query</span>
+
+		<div class="row">
+		  <div class="tooltiped col-xs-4 no-padding">
+		    <span class="tooltip lang-en">Select a filtering operator</span>
+		    <span class="tooltip lang-fr">Sélectionner un opérateur de filtrage</span>
+		    <span class="tooltip lang-es">Seleccionar un operador de filtrado</span>
+		    <span class="tooltip lang-nl">Selecteer een filter operator</span>
+		    <select id="select-terms" class="select-incrs form-control">
+		      <!-- dynamically generated
+		      <option value="matchesAll">matches all</option>
+		      <option value="matchesAny">matches any</option>
+		      <option value="after">after</option>
+		      <option value="before">before</option>
+		      <option value="fromTo">from to</option>
+		      <option value="higherThan">higher or equal to</option>
+		      <option value="lowerThan">lower or equal to</option>
+		      <option value="between">between</option>
+		      <option value="hasLang">has language</option>
+		      <option value="hasDatatype">has datatype</option>
+		      -->
+		    </select></div>
+		  <div class="tooltiped col-xs-7 no-padding">
+		    <span class="tooltip lang-en">Input keywords to filter entities</span>
+		    <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les entités</span>
+		    <span class="tooltip lang-es">Introduzca palabras clave para filtrar las entidades</span>
+		    <span class="tooltip lang-nl">Voer trefwoorden in om entiteiten te filteren</span>
+		    <input id="pattern-terms" class="pattern-incrs form-control" type="text">
+		  </div>
+		  <div class="tooltiped col-xs-1 no-padding">
+		    <span class="tooltip lang-en">Click this button to insert this filter at the query focus</span>
+		    <span class="tooltip lang-fr">Cliquer ce bouton pour insérer ce filtre au focus de la requête</span>
+		    <span class="tooltip lang-es">Haga clic en este botón para insertar este filtro en el foco de consulta</span>
+		    <span class="tooltip lang-nl">Klik op deze knop om dit filter toe te voegen aan de focus van de query</span>
+		    <button id="button-terms" class="btn btn-block btn-primary">
+		      <span class="glyphicon glyphicon-ok"></span>
+		    </button>
+		  </div>
+		</div>
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Click to activate multi-selection</span>
+		  <span class="tooltip lang-fr">Cliquer pour activer la multi-sélection</span>
+		  <span class="tooltip lang-es">Haga clic para activar la multiselección</span>
+		  <span class="tooltip lang-nl">Klik om multi-selectie te activeren</span>
+		  <button id="selection-terms-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		    <span class="texte lang-en">multi-selection</span>
+		    <span class="texte lang-fr">multi-sélection</span>
+		    <span class="texte lang-es">multiselección</span>
+		    <span class="texte lang-nl">multi-selectie</span>
+		  </button>
+		</span>
+		<div id="selection-terms" class="selection-incrs" style="display:none">
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
+		  <span class="selection-count"></span> 
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">elementos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
+		  <span id="selection-terms-items"></span>
+		</div>		
+		<div id="list-terms" class="list-incrs css-treeview">
+		</div>
+	      </span>
+	      <div class="panel-footer">
+		<div class="container-fluid">
+		  <div class="row">
+		    <div class="col-xs-4 btn-group buttons-incrs">
+		      <span class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Turn the hierarchy upside-down</span>
+			<span class="tooltip lang-fr">Retourner la hiérarchie à l'envers</span>
+			<span class="tooltip lang-es">Darle la vuelta a la jerarquía</span>
+			<span class="tooltip lang-nl">Breng de hiërarchie ondersteboven</span>
+			<input id="input-inverse-terms" class="input-inverse" type="checkbox">
+			<label for="input-inverse-terms" class="label-checked glyphicon glyphicon-chevron-up"></label>
+			<label for="input-inverse-terms" class="label-unchecked glyphicon glyphicon-chevron-down"></label>
+		      </span>
+		      <span id="button-expand-terms" type="button" class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Expand all items</span>
+			<span class="tooltip lang-fr">Développer tous les éléments</span>
+			<span class="tooltip lang-es">Expandir todos los elementos</span>
+			<span class="tooltip lang-nl">Vouw alle items uit</span>
+			▼
+		      </span>
+		      <span id="button-collapse-terms" type="button" class="tooltiped btn btn-default btn-sm">
+			<span class="tooltip lang-en">Collapse all items</span>
+			<span class="tooltip lang-fr">Réduire tous les éléments</span>
+			<span class="tooltip lang-es">Contraer todos los elementos</span>
+			<span class="tooltip lang-nl">Alle items samenvouwen</span>
+			►
+		      </span>
+		    </div>
+		    <div class="col-xs-4 no-padding">
+		      <select id="select-sorting-terms" class="select-sorting-incrs form-control">
+			<!-- dynamically generated
+			<option value="frequency">decreasing frequency</option>
+			<option value="alphanum">alphanumeric order</option>
+			-->
+		      </select>
+		    </div>
+		    <div id="count-terms" class="col-xs-4 count-incrs pull-right">
+		      <span class="texte lang-en">No entity</span>
+		      <span class="texte lang-fr">Aucune entité</span>
+		      <span class="texte lang-es">Ninguna entidad</span>
+		      <span class="texte lang-nl">Geen entiteit</span>
+		    </div>
+		  </div>
+		</div>
+	      </div>
+	    </div>
+	  </div>
+	
+	  <div class="incr-box col-sm-4">
+	    <div class="panel panel-default">
+	      <div class="panel-heading">
+		<span class="texte lang-en">Aggregations and Operators</span>
+		<span class="texte lang-fr">Agrégations et Opérateurs</span>
+		<span class="texte lang-es">Agregaciones y Operadores</span>
+		<span class="texte lang-nl">Aggregatien en Operatoren</span>
+	      </div>
+	      <span class="tooltiped panel-body panel-body-incrs">
+		<span class="tooltip lang-en">Click a modifier to insert in the query at the focus</span>
+		<span class="tooltip lang-fr">Cliquer un modifieur pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic en un modificador para insertarlo en el foco de la consulta</span>
+		<span class="tooltip lang-nl">Klik op een modifier om deze toe te voegen aan de focus van de query</span>
+		<div class="row">
+		  <div class="col-xs-5 no-padding">
+		    <select id="select-modifiers" class="select-incrs form-control">
+		      <option value="matchesAll">matches all</option>
+		      <option value="matchesAny">matches any</option>
+		    </select>
+		  </div>
+		  <div class="tooltiped col-xs-7 no-padding">
+		    <span class="tooltip lang-en">Input keywords to filter modifiers</span>
+		    <span class="tooltip lang-fr">Saisir des mots-clés pour filtrer les modifieurs</span>
+		    <span class="tooltip lang-es">Introduzca palabras clave para filtrar los modificadores</span>
+		    <span class="tooltip lang-nl">Voer trefwoorden in om de modifiers te filteren</span>
+		    <input id="pattern-modifiers" class="pattern-incrs form-control" type="text">
+		  </div>
+		</div>		
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Click to activate multi-selection</span>
+		  <span class="tooltip lang-fr">Cliquer pour activer la multi-sélection</span>
+		  <span class="tooltip lang-es">Haga clic para activar la multiselección</span>
+		  <span class="tooltip lang-nl">Klik om multi-selectie te activeren</span>
+		  <button id="selection-modifiers-button" class="btn btn-default btn-xs btn-block selection-incrs-button">
+		    <span class="texte lang-en">multi-selection</span>
+		    <span class="texte lang-fr">multi-sélection</span>
+		    <span class="texte lang-es">multiselección</span>
+		    <span class="texte lang-nl">multi-selectie</span>
+		  </button>
+		</span>
+		<div id="selection-modifiers" class="selection-incrs" style="display:none">
+		  <span class="texte lang-en">Insert the</span>
+		  <span class="texte lang-fr">Insérer les</span>
+		  <span class="texte lang-es">Insertar los</span>
+		  <span class="texte lang-nl">Voeg de</span>
+		  <span class="selection-count"></span> 
+		  <span class="texte lang-en">selected items with</span>
+		  <span class="texte lang-fr">éléments sélectionnés avec</span>
+		  <span class="texte lang-es">artículos seleccionados con</span>
+		  <span class="texte lang-nl">geselecteerde items in met</span>
+		  <span id="selection-modifiers-items"></span>
+		</div>				
+		<div id="list-modifiers" class="list-incrs css-treeview">
+		</div>
+	      </span>
+	      <div id="count-modifiers" class="count-incrs panel-footer">
+		<span class="texte lang-en">No modifier</span>
+		<span class="texte lang-fr">Aucun modifieur</span>
+		<span class="texte lang-es">Ningún modificador</span>
+		<span class="texte lang-nl">Geen modifier</span>
+	      </div>
+	    </div>
+	  </div>
+
+	</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="results" class="panel panel-info">
+      <div class="panel-heading">
+	<h5 class="panel-title">
+	  <a data-toggle="collapse" data-target="#collapse-results">
+	    <span class="texte lang-en">Results of your query</span>
+	    <span class="texte lang-fr">Résultats de votre requête</span>
+	    <span class="texte lang-es">Resultados de tu consulta</span>
+	    <span class="texte lang-nl">Resultaten van uw query</span>
+	  </a>
+	  &nbsp;
+	  <span class="tooltiped">
+	    <span class="tooltip lang-en">Download results as a CSV file</span>
+	    <span class="tooltip lang-fr">Télécharger les résultats sous forme de fichier CSV</span>
+	    <span class="tooltip lang-es">Descargar los resultados en un archivo CSV</span>
+	    <span class="tooltip lang-nl">Resultaten downloaden als CSV-bestand</span>
+	    <button id="button-download-results" data-toggle="modal" data-target="#download-results-modal" class="btn btn-primary btn-xs">
+	      <span class="glyphicon glyphicon-download-alt"></span>
+	    </button>
+	  </span>
+	</h5>
+      </div>
+      <div id="collapse-results" class="panel-collapse collapse in">
+	<div class="panel-body">
+	  <ul class="nav nav-tabs">
+	    <li id="nav-results-nested-table" class="active"><a id="nav-tab-nested-table" data-toggle="tab" data-target="#results-nested-table">
+		<span class="texte lang-en">Nested Table</span>
+		<span class="texte lang-fr">Tableau imbriqué</span>
+		<span class="texte lang-es">Tabla anidada</span>
+		<span class="texte lang-nl">Geneste Tafel</span>
+	    </a></li>
+	    <li id="nav-results-table"><a data-toggle="tab" data-target="#results-table">
+		<span class="texte lang-en">Table</span>
+		<span class="texte lang-fr">Tableau</span>
+		<span class="texte lang-es">Tabla</span>
+		<span class="texte lang-nl">Tafel</span>
+	    </a></li>
+	    <li id="nav-results-map"><a id="nav-tab-map" data-toggle="tab" data-target="#results-map" title="Click on this tab again if the map is not displayed correctly">
+		<span class="texte lang-en">Map</span>
+		<span class="texte lang-fr">Carte</span>
+		<span class="texte lang-es">Mapa</span>
+		<span class="texte lang-nl">Kaart</span>
+	    </a></li>
+	    <li id="nav-results-slideshow"><a id="nav-tab-slideshow" data-toggle="tab" data-target="#results-slideshow">
+		<span class="texte lang-en">Slideshow</span>
+		<span class="texte lang-fr">Diaporama</span>
+		<span class="texte lang-es">Diapositivas</span>
+		<span class="texte lang-nl">Diavoorstelling</span>
+	    </a></li>
+	  </ul>
+	  <div class="tab-content">
+	    
+	    <div id="results-nested-table" class="tab-pane fade in active">
+	      <div id="nested-table">
+		No nested table
+	      </div>
+	      <div id="div-next-nested-table" class="tooltiped">
+		<span class="tooltip lang-en">Click to show more results</span>
+		<span class="tooltip lang-fr">Cliquer pour afficher plus de résultats</span>
+		<span class="tooltip lang-es">Haga clic para mostrar mas resultados</span>
+		<span class="tooltip lang-nl">Klik om meer resultaten te tonen</span>
+		<button id="next-nested-table" class="btn btn-default"><span class="glyphicon glyphicon-chevron-down"></span></button>
+	      </div>
+	    </div>
+	    
+	    <div id="results-table" class="tab-pane fade">
+	      <div id="control-results">
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Click to show the previous page of results</span>
+		  <span class="tooltip lang-fr">Cliquer pour afficher la page de résultats précédente</span>
+		  <span class="tooltip lang-es">Haga clic para mostrar la página anterior de resultados</span>
+		  <span class="tooltip lang-nl">Klik om de vorige pagina met resultaten weer te geven</span>
+		  <button id="previous-results" class="btn btn-default btn-md"><span class="glyphicon glyphicon-step-backward"></span></button>
+		</span>
+		<span id="count-results">
+		  <span class="texte lang-en">No result</span>
+		  <span class="texte lang-fr">Aucun résultat</span>
+		  <span class="texte lang-es">Ningún resultado</span>
+		  <span class="texte lang-nl">Geen resultaat</span>
+		</span>
+		<span class="tooltiped">
+		  <span class="tooltip lang-en">Click to show the next page of results</span>
+		  <span class="tooltip lang-fr">Cliquer pour afficher la page de résultats suivante</span>
+		  <span class="tooltip lang-es">Haga clic para mostrar la siguiente página de resultados</span>
+		  <span class="tooltip lang-nl">Klik om de volgende pagina met resultaten weer te geven</span>
+		  <button id="next-results" class="btn btn-default btn-md"><span class="glyphicon glyphicon-step-forward"></span></button>
+		</span>
+		<span class="texte lang-en">Show</span>
+		<span class="texte lang-fr">Montrer</span>
+		<span class="texte lang-es">Mostrar</span>
+		<span class="texte lang-nl">Toon</span>
+		<select id="limit-results" data-width="fit"> <!-- NOT WORKING!!! -->
+		  <option value="10">10</option>
+		  <option value="20">20</option>
+		  <option value="50">50</option>
+		  <option value="100">100</option>
+		</select>
+		<span class="texte lang-en">results</span>
+		<span class="texte lang-fr">résultats</span>
+		<span class="texte lang-es">resultados</span>
+		<span class="texte lang-nl">resultaten</span>
+	      </div>
+	      <span class="tooltiped">
+		<span class="tooltip lang-en">Click an entity to insert in the query at the column's focus</span>
+		<span class="tooltip lang-fr">Cliquer une entité pour l'insérer au focus de la requête</span>
+		<span class="tooltip lang-es">Haga clic en una entidad para insertarla (en la consulta) en el foco de la columna </span>
+		<span class="tooltip lang-nl">Klik op een entiteit om deze toe te voegen aan de focus van de query kolom</span>
+		<div id="list-results">
+		</div>
+	      </span>
+	    </div>
+
+	    <div id="results-map" class="tab-pane fade">
+	      <div id="map">
+		No geolocalized data
+	      </div>
+	    </div>
+
+	    <div id="results-slideshow" class="tab-pane fade">
+	      <div id="results-carousel" class="carousel slide" data-interval="false">
+		<!-- Wrapper for slides -->
+		<div id="carousel-slides" class="carousel-inner">
+		  No media
+		</div>
+		<!-- Left and right controls -->
+		<a class="left carousel-control" href="#results-carousel" data-slide="prev">
+		  <span class="glyphicon glyphicon-chevron-left"></span>
+		  <span class="sr-only">Previous</span>
+		</a>
+		<a class="right carousel-control" href="#results-carousel" data-slide="next">
+		  <span class="glyphicon glyphicon-chevron-right"></span>
+		  <span class="sr-only">Next</span>
+		</a>
+	      </div>
+	    </div>
+	    
+	  </div> <!-- .tab-content -->
+
+	</div>
+      </div>
+    </div>
+</div>
+
+
+<div id="yasgui-view" class="panel panel-info" style="display:none">
+  <div class="panel-heading">
+    <h5 class="panel-title">
+      <span class="texte lang-en">Your query in SPARQL + results (with YASGUI)</span>
+      <span class="texte lang-fr">Votre requête en SPARQL + résultats (avec YASGUI)</span>
+      <span class="texte lang-es">Tu consulta en SPARQL + resultados (con YASGUI)</span>
+      <span class="texte lang-nl">Uw query in SPARQL + resultaten (met YASGUI)</span>
+    </h5>
+  </div>
+  <div class="panel-body">
+    <div id="sparql-query"></div>
+    <div id="sparklis-yasgui"></div>
+  </div>
+</div>
+
+<div id="log-view" class="panel panel-info" style="display:none">
+  <div class="panel-heading">
+    <h5 class="panel-title">
+      <span class="texte lang-en">Your navigation history on this endpoint</span>
+      <span class="texte lang-fr">Votre historique de navigation sur ce point d'accès</span>
+      <span class="texte lang-es">Su historial de navegación en este SPARQL endpoint</span>
+      <span class="texte lang-nl">Uw navigatiegeschiedenis op dit SPARQL endpoint</span>
+      <button id="clear-log" class="btn btn-primary btn-xs" style="float: right">
+	<span class="tooltiped">
+	  <span class="tooltip lang-en">Clear this history</span>
+	  <span class="tooltip lang-fr">Effacer cet historique</span>
+	  <span class="tooltip lang-es">Borrar este historial</span>
+	  <span class="tooltip lang-nl">Wis deze geschiedenis</span>
+	  <span class="glyphicon glyphicon-trash"></span>
+	</span>
+      </button>
+    </h5>
+  </div>
+  <div class="panel-body">
+    <div id="endpoint-log">
+    </div>
+  </div>
+</div>
+
+</div>
+
+</div>
+
+
+  <footer>
+    <hr/>
+    <!-- licence CC-BY-NC -->
+    <a rel="license" target="_blank" href="https://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons Licence" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/88x31.png" /></a>
+    
+    <span class="texte lang-en">Created by </span>
+    <span class="texte lang-fr">Créé par </span>
+    <span class="texte lang-es">Creado por </span>
+    <span class="texte lang-nl">Gemaakt door </span>
+    <a target="_blank" href="https://people.irisa.fr/Sebastien.Ferre">Sébastien Ferré</a>
+    <a target="_blank" href="https://www-semlis.irisa.fr/"><img src="semlis.png" alt="SemLIS team" height="30"></a>
+    <a target="_blank" href="https://www.irisa.fr/"><img src="irisa.jpg" alt="IRISA" height="30"></a>
+    <a target="_blank" href="https://www.univ-rennes1.fr/"><img src="UR1.png" alt="Université Rennes 1" height="40"></a>
+    <br/>
+
+    <span class="texte lang-es">
+      Traducido al Español por <a target="_blank" href="mailto:jose.ortizv@ucuenca.ec">José Enrique Ortiz Vivar</a>, revisado por <a target="_blank" href="https://webdiis.unizar.es/people/cbobed">Carlos Bobed</a>.
+      <br/>
+    </span>
+    <span class="texte lang-nl">
+      Vertaald naar het Nederlands door <a target="_blank" href="mailto:Erwin.Folmer@kadaster.nl">Erwin Folmer</a>.
+      <br/>
+    </span>
+
+    <span>Citation: <em>Ferré, Sébastien. ‘Sparklis: An Expressive Query Builder for SPARQL Endpoints with Guidance in Natural Language’. Semantic Web 8(3) : 405-418. IOS Press, 2017.</em> (<a href="https://hal.inria.fr/hal-01485093/file/sparklis-preprint.pdf">PDF</a>)</span>
+
+    <br/>
+
+    <span class="texte lang-en">Last modified May 26th, 2021. Visit </span>
+    <span class="texte lang-fr">Dernière modification le 26 mai 2021. Visiter </span>
+    <span class="texte lang-es">Última modificación el 26 de Mayo 2021. Visite </span>
+    <span class="texte lang-nl">Voor het laatst gewijzigd op 26 Mei 2021. Bezoek </span>
+    <a target="_blank" href="https://people.irisa.fr/Sebastien.Ferre/software/">
+      <span class="texte lang-en">my homepage</span>
+      <span class="texte lang-fr">ma page Web</span>
+      <span class="texte lang-es">mi página Web</span>
+      <span class="texte lang-nl">mijn website </span>
+    </a>
+    <span class="texte lang-en"> for more information.</span>
+    <span class="texte lang-fr"> pour plus d'information.</span>
+    <span class="texte lang-es"> para más información.</span>
+    <span class="texte lang-nl"> voor meer informatie.</span>
+  </footer>
+</body>
+</html>
