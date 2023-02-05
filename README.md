@@ -86,18 +86,29 @@ Sparklis is available as Docker image.
 
 Pull the image:
 
-```bash
-docker pull ghcr.io/geovistory/sparklis:latest
+```
+docker pull sferre/sparklis:latest
 ```
 
 Run a container with name `sparklis`:
 
 ```
-docker run -d --name sparklis -p 8080:8080 ghcr.io/geovistory/sparklis:latest
+docker run -d --name sparklis -p 8080:8080 sferre/sparklis:latest
+```
+
+For Apple Silicon (M1/M2):
+
+```
+docker pull  --platform linux/x86_64 sferre/sparklis:latest
+```
+
+and
+
+```
+docker run -d --name sparklis --platform linux/x86_64 -p 8080:8080 sferre/sparklis:latest
 ```
 
 The webserver exposes two paths:
-
 
 - The path `/osparklis.html` exposes the default UI:
 [http://localhost:8080/osparklis.html](http://localhost:8080/osparklis.html)
