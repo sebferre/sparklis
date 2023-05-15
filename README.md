@@ -80,6 +80,28 @@ The following build steps were found to work on Ubuntu (20.04 LTS) by [waldenn](
     make
 ```
 
+The following build steps were found to work on Mac OS X 10.15.7 (using Macports as a package manager) by [CaptSolo](https://github.com/CaptSolo):
+
+```
+sudo port install opam
+
+# this also sets up environment variables in ~/.bash_profile
+opam init
+
+# OCaml version 5 is too recent (some packages missing), installing 4.14.0 instead
+opam switch create 4.14.0
+eval $(opam env --switch=4.14.0)
+
+# required as a dependency when doing opam install
+sudo port install expat
+
+opam install csv lwt js_of_ocaml js_of_ocaml-lwt lwt_ppx js_of_ocaml-ppx num xmlm xml-light camlp5
+
+git clone https://github.com/sebferre/sparklis.git
+cd sparklis
+make
+```
+
 # Run Sparklis as Docker Container
 
 Sparklis is available as Docker image.
