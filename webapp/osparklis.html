@@ -87,21 +87,24 @@
 		  Mondial
 		</a>
 	      </li>
+<!-- only results in JSON
 	      <li>
-		<a href="osparklis.html?title=Nobel%20prizes&endpoint=http%3A//data.nobelprize.org/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
+		<a href="osparklis.html?title=Nobel%20prizes&endpoint=https%3A//data.nobelprize.org/store/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
 		  Nobel prizes
 		</a>
 	      </li>
+-->
 	      <li>
 		<a href="osparklis.html?title=INSEE&endpoint=https%3A//rdf.insee.fr/sparql&entity_lexicon_property=http%3A//www.w3.org/2000/01/rdf-schema%23label%2C%20http%3A//www.w3.org/2004/02/skos/core%23prefLabel%2C%20http%3A//rdf.insee.fr/def/geo%23nom&entity_lexicon_lang=fr&concept_lexicons_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&concept_lexicons_lang=fr%2Cen%2C&lang=fr">
 		  INSEE
 		</a>
 	      </li>
 	      <li>
-		<a href="osparklis.html?title=Persée&endpoint=http%3A//data.persee.fr/sparql&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
+		<a href="osparklis.html?title=Persée&endpoint=https%3A//data.persee.fr/sparql&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%7Chttp%3A//dbpedia.org/%28class/yago/%7Contology/Wikidata%29%29&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
 		  Persée
 		</a>
 	      </li>
+<!-- no more available it seems	      
 	      <li>
 		<a href="osparklis.html?title=PDOK&endpoint=https%3A//data.pdok.nl/sparql&lang=nl&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
 		  Spatial Data Netherlands (PDOK)
@@ -111,14 +114,17 @@
 		<a href="osparklis.html?title=CBS&endpoint=https%3A//betalinkeddata.cbs.nl/sparql&lang=nl&entity_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&class_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label&property_lexicon_select=http%3A//www.w3.org/2000/01/rdf-schema%23label">
 		  Statistics Data Netherlands (CBS)
 		</a>
-	      </li>
+	      </li> 
+	      -->
+	      <!-- too slow and brittle
 	      <li>
-		<a href="osparklis.html?title=Chile%20government&endpoint=https%3A//datos.bcn.cl/sparql&lang=es">
+		<a href="osparklis.html?title=Chile%20government&endpoint=https%3A//datos.bcn.cl/sparql&proxy=true&regexp_hidden_URIs=%5E%28http%3A//www.w3.org/2002/07/owl%23%7Chttp%3A//www.openlinksw.com/%7CnodeID%3A//%7C%23%7Chttp%3A//www.wikidata.org/%7Chttp%3A//dbpedia.org/%28class/yago/%7Contology/Wikidata%29%29&lang=es">
 		  Chile government
 		</a>
 	      </li>
+	      -->
 	      <li>
-		<a href="osparklis.html?title=European%20Television%20Heritage&endpoint=http%3A//lod.euscreen.eu/sparql">
+		<a href="osparklis.html?title=European%20Television%20Heritage&endpoint=http%3A//lod.euscreen.eu/sparql&intentional_init_concepts=false">
 		  European Television Heritage
 		</a>
 	      </li>
