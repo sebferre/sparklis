@@ -830,18 +830,6 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.co
 
 
 (* hooks for Sparklis extension *)
-   
-let hook_sparql (sparql : string) : string =
-  Config.apply_hook_data
-    Config.sparklis_extension##.hookSparql
-    Sparql.js_sparql_map
-    sparql
-
-let hook_results (res : Sparql_endpoint.results) : Sparql_endpoint.results =
-  Config.apply_hook_data
-    Config.sparklis_extension##.hookResults
-    Sparql_endpoint.js_results_map
-    res
 
 let hook_suggestions : (freq_unit * suggestions) -> (freq_unit * suggestions) =
   let open Jsutils in
@@ -989,10 +977,10 @@ object (self)
          self#define_results_views;
          k ()
       | Some sparql ->
-         let sparql = hook_sparql sparql in (* TODO: should the original query be hidden? *)
-	 Sparql_endpoint.ajax_in ~update_yasgui:true elts ajax_pool endpoint sparql
+	 Sparql_endpoint.ajax_in
+           ~main_query:true (* updating YASGUI, and hooking the query and results *)
+           elts ajax_pool endpoint sparql
 	   (fun res ->
-             let res = hook_results res in
              results_ok <- true;
              sparql_opt <- new_sparql_opt;
 	     results <- res;
