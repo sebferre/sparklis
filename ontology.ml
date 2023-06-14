@@ -90,7 +90,7 @@ let sparql_init_relation
       select ~projections:[(`Bare,source); (`Bare,image)] ~froms
         (make_pattern v_source v_image) in
     Sparql_endpoint.ajax_in [] ajax_pool endpoint (sparql :> string)
-      (fun results ->
+      (fun sparql results ->
         let src_imgs = new source_images in
         sparql_relation_process_results ~image_opt_of_term source image src_imgs results;
         k src_imgs#list)

@@ -409,10 +409,10 @@ let cache_eval (endpoint : string) (sparql : string) : results option =
 (* query evaluation, by AJAX call if required *)
 let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.element t list) (pool : ajax_pool)
     (endpoint : string) (sparql : string)
-    (k1 : results -> unit) (* SUCCESS continuation *)
+    (k1 : string (* hooked sparql *) -> results -> unit) (* SUCCESS continuation *)
     (k0 : int -> unit) (* FAILURE continuation *) =
  if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
- then k1 empty_results
+ then k1 "" empty_results
  else
   let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
   let prologue_sparql =
@@ -427,7 +427,7 @@ let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.elem
            Jsutils.yasgui#set_response response_text;
            hook_results results)
          else results in
-       k1 results
+       k1 prologue_sparql results
     | None ->
       let encode_fields l =
 	String.concat "&"
@@ -507,7 +507,7 @@ let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.elem
                            Jsutils.yasgui#set_response response_text;
                            hook_results results)
                          else results in
-		       k1 results)
+		       k1 prologue_sparql results)
 		| 0 ->
 		  if config_proxy#value (* proxy was used *)
 		  then begin
@@ -545,7 +545,7 @@ let rec ajax_list_in ?tentative elts pool endpoint sparql_list k1 k0 =
     | [] -> k1 []
     | s::ls ->
       ajax_in ?tentative elts pool endpoint s
-	(fun r ->
+	(fun _ r -> (* real SPARQL is ignored *)
 	  ajax_list_in ?tentative elts pool endpoint ls
 	    (fun rs1 ->
 	      let rs = r::rs1 in

@@ -1435,7 +1435,7 @@ let make_js_sparklis (history : history) =
       Jsutils.new_promise (fun resolve reject -> (* results, HTTP error code *)
       let ajax_pool = new Sparql_endpoint.ajax_pool in
       Sparql_endpoint.ajax_in [] ajax_pool config#get_endpoint (to_string sparql)
-        (fun res ->
+        (fun _sparql res -> (* TODO: avoid here adding prologue *)
           let js_res = Sparql_endpoint.js_results_map.inject res in
           Unsafe.fun_call resolve [|js_res|])
         (fun code ->
