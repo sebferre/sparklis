@@ -24,7 +24,7 @@ open XmlHttpRequest
 
 let error msg = new%js error_constr (string msg)
 
-let raise_error msg = raise_js_error (error msg)
+let raise_error msg = Js_error.raise_ (Js_error.of_error (new%js error_constr (string msg)))
    
 let alert msg = Dom_html.window##alert (string msg)
 
@@ -237,9 +237,9 @@ let update_localStorage (key : 'a storage_key) (f : 'a option -> 'a option) (fer
         | Some res ->
            storage##setItem jkey (Json.output res)
         | None -> storage##removeItem jkey
-      with Error err ->
-        firebug (string_of_error err);
-        ferr err)
+      with Js_error.Exn err ->
+        firebug (Js_error.to_string err);
+        ferr (Js_error.to_error err))
   
 
 (* helping injection of OCaml values to JSON values *)
@@ -749,7 +749,7 @@ module Wikidata =
       try
 	let oquery = Unsafe.get ojson (string "query") in
 	let osearch = Unsafe.get oquery (string "search") in
-	let n = truncate (to_float (Unsafe.get osearch (string "length"))) in
+	let n = truncate (Unsafe.get osearch (string "length")) in
 	let le = ref [] in
 	for i = n-1 downto 0 do
 	  let oresult = Unsafe.get osearch (string (string_of_int i)) in

@@ -246,7 +246,7 @@ let results_of_json s_json =
     let ojson = Json.unsafe_input (string s_json) in
     let ohead = Unsafe.get ojson (string "head") in
     let ovars = Unsafe.get ohead (string "vars") in
-    let m = truncate (to_float (Unsafe.get ovars (string "length"))) in
+    let m = truncate (Unsafe.get ovars (string "length")) in
     let dim, vars =
       let dim = ref 0 in
       let vars = ref [] in
@@ -259,7 +259,7 @@ let results_of_json s_json =
       !dim, !vars in
     let oresults = Unsafe.get ojson (string "results") in
     let obindings = Unsafe.get oresults (string "bindings") in
-    let n = truncate (to_float (Unsafe.get obindings (string "length"))) in
+    let n = truncate (Unsafe.get obindings (string "length")) in
     let length, bindings =
       let len = ref 0 in
       let res = ref [] in
