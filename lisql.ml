@@ -2036,7 +2036,8 @@ let rec insert_and = function
        | Some arg -> let np, id = factory#top_s1 in
 		     CCons ((), arg, np, CNil ()), [id] in
      focus_opt_start ~delta:(delta_ids ids)
-		     (append_and_sn ctx cp f)
+       (append_and_sn ctx cp f)
+  | AtS1 (_, InGraphX _) -> None (* to avoid complex focus graphs *)
   | AtS1 (f, ReturnX ctx) ->
      let np, id = factory#top_s1 in
      Some (AtS1 (np, ReturnX (SeqX (([Return ((),f)],[]), ctx))), delta_ids [id])
@@ -2080,7 +2081,16 @@ let rec insert_or = function
        | Some arg -> let np, id = factory#top_s1 in
 		     CCons ((), arg, np, CNil ()), [id] in
      focus_opt_start ~delta:(delta_ids ids)
-		     (append_or_sn ctx cp f)
+       (append_or_sn ctx cp f)
+  | AtS1 ((Det (_, det, rel_opt) as np), (InGraphX _ as ctx)) ->
+     if rel_opt = None && not (is_top_s2 det)
+     then
+       let det, id1 = factory#top_s2 in
+       let np2, id2 = factory#top_s1 in
+       let ctx_or = IsX (DetThatX (det, ctx)) in
+       focus_opt_start ~delta:(delta_ids [id1;id2])
+         (append_or_s1 ctx_or np2 np)
+     else None
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (f, CConsX1 (arg,cp,ctx)) ->
      insert_or (AtSn (CCons ((), arg, f, cp), ctx))
@@ -2164,6 +2174,12 @@ let rec insert_not = function
      if is_top_sn f
      then Some (focus_moves [down_focus] foc_delta)
      else Some foc_delta
+  | AtS1 ((Det (_, det, rel_opt) as np), (InGraphX _ as ctx)) ->
+     if rel_opt = None && not (is_top_s2 det)
+     then
+       let det, id = factory#top_s2 in
+       Some (AtS1 (Det ((), det, Some (Is ((), NNot ((), np)))), ctx), delta_ids [id])
+     else None
   | AtS1 (_, InGraphX _) -> None
   | AtS1 (NNot (_,f), ctx) -> Some (AtS1 (f,ctx), DeltaNil)
   | AtS1 (_, NNotX ctx) -> None
