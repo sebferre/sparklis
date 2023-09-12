@@ -218,6 +218,7 @@ let config_max_increment_samples = new Config.integer_input ~key:"max_increment_
 let config_max_classes = new Config.integer_input ~key:"max_classes" ~input_selector:"#input-max-classes" ~min:0 ~default:200 ()
 let config_max_properties = new Config.integer_input ~key:"max_properties" ~input_selector:"#input-max-properties" ~min:0 ~default:200 ()
 let config_avoid_lengthy_queries = new Config.boolean_input ~key:"avoid_lengthy_queries" ~input_selector:"#input-avoid-lengthy-queries" ~default:false ()
+let config_wikidata_hide_ID_properties = new Config.boolean_input ~key:"wikidata_hide_ID_properties" ~input_selector:"#input-wikidata-hide-ID-properties" ~default:true ()
 
 let regexp_sep = Regexp.regexp "[,;][ ]*"
 

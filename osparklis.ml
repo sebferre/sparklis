@@ -242,6 +242,7 @@ let config =
       (Lis.config_max_classes :> Config.input);
       (Lis.config_max_properties :> Config.input);
       (Lis.config_avoid_lengthy_queries :> Config.input);
+      (Lis.config_wikidata_hide_ID_properties :> Config.input);
       (Lexicon.config_entity_lexicon :> Config.input);
       (Lexicon.config_concept_lexicon :> Config.input);
       (Lexicon.config_entity_tooltips :> Config.input);

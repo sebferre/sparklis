@@ -582,14 +582,21 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
        let html_freq = html_freq ~title:"number of results matching this" ~unit ~partial value in
 	     (*let s = match max_value with None -> s | Some max -> s ^ "/" ^ string_of_int max in*)
        Some (position, sort_frequency), html_freq in
-  let data = 
-    let text =
-      String.lowercase_ascii
-	(Lisql2nl.word_text_content
-	   grammar
-	   (Lisql2nl.word_of_incr grammar incr)) in
-    try `Number (float_of_string text)
-    with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
+  let data, hide_incr =
+    let label =
+      Lisql2nl.word_text_content
+	grammar
+	(Lisql2nl.word_of_incr grammar incr) in
+    let hide_incr =
+      Rdf.config_wikidata_mode#value
+      && Lis.config_wikidata_hide_ID_properties#value
+      && (match incr with IncrRel _ | IncrPred _ -> true | _ -> false)
+      && Regexp.string_match (Regexp.regexp "\\bID\\b") label 0 <> None in
+    let text = String.lowercase_ascii label in
+    let data =
+      try `Number (float_of_string text)
+      with _ -> `Words (Regexp.split (Regexp.regexp "[- ,;:.()]+") text) in
+    data, hide_incr in
   let rank, title_opt =
     match incr with
       | IncrSelection _ -> 0, None
@@ -662,7 +669,9 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
 	 then classe ^ " filterable-increment"
 	 else classe in
        false, html_span ~id:key ~classe ?title:title_opt (html ^ html_freq) in
-  Some (sort_data, key, is_selection_incr, html)
+  if hide_incr
+  then None
+  else Some (sort_data, key, is_selection_incr, html)
  end
 
 (* TODO: avoid to pass focus as argument, use NL generation on increments *)
