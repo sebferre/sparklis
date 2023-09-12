@@ -2180,16 +2180,21 @@ let rec insert_not = function
   | _ -> None
 
 let rec insert_in = function
+  | AtP1 (In (_,npg,f), ctx) -> Some (AtP1 (f,ctx), DeltaNil)
+  | AtP1 (_, InX _) -> None
   | AtP1 (f,ctx) ->
-     let np, id = factory#top_s1 in
-     Some (AtS1 (np, InGraphX (f,ctx)), delta_ids [id])
-  | AtS1 (_, InGraphX _) -> None
+     if is_top_p1 f
+     then None (* GRAPH does not apply to empty graph patterns *)
+     else
+       let np, id = factory#top_s1 in
+       Some (AtS1 (np, InGraphX (f,ctx)), delta_ids [id])
+(*  | AtS1 (_, InGraphX _) -> None
   | AtS1 (Det (_,det,None), ctx) ->
      let np, id = factory#top_s1 in
      Some (AtS1 (np, InGraphX (IsThere (), DetThatX (det, ctx))), delta_ids [id])
   | AtS1 (Det (_,det,Some rel), ctx) ->
      let np, id = factory#top_s1 in
-     Some (AtS1 (np, InGraphX (rel, DetThatX (det, ctx))), delta_ids [id])
+     Some (AtS1 (np, InGraphX (rel, DetThatX (det, ctx))), delta_ids [id]) *)
   | _ -> None
 
 let insert_in_which_there_is focus =
@@ -2698,9 +2703,9 @@ and delete_ctx_s1 f_opt ctx =
 	| `List (elt,ll2,rr2) -> Some (AtS1 (elt, NOrX ((ll2,rr2),ctx2))), [] )
     | NMaybeX ctx2 -> delete_ctx_s1 f_opt ctx2
     | NNotX ctx2 -> delete_ctx_s1 f_opt ctx2
-    | InGraphX (_,ctx2) ->
+    | InGraphX (f2,ctx2) ->
       ( match f_opt with
-      | None -> delete_ctx_p1 ctx2
+      | None -> Some (AtP1 (f2,ctx2)), []
       | Some f -> let np, ids = delete_elt_s1 f in
 		  Some (AtS1 (np, ctx)), ids )
     | InWhichThereIsX ctx2 ->
