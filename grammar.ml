@@ -31,6 +31,7 @@ object (self)
 
   method virtual thing : string
   method virtual relation : string
+  method virtual graph : string
   method virtual value_ : string
   method virtual result : string
   method virtual geolocation : string
@@ -170,6 +171,7 @@ object
 
   method thing = "thing"
   method relation = "relation"
+  method graph = "graph"
   method value_ = "value"
   method result = "result"
   method geolocation = "geolocation"
@@ -379,6 +381,7 @@ object
 
   method thing = "chose"
   method relation = "relation"
+  method graph = "graphe"
   method value_ = "valeur"
   method result = "résultat"
   method geolocation = "géolocalisation"
@@ -587,6 +590,7 @@ object
 
   method thing = "cosa"
   method relation = "relación"
+  method graph = "grafo"
   method value_ = "valor"
   method result = "resultado"
   method geolocation = "geolocalización"
@@ -796,6 +800,7 @@ object
 
   method thing = "object"
   method relation = "relatie"
+  method graph = "grafiek"
   method value_ = "value"
   method result = "resultaat"
   method geolocation = "geolocatie"

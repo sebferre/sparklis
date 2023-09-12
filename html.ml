@@ -462,6 +462,7 @@ and html_highlight h xml =
 and html_word state = function
   | `Thing -> html_span Lisql2nl.config_lang#grammar#thing
   | `Relation -> html_modifier Lisql2nl.config_lang#grammar#relation
+  | `Graph -> html_modifier Lisql2nl.config_lang#grammar#graph
   | `Literal s -> html_literal s
   | `TypedLiteral (s,t) ->
     if Lisql2nl.config_show_datatypes#value

@@ -49,6 +49,7 @@ let config_show_datatypes = new Config.boolean_input ~key:"show_datatypes" ~inpu
 type word =
   [ `Thing
   | `Relation
+  | `Graph
   | `Entity of Rdf.uri * string
   | `Literal of string
   | `TypedLiteral of string * string (* lexical value, datatype/lang *)
@@ -65,6 +66,7 @@ type word =
 let word_text_content grammar : word -> string = function
   | `Thing -> grammar#thing
   | `Relation -> grammar#relation
+  | `Graph -> grammar#graph
   | `Entity (uri,s) -> s
   | `Literal s -> s
   | `TypedLiteral (s, dt) -> if config_show_datatypes#value then s ^ " (" ^ dt ^ ")" else s
@@ -466,7 +468,7 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
     let _ls, lab = labelling_p1 grammar ~labels elt in
     [], lab
   | In (_,npg,elt) ->
-    let _, lab1 = labelling_s1 ~as_p1:false grammar ~labels:[] npg in
+    let _, lab1 = labelling_s1 ~thing:`Graph ~as_p1:false grammar ~labels:[] npg in
     let ls, lab2 = labelling_p1 grammar ~labels elt in
     ls, lab1 @ lab2
   | InWhichThereIs (_,np) ->
@@ -508,9 +510,16 @@ and labelling_sn grammar ~labels : 'a elt_sn -> id_label list * id_labelling_lis
   | CNot (_, elt) ->
     let _ls, lab = labelling_sn grammar ~labels elt in
     [], lab
-and labelling_s1 ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_list = function
+and labelling_s1 ?(thing : [`Thing|`Graph] = `Thing) ~as_p1 grammar ~labels : 'a elt_s1 -> id_label list * id_labelling_list = function
   | Det (_, An (id, modif, head), rel_opt) ->
-    let ls_head = match head with Thing -> [] | Class c -> [(var_of_uri c, `Word (word_of_class c))] in
+     let ls_head =
+       match head with
+       | Thing ->
+          (match thing with
+           | `Graph -> [("graph", `Word `Graph)]
+           | `Thing -> [])
+       | Class c ->
+          [(var_of_uri c, `Word (word_of_class c))] in
     let labels2 = labels @ ls_head in
     let ls_rel, lab_rel = labelling_p1_opt grammar ~labels:labels2 rel_opt in
     ls_head @ ls_rel, if as_p1 then lab_rel else (id, `Labels (labels2 @ ls_rel)) :: lab_rel
@@ -813,7 +822,7 @@ let rec vp_of_elt_p1 grammar ~id_labelling : annot elt_p1 -> vp = function
   | Or (annot,lr) -> `Focus (annot, `Or (List.map (vp_of_elt_p1 grammar ~id_labelling) lr))
   | Maybe (annot,x) -> `Focus (annot, `Maybe (vp_of_elt_p1 grammar ~id_labelling x))
   | Not (annot,x) -> `Focus (annot, `Not (vp_of_elt_p1 grammar ~id_labelling x))
-  | In (annot,npg,x) -> `Focus (annot, `In (np_of_elt_s1 grammar ~id_labelling npg, vp_of_elt_p1 grammar ~id_labelling x))
+  | In (annot,npg,x) -> `Focus (annot, `In (np_of_elt_s1 grammar ~id_labelling ~thing:`Graph npg, vp_of_elt_p1 grammar ~id_labelling x))
   | InWhichThereIs (annot,np) -> `Focus (annot, `IsInWhich (`ThereIs (np_of_elt_s1 grammar ~id_labelling np)))
 and vp_of_constr grammar annot = function
   | True -> `Focus (annot, `Ellipsis)
@@ -840,10 +849,10 @@ and rel_of_elt_p1_opt grammar ~id_labelling = function
   | None -> top_rel
   | Some (InWhichThereIs (annot,np)) -> `Focus (annot, `InWhich (`ThereIs (np_of_elt_s1 grammar ~id_labelling np)))
   | Some rel -> `That (vp_of_elt_p1 grammar ~id_labelling rel)
-and np_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> np = function
+and np_of_elt_s1 grammar ~id_labelling ?(thing : [`Thing|`Graph] = `Thing) : annot elt_s1 -> np = function
   | Det (annot, det, rel_opt) ->
     let nl_rel = rel_of_elt_p1_opt grammar ~id_labelling rel_opt in
-    det_of_elt_s2 grammar ~id_labelling annot nl_rel det
+    det_of_elt_s2 grammar ~id_labelling ~thing annot nl_rel det
   | AnAggreg (annot,id,modif,g,rel_opt,np) ->
     np_of_aggreg grammar (Some annot)
       `A modif g
@@ -866,13 +875,13 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> ng = function
     let ng = ng_of_elt_s1 grammar ~id_labelling np in
     `Focus (annot, `Aggreg (annot#is_susp_focus, ng_aggreg, ng))
   | _ -> assert false
-and det_of_elt_s2 grammar ~id_labelling annot rel : elt_s2 -> np = function
+and det_of_elt_s2 grammar ~id_labelling ?thing annot rel : elt_s2 -> np = function
   | Term t -> `Focus (annot, `PN (word_of_term t, rel))
-  | An (id, modif, head) -> head_of_modif grammar (Some annot) (word_of_elt_head head) rel modif
+  | An (id, modif, head) -> head_of_modif grammar (Some annot) (word_of_elt_head ?thing head) rel modif
   | The id -> `Focus (annot, `Qu (`The, `Nil, `LabelThat (id_labelling#get_id_label id, rel)))
 (*    `Focus (annot, `Ref (id_labelling#get_id_label id, rel)) *)
-and word_of_elt_head = function
-  | Thing -> `Thing
+and word_of_elt_head ?(thing : [`Thing|`Graph] = `Thing) = function
+  | Thing -> (thing :> word)
   | Class c -> word_of_class c
 and np_of_elt_aggreg grammar ~id_labelling : annot elt_aggreg -> np = function
   | ForEachResult annot ->
@@ -1653,7 +1662,7 @@ let xml_of_incr grammar ~id_labelling (focus : focus) (incr : increment) : xml =
   | IncrChoice -> [Kwd (grammar#a_an ~following:grammar#choice); Word (`Op grammar#choice); Kwd grammar#between; Word focus_span; Kwd ", "; Word `Undefined]
   | IncrMaybe -> xml_maybe grammar None [Word focus_span]
   | IncrNot -> xml_not grammar None [Word focus_span]
-  | IncrIn -> [Suffix (Word (`Op grammar#according_to) :: xml_ellipsis, ","); Word focus_span]
+  | IncrIn -> [Suffix (Word (`Op grammar#according_to) :: xml_a_an grammar [Word `Graph], ","); Word focus_span]
   | IncrInWhichThereIs -> Word (`Op grammar#according_to) :: Kwd grammar#which :: Kwd grammar#there_is :: xml_ellipsis
   | IncrUnselect -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Unselect,Unordered))
   | IncrOrder order -> xml_np grammar ~id_labelling (head_of_modif grammar None focus_name top_rel (Select,order))
