@@ -70,7 +70,9 @@ type concept_lexicon =
 let re_white = Regexp.regexp "_"
 
 let name_of_uri uri =
-  let uri = Js.to_string (Js.decodeURI (Js.string uri)) in
+  let uri =
+    try Js.to_string (Js.decodeURI (Js.string uri))
+    with _ -> uri in
   match Regexp.search (Regexp.regexp "[^/#]+$") uri 0 with
     | Some (_,res) ->
       ( match Regexp.matched_string res with "" -> uri | name -> name )

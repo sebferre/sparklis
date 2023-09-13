@@ -308,6 +308,9 @@ let not_exists (p : _ any_pattern) : expr =
   else "NOT EXISTS { " ^< indent 13 p ^> " }"
 let graph (g : _ any_term) (p : _ any_pattern) : pattern =
   "GRAPH " ^< g ^^ "\n    { " ^< indent 6 p ^> " }"
+let is_graph (new_var : string -> string) (g : _ any_term) : pattern =
+  let pg = new_var "pg" in
+  graph g (triple (bnode "") (var pg) (bnode ""))
 
 let subquery (q : _ any_query) : pattern = "{ " ^< indent 2 q ^> " }"
 
@@ -531,14 +534,14 @@ let formula_bind (x : _ any_term) : formula -> formula = function
   | False -> False
   | Or (p,e) -> Pattern (union [p; join [something x; filter e]])
 
-let rec formula_graph (g : _ any_term) : formula -> formula = function
+let rec formula_graph (new_var : string -> string) (g : _ any_term) : formula -> formula = function
   | Pattern p -> Pattern (graph g p)
-  | Subquery sq -> Subquery {sq with formula = formula_graph g sq.formula}
-  | Filter e -> Pattern (graph g (filter e))
-  | True -> Pattern (graph g empty)
+  | Subquery sq -> Subquery {sq with formula = formula_graph new_var g sq.formula}
+  | Filter e -> Pattern (join [is_graph new_var g; filter e])
+  | True -> Pattern (is_graph new_var g)
   | False -> False
-  | Or (p,e) -> Pattern (graph g (union [p; filter e])) (* TODO: avoid union? *)
-    
+  | Or (p,e) -> Pattern (union [graph g p; join [is_graph new_var g; filter e]])
+
 let expr_of_formula : formula -> expr = function
   | Filter e -> e
   | _ -> log_true (* TODO: dummy default *)

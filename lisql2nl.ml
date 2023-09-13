@@ -473,7 +473,7 @@ let rec labelling_p1 grammar ~labels : 'a elt_p1 -> id_label list * id_labelling
     ls, lab1 @ lab2
   | InWhichThereIs (_,np) ->
     let _, lab = labelling_s1 ~as_p1:false grammar ~labels:[] np in
-    [], lab
+    [("graph", `Word `Graph)], lab
   | IsThere _ -> [], []
 and labelling_p1_opt grammar ~labels : 'a elt_p1 option -> id_label list * id_labelling_list = function
   | None -> [], []
@@ -877,7 +877,12 @@ and ng_of_elt_s1 grammar ~id_labelling : annot elt_s1 -> ng = function
   | _ -> assert false
 and det_of_elt_s2 grammar ~id_labelling ?thing annot rel : elt_s2 -> np = function
   | Term t -> `Focus (annot, `PN (word_of_term t, rel))
-  | An (id, modif, head) -> head_of_modif grammar (Some annot) (word_of_elt_head ?thing head) rel modif
+  | An (id, modif, head) ->
+     let thing =
+       match id_labelling#get_id_label id with
+       | `Word `Graph -> `Graph
+       | _ -> `Thing in
+     head_of_modif grammar (Some annot) (word_of_elt_head ~thing head) rel modif
   | The id -> `Focus (annot, `Qu (`The, `Nil, `LabelThat (id_labelling#get_id_label id, rel)))
 (*    `Focus (annot, `Ref (id_labelling#get_id_label id, rel)) *)
 and word_of_elt_head ?(thing : [`Thing|`Graph] = `Thing) = function

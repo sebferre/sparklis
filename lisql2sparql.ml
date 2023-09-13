@@ -853,11 +853,11 @@ let rec form_p1 state : annot elt_p1 -> deps_p1 * sparql_p1 = function
     let q_deps, q = form_s1 state npg in
     let d_deps, d = form_p1 state f in
     (fun x -> q_deps (fun g -> d_deps x |> List.map (fun dep -> g::dep))),
-    (fun x -> q (fun g -> Sparql.formula_graph g (d x)))
+    (fun x -> q (fun g -> Sparql.formula_graph state#genvar#new_var g (d x)))
   | InWhichThereIs (annot,np) ->
      let q_deps, q = form_s1 state np in
      (fun g -> q_deps (fun x -> []) |> List.map (fun dep -> g::dep)),
-     (fun g -> Sparql.formula_graph g (q (fun x -> Sparql.True)))
+     (fun g -> Sparql.formula_graph state#genvar#new_var g (q (fun x -> Sparql.True)))
   | IsThere annot ->
      (fun x -> []),
      (fun x -> Sparql.True)
@@ -1404,7 +1404,7 @@ let s_annot (id_labelling : Lisql2nl.id_labelling) (fd : focus_descr) (s_annot :
       let tx = (Sparql.var x :> Sparql.term) in
       Some (fun ?(hook=(fun tx form -> form)) ~froms ?limit () ->
 	let form_x = Sparql.Pattern (make_pattern t) in
-	let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph (Sparql.term tg) form_x in
+	let form_x = match focus_graph_opt with None -> form_x | Some tg -> Sparql.formula_graph state#genvar#new_var (Sparql.term tg) form_x in
 	let form_x =
 	  match focus_term_opt with
 	  | Some (Rdf.Var _) -> Sparql.formula_and (Sparql.formula_of_view ?limit view) form_x

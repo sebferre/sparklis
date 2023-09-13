@@ -1334,7 +1334,8 @@ object (self)
       (* adding other increments *)
       if not freq0 then (
 	incr_index#add (Lisql.IncrTriple Lisql.S, None);
-	incr_index#add (Lisql.IncrTriple Lisql.O, None)
+	incr_index#add (Lisql.IncrTriple Lisql.O, None);
+        incr_index#add (Lisql.IncrInWhichThereIs, None)
       );
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
