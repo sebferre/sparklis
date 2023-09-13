@@ -612,7 +612,6 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
       | IncrSimRankIncr -> 1, None
       | IncrSimRankDecr -> 1, None
       | IncrTriple _ -> 7, None
-      | IncrInWhichThereIs -> 8, None (* TODO: tooltip *)
       (* term increments *)
       | IncrAnything -> 1, None
       | IncrId _ -> 2, None
@@ -638,14 +637,15 @@ let freq_text_html_increment_frequency ~(filter : Lisql.increment -> bool) focus
       | IncrNot -> 15, Some grammar#tooltip_not
       | IncrThatIs -> 16, None
       | IncrSomethingThatIs -> 17, None
+      | IncrIn -> 18, None (* TODO: tooltip *)
+      | IncrInWhichThereIs -> 19, None (* TODO: tooltip *)
 
-      | IncrForeach -> 18, Some grammar#tooltip_foreach
-      | IncrAggreg Sample -> 20, Some grammar#tooltip_aggreg
-      | IncrAggreg _ -> 19, Some grammar#tooltip_aggreg
-      | IncrFuncArg _ -> 21, Some grammar#tooltip_func
+      | IncrForeach -> 20, Some grammar#tooltip_foreach
+      | IncrAggreg Sample -> 21, Some grammar#tooltip_aggreg
+      | IncrAggreg _ -> 22, Some grammar#tooltip_aggreg
+      | IncrFuncArg _ -> 23, Some grammar#tooltip_func
 
-      | IncrTriplify -> 22, Some grammar#tooltip_focus_on_property
-      | IncrIn -> 23, None (* TODO: tooltip *) in
+      | IncrTriplify -> 24, Some grammar#tooltip_focus_on_property in
   let filterable =
     match incr with
     | IncrAnything

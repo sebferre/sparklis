@@ -827,7 +827,7 @@ object (self)
       | IncrThatIs | IncrSomethingThatIs | IncrTriplify | IncrHierarchy _
       | IncrSimRankIncr | IncrSimRankDecr
       | IncrAnd | IncrDuplicate | IncrOr | IncrChoice | IncrMaybe
-      | IncrNot | IncrIn | IncrUnselect | IncrOrder _ -> true
+      | IncrNot | IncrIn | IncrInWhichThereIs | IncrUnselect | IncrOrder _ -> true
       | _ -> false in
     let get_incr_opt elt =
       let incr = html_state#dico_incrs#get (to_string elt##.id) in

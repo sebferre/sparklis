@@ -1334,8 +1334,7 @@ object (self)
       (* adding other increments *)
       if not freq0 then (
 	incr_index#add (Lisql.IncrTriple Lisql.S, None);
-	incr_index#add (Lisql.IncrTriple Lisql.O, None);
-        incr_index#add (Lisql.IncrInWhichThereIs, None)
+	incr_index#add (Lisql.IncrTriple Lisql.O, None)
       );
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
@@ -1727,11 +1726,6 @@ object (self)
             (* adding other increments *)
             if !fwd_prop then incr_index#add (Lisql.IncrTriple Lisql.S, None);
             if !bwd_prop then incr_index#add (Lisql.IncrTriple Lisql.O, None);
-            List.iter
-	      (fun incr ->
-	        if Lisql.insert_increment incr focus <> None
-	        then incr_index#add (incr,None))
-	      [Lisql.IncrInWhichThereIs (* should check that some focus values are named graphs *)];
             sync_concepts (fun () ->
                 let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
                 let suggestions = {partial; forest} in
@@ -1941,7 +1935,7 @@ object (self)
     let open Lisql in
     let incrs =
       if focus_descr#unconstrained
-      then [IncrIn]
+      then [IncrIn; IncrInWhichThereIs]
       else
 	let incrs = [] in
 	let incrs =
@@ -1950,7 +1944,7 @@ object (self)
 	    IncrSomethingThatIs :: IncrName "" :: IncrTriplify ::
 	    IncrSimRankIncr :: IncrSimRankDecr ::
 	    IncrAnd :: IncrDuplicate :: IncrOr :: IncrMaybe :: IncrNot :: IncrChoice ::
-	    IncrIn ::
+	    IncrIn :: IncrInWhichThereIs ::
 	    IncrUnselect ::
 	    IncrHierarchy false ::
 	    incrs in
