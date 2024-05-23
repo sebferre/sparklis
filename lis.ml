@@ -784,22 +784,29 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.co
   | WikidataSearch [] -> k (Result.Ok Lisql.True)
   | WikidataSearch kwds ->
      let query = String.concat "+" kwds in
-     let limit = 30 in
+     (*  limit = 10 (* TEST 30 *) in *)
      Jsutils.Wikidata.ajax_entity_search
-       query limit
+       `Q query 30
        (function
-        | Result.Ok le ->
-           let lt =
-             List.map
-	       (fun e ->
-                 match e.[0] with
-                 | 'P' ->
-                    if config_nary_relations#value (* see Lisq2sparql.WhichProp/Pred *)
-                    then Rdf.URI (Rdf.wikidata_prop e)
-                    else Rdf.URI (Rdf.wikidata_prop_direct e)
-                 | _ (* 'Q' *) -> Rdf.URI (Rdf.wikidata_entity e))
-	       le in
-           k (Result.Ok (Lisql.ExternalSearch (search, Some lt)))
+        | Result.Ok lq ->
+           Jsutils.Wikidata.ajax_entity_search (* TODO: launch two call in parallel *)
+             `P query 10
+             (function
+              | Result.Ok lp ->
+                 let ltq =
+                   List.map
+                     (fun q -> Rdf.URI (Rdf.wikidata_entity q))
+                     lq in
+                 let ltp =
+                   List.map
+                     (fun p ->
+                       if config_nary_relations#value (* see Lisq2sparql.WhichProp/Pred *)
+                       then Rdf.URI (Rdf.wikidata_prop p)
+                       else Rdf.URI (Rdf.wikidata_prop_direct p))
+                     lp in
+                 let lt = ltq @ ltp in
+                 k (Result.Ok (Lisql.ExternalSearch (search, Some lt)))
+              | (Result.Error _ as err)-> k err)
         | (Result.Error _ as err) -> k err)
   | TextQuery [] -> k (Result.Ok Lisql.True)
   | TextQuery kwds ->

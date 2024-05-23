@@ -767,17 +767,18 @@ module Wikidata =
       with exn ->
 	Result.Error (Failure ("Wikidata entity search: unexpected JSON: " ^ Printexc.to_string exn))
 
-    let ajax_entity_search (query : string) (limit : int) (k : (string list, exn) Result.t -> unit) : unit = (* the returned list is made of Pxxx and Qxxx, property and item identifiers *)
+    let ajax_entity_search (kind : [`Q|`P]) (query : string) (limit : int) (k : (string list, exn) Result.t -> unit) : unit = (* the returned list is made of Pxxx and Qxxx, property and item identifiers *)
       if String.length query < 3
       then k (Result.Error (Failure "Wikidata entity search: query too short (less than 3 cars)"))
       else
 	let _ = firebug ("Wikidata entity search: " ^ query) in
 	let query_url =
 	  Printf.sprintf
-	    "https://www.wikidata.org/w/api.php?action=query&list=search&srnamespace=0|120&format=json&srlimit=%d&srsearch=%s"
+	    "https://www.wikidata.org/w/api.php?action=query&list=search&srnamespace=%s&format=json&srlimit=%d&srsearch=%s"
             (* namespace 0 is for items, and namespace 120 is for properties *)
             (* SEE https://www.mediawiki.org/w/api.php?action=help&modules=query%2Bsearch for for doc *)
 	    (*"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=%d&search=%s" (* type=item|property *) NOTE: less flexible search *)
+            (match kind with `Q -> "0" | `P -> "120")
 	    limit
 	    (Url.urlencode query) in
         Lwt.async (fun () ->

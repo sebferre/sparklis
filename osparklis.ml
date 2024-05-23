@@ -972,7 +972,7 @@ object (self)
 	      ~k_new_results:k
               ~k_trivial:(fun () -> ()))
 	   
-  method private filter_increments ?on_modifiers elt_list constr =
+  method private filter_increments ?on_modifiers elt_list constr : bool (* some match *) =
     let matcher = compile_constr ?on_modifiers constr in
     let there_is_match = ref false in
     jquery_all_from elt_list "li" (fun elt_li ->
@@ -996,7 +996,8 @@ object (self)
 			(fun elt -> to_string elt##.innerHTML) in
 	if matcher str
 	then begin elt_li##.style##.display := string "list-item"; there_is_match := true end
-	else elt_li##.style##.display := string "none"))
+	else elt_li##.style##.display := string "none"));
+    !there_is_match
 
   method is_home =
     Lisql.is_home_focus lis#focus
@@ -1010,9 +1011,10 @@ object (self)
       else (
 	self#abort_all_ajax;
 	true, true ) in
+    let there_is_match = ref false in
     if to_filter then begin
       jquery "#list-terms" (fun elt_list ->
-	self#filter_increments elt_list new_constr)
+	there_is_match := self#filter_increments elt_list new_constr)
       end;
     if to_refresh then begin (* not refreshing_terms && constr <> term_constr *)
       refreshing_terms <- true;
@@ -1025,10 +1027,12 @@ object (self)
       if equivalent_constr new_constr current_constr then false, false
       else if subsumed_constr new_constr current_constr then true, not refreshing_properties
       else begin self#abort_all_ajax; true, true end in
+    let there_is_match = ref false in
     if to_filter then begin
       jquery "#list-properties" (fun elt_list ->
-	 self#filter_increments elt_list new_constr)
+	 there_is_match := self#filter_increments elt_list new_constr)
       end;
+    (* on properties, only refreshing when empty filtering (because not robust and not responsive, and often enough) *)
     if to_refresh then begin (* not refreshing_properties && constr <> property_constr *)
       refreshing_properties <- true;
       self#save_ui_state;
@@ -1038,9 +1042,10 @@ object (self)
   method refresh_new_modifier_constr current_constr new_constr =
     let to_filter =
       not (equivalent_constr new_constr current_constr) in
+    let there_is_match = ref false in
     if to_filter then
       jquery "#list-modifiers" (fun elt_list ->
-	 self#filter_increments ~on_modifiers:true elt_list new_constr)
+	 there_is_match := self#filter_increments ~on_modifiers:true elt_list new_constr)
 
   method set_limit n =
     limit <- n;
