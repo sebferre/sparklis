@@ -73,9 +73,9 @@ window.addEventListener(
 			.catch(() => console.log("FAILED setConceptSuggestions"))
 		};
 		qa.value = "";
-	    }});
-	
+	    }});	
     });
+
 // example SPARQL hook: adding a dummy PREFIX
 sparklis_extension.hookSparql =
     function(sparql) {
@@ -84,46 +84,53 @@ sparklis_extension.hookSparql =
 	console.log("delta: ", sparklis.currentPlace().delta());
 	console.log("permalink:", sparklis.currentPlace().permalink());
 	console.log("SPARQL query:", sparql);
-	return sparql
-	//console.log("Here a dummy PREFIX is added.");
-	//return "PREFIX foo: <http://foo.com/>\n" + sparql
+	return new Promise((resolve,reject) => {
+	    console.log("Here a dummy PREFIX is added.");
+	    new_sparql = "PREFIX foo: <http://foo.com/>\n" + sparql;
+	    resolve(new_sparql)})
     };
 // example results hook: keeping only the two first results
 sparklis_extension.hookResults =
     function(results) {
 	console.log("results", results);
 	// testing direct SPARQL call to the endpoint
-	sparklis.evalSparql("SELECT * WHERE { ?x a ?c } LIMIT 10")
-	    .then(res => console.log("PROMISE: other results:", res))
-	    .catch(code => console.log("PROMISE: failed to get the other results, error", code));
-	console.log("Here the first two rows of the results will be selected.");
-	//results.rows = results.rows.slice(0,2);
-	return results
+	return new Promise((resolve,reject) => {
+	    sparklis.evalSparql("SELECT * WHERE { ?x a ?c } LIMIT 10")
+		.then(res => {
+		    console.log("PROMISE: other results:", res);
+		    console.log("Here the first four rows of the results will be selected.");
+		    //results.rows = results.rows.slice(0,4);
+		    resolve(results) })
+		.catch(code => console.log("PROMISE: failed to get the other results, error", code)) })
     };
 // example suggestions hook: looking for suggestions matching 'city'
 flag = true;
 sparklis_extension.hookSuggestions =
-    function(suggestions) {
-	console.log("2 suggestions", suggestions.type, suggestions.forest.slice(0,2));
-	if (suggestions.type == "Concepts" && flag) {
-	    flag = false;
-	    constr = { "type": "MatchesAll", "kwds": ["city"] };
-	    sparklis
-		.currentPlace()
-		.getConceptSuggestions(false, constr)
-		.then(res => {
-		    let suggs = res.suggs;
-		    console.log("all suggestions matching 'city'", suggs);
-		    flag = true;
-		})
-		.catch(() => console.log("FAILED search of 'city' concepts"))
-	}
+    function(unit_suggestions) {
+	console.log("2 suggestions", unit_suggestions.type, unit_suggestions.suggestions.forest.slice(0,2));
+	return new Promise((resolve,reject) => {
+	    if (unit_suggestions.type == "Concepts" && flag) {
+		flag = false;
+		constr = { "type": "MatchesAll", "kwds": ["city"] };
+		sparklis
+		    .currentPlace()
+		    .getConceptSuggestions(false, constr)
+		    .then(suggs => {
+			console.log("all suggestions matching 'city'", suggs);
+			flag = true
+		    })
+		    .catch(error => console.log("FAILED search of 'city' concepts"))		
+	    };
+	    resolve(undefined) // keep original suggestions
+	})
     };
 // example apply-suggestion hook: just logging and applying the suggestion
 sparklis_extension.hookApplySuggestion =
     function(place,sugg) {
 	console.log("applied suggestion", sugg);
-	new_place = place.applySuggestion(sugg);
-	//console.log("new place", new_place);
-	return new_place
+	return new Promise((resolve,reject) => {
+	    new_place = place.applySuggestion(sugg);
+	    //console.log("new place", new_place);
+	    resolve(new_place)
+	})
     };

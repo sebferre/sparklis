@@ -839,18 +839,18 @@ let ajax_external_search_constr ~endpoint (search : Lisql.search) (k : (Lisql.co
 
 (* hooks for Sparklis extension *)
 
-let hook_suggestions : (freq_unit * suggestions) -> (freq_unit * suggestions) =
+let hook_suggestions : (freq_unit * suggestions) -> ((suggestions, exn) Result.t -> unit) -> unit =
   let open Jsutils in
   let js_unit_suggestions_map =
     js_map
       (`Record [| "type", js_custom_spec js_freq_unit_map;
                   "suggestions", js_custom_spec js_suggestions_map |]) in
-  (fun unit_suggestions ->
-    Jsutils.firebug "applying hook on suggestions";
-    Config.apply_hook_data
-      Config.sparklis_extension##.hookSuggestions
-      js_unit_suggestions_map
-      unit_suggestions)
+  fun unit_suggestions k ->
+  Config.apply_hook_data "suggestions"
+    Config.sparklis_extension##.hookSuggestions
+    js_unit_suggestions_map
+    unit_suggestions
+    (fun (_, suggestions) -> k (Result.Ok suggestions))
 
 (* LIS navigation places *)
   
@@ -1170,8 +1170,7 @@ object (self)
 	   (fun () ->
              let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
              let suggestions = {partial; forest} in
-             let _, suggestions = hook_suggestions (Entities, suggestions) in
-	     k (Result.Ok suggestions)))
+             hook_suggestions (Entities, suggestions) k))
     in
     let sparql_genvar = new Lisql2sparql.genvar in
     let sparql_term =
@@ -1277,8 +1276,7 @@ object (self)
 	      (fun () ->
                 let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
                 let suggestions = {partial; forest} in
-                let _, suggestions = hook_suggestions (Entities, suggestions) in
-	        k (Result.Ok suggestions)))
+                hook_suggestions (Entities, suggestions) k))
       in
       if constr = current_term_constr
       then process ()
@@ -1346,8 +1344,7 @@ object (self)
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
           let suggestions = {partial; forest} in
-          let _, suggestions = hook_suggestions (Concepts, suggestions) in
-	  k (Result.Ok suggestions))
+          hook_suggestions (Concepts, suggestions) k)
     in
     let ajax_extent () =
       let sparql_genvar = new Lisql2sparql.genvar in
@@ -1469,8 +1466,7 @@ object (self)
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
           let suggestions = {partial; forest} in
-          let _, suggestions = hook_suggestions (Concepts, suggestions) in
-	  k (Result.Ok suggestions)) in
+          hook_suggestions (Concepts, suggestions) k) in
     let process_wikidata_with_external_search (lx : Rdf.var list) (ltq : Rdf.term list) (ltp : Rdf.term list) results_class =
       let freq = { value=(if freq0 then 0 else 1); max_value=None; partial=true; unit=Entities } in
       let incr_index = new incr_freq_tree_index term_hierarchy in
@@ -1514,8 +1510,7 @@ object (self)
       sync_concepts (fun () ->
           let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
           let suggestions = {partial = true; forest} in
-          let _, suggestions = hook_suggestions (Concepts, suggestions) in
-	  k (Result.Ok suggestions))
+          hook_suggestions (Concepts, suggestions) k)
     in
     let ajax_wikidata () =
       (* NOTE: pat+constraint does not work on wikidata, don't know why *)
@@ -1736,8 +1731,7 @@ object (self)
             sync_concepts (fun () ->
                 let forest = incr_index#filter_map_forest ~inverse (fun x -> Some x) in
                 let suggestions = {partial; forest} in
-                let _, suggestions = hook_suggestions (Concepts, suggestions) in
-	        k (Result.Ok suggestions)))
+                hook_suggestions (Concepts, suggestions) k))
         in
         let sparql_genvar = s_sparql.Lisql2sparql.state#genvar in
         let froms = Sparql_endpoint.config_default_graphs#froms in
@@ -1938,7 +1932,7 @@ object (self)
           else ajax_extent ()
       end
 
-  method forest_modifiers : suggestions =
+  method forest_modifiers (k : (suggestions, exn) Result.t -> unit) : unit =
     let open Lisql in
     let incrs =
       if focus_descr#unconstrained
@@ -2081,8 +2075,7 @@ object (self)
         (fun incr -> Node ((incr, None), []))
         valid_incrs in
     let suggestions = {partial = false; forest} in
-    let _, suggestions = hook_suggestions (Modifiers, suggestions) in
-    suggestions
+    hook_suggestions (Modifiers, suggestions) k
 	  
   method list_term_constraints (constr : Lisql.constr) : Lisql.constr list =
     let open Lisql in

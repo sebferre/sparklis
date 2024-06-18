@@ -50,6 +50,12 @@ let _Promise = Unsafe.global##._Promise
 let new_promise (executor : Unsafe.any (* data -> void *) -> Unsafe.any (* error -> void *) -> unit) : Unsafe.any (* Promise *) =
   Unsafe.new_obj _Promise [|Unsafe.inject (Unsafe.callback executor)|]
 
+let promise_then (promise : Unsafe.any (* Promise *))
+      (resolve : Unsafe.any (* data *) -> unit)
+      (reject : Unsafe.any (* error *) -> unit) : unit =
+  Unsafe.(meth_call promise "then" [|Unsafe.inject (Unsafe.callback resolve);
+                                     Unsafe.inject (Unsafe.callback reject)|])
+
 let () = (* for handling uncaught exceptions in lwt async sections *)
   Lwt.async_exception_hook := (fun exn -> firebug (Printexc.to_string exn))
 

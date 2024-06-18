@@ -1,9 +1,13 @@
 
 OBJ=common.cmo find_merge.cmo jsutils.cmo cache.cmo config.cmo rdf.cmo sparql.cmo sparql_endpoint.cmo ontology.cmo lisql.cmo lisql_annot.cmo lexicon.cmo grammar.cmo lisql2nl.cmo lisql2sparql.cmo lisql_type.cmo lis.cmo permalink.cmo html.cmo
 
+FLAGS = # -g
+#JSOO_FLAGS = --pretty --no-inline --debug-info # for dev
+JSOO_FLAGS = --opt 3 # for prod
+
 osparklis: $(OBJ)
-	ocamlfind ocamlc -package csv,lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -linkpkg -o osparklis.byte $(OBJ) osparklis.ml
-	js_of_ocaml osparklis.byte
+	ocamlfind ocamlc -package csv,lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -linkpkg $(FLAGS) -o osparklis.byte $(OBJ) osparklis.ml
+	js_of_ocaml $(JSOO_FLAGS) osparklis.byte
 	mv osparklis.js webapp/
 
 install:
@@ -23,7 +27,7 @@ clean:
 .SUFFIXES: .ml .mli .cmo .cmi
 
 permalink.cmo: permalink.ml
-	ocamlfind ocamlc -package lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -pp camlp5o -c $<
+	ocamlfind ocamlc -package lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -pp camlp5o -c $(FLAGS) $<
 
 %.cmo: %.ml
-	ocamlfind ocamlc -package csv,lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -c $<
+	ocamlfind ocamlc -g -package csv,lwt,js_of_ocaml,js_of_ocaml-lwt,lwt_ppx,js_of_ocaml-ppx -c $(FLAGS) $<

@@ -855,7 +855,10 @@ object (self)
 	 modifier_selection#toggle incr
       | _ -> ()
     in
-    let {Lis.partial; forest} = lis#forest_modifiers in
+    lis#forest_modifiers
+      (function
+       | Result.Error exn -> ()
+       | Result.Ok {Lis.partial; forest} ->
     match mode with
     | `Dropdown ->
       jquery "#focus-dropdown-content" (fun elt_dropdown ->
@@ -906,7 +909,7 @@ object (self)
 	     Opt.iter elt##.parentNode (fun node ->
 	       Opt.iter (Dom.CoerceTo.element node) (fun dom_elt ->
 	         let incr_elt = Dom_html.element dom_elt in
-		 apply_incr incr_elt))))))))
+		 apply_incr incr_elt)))))))))
 
   method refresh =
     Dom_html.window##.history##replaceState Js.null (string "") (Js.some (string permalink));
@@ -1232,10 +1235,14 @@ let rec make_js_place (place : place) =
             let js_suggs = Lis.js_suggestions_map.inject suggs in
             Unsafe.fun_call resolve [|js_suggs|]))
     method getModifierSuggestions : Unsafe.any (* Promise *) =
-      Jsutils.new_promise (fun resolve _reject -> (* suggestions, none *)
-      let suggs = place#lis#forest_modifiers in
-      let js_suggs = Lis.js_suggestions_map.inject suggs in
-      Unsafe.fun_call resolve [|js_suggs|])
+      Jsutils.new_promise (fun resolve reject -> (* suggestions, exn *)
+      place#lis#forest_modifiers
+        (function
+         | Result.Error exn ->
+            Unsafe.fun_call reject [|Jsutils.Inject.exn exn|]
+         | Result.Ok suggs ->
+            let js_suggs = Lis.js_suggestions_map.inject suggs in
+            Unsafe.fun_call resolve [|js_suggs|]))
 
     method focusAtPath (js_path : Unsafe.any) : Unsafe.any (* place after focus move *) =
       try
@@ -1380,10 +1387,11 @@ object (self)
       match focus with
       | None -> present#lis#focus, present (* is current place by default *)
       | Some foc -> foc, present#new_place present#lis#endpoint foc Lisql.DeltaNil (* undefined *) in
-    match Config.apply_hook_opt
-            Config.sparklis_extension##.hookApplySuggestion
-            [| js_place_map.inject p_start;
-               Lisql.js_increment_map.inject incr |] with
+    Config.apply_hook_opt "applying a suggestion"
+      Config.sparklis_extension##.hookApplySuggestion
+      [| js_place_map.inject p_start;
+         Lisql.js_increment_map.inject incr |]
+    (function
     | Some js_p_end ->
        self#update_place ~push_in_history:true (js_place_map.extract js_p_end)
     | None ->
@@ -1391,7 +1399,7 @@ object (self)
        | Some (foc_end, delta) ->
           let p_end = p_start#new_place p_start#lis#endpoint foc_end delta in
           self#update_place ~push_in_history:true p_end
-       | None -> ()
+       | None -> ())
     
   method home =
     self#update_focus ~push_in_history:true

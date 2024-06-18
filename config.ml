@@ -202,43 +202,51 @@ end
   
 (* JS object for Sparklis extension *)
 
-type hook = Unsafe.top optdef (* optionally defined ('a -> 'a) functions on JS objects, which can be used to add side effects and to modify the data back into Sparklis *)
+type hook = Unsafe.top optdef (* optionally defined ('a -> Promise('a or undefined, error)) functions on JS objects, which can be used to add side effects and to modify the data back into Sparklis *)
 
-let apply_hook_opt (hook : hook) (js_args : Unsafe.any array) : Unsafe.any option =
+let apply_hook_opt (what : string) (hook : hook) (js_args : Unsafe.any array) (k : Unsafe.any option -> unit) : unit =
   Optdef.case hook
-    (fun () -> None) (* if hook undefined *)
+    (fun () -> k None) (* if hook undefined *)
     (fun callback ->
-      try
-        let js_res = Unsafe.fun_call callback js_args in
-        if js_res = Jsutils.Inject.undefined
-        then None (* undefined result (side-effect only extension) *)
-        else Some js_res
-      with error -> (* catching any error thrown by callback *)
-        Jsutils.firebug (Printexc.to_string error); (* logging the error *)
-        None) (* and falling back to default behavior *)
+      Jsutils.firebug ("applying hook for " ^ what);
+      Jsutils.promise_then
+        (Unsafe.fun_call callback js_args)
+        (fun js_res ->
+          if js_res = Jsutils.Inject.undefined
+          then k None (* undefined result (side-effect only extension) *)
+          else k (Some js_res))
+        (fun js_error -> (* catching any error thrown by callback *)
+          Firebug.console##log js_error; (* logging the error *)
+          k None)) (* and falling back to default behavior *)
 
 (* apply a hook, if defined, to some Sparklis data [x], given functions for injection to and extraction from JS objects. *)
-let apply_hook_data (hook : hook) (map : 'a js_map) (x : 'a) : 'a =
+let apply_hook_data (what : string) (hook : hook) (map : 'a js_map) (x : 'a) (k : 'a -> unit) : unit =
   Optdef.case hook
-    (fun () -> x) (* identity if hook undefined *)
+    (fun () -> k x) (* identity if hook undefined *)
     (fun callback ->
-      try
-        let js_x = map.inject x in
-        (*Firebug.console##log_2 (string "BEFORE hook: ") js_x;*)
-        let js_y = Unsafe.fun_call callback [|js_x|] in
-        (*Firebug.console##log_2 (string "AFTER hook: ") js_x;*)
-        if js_y = Jsutils.Inject.undefined
-        then x (* use original result if undefined result (side-effect only extension) *)
-        else map.extract js_y
-      with error -> (* catching any error thrown by callback *)
-        Jsutils.firebug (Printexc.to_string error); (* logging the error *)
-        x) (* and falling back to default data *)
+      Jsutils.firebug ("applying hook on " ^ what);
+      let js_x = map.inject x in
+      (* Firebug.console##log_2 (string "BEFORE hook: ") js_x; *)
+      Jsutils.promise_then
+        (Unsafe.fun_call callback [|js_x|])
+        (fun js_y ->
+          if js_y = Jsutils.Inject.undefined
+          then (
+            (* Jsutils.firebug "AFTER hook: undefined"; *)
+            k x) (* use original result if undefined result (side-effect only extension) *)
+          else (
+            (* Firebug.console##log_2 (string "AFTER hook: ") js_y; *)
+            let y = map.extract js_y in
+            k y))
+        (fun js_error -> (* catching any error thrown by callback *)
+          Firebug.console##log js_error; (* logging the error *)
+          k x)) (* and falling back to default data *)
 
 let sparklis_extension =
   object%js (self)
     val mutable hookSparql : hook = undefined (* data: string (SPARQL query) *)
     val mutable hookResults : hook = undefined (* data : Sparql_endpoint.results *)
-    val mutable hookSuggestions : hook = undefined (* data: Lis.incr_freq_forest option *)
+    val mutable hookSuggestions : hook = undefined (* data: Lis.freq_unit * Lis.suggestions *)
     val mutable hookApplySuggestion : hook = undefined (* place -> increment -> place *)
   end
 let () = Js.export "sparklis_extension" sparklis_extension

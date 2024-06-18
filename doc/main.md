@@ -197,7 +197,7 @@ Let us assume a Sparklis place `p`, representing a navigation state. The followi
 
   returns a promise of the concept suggestions (see datatype `sparklis-suggestions`) matching the given concept constraint. The place must have been evaluated.
 
-- **p.getModifierSuggestions(): Promise([sparklis-suggestions](#datatype-sparklis-suggestions), ())**
+- **p.getModifierSuggestions(): Promise([sparklis-suggestions](#datatype-sparklis-suggestions), error)**
 
   returns a promise of the modifier suggestions (see datatype `sparklis-suggestions`). The place must have been evaluated.
 
@@ -245,19 +245,19 @@ This object has a number of properties that are undefined by default. By definin
 
 A common form of customization is a *hook*, i.e. a custom function that is called by Sparklis at some step in the data workflow. That function can have both side effects and a result. If the result is undefined, then only side effects occur and the data workflow is left unchanged.
 
-- **sparklis_extension.hookSparql: (string => string or undefined) or undefined**
+- **sparklis_extension.hookSparql: (string => Promise(string or undefined, error)) or undefined**
 
   can hold a function that will be called on each SPARQL translation of the user query, and that may return a modified SPARQL query, which will be the one sent to the SPARQL endpoint for evaluation. This can be used to handle features that are specific to the target endpoint.
 
-- **sparklis_extension.hookResults: ([sparklis-results](#datatype-sparklis-results) => sparklis-results or undefined) or undefined**
+- **sparklis_extension.hookResults: ([sparklis-results](#datatype-sparklis-results) => Promise(sparklis-results or undefined, error)) or undefined**
 
   can hold a function that will be called on each Sparklis results, and that may return modified results, which will be the one displayed to the user. Side effects can here be used to generate and display an alternative view of results to the user (e.g., charts, a custom map). In combination with `hookSparql`, this can be used to post-process the results of a modified SPARQL query so that they align with the user query (e.g., removing some columns).
 
-- **sparklis_extension.hookSuggestions: ([sparklis-typed-suggestions](#datatype-sparklis-typed-suggestions) => sparklis-typed-suggestions or undefined) or undefined**
+- **sparklis_extension.hookSuggestions: ([sparklis-typed-suggestions](#datatype-sparklis-typed-suggestions) => Promise(sparklis-typed-suggestions or undefined), error) or undefined**
 
   can hold a function that will be called on each set of suggestions (terms, concepts, and modifiers), and may return a modified set of suggestions, which will be the one displayed to the user. This can be used to filter out some suggestions or to forcibly add some suggestions.
 
-- **sparklis_extension.hookApplySuggestion: ((place: [sparklis-place](#datatype-sparklis-place), sugg: [sparklis-suggestion](#datatype-sparklis-suggestion)) => sparklis-place or undefined) or undefined`**
+- **sparklis_extension.hookApplySuggestion: ((place: [sparklis-place](#datatype-sparklis-place), sugg: [sparklis-suggestion](#datatype-sparklis-suggestion)) => Promise(sparklis-place or undefined, error) or undefined`**
 
   can hold a function that will be called each time when a suggestion is applied to some Sparklis place. Given the place and the suggestion, the function may return a new Sparklis place, as a substitute for the default target place. This can be used to customize the application of suggestions, e.g. applying automatic focus moves after suggestion application.
 

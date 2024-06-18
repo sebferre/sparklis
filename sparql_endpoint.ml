@@ -365,17 +365,19 @@ let config_caching = new Config.boolean_input ~key:"caching" ~input_selector:"#i
 
 (* hooks for Sparklis extension *)
    
-let hook_sparql (sparql : string) : string =
-  Config.apply_hook_data
+let hook_sparql (sparql : string) (k : string -> unit) : unit =
+  Config.apply_hook_data "SPARQL query"
     Config.sparklis_extension##.hookSparql
     Sparql.js_sparql_map
     sparql
+    k
 
-let hook_results (res : results) : results =
-  Config.apply_hook_data
+let hook_results (res : results) (k : results -> unit) : unit =
+  Config.apply_hook_data "query results"
     Config.sparklis_extension##.hookResults
     js_results_map
     res
+    k
 
 let cache =
 object
@@ -415,19 +417,19 @@ let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.elem
  then k1 "" empty_results
  else
   let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
-  let prologue_sparql =
-    if main_query then (
-      Jsutils.yasgui#set_query prologue_sparql;
-      hook_sparql prologue_sparql)
-    else prologue_sparql in
+  (if main_query
+   then hook_sparql prologue_sparql
+   else fun k -> k prologue_sparql)
+    (fun prologue_sparql ->
+      if main_query then Jsutils.yasgui#set_query prologue_sparql;
   match cache#lookup real_endpoint prologue_sparql with
-    | Some (response_text, results) ->
-       let results =
-         if main_query then (
-           Jsutils.yasgui#set_response response_text;
-           hook_results results)
-         else results in
-       k1 prologue_sparql results
+  | Some (response_text, results) ->
+     if main_query then Jsutils.yasgui#set_response response_text;
+       (if main_query
+        then hook_results results
+        else fun k -> k results)
+         (fun results ->
+           k1 prologue_sparql results)
     | None ->
       let encode_fields l =
 	String.concat "&"
@@ -502,12 +504,12 @@ let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.elem
 		      k0 code
 		    | Some (response_text, results) ->
 		       cache#replace real_endpoint prologue_sparql (response_text, results);
-                       let results =
-                         if main_query then (
-                           Jsutils.yasgui#set_response response_text;
-                           hook_results results)
-                         else results in
-		       k1 prologue_sparql results)
+                       if main_query then Jsutils.yasgui#set_response response_text;
+                       (if main_query
+                        then hook_results results
+                        else fun k -> k results)
+                         (fun results ->
+		           k1 prologue_sparql results) )
 		| 0 ->
 		  if config_proxy#value (* proxy was used *)
 		  then begin
@@ -538,7 +540,7 @@ let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.elem
       List.iter start_progress elts;
       if config_method_get#value
       then req##send Js.null
-      else req##send (Js.some (string (encode_fields fields)))
+      else req##send (Js.some (string (encode_fields fields))))
 
 let rec ajax_list_in ?tentative elts pool endpoint sparql_list k1 k0 =
   match sparql_list with
