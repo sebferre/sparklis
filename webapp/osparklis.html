@@ -30,6 +30,7 @@
 <script src="osparklis.js"></script>
 <!-- TEST JS API - example extension -->
 <!-- <script src="example_extension.js"></script> -->
+<script src="qa_extension.js"></script>
 </head>
 
 <body>
@@ -1077,7 +1078,7 @@
 
 
 <div id="control-navig" class="navbar" data-spy="affix" data-offset-top="75">
-  <div class="nav navbar-nav navbar-left">
+  <div id="control-navig-nav" class="nav navbar-nav navbar-left">
     <span class="btn-group">
       <button id="button-home" class="btn btn-primary btn-md navbar-btn">
 	<span class="tooltiped">
@@ -1142,8 +1143,14 @@
 	<span class="texte lang-nl">Geschiedenis</span>
       </label>
     </div>
-
   </div>
+
+  <div class="navbar-form navbar-left">
+    <div class="form-group">
+      <input id="qa" class="form-control" type="text" placeholder="commands separated by ';' then ENTER" style="width: 400px;">
+    </div>
+  </div>
+
 </div>
 
 <div class="container-fluid">
