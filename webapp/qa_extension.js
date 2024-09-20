@@ -14,6 +14,8 @@ window.addEventListener(
 	})
     });
 
+/* processing a question, i.e. a sequence of steps */
+
 // process user question, available qa HTML element
 function process_question(qa) {
     let question = qa.value;
@@ -43,62 +45,157 @@ function process_steps(qa, place, steps) {
     }
 }
 
+/* processing a single step */
+
 // applying step to place, returning a promise of the next place
 function process_step(place, step) {
+    console.log("Step: ", step);
+    let match;
+    if (step === "up") {
+	return move_focus(place, move_up)
+    } else if (step === "down") {
+	return move_focus(place, move_down)
+    } else if (step === "and") {
+	return apply_suggestion(place, "and", "IncrAnd")
+    } else if (step === "or") {
+	return apply_suggestion(place, "or", "IncrOr")
+    } else if (step === "not") {
+	return apply_suggestion(place, "not", "IncrNot")
+    } else if (step === "maybe") {
+	return apply_suggestion(place, "maybe", "IncrMaybe")
+    } else if (step === "asc") {
+	let sugg = { type: "IncrOrder", order: { type: "ASC", conv: { targetType: "Double", forgetOriginalDatatype: false } } };
+	return apply_suggestion(place, "asc-order", sugg)
+    } else if (step === "desc") {
+	let sugg = { type: "IncrOrder", order: { type: "DESC", conv: { targetType: "Double", forgetOriginalDatatype: false } } };
+	return apply_suggestion(place, "desc-order", sugg)
+    } else if ((match = /^after\s+(.+)$/.exec(step))) {
+	let constr = { type: "After", kwd: match[1] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "after", sugg)
+    } else if ((match = /^before\s+(.+)$/.exec(step))) {
+	let constr = { type: "Before", kwd: match[1] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "before", sugg)
+    } else if ((match = /^from\s+(.+)\s+to\s+(.+)$/.exec(step))) {
+	let constr = { type: "FromTo", kwdFrom: match[1], kwdTo: match[2] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "from-to", sugg)
+    } else if ((match = /^>\s*(.+)$/.exec(step))) {
+	let constr = { type: "HigherThan", value: match[1] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "higher-than", sugg)
+    } else if ((match = /^<\s*(.+)$/.exec(step))) {
+	let constr = { type: "LowerThan", value: match[1] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "lower-than", sugg)
+    } else if ((match = /^between\s+(.+)\s+and\s+(.+)$/.exec(step))) {
+	let constr = { type: "Between", valueFrom: match[1], valueTo: match[2] };
+	let sugg = {type: "IncrConstr", constr: constr, filterType: "OnlyLiterals"};
+	return apply_suggestion(place, "between", sugg)
+    } else if ((match = /^a\s+(.+)\s*$/.exec(step))) {
+	return search_and_apply_suggestion(
+	    place, "class", match[1],
+	    (place,constr) => place.getConceptSuggestions(false,constr),
+	    sugg => suggestion_type(sugg) === "IncrType")
+    } else if ((match = /^has\s+(.+)$/.exec(step))) {
+	return search_and_apply_suggestion(
+	    place, "fwd property", match[1],
+	    (place,constr) => place.getConceptSuggestions(false,constr),
+	    sugg => suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Fwd")
+    } else if ((match = /^is\s+(.+)\s+of$/.exec(step))) {
+	return search_and_apply_suggestion(
+	    place, "bwd property", match[1],
+	    (place,constr) => place.getConceptSuggestions(false,constr),
+	    sugg => suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Bwd")
+    } else {
+	return search_and_apply_suggestion(
+	    place, "term", step,
+	    (place,constr) => place.getTermSuggestions(false,constr),
+	    sugg => suggestion_type(sugg) === "IncrTerm" && sugg.term.type === "uri")
+    }
+}
+
+function move_focus(place, move) {
     return new Promise((resolve, reject) => {
-	console.log("Step: ", step);
-	let step_kwds = step.split(/\s+/);
-	console.log("Kwds: ", step_kwds);
-	let constr = { type: "MatchesAll", kwds: step_kwds };
-	let char0 = step.charAt(0);
-	if (char0 === char0.toUpperCase()) {
-	    place.onEvaluated(() => {
-		place
-		    .getTermSuggestions(false, constr)
-		    .then(suggs => {
-			console.log("got term suggestions for constraint");
-			//console.log(suggs);
-			let best_sugg = select_sugg(suggs);
-			let labels = sparklis.termLabels();
-			console.log("choosing suggestion: " + labels.info(best_sugg.term.uri));
-			let next_place = place.applySuggestion(best_sugg);
-			resolve(next_place);
-		    })
-		    .catch(() => {
-			reject("Term not found");
-		    })
-	    })
-	} else {
-	    place.onEvaluated(() => {
-		place
-		    .getConceptSuggestions(false, constr)
-		    .then(suggs => {
-			console.log("got concept suggestions for constraint");
-			//console.log(suggs);
-			let best_sugg = select_sugg(suggs);
-			console.log("choosing suggestion:");
-			console.log(best_sugg);
-			let next_place = place.applySuggestion(best_sugg);
-			resolve(next_place);
-		    })
-		    .catch(() => {
-			reject("Concept not found");
-		    })
-	    })
-	};
+	let path = place.focusPath();
+	let next_path = move(path);
+	let next_place = place.focusAtPath(next_path);
+	resolve(next_place)
     })
 }
 
-// selecting the most frequent suggestion
-function select_sugg(suggs) {
-    let forest = suggs.forest;
-    var best_item = forest[0].item;
-    forest.forEach(function(sugg) {
-	if (best_item.frequency == null
-	    || (sugg.item.frequency != null
-		&& (sugg.item.frequency.value > best_item.frequency.value))) {
-	    best_item = sugg.item;
+function apply_suggestion(place, kind, sugg) {
+    return new Promise((resolve, reject) => {
+	let next_place = place.applySuggestion(sugg);
+	resolve(next_place);
+    })
+}
+    
+function search_and_apply_suggestion(place, kind, label, getSuggestions, filterSuggestion) {
+    return new Promise((resolve, reject) => {
+	let constr =
+	    { type: "MatchesAll",
+	      kwds: label.split(/\s+/) };
+	console.log(kind, "constr : ", constr);
+	place.onEvaluated(() => {
+	    getSuggestions(place, constr)
+		.then(res => {
+		    let forest = res.forest;
+		    console.log("got suggestions for constraint");
+		    //console.log(forest);
+		    let best_sugg = select_sugg(forest, filterSuggestion);
+		    console.log("choosing suggestion:");
+		    console.log(best_sugg);
+		    let next_place = place.applySuggestion(best_sugg);
+		    resolve(next_place);
+		})
+		.catch(() => {
+		    reject(kind + " not found");
+		})
+	})
+    })
+}		       
+
+// selecting the most frequent suggestion satisfying pred
+function select_sugg(forest, pred) {
+    var best_item = null;
+    forest.forEach(function(tree) {
+	let item = tree.item;
+	if (pred(item.suggestion)
+	    && (best_item === null
+		|| (item.frequency !== null
+		    && (item.frequency.value > best_item.frequency.value)))) {
+	    best_item = item;
 	}
     });
     return best_item.suggestion;
 }
+
+/* utility functions */
+
+function move_up(path) {
+    let lastDownIndex = path.lastIndexOf("DOWN");
+    if (lastDownIndex === -1) {
+	return path;
+    } else {
+	return path.slice(0, lastDownIndex);
+    }
+}
+
+function move_down(path) {
+    return [...path, "DOWN"];
+}
+
+function suggestion_type(sugg) {
+    if (typeof sugg === "string") {
+	return sugg;
+    } else {
+	return sugg.type;
+    }
+}
+
+// example steps
+// on DBpedia Core: a film; has director; Tim Burton; down; or; Spielberg; up; up; has starring ; has birthdate ; after 1980
+// on DBpedia Core: a film ; has budget ; desc ; > 1e7
+
