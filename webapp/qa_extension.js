@@ -102,12 +102,16 @@ function process_step(place, step) {
 	return search_and_apply_suggestion(
 	    place, "fwd property", match[1],
 	    (place,constr) => place.getConceptSuggestions(false,constr),
-	    sugg => suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Fwd")
+	    sugg =>
+	    suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Fwd"
+		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "S")
     } else if ((match = /^is\s+(.+)\s+of$/.exec(step))) {
 	return search_and_apply_suggestion(
 	    place, "bwd property", match[1],
 	    (place,constr) => place.getConceptSuggestions(false,constr),
-	    sugg => suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Bwd")
+	    sugg =>
+	    suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Bwd"
+		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "O")
     } else {
 	return search_and_apply_suggestion(
 	    place, "term", step,
@@ -134,28 +138,51 @@ function apply_suggestion(place, kind, sugg) {
     
 function search_and_apply_suggestion(place, kind, label, getSuggestions, filterSuggestion) {
     return new Promise((resolve, reject) => {
-	let constr =
-	    { type: "MatchesAll",
-	      kwds: label.split(/\s+/) };
-	console.log(kind, "constr : ", constr);
-	place.onEvaluated(() => {
-	    getSuggestions(place, constr)
-		.then(res => {
-		    let forest = res.forest;
-		    console.log("got suggestions for constraint");
-		    //console.log(forest);
-		    let best_sugg = select_sugg(forest, filterSuggestion);
-		    console.log("choosing suggestion:");
-		    console.log(best_sugg);
-		    let next_place = place.applySuggestion(best_sugg);
-		    resolve(next_place);
+	get_constr(kind, label)
+	    .then(constr => {
+		console.log(kind, "constr : ", constr);
+		place.onEvaluated(() => {
+		    getSuggestions(place, constr)
+			.then(res => {
+			    let forest = res.forest;
+			    console.log("got suggestions for constraint");
+			    //console.log(forest);
+			    let best_sugg = select_sugg(forest, filterSuggestion);
+			    console.log("choosing suggestion:");
+			    console.log(best_sugg);
+			    let next_place = place.applySuggestion(best_sugg);
+			    resolve(next_place);
+			})
+			.catch(() => {
+			    reject(kind + " not found");
+			})
 		})
-		.catch(() => {
-		    reject(kind + " not found");
-		})
-	})
+	    })
+	    .catch(error => {
+		reject(kind + " search failed");
+	    })
     })
 }		       
+
+// defining a constraint promise from kind and label
+function get_constr(kind, label) {
+    return new Promise((resolve, reject) => {
+	let input_wikidata = document.getElementById("input-wikidata-mode");
+	if (input_wikidata.checked) {
+	    let search =
+		{ type: "WikidataSearch",
+		  kwds: label.split(/\s+/) };
+	    sparklis.externalSearchConstr(search)
+		.then(constr => resolve(constr))
+		.catch(reject);
+	} else {
+	    let constr =
+		{ type: "MatchesAll",
+		  kwds: label.split(/\s+/) };
+	    resolve(constr);
+	}
+    })
+}
 
 // selecting the most frequent suggestion satisfying pred
 function select_sugg(forest, pred) {
