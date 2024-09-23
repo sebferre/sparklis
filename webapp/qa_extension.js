@@ -97,26 +97,30 @@ function process_step(place, step) {
 	return search_and_apply_suggestion(
 	    place, "class", match[1],
 	    (place,constr) => place.getConceptSuggestions(false,constr),
-	    sugg => suggestion_type(sugg) === "IncrType")
+	    sugg => suggestion_type(sugg) === "IncrType",
+	    sparklis.classLabels())
     } else if ((match = /^has\s+(.+)$/.exec(step))) {
 	return search_and_apply_suggestion(
 	    place, "fwd property", match[1],
 	    (place,constr) => place.getConceptSuggestions(false,constr),
 	    sugg =>
 	    suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Fwd"
-		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "S")
+		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "S",
+	    sparklis.propertyLabels())
     } else if ((match = /^is\s+(.+)\s+of$/.exec(step))) {
 	return search_and_apply_suggestion(
 	    place, "bwd property", match[1],
 	    (place,constr) => place.getConceptSuggestions(false,constr),
 	    sugg =>
 	    suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Bwd"
-		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "O")
+		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "O",
+	    sparklis.propertyLabels())
     } else {
 	return search_and_apply_suggestion(
 	    place, "term", step,
 	    (place,constr) => place.getTermSuggestions(false,constr),
-	    sugg => suggestion_type(sugg) === "IncrTerm" && sugg.term.type === "uri")
+	    sugg => suggestion_type(sugg) === "IncrTerm" && sugg.term.type === "uri",
+	    sparklis.termLabels())
     }
 }
 
@@ -136,9 +140,9 @@ function apply_suggestion(place, kind, sugg) {
     })
 }
     
-function search_and_apply_suggestion(place, kind, label, getSuggestions, filterSuggestion) {
+function search_and_apply_suggestion(place, kind, query, getSuggestions, filterSuggestion, lexicon) {
     return new Promise((resolve, reject) => {
-	get_constr(kind, label)
+	get_constr(kind, query)
 	    .then(constr => {
 		console.log(kind, "constr : ", constr);
 		place.onEvaluated(() => {
@@ -147,11 +151,15 @@ function search_and_apply_suggestion(place, kind, label, getSuggestions, filterS
 			    let forest = res.forest;
 			    console.log("got suggestions for constraint");
 			    //console.log(forest);
-			    let best_sugg = select_sugg(forest, filterSuggestion);
-			    console.log("choosing suggestion:");
-			    console.log(best_sugg);
-			    let next_place = place.applySuggestion(best_sugg);
-			    resolve(next_place);
+			    let best_sugg = select_sugg(kind, query, forest, filterSuggestion, lexicon);
+			    if (!best_sugg) {
+				reject("no suggestion found");
+			    } else {
+				console.log("choosing suggestion:");
+				console.log(best_sugg);
+				let next_place = place.applySuggestion(best_sugg);
+				resolve(next_place);
+			    }
 			})
 			.catch(() => {
 			    reject(kind + " not found");
@@ -164,39 +172,62 @@ function search_and_apply_suggestion(place, kind, label, getSuggestions, filterS
     })
 }		       
 
-// defining a constraint promise from kind and label
-function get_constr(kind, label) {
+// defining a constraint promise from kind and query
+function get_constr(kind, query) {
     return new Promise((resolve, reject) => {
 	let input_wikidata = document.getElementById("input-wikidata-mode");
 	if (input_wikidata.checked) {
 	    let search =
 		{ type: "WikidataSearch",
-		  kwds: label.split(/\s+/) };
+		  kwds: query.split(/\s+/) };
 	    sparklis.externalSearchConstr(search)
 		.then(constr => resolve(constr))
 		.catch(reject);
 	} else {
 	    let constr =
 		{ type: "MatchesAll",
-		  kwds: label.split(/\s+/) };
+		  kwds: query.split(/\s+/) };
 	    resolve(constr);
 	}
     })
 }
 
 // selecting the most frequent suggestion satisfying pred
-function select_sugg(forest, pred) {
+function select_sugg(kind, query, forest, pred, lexicon) {
     var best_item = null;
+    var best_score = null;
     forest.forEach(function(tree) {
 	let item = tree.item;
-	if (pred(item.suggestion)
-	    && (best_item === null
-		|| (item.frequency !== null
-		    && (item.frequency.value > best_item.frequency.value)))) {
-	    best_item = item;
+	if (pred(item.suggestion)) {
+	    let score = get_score(lexicon, kind, query, item);
+	    if (best_item === null
+		|| best_score === null
+		|| (score !== null && best_score !== null
+		    && score > best_score)) {
+		best_item = item;
+		best_score = score;
+	    }
 	}
     });
     return best_item.suggestion;
+}
+
+// computing score of item for suggestion choice
+function get_score(lexicon, kind, query, item) {
+    let freq = item_frequency(item);
+    let uri = suggestion_uri(item.suggestion);
+    if (uri === null) {
+	return 0;
+    } else {
+	let label = lexicon.info(uri);
+	if (typeof label !== "string") {
+	    label = label.label;
+	};
+	let dist = editDistance(query,label);
+	let score = freq * (1 / (1 + dist));
+	console.log("score=", score, ", freq=", freq, ", dist=", dist, ", label=", label, ", uri=", uri);
+	return score;
+    }
 }
 
 /* utility functions */
@@ -214,12 +245,77 @@ function move_down(path) {
     return [...path, "DOWN"];
 }
 
+function item_frequency(item) {
+    if (item.frequency === null) {
+	return 0;
+    } else {
+	return item.frequency.value;
+    }
+}
+
 function suggestion_type(sugg) {
     if (typeof sugg === "string") {
 	return sugg;
     } else {
 	return sugg.type;
     }
+}
+
+function suggestion_uri(sugg) {
+    switch (sugg.type) {
+    case "IncrType":
+	return sugg.uri;
+    case "IncrRel":
+	return sugg.uri;
+    case "IncrPred":
+	let pred = sugg.pred;
+	switch (pred.type) {
+	case "Class":
+	    return pred.uri;
+	case "Prop":
+	    return pred.uri;
+	case "SO":
+	    return pred.uriO;
+	case "EO":
+	    return pred.uriE;
+	default:
+	    return null;
+	}
+    case "IncrTerm":
+	let term = sugg.term;
+	switch (term.type) {
+	case "uri":
+	    return term.uri;
+	default:
+	    return null;
+	}
+    }
+}
+
+function editDistance(str1, str2) {
+    const len1 = str1.length;
+    const len2 = str2.length;
+    
+    // Create a 2D array to store distances
+    const dp = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(null));
+
+    // Initialize base cases
+    for (let i = 0; i <= len1; i++) dp[i][0] = i;
+    for (let j = 0; j <= len2; j++) dp[0][j] = j;
+
+    // Compute distances
+    for (let i = 1; i <= len1; i++) {
+        for (let j = 1; j <= len2; j++) {
+            const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(
+                dp[i - 1][j] + 1,    // Deletion
+                dp[i][j - 1] + 1,    // Insertion
+                dp[i - 1][j - 1] + cost // Substitution
+            );
+        }
+    }
+
+    return dp[len1][len2];
 }
 
 // example steps
