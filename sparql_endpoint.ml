@@ -409,14 +409,19 @@ let cache_eval (endpoint : string) (sparql : string) : results option =
   | None -> None
 
 (* query evaluation, by AJAX call if required *)
-let rec ajax_in ?(tentative = false) ?(main_query = false) (elts : Dom_html.element t list) (pool : ajax_pool)
-    (endpoint : string) (sparql : string)
-    (k1 : string (* hooked sparql *) -> results -> unit) (* SUCCESS continuation *)
-    (k0 : int -> unit) (* FAILURE continuation *) =
+let rec ajax_in
+          ?(tentative = false) ?(main_query = false) ?(handle_prologue = true)
+          (elts : Dom_html.element t list) (pool : ajax_pool)
+          (endpoint : string) (sparql : string)
+          (k1 : string (* hooked sparql *) -> results -> unit) (* SUCCESS continuation *)
+          (k0 : int -> unit) (* FAILURE continuation *) =
  if sparql = "" (* to allow for dummy queries, especially in query lists [ajax_list_in] *)
  then k1 "" empty_results
  else
-  let real_endpoint, prologue_sparql = resolve_endpoint_sparql endpoint sparql in
+  let real_endpoint, prologue_sparql =
+    if handle_prologue
+    then resolve_endpoint_sparql endpoint sparql
+    else endpoint, sparql in
   (if main_query
    then hook_sparql prologue_sparql
    else fun k -> k prologue_sparql)

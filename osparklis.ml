@@ -1448,8 +1448,8 @@ let make_js_sparklis (history : history) =
     method evalSparql (sparql : js_string t) : Unsafe.any (* Promise *) =
       Jsutils.new_promise (fun resolve reject -> (* results, HTTP error code *)
       let ajax_pool = new Sparql_endpoint.ajax_pool in
-      Sparql_endpoint.ajax_in [] ajax_pool config#get_endpoint (to_string sparql)
-        (fun _sparql res -> (* TODO: avoid here adding prologue *)
+      Sparql_endpoint.ajax_in ~handle_prologue:false [] ajax_pool config#get_endpoint (to_string sparql)
+        (fun _sparql res ->
           let js_res = Sparql_endpoint.js_results_map.inject res in
           Unsafe.fun_call resolve [|js_res|])
         (fun code ->

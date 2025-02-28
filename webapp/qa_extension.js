@@ -16,7 +16,7 @@ window.addEventListener(
 
 /* processing a question, i.e. a sequence of steps */
 
-// process user question, available qa HTML element
+// process user question, available in qa HTML element
 function process_question(qa) {
     let question = qa.value;
     console.log("Question: " + question);
