@@ -325,7 +325,7 @@ let end_progress elt = (* removing progress cursor on 'elt' *)
   elt##.style##.opacity := def (string "1")
 
 class ajax_pool =
-object
+object (self)
   val mutable reqs : xmlHttpRequest t list = []
   method add_req req = reqs <- req::reqs
   method remove_req req = reqs <- List.filter ((!=) req) reqs
@@ -334,13 +334,20 @@ object
   method add_elt elt = elts <- elt::elts
   method remove_elt elt = elts <- List.filter ((!=) elt) elts
 
-  val mutable raised_alerts : string list = []
-  method alert (msg : string) : unit =
-    if not (List.mem msg raised_alerts)
-    then begin
-      raised_alerts <- msg::raised_alerts;
-      alert msg
+  val mutable raised_msgs : string list = []
+  method private is_new_msg (msg : string) : bool =
+    if List.mem msg raised_msgs
+    then false
+    else begin
+      raised_msgs <- msg::raised_msgs;
+      true
     end
+  method alert (msg : string) : unit =
+    if self#is_new_msg msg
+    then alert msg
+  method firebug (msg : string) : unit =
+    if self#is_new_msg msg
+    then firebug msg
     
   method abort_all =
     List.iter
@@ -351,7 +358,7 @@ object
     reqs <- [];
     List.iter end_progress elts;
     elts <- [];
-    raised_alerts <- []
+    raised_msgs <- []
 end
 
 let config_proxy = new Config.boolean_input ~key:"proxy" ~input_selector:"#input-proxy" ~default:false ()
@@ -531,7 +538,7 @@ let rec ajax_in
 		    end
 		| 4 ->
 		  if not tentative then
-		    pool#alert "The query was not understood by the SPARQL endpoint (see browser's console to see the SPARQL query). The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
+		    pool#firebug "The query was not understood by the SPARQL endpoint (see browser's console to see the SPARQL query). The reason is probably that some SPARQL features used by Sparklis are not supported by the endpoint. The minimum required SPARQL features are: UNION, DISTINCT, LIMIT. Other features depend on the current query.";
 		  firebug "The following query was not understood";
 		  firebug sparql;
 		  k0 code
@@ -539,7 +546,7 @@ let rec ajax_in
 		  pool#alert "There was an error at the SPARQL endpoint during the evaluation of the query.";
 		  k0 code
 		| _ ->
-		  pool#alert ("Error " ^ string_of_int code);
+		  pool#firebug ("Error " ^ string_of_int code);
 		  k0 code )
             | _ -> ()));
       List.iter start_progress elts;

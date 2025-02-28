@@ -304,8 +304,8 @@ let sparql_lexicon
 	    ht_labels [] in
 	k l_uri_info_opt)
        (fun code ->
-	ajax_pool#alert ("The " ^ kind ^ " labels could not be retrieved."
-			 ^ " This may be because the endpoint does not support the VALUES or BIND operators.");
+	ajax_pool#firebug ("The " ^ kind ^ " labels could not be retrieved."
+			   ^ " This may be because the endpoint does not support the VALUES or BIND operators.");
 	k [])
   in
   new tabled_lexicon default_label bind_labels

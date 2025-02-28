@@ -95,7 +95,7 @@ let sparql_init_relation
         sparql_relation_process_results ~image_opt_of_term source image src_imgs results;
         k src_imgs#list)
       (fun code ->
-        ajax_pool#alert ("Relation " ^ name ^ " could not be retrieved.");
+        ajax_pool#firebug ("Relation " ^ name ^ " could not be retrieved.");
         k [])
   in
   new init_relation (fun uri -> []) bind
@@ -137,7 +137,7 @@ let sparql_tabled_relation
 	  l_results;
 	k src_imgs#list)
       (fun code ->
-	ajax_pool#alert ("The image URIs could not be retrieved in " ^ name ^ ".");
+	ajax_pool#firebug ("The image URIs could not be retrieved in " ^ name ^ ".");
 	k [])
   in
   new tabled_relation (fun uri -> []) bind_images
