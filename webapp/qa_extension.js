@@ -115,6 +115,8 @@ function process_step(place, step) {
 	    suggestion_type(sugg) === "IncrRel" && sugg.orientation === "Bwd"
 		|| suggestion_type(sugg) === "IncrPred" && sugg.arg === "O",
 	    sparklis.propertyLabels())
+    } else if ((match = /^matches\s+(.+)$/.exec(step))) {
+	return search_and_apply_constr(place, "constr", match[1])
     } else {
 	return search_and_apply_suggestion(
 	    place, "term", step,
@@ -172,6 +174,22 @@ function search_and_apply_suggestion(place, kind, query, getSuggestions, filterS
     })
 }		       
 
+function search_and_apply_constr(place, kind, query) {
+    return new Promise((resolve, reject) => {
+	get_constr(kind, query)
+	    .then(constr => {
+		console.log(kind, constr);
+		let sugg = {type: "IncrConstr", constr: constr, filterType: "Mixed"};
+		let next_place = place.applySuggestion(sugg);
+		resolve(next_place);
+	    })
+	    .catch(error => {
+		reject(kind + " search failed");
+	    })
+    })
+}
+	
+    
 // defining a constraint promise from kind and query
 function get_constr(kind, query) {
     return new Promise((resolve, reject) => {
