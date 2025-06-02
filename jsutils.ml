@@ -315,9 +315,9 @@ module Extract =
       then None
       else Some js
 
-    let get (js : Unsafe.any) (name : string) : _ t (* unsafe *) =
+    let get ?(opt = false) (js : Unsafe.any) (name : string) : _ t (* unsafe *) =
       let v = Unsafe.get js (string name) in
-      if v = Js.null then raise_error_null_property name js
+      if not opt && v = Js.null then raise_error_null_property name js
       else v
     let get_index (js : Unsafe.any) (pos : int) : _ t (* unsafe *) =
       let v = Unsafe.get js pos in
@@ -349,6 +349,10 @@ and js_map_spec = (* fields and constructors to be specified in declaration orde
 
 let sum_spec_of_enum constr_names =
   `Sum (constr_names, [| |])
+
+let js_map_spec_can_be_null : js_map_spec -> bool = function
+  | `Option _ -> true
+  | _ -> false
   
 let rec string_of_js_map_spec = function
   | `Bool -> "bool"
@@ -540,13 +544,16 @@ let rec js_extract (rec_specs : (string * js_map_spec) list) (spec : js_map_spec
      let tag = 0 in
      let fields_extract =
        Array.map
-         (fun (name,spec_field) -> name, js_extract rec_specs spec_field)
+         (fun (name,spec_field) ->
+           let opt = js_map_spec_can_be_null spec_field in
+           name, opt, js_extract rec_specs spec_field)
          fields in
      (fun js ->
+       let js = Extract.as_object js in
        let bl = Obj.new_block tag (Array.length fields) in
        Array.iteri
-         (fun i (name,extract_field) ->
-           Obj.set_field bl i (extract_field (Extract.get js name)))
+         (fun i (name,opt,extract_field) ->
+           Obj.set_field bl i (extract_field (Extract.get ~opt js name)))
          fields_extract;
        bl)
   | `Sum (constructors_cst, constructors_non_cst) ->
@@ -555,7 +562,9 @@ let rec js_extract (rec_specs : (string * js_map_spec) list) (spec : js_map_spec
          (fun (constr, fields) ->
            constr,
            Array.map
-             (fun (name, spec_field) -> name, js_extract rec_specs spec_field)
+             (fun (name, spec_field) ->
+               let opt = js_map_spec_can_be_null spec_field in
+               name, opt, js_extract rec_specs spec_field)
              fields)
          constructors_non_cst in
      (fun js ->
@@ -584,8 +593,8 @@ let rec js_extract (rec_specs : (string * js_map_spec) list) (spec : js_map_spec
            !i_ref, !f_ref in
          let bl = Obj.new_block tag (Array.length fields_extract) in
          Array.iteri
-           (fun i (name,extract_field) ->
-             Obj.set_field bl i (extract_field (Extract.get js name)))
+           (fun i (name,opt,extract_field) ->
+             Obj.set_field bl i (extract_field (Extract.get ~opt js name)))
            fields_extract;
          bl
      ))
