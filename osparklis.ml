@@ -1811,15 +1811,15 @@ let _ =
     let args = Url.Current.arguments in
     let endpoint =
       try List.assoc "endpoint" args
-      with Not_found ->  "http://servolis.irisa.fr/dbpedia/sparql" in
+      with Not_found ->  "https://servolis.irisa.fr/dbpedia/sparql" in
     let title =
       try Jsutils.escapeHTML (List.assoc "title" args) (* avoiding code injection *)
       with Not_found -> "Core English DBpedia" in
     let endpoint = (* switching from lisfs2008 to servolis *)
       try List.assoc
 	    endpoint
-	    ["http://lisfs2008.irisa.fr/dbpedia/sparql", "http://servolis.irisa.fr/dbpedia/sparql";
-	     "http://lisfs2008.irisa.fr/mondial/sparql", "http://servolis.irisa.fr/mondial/sparql"]
+	    ["http://lisfs2008.irisa.fr/dbpedia/sparql", "https://servolis.irisa.fr/dbpedia/sparql";
+	     "http://lisfs2008.irisa.fr/mondial/sparql", "https://servolis.irisa.fr/mondial/sparql"]
       with _ -> endpoint in
     config#init endpoint args;
     jquery_set_innerHTML "#sparql-endpoint-title" title;

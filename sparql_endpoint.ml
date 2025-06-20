@@ -362,7 +362,7 @@ object (self)
 end
 
 let config_proxy = new Config.boolean_input ~key:"proxy" ~input_selector:"#input-proxy" ~default:false ()
-let config_proxy_url = new Config.string_input ~key:"proxy_url" ~input_selector:"#input-proxy-url" ~default:"http://servolis.irisa.fr/dbpedia/sparql" ()
+let config_proxy_url = new Config.string_input ~key:"proxy_url" ~input_selector:"#input-proxy-url" ~default:"https://servolis.irisa.fr/dbpedia/sparql" ()
 
 let config_method_get = new Config.boolean_input ~key:"method_get" ~input_selector:"#input-method-get" ~default:false ()
 
